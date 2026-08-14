@@ -27,6 +27,7 @@ function createRegularPlatformPreparationPort(options) {
       const inspectionTask = Object.freeze({
         targetPlatformId: input.platformId,
         accountProfileId: input.accountProfileId,
+        preserveCurrentPage: false,
       });
       const inspection = await inspector.inspect(inspectionTask);
       if (
@@ -45,7 +46,11 @@ function createRegularPlatformPreparationPort(options) {
         submitPreparedPublication: async function () {
           let finalInspection;
           try {
-            finalInspection = await inspector.inspect(inspectionTask);
+            finalInspection = await inspector.inspect(
+              Object.assign({}, inspectionTask, {
+                preserveCurrentPage: true,
+              }),
+            );
           } catch (_) {
             finalInspection = null;
           }

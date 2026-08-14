@@ -26,7 +26,12 @@ function claim(platformId) {
   };
 }
 
-function loadBrowserAdapter(platformId) {
+function loadBrowserAdapter(platformId, options) {
+  const value = options || {};
+  const sessionName = `synthetic-${platformId}`;
+  let alive = value.alive !== false;
+  let identityReady = value.identityReady !== false;
+  const calls = value.calls || [];
   const playwrightPath = require.resolve("../src/core/playwright");
   const adapterPath = require.resolve(`../src/platforms/${platformId}/adapter`);
   const previousPlaywright = require.cache[playwrightPath];
@@ -36,12 +41,32 @@ function loadBrowserAdapter(platformId) {
     filename: playwrightPath,
     loaded: true,
     exports: {
-      pwSessionConfig: () => ({ id: `synthetic-${platformId}` }),
-      pwInvokeSync: () => true,
+      pwSessionConfig: () => ({
+        session: sessionName,
+        stateFile: value.stateFile || "synthetic-state.json",
+      }),
+      pwInvokeSync: (args) => {
+        calls.push(args);
+        if (args[0] === "list") return alive ? sessionName : "";
+        if (args[0] === "open") {
+          alive = true;
+          return "";
+        }
+        if (args[0] === "goto") {
+          identityReady = true;
+          return "";
+        }
+        return "";
+      },
       runCode(source) {
         if (source.includes("page.url()"))
           return "https://mp.toutiao.com/profile_v4/graphic/publish";
         if (source.includes("targetCity")) return "北京";
+        if (
+          source.includes("document.querySelector") &&
+          source.includes("selectors")
+        )
+          return identityReady;
         return true;
       },
     },
@@ -95,6 +120,47 @@ test("Hepan accepted result carries a closed safe remote identity", async () => 
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+for (const platformId of ["lieju", "toutiao"]) {
+  test(`${platformId} account preflight starts the session, restores state, and reaches identity page`, async () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), `regular-${platformId}-account-ready-`),
+    );
+    const stateFile = path.join(root, "saved-state.json");
+    fs.writeFileSync(stateFile, "{}", "utf8");
+    const calls = [];
+    const loaded = loadBrowserAdapter(platformId, {
+      alive: false,
+      identityReady: false,
+      stateFile,
+      calls,
+    });
+    try {
+      await loaded.adapter.ensureAccountInspectionReady({
+        targetPlatformId: platformId,
+        accountProfileId: "account-browser-ready",
+      });
+      const commands = calls.map((args) => args[0]);
+      const openIndex = commands.indexOf("open");
+      const stateLoadIndex = commands.indexOf("state-load");
+      const gotoIndex = commands.indexOf("goto");
+      assert.ok(openIndex >= 0);
+      assert.ok(stateLoadIndex > openIndex);
+      assert.ok(gotoIndex > stateLoadIndex);
+
+      calls.splice(0, calls.length);
+      await loaded.adapter.ensureAccountInspectionReady({
+        targetPlatformId: platformId,
+        accountProfileId: "account-browser-ready",
+        preserveCurrentPage: true,
+      });
+      assert.equal(calls.some((args) => args[0] === "goto"), false);
+    } finally {
+      loaded.restore();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+}
 
 for (const platformId of ["lieju", "toutiao"]) {
   test(`${platformId} returns uncertain when final submit cannot bind a remote identity`, async () => {

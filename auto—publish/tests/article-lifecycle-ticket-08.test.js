@@ -506,6 +506,7 @@ test("production preparation port verifies the account profile before adapter pr
 test("prepared browser submission rechecks the bound account immediately before submit", async () => {
   let inspections = 0;
   let submissions = 0;
+  const inspectionTasks = [];
   const claim = {
     platformId: "toutiao",
     accountProfileId: "account-a",
@@ -525,7 +526,8 @@ test("prepared browser submission rechecks the bound account immediately before 
   };
   const port = createRegularPlatformPreparationPort({
     accountInspector: {
-      inspect: async () => {
+      inspect: async (task) => {
+        inspectionTasks.push(task);
         inspections += 1;
         return inspections === 1
           ? {
@@ -558,11 +560,13 @@ test("prepared browser submission rechecks the bound account immediately before 
 
   const prepared = await port.preparePlatformSubmission(claim);
   assert.equal(inspections, 1);
+  assert.equal(inspectionTasks[0].preserveCurrentPage, false);
   assert.deepEqual(await prepared.submitPreparedPublication(), {
     status: "uncertain",
     errorCode: "REGULAR_ACCOUNT_PROFILE_DRIFT",
   });
   assert.equal(inspections, 2);
+  assert.equal(inspectionTasks[1].preserveCurrentPage, true);
   assert.equal(submissions, 0);
 });
 

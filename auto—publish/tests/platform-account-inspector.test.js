@@ -53,6 +53,127 @@ test("platform account inspector binds only a verified remote identity to its ex
   });
 });
 
+test("platform account inspector prepares the session before inspecting identity", async () => {
+  const bindings = new Map();
+  const calls = [];
+  const inspector = createPlatformAccountInspector({
+    adapters: {
+      toutiao: {
+        ensureAccountInspectionReady: async (task) =>
+          calls.push(["ready", task]),
+        inspectAccount: async () => {
+          calls.push(["inspect"]);
+          return {
+            verified: true,
+            displayName: "fixture-account",
+            remoteAccountId: "remote-123",
+          };
+        },
+      },
+    },
+    operationalStore: {
+      listAccountProfiles: () => [
+        { accountProfileId: "account-1", platformId: "toutiao" },
+      ],
+    },
+    bindingStore: {
+      get: (id) => bindings.get(id) || null,
+      bind: (value) => bindings.set(value.accountProfileId, value),
+    },
+  });
+
+  const result = await inspector.inspect({
+    targetPlatformId: "toutiao",
+    accountProfileId: "account-1",
+    preserveCurrentPage: true,
+  });
+
+  assert.equal(result.verified, true);
+  assert.deepEqual(calls, [
+    [
+      "ready",
+      {
+        targetPlatformId: "toutiao",
+        accountProfileId: "account-1",
+        preserveCurrentPage: true,
+      },
+    ],
+    ["inspect"],
+  ]);
+});
+
+test("account inspection fails closed without calling inspectAccount when session readiness fails", async () => {
+  let inspections = 0;
+  const inspector = createPlatformAccountInspector({
+    adapters: {
+      toutiao: {
+        ensureAccountInspectionReady: async () => {
+          const error = new Error("session unavailable");
+          error.code = "PLAYWRIGHT_SESSION_NOT_OPEN";
+          throw error;
+        },
+        inspectAccount: async () => {
+          inspections += 1;
+          return {
+            verified: true,
+            displayName: "fixture-account",
+            remoteAccountId: "remote-123",
+          };
+        },
+      },
+    },
+    operationalStore: {
+      listAccountProfiles: () => [
+        { accountProfileId: "account-1", platformId: "toutiao" },
+      ],
+    },
+    bindingStore: { get: () => null, bind: () => {} },
+  });
+
+  assert.deepEqual(
+    await inspector.inspect({
+      targetPlatformId: "toutiao",
+      accountProfileId: "account-1",
+    }),
+    { verified: false },
+  );
+  assert.equal(inspections, 0);
+});
+
+test("account inspection keeps the session fallback for non-browser adapters", async () => {
+  const calls = [];
+  const inspector = createPlatformAccountInspector({
+    adapters: {
+      hepan: {
+        ensureSession: async () => calls.push("session"),
+        inspectAccount: async () => {
+          calls.push("inspect");
+          return {
+            verified: true,
+            displayName: "fixture-account",
+            remoteAccountId: "remote-123",
+          };
+        },
+      },
+    },
+    operationalStore: {
+      listAccountProfiles: () => [
+        { accountProfileId: "account-1", platformId: "hepan" },
+      ],
+    },
+    bindingStore: { get: () => null, bind: () => {} },
+  });
+
+  assert.equal(
+    (await inspector.inspect({
+      targetPlatformId: "hepan",
+      accountProfileId: "account-1",
+    })).verified,
+    true,
+  );
+  assert.deepEqual(calls, ["session", "inspect"]);
+});
+
 test("platform account inspector fails closed for a missing or platform-mismatched profile", async () => {
   const inspector = createPlatformAccountInspector({
     adapters: {

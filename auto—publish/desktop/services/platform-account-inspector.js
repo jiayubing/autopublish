@@ -15,6 +15,23 @@ function fingerprint(platformId, remoteAccountId) {
     .digest("hex");
 }
 
+async function ensureAccountInspectionReady(adapter, task) {
+  const input = task || {};
+  if (typeof adapter.ensureAccountInspectionReady === "function") {
+    await adapter.ensureAccountInspectionReady(
+      Object.freeze({
+        targetPlatformId: input.targetPlatformId,
+        accountProfileId: input.accountProfileId,
+        preserveCurrentPage: input.preserveCurrentPage === true,
+      }),
+    );
+    return;
+  }
+  if (typeof adapter.ensureSession === "function") {
+    await adapter.ensureSession();
+  }
+}
+
 function createPlatformAccountInspector(options) {
   const value = options || {};
   const adapters = value.adapters || {};
@@ -45,6 +62,7 @@ function createPlatformAccountInspector(options) {
       }
       let evidence;
       try {
+        await ensureAccountInspectionReady(adapter, task);
         evidence = await adapter.inspectAccount();
       } catch (_) {
         return Object.freeze({ verified: false });

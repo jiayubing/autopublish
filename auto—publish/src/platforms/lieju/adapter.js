@@ -118,6 +118,51 @@ function checkLoginInCurrentPage() {
   return hasLoginIndicator();
 }
 
+function hasAccountIdentityIndicator() {
+  try {
+    return runCode(
+      [
+        "  var selectors = ['#um a[href*=\"uid=\"]', '.vwmy a[href*=\"uid=\"]', '.user-name a[href*=\"uid=\"]', '[data-uid]'];",
+        "  for (var i = 0; i < selectors.length; i += 1) {",
+        "    if (document.querySelector(selectors[i])) return true;",
+        "  }",
+        "  return false;",
+      ].join("\n"),
+      SESSION_OPTS,
+    ) === true;
+  } catch (_) {
+    return false;
+  }
+}
+
+async function ensureAccountInspectionReady(options) {
+  var opts = options || {};
+  var wasAlive = daemonAlive();
+  ensureDaemon();
+  if (!wasAlive) {
+    try {
+      loadSavedState();
+    } catch (e) {
+      diagnose("PLATFORM_LOGIN_STATE_LOAD_FAILED", "storage", "state-load");
+    }
+  }
+  if (hasAccountIdentityIndicator()) return;
+  if (opts.preserveCurrentPage === true) {
+    var pageError = new Error("Account inspection page is not ready");
+    pageError.code = "PLATFORM_ACCOUNT_INSPECTION_PAGE_NOT_READY";
+    throw pageError;
+  }
+  pwInvokeSync(["goto", LIEJU.base], {
+    timeout: 20000,
+    session: SESSION,
+  });
+  waitForLoginState(LOGIN_STATE_SETTLE_MS);
+  waitForCondition(hasAccountIdentityIndicator, {
+    timeoutMs: PUBLISH_PAGE_LOGIN_CHECK_MS,
+    intervalMs: FAST_POLL_MS,
+  });
+}
+
 function inspectAccount() {
   try {
     var evidence = runCode(
@@ -433,6 +478,7 @@ module.exports = {
   ensureLoggedIn: ensureLoggedIn,
   openLogin: openLogin,
   checkLogin: checkLogin,
+  ensureAccountInspectionReady: ensureAccountInspectionReady,
   inspectAccount: inspectAccount,
   publishArticle: publishArticle,
   preparePlatformSubmission: preparePlatformSubmission,
