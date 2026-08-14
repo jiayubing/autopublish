@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 
 const { getContentWorkspace, getClientWorkspace } = require("../core/files");
+const { createAtomicFileWriter } = require("./content-file-transaction");
 
 // Legacy knowledge loading remains synchronous and text-only. DOCX is handled
 // by client-material-store so it can be converted, cached, and retried safely.
@@ -148,18 +149,17 @@ function assertClientDirectory(clientDirectory, workspaceRootOrBoundary) {
   };
 }
 
-function readClientMetadata(clientBoundary) {
+function readClientMetadataDocument(clientBoundary) {
   const directory = clientBoundary.resolved;
-  const defaults = { id: path.basename(directory), name: path.basename(directory) };
   const metadataPath = path.join(directory, "client.json");
   const realMetadataPath = assertRegularFile(metadataPath, clientBoundary.realClientDirectory, true);
-  if (!realMetadataPath) return defaults;
+  if (!realMetadataPath) return {};
 
   let source;
   try {
     source = fs.readFileSync(metadataPath, "utf8");
   } catch (error) {
-    if (isMissingPathError(error)) return defaults;
+    if (isMissingPathError(error)) return {};
     throw pathOutOfBounds();
   }
 
@@ -172,10 +172,76 @@ function readClientMetadata(clientBoundary) {
     invalid.cause = error;
     throw invalid;
   }
+  return metadata;
+}
+
+function normalizeLiejuPublicationProfile(value) {
+  const profile = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const result = { city: "", contact: "", phone: "" };
+  [["city", 100], ["contact", 100], ["phone", 50]].forEach(function(entry) {
+    const key = entry[0];
+    const limit = entry[1];
+    if (typeof profile[key] === "string" && profile[key].trim()) {
+      result[key] = profile[key].trim().slice(0, limit);
+    }
+  });
+  return result;
+}
+
+function readClientMetadata(clientBoundary) {
+  const directory = clientBoundary.resolved;
+  const metadata = readClientMetadataDocument(clientBoundary);
+  const lieju = normalizeLiejuPublicationProfile(
+    metadata.publicationProfiles && metadata.publicationProfiles.lieju,
+  );
   return {
     id: typeof metadata.id === "string" && metadata.id ? metadata.id : path.basename(directory),
-    name: typeof metadata.name === "string" && metadata.name ? metadata.name : path.basename(directory)
+    name: typeof metadata.name === "string" && metadata.name ? metadata.name : path.basename(directory),
+    publicationProfiles: { lieju: lieju },
   };
+}
+
+function saveLiejuPublicationProfile(workspaceRoot, clientId, profile, options) {
+  if (typeof clientId !== "string" || !clientId.trim()) {
+    throw contentError("CLIENT_PROFILE_INPUT_INVALID", "Client id is required");
+  }
+  if (!profile || typeof profile !== "object" || Array.isArray(profile)) {
+    throw contentError("CLIENT_PROFILE_INPUT_INVALID", "Lieju publication profile must be an object");
+  }
+  const allowed = new Set(["city", "contact", "phone"]);
+  if (Object.keys(profile).some(function(key) { return !allowed.has(key); })) {
+    throw contentError("CLIENT_PROFILE_INPUT_INVALID", "Lieju publication profile contains unsupported fields");
+  }
+  [["city", 100], ["contact", 100], ["phone", 50]].forEach(function(entry) {
+    const value = profile[entry[0]];
+    if (value !== undefined && (typeof value !== "string" || value.length > entry[1])) {
+      throw contentError("CLIENT_PROFILE_INPUT_INVALID", "Lieju publication profile field is invalid");
+    }
+  });
+
+  const identity = resolveClientIdentity(workspaceRoot, clientId);
+  const boundary = assertClientDirectory(identity.directory, workspaceRoot);
+  if (!boundary.realClientDirectory) throw contentError("CLIENT_NOT_FOUND", "Client was not found");
+  const document = readClientMetadataDocument(boundary);
+  const publicationProfiles = document.publicationProfiles &&
+    typeof document.publicationProfiles === "object" &&
+    !Array.isArray(document.publicationProfiles)
+    ? Object.assign({}, document.publicationProfiles)
+    : {};
+  const lieju = normalizeLiejuPublicationProfile(profile);
+  publicationProfiles.lieju = lieju;
+  const next = Object.assign({}, document, {
+    id: typeof document.id === "string" && document.id ? document.id : identity.id,
+    name: typeof document.name === "string" && document.name ? document.name : identity.name,
+    publicationProfiles: publicationProfiles,
+  });
+  const writer = options && options.atomicWriter || createAtomicFileWriter({ fs: fs });
+  writer.write(
+    path.join(boundary.resolved, "client.json"),
+    JSON.stringify(next, null, 2) + "\n",
+    { keepExisting: false },
+  );
+  return { lieju: lieju };
 }
 
 function readSearchQueryWithinBoundary(clientBoundary) {
@@ -253,6 +319,12 @@ function getClient(workspaceRoot, clientId) {
   return client;
 }
 
+function getLiejuPublicationProfile(workspaceRoot, clientId) {
+  const identity = resolveClientIdentity(workspaceRoot, clientId);
+  const boundary = assertClientDirectory(identity.directory, workspaceRoot);
+  return readClientMetadata(boundary).publicationProfiles.lieju;
+}
+
 // Identity lookup intentionally reads only directory and client.json metadata.
 // Callers which merely need a physical location must not load knowledge files.
 function resolveClientIdentity(workspaceRoot, clientId) {
@@ -314,6 +386,7 @@ function listClients(workspaceRoot) {
         id: metadata.id,
         name: metadata.name,
         directory: directory,
+        publicationProfiles: metadata.publicationProfiles,
         knowledgeFiles: loadClientKnowledgeWithinBoundary(clientBoundary)
       };
       const searchQuery = readOptionalSearchQueryWithinBoundary(clientBoundary);
@@ -322,4 +395,13 @@ function listClients(workspaceRoot) {
     });
 }
 
-module.exports = { listClients, getClient, resolveClientIdentity, listClientIdentities, loadClientKnowledge, readSearchQuery };
+module.exports = {
+  listClients,
+  getClient,
+  getLiejuPublicationProfile,
+  resolveClientIdentity,
+  listClientIdentities,
+  loadClientKnowledge,
+  readSearchQuery,
+  saveLiejuPublicationProfile,
+};

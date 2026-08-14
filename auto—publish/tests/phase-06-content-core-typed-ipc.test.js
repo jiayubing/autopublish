@@ -45,6 +45,7 @@ const {
 
 const CHANNELS = [
   "content:list-clients",
+  "content:save-client-lieju-publication-profile",
   "content:list-research",
   "content:list-template-catalog",
   "content:retry-material",
@@ -65,7 +66,7 @@ const CHANNELS = [
   "content:article-removal-transaction",
 ].sort();
 
-test("content core declares exactly 19 versioned path-free capabilities", function () {
+test("content core declares exactly 20 versioned path-free capabilities", function () {
   const registry = createContractRegistry(contentCoreContracts);
   assert.deepEqual(
     contentCoreContracts.map((contract) => contract.channel).sort(),
@@ -444,6 +445,9 @@ test("content clients preserve multiline material text while stripping paths and
         {
           id: "client-1",
           name: "测试客户",
+          publicationProfiles: {
+            lieju: { city: "", contact: "", phone: "" },
+          },
           knowledgeFiles: [
             {
               id: "material-1",

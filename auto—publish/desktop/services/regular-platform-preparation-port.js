@@ -11,6 +11,7 @@ function fail(code) {
 function createRegularPlatformPreparationPort(options) {
   const value = options || {};
   const inspector = value.accountInspector;
+  const resolveClientPublicationProfile = value.resolveClientPublicationProfile;
   if (!inspector || typeof inspector.inspect !== "function")
     throw fail("REGULAR_ACCOUNT_INSPECTOR_REQUIRED");
   const adapters = new Map();
@@ -38,8 +39,17 @@ function createRegularPlatformPreparationPort(options) {
         !inspection.remoteFingerprint
       )
         throw fail("REGULAR_ACCOUNT_PROFILE_UNVERIFIED");
+      const publicationProfile = typeof resolveClientPublicationProfile === "function"
+        ? await resolveClientPublicationProfile({
+          clientId: input.articleIdentityV1 && input.articleIdentityV1.clientId,
+          platformId: input.platformId,
+        })
+        : undefined;
+      const adapterInput = publicationProfile === undefined
+        ? input
+        : Object.assign({}, input, { publicationProfile: publicationProfile });
       const prepared = domain.createPreparedSubmission(
-        await adapter.preparePlatformSubmission(input),
+        await adapter.preparePlatformSubmission(adapterInput),
       );
       return domain.createPreparedSubmission({
         preparedSubmissionEvidenceV1: prepared.preparedSubmissionEvidenceV1,

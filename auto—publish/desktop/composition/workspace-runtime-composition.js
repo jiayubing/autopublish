@@ -639,7 +639,17 @@ async function createWorkspaceRuntimeComposition(deps) {
     });
     const platformSubmissionExecutor =
       require("../services/regular-platform-preparation-port").createRegularPlatformPreparationPort(
-        { adapters: regularPlatformAdapters, accountInspector },
+        {
+          adapters: regularPlatformAdapters,
+          accountInspector,
+          resolveClientPublicationProfile: function(input) {
+            if (!input || input.platformId !== "lieju") return undefined;
+            return require("../../src/content/client-knowledge").getLiejuPublicationProfile(
+              workspaceRoot,
+              input.clientId,
+            );
+          },
+        },
       );
     const regularPlatformOutcomeService =
       require("../services/regular-platform-outcome-service").createRegularPlatformOutcomeService(

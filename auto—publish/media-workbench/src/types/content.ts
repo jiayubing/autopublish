@@ -21,7 +21,15 @@ export interface ContentClient {
   id: string;
   name: string;
   searchQuery?: string;
+  publicationProfiles?: {
+    lieju: LiejuPublicationProfile;
+  };
   knowledgeFiles: ContentMaterial[];
+}
+export interface LiejuPublicationProfile {
+  city: string;
+  contact: string;
+  phone: string;
 }
 export interface ContentQuestion {
   id: string;

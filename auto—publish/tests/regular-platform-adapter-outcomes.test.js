@@ -32,6 +32,7 @@ function loadBrowserAdapter(platformId, options) {
   let alive = value.alive !== false;
   let identityReady = value.identityReady !== false;
   const calls = value.calls || [];
+  const codeSources = value.codeSources || [];
   const playwrightPath = require.resolve("../src/core/playwright");
   const adapterPath = require.resolve(`../src/platforms/${platformId}/adapter`);
   const previousPlaywright = require.cache[playwrightPath];
@@ -59,6 +60,7 @@ function loadBrowserAdapter(platformId, options) {
         return "";
       },
       runCode(source) {
+        codeSources.push(source);
         if (source.includes("page.url()"))
           return "https://mp.toutiao.com/profile_v4/graphic/publish";
         if (source.includes("targetCity")) return "北京";
@@ -161,6 +163,22 @@ for (const platformId of ["lieju", "toutiao"]) {
     }
   });
 }
+
+test("Lieju fills the customer publication profile passed by preparation", async () => {
+  const codeSources = [];
+  const loaded = loadBrowserAdapter("lieju", { codeSources });
+  try {
+    await loaded.adapter.preparePlatformSubmission(Object.assign(claim("lieju"), {
+      publicationProfile: { city: "上海", contact: "张三", phone: "13800138000" },
+    }));
+    const source = codeSources.join("\n");
+    assert.match(source, /targetCity = "上海"/);
+    assert.match(source, /#atc_linkman'\)\.fill\("张三"\)/);
+    assert.match(source, /#atc_mobphone'\)\.fill\("13800138000"\)/);
+  } finally {
+    loaded.restore();
+  }
+});
 
 for (const platformId of ["lieju", "toutiao"]) {
   test(`${platformId} returns uncertain when final submit cannot bind a remote identity`, async () => {

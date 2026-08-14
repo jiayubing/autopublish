@@ -34,6 +34,12 @@ function registerAiContentIpc(deps) {
   if (!ipcMain || !service) throw new Error("AI content IPC requires the workspace content service");
 
   ipcMain.handle("content:list-clients", function() { return wrap(async function() { return { clients: (await service.listClients()).map(projectClient) }; }); });
+  ipcMain.handle("content:save-client-lieju-publication-profile", function(event, input) {
+    return wrap(async function() {
+      const result = await service.saveClientLiejuPublicationProfile(input);
+      return { profile: projectClient({ publicationProfiles: result, knowledgeFiles: [] }).publicationProfiles.lieju };
+    });
+  });
   ipcMain.handle("content:list-research", function(event, clientId) { return wrap(function() { return { research: service.listResearch(clientId).map(projectResearch) }; }); });
   ipcMain.handle("content:list-template-catalog", function() { return wrap(function() { return projectTemplateCatalog(service.listTemplateCatalog()); }); });
   ipcMain.handle("content:retry-material", function(event, input) {

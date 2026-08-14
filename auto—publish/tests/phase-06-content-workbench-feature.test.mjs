@@ -317,3 +317,42 @@ test("workspace-level content commands remain available when source loading has 
     /Content command is unavailable/,
   );
 });
+
+test("customer Lieju profile saves at workspace scope and refreshes isolated client data", async () => {
+  const profiles = {
+    a: { city: "上海", contact: "张三", phone: "13800138000" },
+    b: { city: "北京", contact: "李四", phone: "010-12345678" },
+  };
+  const feature = createContentWorkbenchFeature({
+    ...paidExecutionAdapters,
+    listClients: async () => Object.keys(profiles).map((id) => ({
+      id,
+      name: id.toUpperCase(),
+      publicationProfiles: { lieju: profiles[id] },
+      knowledgeFiles: [],
+    })),
+    listTemplateCatalog: async () => ({ revision: "r1", platforms: [], templates: [], diagnostics: [] }),
+    listQuestions: async () => [],
+    listResearch: async () => [],
+    loadManagement: async () => ({}),
+    saveClientLiejuPublicationProfile: async ({ clientId, profile }) => {
+      profiles[clientId] = profile;
+      return profile;
+    },
+  });
+  feature.setScope({ workspaceRuntimeId: "runtime-1" });
+  await feature.refresh("initial");
+
+  await feature.commands.saveClientLiejuPublicationProfile({
+    clientId: "b",
+    profile: { city: "广州", contact: "王五", phone: "020-12345678" },
+  });
+
+  const clients = new Map(feature.getSnapshot().clients.map((client) => [client.id, client]));
+  assert.deepEqual(clients.get("a").publicationProfiles.lieju, {
+    city: "上海", contact: "张三", phone: "13800138000",
+  });
+  assert.deepEqual(clients.get("b").publicationProfiles.lieju, {
+    city: "广州", contact: "王五", phone: "020-12345678",
+  });
+});

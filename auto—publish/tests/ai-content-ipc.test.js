@@ -13,14 +13,16 @@ describe("ai content ipc", function() {
     const ipc = createIpc();
     const service = {
       listClients: function() { return [{ id: "client-1", name: "Client", knowledgeFiles: [] }]; }, retryMaterial: function() { return { id: "material-1", name: "facts.txt", content: "facts", status: "ready" }; },
+      saveClientLiejuPublicationProfile: function(input) { return { lieju: input.profile }; },
       listResearch: function() { return []; },
       generateArticle: async function() { return { id: "article-1" }; }, saveArticle: function(value) { return value; }
     };
     registerAiContentIpc({ ipcMain: ipc.ipcMain, aiContentService: service });
-    ["content:list-clients", "content:list-research", "content:list-template-catalog", "content:retry-material", "content:generate-article", "content:save-article"].forEach(function(channel) {
+    ["content:list-clients", "content:save-client-lieju-publication-profile", "content:list-research", "content:list-template-catalog", "content:retry-material", "content:generate-article", "content:save-article"].forEach(function(channel) {
       assert.equal(ipc.handlers.has(channel), true, "missing " + channel);
     });
-    assert.deepStrictEqual(await ipc.handlers.get("content:list-clients")(), { ok: true, data: { clients: [{ id: "client-1", name: "Client", knowledgeFiles: [] }] } });
+    assert.deepStrictEqual(await ipc.handlers.get("content:list-clients")(), { ok: true, data: { clients: [{ id: "client-1", name: "Client", publicationProfiles: { lieju: { city: "", contact: "", phone: "" } }, knowledgeFiles: [] }] } });
+    assert.deepStrictEqual(await ipc.handlers.get("content:save-client-lieju-publication-profile")(null, { clientId: "client-1", profile: { city: "上海", contact: "张三", phone: "13800138000" } }), { ok: true, data: { profile: { city: "上海", contact: "张三", phone: "13800138000" } } });
     assert.deepStrictEqual(await ipc.handlers.get("content:generate-article")(null, { clientId: "client-1" }), { ok: true, data: { article: { id: "article-1" } } });
     assert.equal(ipc.handlers.has("content:copy-article-version"), false);
     assert.deepStrictEqual(await ipc.handlers.get("content:retry-material")(null, { clientId: "client-1", materialId: "material-1" }), { ok: true, data: { material: { id: "material-1", name: "facts.txt", content: "facts", status: "ready" } } });

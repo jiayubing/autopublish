@@ -1,4 +1,4 @@
-const { listClients, getClient } = require("../../src/content/client-knowledge");
+const { listClients, getClient, saveLiejuPublicationProfile } = require("../../src/content/client-knowledge");
 const { createResearchStore } = require("../../src/content/research-store");
 const { createTemplateStore } = require("../../src/content/template-store");
 const { createArticleTrashService } = require("../../src/content/article-trash-service");
@@ -75,7 +75,10 @@ function createAiContentService(opts) {
   const paths = options.paths;
   const clientKnowledge = options.clientKnowledge || {
     listClients: function() { return listClients(workspaceRoot); },
-    getClient: function(id) { return getClient(workspaceRoot, id); }
+    getClient: function(id) { return getClient(workspaceRoot, id); },
+    saveLiejuPublicationProfile: function(id, profile) {
+      return saveLiejuPublicationProfile(workspaceRoot, id, profile);
+    }
   };
   const researchStore = options.researchStore || createResearchStore(workspaceRoot, { paths: paths });
   const templateStore = options.templateStore || createTemplateStore(workspaceRoot, { paths: paths });
@@ -208,6 +211,15 @@ function createAiContentService(opts) {
   async function getClientSafe(clientId) {
     assertId(clientId, "Client id");
     return materializeClient(await clientKnowledge.getClient(clientId));
+  }
+
+  async function saveClientLiejuPublicationProfile(input) {
+    const request = input || {};
+    assertId(request.clientId, "Client id");
+    if (typeof clientKnowledge.saveLiejuPublicationProfile !== "function") {
+      throw contentError("CLIENT_PROFILE_UNAVAILABLE", "Client publication profile storage is unavailable");
+    }
+    return clientKnowledge.saveLiejuPublicationProfile(request.clientId, request.profile);
   }
 
   function listResearch(clientId) {
@@ -367,6 +379,7 @@ function createAiContentService(opts) {
   return {
     listClients: listClientsSafe,
     getClient: getClientSafe,
+    saveClientLiejuPublicationProfile: saveClientLiejuPublicationProfile,
     retryMaterial: retryMaterial,
     listResearch: listResearch,
     getResearch: getResearch,

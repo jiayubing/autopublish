@@ -322,6 +322,9 @@ const api = {
     listClients: function () {
       return ipcRenderer.invoke("content:list-clients");
     },
+    saveClientLiejuPublicationProfile: function (input) {
+      return ipcRenderer.invoke("content:save-client-lieju-publication-profile", input);
+    },
     listResearch: function (clientId) {
       return ipcRenderer.invoke("content:list-research", clientId);
     },

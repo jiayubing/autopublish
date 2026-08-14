@@ -12,6 +12,9 @@ function contentClientFixture() {
   return {
     id: "client-1",
     name: "测试客户",
+    publicationProfiles: {
+      lieju: { city: "上海", contact: "张三", phone: "13800138000" },
+    },
     knowledgeFiles: [contentMaterialFixture()],
   };
 }
@@ -858,6 +861,21 @@ const PRODUCTION_CALLERS = Object.freeze({
     registrar: "desktop/ipc/ai-content-ipc.js",
     application: "service.listClients",
     featureBinding: "listClients",
+  }),
+  "content.saveClientLiejuPublicationProfile": Object.freeze({
+    view: "media-workbench/src/components/ContentWorkbench.tsx",
+    viewSymbol: "useContentWorkbenchFeature",
+    feature:
+      "media-workbench/src/features/content/use-content-workbench-feature.ts",
+    featureSymbol: "useContentWorkbenchFeature",
+    bridge: "media-workbench/src/bridge/content.ts",
+    bridgeSymbol: "saveClientLiejuPublicationProfile",
+    preloadMethod: "saveClientLiejuPublicationProfile",
+    command: "content.saveClientLiejuPublicationProfile",
+    channel: "content:save-client-lieju-publication-profile",
+    registrar: "desktop/ipc/ai-content-ipc.js",
+    application: "service.saveClientLiejuPublicationProfile",
+    featureBinding: "saveClientLiejuPublicationProfile",
   }),
   "content.listResearch": Object.freeze({
     view: "media-workbench/src/components/ContentWorkbench.tsx",
@@ -2251,6 +2269,11 @@ const PRODUCTION_CONSUMERS = Object.freeze({
     "media-workbench/src/features/content/use-content-workbench-feature.ts",
     "refresh",
   ],
+  "content.saveClientLiejuPublicationProfile": [
+    "direct",
+    "media-workbench/src/components/ContentWorkbench.tsx",
+    "saveClientLiejuPublicationProfile",
+  ],
   "content.listResearch": [
     "lifecycle",
     "media-workbench/src/features/content/use-content-workbench-feature.ts",
@@ -2924,6 +2947,7 @@ const PRODUCTION_NESTED_COMMAND_FEATURES = Object.freeze(
         "createContentSourcesFeature",
         [
           "content.retryMaterial",
+          "content.saveClientLiejuPublicationProfile",
           "content.createQuestion",
           "content.updateQuestion",
           "content.deleteQuestion",
@@ -3108,6 +3132,7 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
         "commands",
         [
           "content.retryMaterial",
+          "content.saveClientLiejuPublicationProfile",
           "content.saveArticle",
           "content.getArticleEditor",
           "content.previewArticleRemovalImpact",
@@ -4328,6 +4353,20 @@ const rawProductionIpcContractFixtures = [
     productionCaller: "desktop/preload.js:content:list-clients",
     request: {},
     result: { clients: [contentClientFixture()] },
+  },
+  {
+    capability: "content.saveClientLiejuPublicationProfile",
+    channel: "content:save-client-lieju-publication-profile",
+    owner: "content",
+    productionCaller:
+      "desktop/preload.js:content:save-client-lieju-publication-profile",
+    request: {
+      clientId: "client-1",
+      profile: { city: "上海", contact: "张三", phone: "13800138000" },
+    },
+    result: {
+      profile: { city: "上海", contact: "张三", phone: "13800138000" },
+    },
   },
   {
     capability: "content.listResearch",

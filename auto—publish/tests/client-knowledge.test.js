@@ -4,7 +4,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
-const { listClients, getClient, loadClientKnowledge, readSearchQuery } = require("../src/content/client-knowledge");
+const { listClients, getClient, loadClientKnowledge, readSearchQuery, saveLiejuPublicationProfile } = require("../src/content/client-knowledge");
 
 const LINK_UNAVAILABLE_CODES = new Set(["EPERM", "EACCES", "ENOTSUP", "EOPNOTSUPP", "EINVAL", "ENOSYS"]);
 
@@ -50,6 +50,48 @@ describe("client knowledge", function() {
     assert.equal(clients[0].searchQuery, "Shanghai hotels\nfamily travel ");
     assert.deepStrictEqual(clients[0].knowledgeFiles.map(function(file) { return file.name; }), ["brand.md", "details.markdown", "facts.json", "service.txt"]);
     assert.deepStrictEqual(getClient(root, "client-1"), clients[0]);
+    assert.deepStrictEqual(clients[0].publicationProfiles, {
+      lieju: { city: "", contact: "", phone: "" },
+    });
+  });
+
+  it("persists isolated Lieju publication profiles without changing other client metadata", function() {
+    const secondDirectory = path.join(root, "clients", "second-client");
+    fs.mkdirSync(secondDirectory, { recursive: true });
+    fs.writeFileSync(path.join(secondDirectory, "client.json"), JSON.stringify({
+      id: "client-2",
+      name: "Second Client",
+      retained: { custom: true },
+    }));
+
+    assert.deepStrictEqual(saveLiejuPublicationProfile(root, "client-1", {
+      city: " 上海 ", contact: " 张三 ", phone: " 13800138000 ",
+    }), { lieju: { city: "上海", contact: "张三", phone: "13800138000" } });
+    assert.deepStrictEqual(saveLiejuPublicationProfile(root, "client-2", {
+      city: "北京", contact: "李四", phone: "010-12345678",
+    }), { lieju: { city: "北京", contact: "李四", phone: "010-12345678" } });
+
+    const reloaded = new Map(listClients(root).map(function(client) { return [client.id, client]; }));
+    assert.deepStrictEqual(reloaded.get("client-1").publicationProfiles.lieju, {
+      city: "上海", contact: "张三", phone: "13800138000",
+    });
+    assert.deepStrictEqual(reloaded.get("client-2").publicationProfiles.lieju, {
+      city: "北京", contact: "李四", phone: "010-12345678",
+    });
+    const secondDocument = JSON.parse(fs.readFileSync(path.join(secondDirectory, "client.json"), "utf8"));
+    assert.deepStrictEqual(secondDocument.retained, { custom: true });
+  });
+
+  it("allows empty Lieju fields and rejects unsupported or oversized profile input", function() {
+    assert.deepStrictEqual(saveLiejuPublicationProfile(root, "client-1", {
+      city: "", contact: "", phone: "",
+    }), { lieju: { city: "", contact: "", phone: "" } });
+    assert.throws(function() {
+      saveLiejuPublicationProfile(root, "client-1", { city: "上海", extra: "no" });
+    }, { code: "CLIENT_PROFILE_INPUT_INVALID" });
+    assert.throws(function() {
+      saveLiejuPublicationProfile(root, "client-1", { city: "x".repeat(101) });
+    }, { code: "CLIENT_PROFILE_INPUT_INVALID" });
   });
 
   it("lists a client without search_query.txt when questions.json already exists", function() {

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronLeft, ChevronRight } from 'lucide-react';
-import type { ContentClient, ContentCommandStaleResult, ContentMaterial, ContentResearch, ContentTemplate, ContentTemplateCatalog } from '../../types/content';
+import type { ContentClient, ContentCommandStaleResult, ContentMaterial, ContentResearch, ContentTemplate, ContentTemplateCatalog, LiejuPublicationProfile } from '../../types/content';
 import type { GenerationBatch, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState } from '../../types/generation';
 import BaseCollapsibleSourceItem, { CollapsibleSourceItemProps } from './CollapsibleSourceItem';
 import GenerationBatchDetail from './GenerationBatchDetail';
@@ -14,7 +14,10 @@ interface BatchGenerationViewProps {
   currentClientId?: string;
   researchByClient: Record<string, ContentResearch[]>;
   templateCatalog?: ContentTemplateCatalog;
-  commands: { retryMaterial: (input: Record<string, unknown>) => Promise<ContentMaterial | ContentCommandStaleResult> };
+  commands: {
+    retryMaterial: (input: Record<string, unknown>) => Promise<ContentMaterial | ContentCommandStaleResult>;
+  };
+  saveClientLiejuPublicationProfile: (input: { clientId: string; profile: LiejuPublicationProfile }) => Promise<LiejuPublicationProfile | ContentCommandStaleResult>;
   commandStates: { retryMaterial: { busy: boolean } };
 }
 
@@ -23,6 +26,11 @@ type BatchViewMode = 'wizard' | 'monitoring';
 const EMPTY_STATE: GenerationBatchState = { status: 'idle', state: 'idle', batchId: null };
 const ACTIVE_BATCH_STATUSES = new Set(['running', 'pausing', 'stopping']);
 const CollapsibleSourceItem = BaseCollapsibleSourceItem as React.ComponentType<CollapsibleSourceItemProps & React.Attributes>;
+const EMPTY_LIEJU_PROFILE: LiejuPublicationProfile = { city: '', contact: '', phone: '' };
+
+function liejuProfile(client: ContentClient): LiejuPublicationProfile {
+  return { ...EMPTY_LIEJU_PROFILE, ...(client.publicationProfiles?.lieju || {}) };
+}
 
 function materialForClient(client: ContentClient, overrides: Record<string, ContentMaterial> = {}): ContentMaterial[] {
   return (client.knowledgeFiles || []).map((item) => ({
@@ -46,7 +54,7 @@ function errorReason(code: string) {
   return labels[code] || code;
 }
 
-export default function BatchGenerationView({ clients, currentClientId, researchByClient, templateCatalog, commands, commandStates }: BatchGenerationViewProps) {
+export default function BatchGenerationView({ clients, currentClientId, researchByClient, templateCatalog, commands, commandStates, saveClientLiejuPublicationProfile }: BatchGenerationViewProps) {
   const { confirm } = useConfirmation();
   const [viewMode, setViewMode] = useState<BatchViewMode>('wizard');
   const [step, setStep] = useState(0);
@@ -58,6 +66,10 @@ export default function BatchGenerationView({ clients, currentClientId, research
   const [previewResult, setPreviewResult] = useState<GenerationBatchPreview | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [profileDrafts, setProfileDrafts] = useState<Record<string, LiejuPublicationProfile>>({});
+  const [profileDirty, setProfileDirty] = useState<Record<string, boolean>>({});
+  const [savingProfileClientId, setSavingProfileClientId] = useState('');
+  const [profileMessages, setProfileMessages] = useState<Record<string, string>>({});
   const preflightErrorRef = useRef<HTMLDivElement | null>(null);
   const clientSelectionTouchedRef = useRef(false);
   const templateSelectionTouchedRef = useRef(false);
@@ -107,7 +119,11 @@ export default function BatchGenerationView({ clients, currentClientId, research
   useEffect(() => {
     const availableClientIds = clients.map((client) => client.id);
     setSelectedClientIds((current) => preserveSelection(current, availableClientIds, clientSelectionTouchedRef.current));
-  }, [clients, clientMap]);
+    setProfileDrafts((current) => Object.fromEntries(clients.map((client) => [
+      client.id,
+      profileDirty[client.id] ? current[client.id] || liejuProfile(client) : liejuProfile(client),
+    ])));
+  }, [clients, clientMap, profileDirty]);
 
   useEffect(() => {
     const nextCatalog = templateCatalog || { revision: '', platforms: [], templates: [], diagnostics: [] };
@@ -178,6 +194,32 @@ export default function BatchGenerationView({ clients, currentClientId, research
   function updateSource(clientId: string, field: 'materialIds' | 'researchQueryIds', id: string, selected: boolean) {
     setSources((current) => ({ ...current, [clientId]: { ...current[clientId], [field]: selected ? [...(current[clientId]?.[field] || []), id] : (current[clientId]?.[field] || []).filter((item) => item !== id) } }));
     setPreviewResult(null);
+  }
+
+  function updateProfile(clientId: string, field: keyof LiejuPublicationProfile, value: string) {
+    setProfileDrafts((current) => ({ ...current, [clientId]: { ...(current[clientId] || EMPTY_LIEJU_PROFILE), [field]: value } }));
+    setProfileDirty((current) => ({ ...current, [clientId]: true }));
+    setProfileMessages((current) => ({ ...current, [clientId]: '' }));
+  }
+
+  async function saveProfile(clientId: string) {
+    if (savingProfileClientId) return;
+    setSavingProfileClientId(clientId);
+    setProfileMessages((current) => ({ ...current, [clientId]: '' }));
+    try {
+      const saved = await saveClientLiejuPublicationProfile({
+        clientId,
+        profile: profileDrafts[clientId] || EMPTY_LIEJU_PROFILE,
+      });
+      if (isContentCommandStaleResult(saved)) return;
+      setProfileDrafts((current) => ({ ...current, [clientId]: saved }));
+      setProfileDirty((current) => ({ ...current, [clientId]: false }));
+      setProfileMessages((current) => ({ ...current, [clientId]: '已保存' }));
+    } catch (value) {
+      setProfileMessages((current) => ({ ...current, [clientId]: value instanceof Error ? value.message : '保存失败' }));
+    } finally {
+      setSavingProfileClientId('');
+    }
   }
 
   async function preview() {
@@ -274,7 +316,18 @@ export default function BatchGenerationView({ clients, currentClientId, research
     <div className="min-h-0 flex-1 overflow-y-auto p-4">
       {hydrationError && <div role="alert" aria-live="polite" className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">{hydrationError}</div>}
       {viewMode === 'wizard' && <>
-      {step === 0 && <section className="rounded-md border border-slate-200 bg-white p-4"><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-sm font-semibold">选择批次客户</h2><p className="mt-1 text-xs text-slate-500">已选 {selectedCount} 个客户</p></div><div className="flex gap-2"><button type="button" onClick={toggleAllClients} className="rounded border border-slate-300 px-3 py-2 text-xs">全选客户</button><button type="button" onClick={() => { clientSelectionTouchedRef.current = true; setSelectedClientIds([]); setPreviewResult(null); }} disabled={!selectedCount} className="rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40">取消全选</button></div></div><label className="mb-3 flex items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={allSelected} onChange={toggleAllClients} />全选客户</label><div className="grid gap-2 sm:grid-cols-2">{clients.map((client) => <label key={client.id} className="flex items-center gap-2 rounded border border-slate-200 p-3 text-sm"><input type="checkbox" checked={selectedClientIds.includes(client.id)} onChange={(event) => { clientSelectionTouchedRef.current = true; setSelectedClientIds((current) => event.target.checked ? [...new Set([...current, client.id])] : current.filter((id) => id !== client.id)); }} /><span className="min-w-0 flex-1"><span className="block">{client.name}</span><span className={`block text-xs ${clientReadiness(client) === '可生成' ? 'text-emerald-600' : 'text-amber-700'}`}>{clientReadiness(client)}</span></span></label>)}</div></section>}
+      {step === 0 && <section className="rounded-md border border-slate-200 bg-white p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-sm font-semibold">选择批次客户</h2><p className="mt-1 text-xs text-slate-500">已选 {selectedCount} 个客户</p></div><div className="flex gap-2"><button type="button" onClick={toggleAllClients} className="rounded border border-slate-300 px-3 py-2 text-xs">全选客户</button><button type="button" onClick={() => { clientSelectionTouchedRef.current = true; setSelectedClientIds([]); setPreviewResult(null); }} disabled={!selectedCount} className="rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40">取消全选</button></div></div>
+        <label className="mb-3 flex items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={allSelected} onChange={toggleAllClients} />全选客户</label>
+        <div className="grid gap-3 sm:grid-cols-2">{clients.map((client) => {
+          const profile = profileDrafts[client.id] || liejuProfile(client);
+          const message = profileMessages[client.id];
+          return <article key={client.id} className="rounded border border-slate-200 p-3 text-sm">
+            <label className="flex items-center gap-2"><input type="checkbox" checked={selectedClientIds.includes(client.id)} onChange={(event) => { clientSelectionTouchedRef.current = true; setSelectedClientIds((current) => event.target.checked ? [...new Set([...current, client.id])] : current.filter((id) => id !== client.id)); }} /><span className="min-w-0 flex-1"><span className="block">{client.name}</span><span className={`block text-xs ${clientReadiness(client) === '可生成' ? 'text-emerald-600' : 'text-amber-700'}`}>{clientReadiness(client)}</span></span></label>
+            <fieldset className="mt-3 border-t border-slate-100 pt-3"><legend className="px-1 text-xs font-semibold text-slate-700">列举网投递档案（客户级）</legend><p className="mb-2 text-xs text-slate-500">保存到该客户资料，不会修改文章标题或正文。</p><div className="grid gap-2 sm:grid-cols-3"><label className="text-xs text-slate-600">城市<input aria-label={`${client.name} 列举网城市`} maxLength={100} value={profile.city} onChange={(event) => updateProfile(client.id, 'city', event.target.value)} className="mt-1 h-8 w-full rounded border border-slate-300 px-2" /></label><label className="text-xs text-slate-600">联系人<input aria-label={`${client.name} 列举网联系人`} maxLength={100} value={profile.contact} onChange={(event) => updateProfile(client.id, 'contact', event.target.value)} className="mt-1 h-8 w-full rounded border border-slate-300 px-2" /></label><label className="text-xs text-slate-600">电话<input aria-label={`${client.name} 列举网电话`} maxLength={50} value={profile.phone} onChange={(event) => updateProfile(client.id, 'phone', event.target.value)} className="mt-1 h-8 w-full rounded border border-slate-300 px-2" /></label></div><div className="mt-2 flex items-center justify-between gap-2"><span role={message && message !== '已保存' ? 'alert' : 'status'} className={`text-xs ${message === '已保存' ? 'text-emerald-600' : 'text-rose-600'}`}>{message}</span><button type="button" onClick={() => void saveProfile(client.id)} disabled={!profileDirty[client.id] || Boolean(savingProfileClientId)} className="rounded border border-blue-300 px-3 py-1 text-xs text-blue-700 disabled:opacity-40">{savingProfileClientId === client.id ? '保存中…' : '保存档案'}</button></div></fieldset>
+          </article>;
+        })}</div>
+      </section>}
       {step === 1 && <section className="rounded-md border border-slate-200 bg-white p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><h2 className="text-sm font-semibold">选择跨平台写作模板</h2><p className="mt-1 text-xs text-slate-500">模板按平台分组，已选 {selectedTemplates.length} 个 · 潜在 AI 调用数：{potentialTaskCount}</p></div>{customTemplateCount > 0 && <label className="inline-flex items-center gap-1 text-xs text-slate-500"><input type="checkbox" aria-label="显示内置模板" checked={showBuiltinTemplates} onChange={(event) => setShowBuiltinTemplates(event.target.checked)} />显示内置模板</label>}</div>{riskWarning && <div role="status" className="mt-3 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">潜在任务数超过 {GENERATION_BATCH_RISK_THRESHOLD}，可能增加 AI 调用费用，请确认客户和模板选择。</div>}<div className="mt-4 grid gap-4 md:grid-cols-3">{(Object.entries(templateGroups) as Array<[string, ContentTemplate[]]>).map(([platform, platformTemplates]) => <div key={platform} className="rounded border border-slate-200 p-3"><h3 className="text-xs font-semibold text-slate-700">{templatePlatformDisplayName(catalog, platform)}</h3><div className="mt-2 grid gap-2">{platformTemplates.map((template) => <label key={template.id} className="flex items-start gap-2 text-xs text-slate-600"><input type="checkbox" checked={selectedTemplates.some((item) => item.platform === platform && item.templateId === template.id)} onChange={() => toggleTemplate(template)} /><span><span className="block font-medium">{templateTitle(template)} · {templateSourceLabel(template)}</span>{templateScenarioLabel(template) && <span className="text-slate-400">{templateScenarioLabel(template)}</span>}</span></label>)}</div></div>)}</div></section>}
       {step === 2 && <section className="grid gap-3"><div className="rounded border border-slate-200 bg-white p-3 text-xs text-slate-600">潜在 AI 调用数：{selectedCount} × {selectedTemplates.length} = {potentialTaskCount}{riskWarning && <span className="ml-2 text-amber-700">· 费用风险：超过 {GENERATION_BATCH_RISK_THRESHOLD} 个任务</span>}</div>{selectedClientIds.map((clientId) => { const client = clientMap.get(clientId); const materials = materialForClient(client || { id: clientId, name: clientId, knowledgeFiles: [] }); const research = researchByClient[clientId] || []; const source = sources[clientId] || { materialIds: [], researchQueryIds: [] }; const selectedMaterials = materials.filter((item) => source.materialIds.includes(getMaterialId(item)) && isUsableMaterial(item)); const selectedResearch = research.filter((item) => source.researchQueryIds.includes(item.id) && isUsableResearch(item)); const reason = !selectedMaterials.length ? '没有有效客户资料' : !selectedResearch.length ? '没有有效 GEO 调研回答' : ''; return <article key={clientId} className="rounded-md border border-slate-200 bg-white p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><h2 className="text-sm font-semibold">{client?.name || clientId}</h2><p className="mt-1 text-xs text-slate-500">预计输入字符数 {sourceCharacterCount(selectedMaterials, selectedResearch)}</p></div><span className={`text-xs font-semibold ${reason ? 'text-rose-600' : 'text-emerald-600'}`}>{reason || '可生成'}</span></div><div className="mt-3 grid gap-2">{materials.map((item) => <CollapsibleSourceItem key={getMaterialId(item)} id={`${clientId}-${getMaterialId(item)}`} title={item.name} summary={`${item.extension || '资料'} · ${item.characterCount || 0} 字${item.status === 'error' ? ' · 错误' : item.status === 'converting' ? ' · 转换中' : ''}`} selected={source.materialIds.includes(getMaterialId(item)) && isUsableMaterial(item)} disabled={!isUsableMaterial(item)} onSelectedChange={(selected) => updateSource(clientId, 'materialIds', getMaterialId(item), selected)} actions={item.extension?.toLowerCase() === '.docx' && (item.status === 'error' || item.status === 'converting') ? <button type="button" onClick={(event) => { event.stopPropagation(); void retryMaterialItem(clientId, getMaterialId(item)); }} disabled={commandStates.retryMaterial.busy} className="rounded border border-blue-300 px-2 py-1 text-xs text-blue-700 disabled:opacity-40">{commandStates.retryMaterial.busy ? '重试中…' : '重试转换'}</button> : undefined} defaultExpanded={false}>{item.content || '资料转换失败，请重试。'}</CollapsibleSourceItem>)}{research.map((item) => <CollapsibleSourceItem key={item.id} id={`${clientId}-${item.id}`} title={item.question || item.id} summary={`${item.answerText?.length || 0} 字 · GEO 调研回答${item.isAnswerComplete === false ? ' · 未完成' : ''}`} selected={isUsableResearch(item) && source.researchQueryIds.includes(item.id)} disabled={!isUsableResearch(item)} onSelectedChange={(selected) => isUsableResearch(item) && updateSource(clientId, 'researchQueryIds', item.id, selected)} defaultExpanded={false}>{item.answerText || '没有回答内容'}</CollapsibleSourceItem>)}</div></article>; })}</section>}
       {step === 3 && <section className="rounded-md border border-slate-200 bg-white p-4"><h2 className="text-sm font-semibold">确认任务并启动</h2><p className="mt-1 text-xs text-slate-500">客户数 × 模板数 = AI 调用任务数</p><div className="mt-4 grid gap-2 sm:grid-cols-3"><div className="rounded bg-slate-50 p-3 text-sm">{selectedCount} × {selectedTemplates.length} = {previewResult?.taskCount ?? potentialTaskCount}</div><div className="rounded bg-emerald-50 p-3 text-sm text-emerald-700">可执行任务数：{executableTaskCount}</div><div className="rounded bg-rose-50 p-3 text-sm text-rose-700">排除客户/任务：{previewResult?.excludedClients.length ?? Math.max(0, selectedCount - executableClients.length)} / {previewResult?.excludedTaskCount ?? Math.max(0, potentialTaskCount - executableTaskCount)}</div></div>{riskWarning && <div className="mt-3 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">费用风险提示：任务数较多，启动前请再次确认。</div>}{previewResult?.excludedClients.length ? <div className="mt-4 rounded border border-rose-100 bg-rose-50 p-3 text-xs text-rose-700"><p className="font-semibold">被排除客户与原因</p>{previewResult.excludedClients.map((item) => <p key={item.clientId} className="mt-1">{clientMap.get(item.clientId)?.name || item.clientId}：{item.codes.map(errorReason).join('、')}</p>)}</div> : <p className="mt-4 text-xs text-emerald-700">没有被排除的客户。</p>}<button type="button" onClick={() => void start()} disabled={loading || !previewResult?.executableTaskCount} className="mt-4 h-10 w-full rounded-md bg-blue-600 text-sm font-semibold text-white disabled:opacity-40">{loading ? '启动中…' : '确认并启动批量生成'}</button></section>}

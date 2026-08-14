@@ -22,6 +22,7 @@ import type {
 } from "../types/publication";
 import type {
   ContentClient,
+  LiejuPublicationProfile,
   ContentMaterial,
   ContentQuestion,
   ContentResearch,
@@ -71,6 +72,10 @@ type ArticleManagementSnapshotWire = Omit<
 };
 type CoreContentApi = {
   listClients: () => Promise<ContentIpcResponse<{ clients: ContentClient[] }>>;
+  saveClientLiejuPublicationProfile: (input: {
+    clientId: string;
+    profile: LiejuPublicationProfile;
+  }) => Promise<ContentIpcResponse<{ profile: LiejuPublicationProfile }>>;
   listResearch: (
     clientId: string,
   ) => Promise<ContentIpcResponse<{ research: ContentResearch[] }>>;
@@ -327,6 +332,16 @@ export async function listContentClients(): Promise<ContentClient[]> {
     (api) => requireBridgeMethod(api.listClients)(),
     "Unable to load clients",
     (wire) => wire.clients,
+  );
+}
+export async function saveClientLiejuPublicationProfile(input: {
+  clientId: string;
+  profile: LiejuPublicationProfile;
+}): Promise<LiejuPublicationProfile> {
+  return callCoreContent(
+    (api) => requireBridgeMethod(api.saveClientLiejuPublicationProfile)(input),
+    "Unable to save client Lieju publication profile",
+    (wire) => wire.profile,
   );
 }
 export async function listContentResearch(

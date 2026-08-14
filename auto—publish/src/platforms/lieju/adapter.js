@@ -424,9 +424,13 @@ async function publishArticle(article, options) {
 
 async function preparePlatformSubmission(claim) {
   const evidence = domain.createTextOnlyPreparedSubmissionEvidenceV1(claim);
+  const profile = claim && claim.publicationProfile || {};
   const preparedArticle = Object.freeze({
     title: evidence.title,
     body: evidence.body,
+    city: typeof profile.city === "string" ? profile.city : "",
+    contact: typeof profile.contact === "string" ? profile.contact : "",
+    phone: typeof profile.phone === "string" ? profile.phone : "",
   });
   const prepared = await prepareArticleSubmission(preparedArticle, {
     autoSubmit: true,

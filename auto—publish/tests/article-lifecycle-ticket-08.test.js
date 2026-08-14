@@ -570,6 +570,46 @@ test("prepared browser submission rechecks the bound account immediately before 
   assert.equal(submissions, 0);
 });
 
+test("preparation resolves the Lieju profile by the claimed article client and passes only prepared data to the adapter", async () => {
+  const claims = [];
+  const profileRequests = [];
+  const claim = {
+    platformId: "lieju",
+    accountProfileId: "account-a",
+    regularPublicationAttemptId: "attempt-client-profile",
+    articleIdentityV1: { version: 1, clientId: "client-b", articleId: "article-b" },
+    targetIdentityV1: { version: 1, kind: "platform", platformId: "lieju", accountProfileId: "account-a" },
+    publicationSnapshot: { title: "Title B", body: "Body B" },
+  };
+  const port = createRegularPlatformPreparationPort({
+    accountInspector: { inspect: async () => ({ verified: true, accountProfileId: "account-a", remoteFingerprint: "fingerprint-a" }) },
+    resolveClientPublicationProfile: async (input) => {
+      profileRequests.push(input);
+      return input.clientId === "client-b"
+        ? { city: "北京", contact: "李四", phone: "010-12345678" }
+        : { city: "上海", contact: "张三", phone: "13800138000" };
+    },
+    adapters: [{
+      id: "lieju",
+      preparePlatformSubmission: async (input) => {
+        claims.push(input);
+        return domain.createPreparedSubmission({
+          preparedSubmissionEvidenceV1: domain.createTextOnlyPreparedSubmissionEvidenceV1(input),
+          submitPreparedPublication: async () => ({ status: "accepted" }),
+        });
+      },
+    }],
+  });
+
+  await port.preparePlatformSubmission(claim);
+  assert.deepStrictEqual(profileRequests, [{ clientId: "client-b", platformId: "lieju" }]);
+  assert.deepStrictEqual(claims[0].publicationProfile, {
+    city: "北京", contact: "李四", phone: "010-12345678",
+  });
+  assert.equal(claims[0].publicationSnapshot.title, "Title B");
+  assert.equal(claims[0].publicationSnapshot.body, "Body B");
+});
+
 test("start all skips manually paused groups and pause all preserves the in-flight request", async () => {
   const current = fixture();
   const gate = deferred();

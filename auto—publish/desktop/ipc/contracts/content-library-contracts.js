@@ -39,10 +39,19 @@ const contentMaterial = exactObject({
   contentHash: optionalField(text(256)),
   source: optionalField(text(80)),
 });
+const liejuPublicationProfile = exactObject({
+  city: text(100),
+  contact: text(100),
+  phone: text(50),
+});
+const publicationProfiles = exactObject({
+  lieju: liejuPublicationProfile,
+});
 const contentClient = exactObject({
   id,
   name: text(500),
   searchQuery: optionalField(multiline(10000)),
+  publicationProfiles,
   knowledgeFiles: arrayField(contentMaterial, { max: 10000 }),
 });
 const research = exactObject({
@@ -96,6 +105,16 @@ const templateCatalog = exactObject({
 });
 
 const contentLibraryContracts = Object.freeze([
+  contentContract({
+    capability: "content.saveClientLiejuPublicationProfile",
+    channel: "content:save-client-lieju-publication-profile",
+    feature: "content",
+    kind: "command",
+    request: exactObject({ clientId: id, profile: liejuPublicationProfile }),
+    success: exactObject({ profile: liejuPublicationProfile }),
+    fromArgs: directArgs,
+    toArgs: directInput,
+  }),
   contentContract({
     capability: "content.listClients",
     channel: "content:list-clients",
@@ -169,6 +188,14 @@ function projectMaterial(value) {
 
 function projectClient(value) {
   const output = projectFields(value, ["id", "name", "searchQuery"]);
+  const lieju = value && value.publicationProfiles && value.publicationProfiles.lieju || {};
+  output.publicationProfiles = {
+    lieju: {
+      city: typeof lieju.city === "string" ? lieju.city : "",
+      contact: typeof lieju.contact === "string" ? lieju.contact : "",
+      phone: typeof lieju.phone === "string" ? lieju.phone : "",
+    },
+  };
   output.knowledgeFiles = Array.isArray(value && value.knowledgeFiles)
     ? value.knowledgeFiles.map(projectMaterial)
     : [];
@@ -248,6 +275,7 @@ module.exports = {
   contentClient,
   contentLibraryContracts,
   contentMaterial,
+  liejuPublicationProfile,
   projectClient,
   projectMaterial,
   projectResearch,

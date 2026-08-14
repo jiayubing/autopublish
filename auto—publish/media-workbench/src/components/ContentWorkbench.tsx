@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { LoaderCircle, RefreshCw } from "lucide-react";
-import type { ContentClient, ContentTemplateCatalog } from "../types/content";
+import type { ContentClient, ContentTemplateCatalog, LiejuPublicationProfile } from "../types/content";
 import type { GeneratedContentArticle } from "../types/generation";
 import type { ArticleEditorSnapshot } from "../bridge/content";
 import ArticleGenerationView from "./content/ArticleGenerationView";
@@ -70,6 +70,10 @@ export default function ContentWorkbench({
     string | null
   >(null);
   const historySourceRef = useRef<HTMLElement | null>(null);
+
+  function saveClientLiejuPublicationProfile(input: { clientId: string; profile: LiejuPublicationProfile }) {
+    return content.commands.saveClientLiejuPublicationProfile(input);
+  }
 
   function isArticleEditorSnapshot(
     value: unknown,
@@ -316,6 +320,7 @@ export default function ContentWorkbench({
             selectedArticle={article}
             onArticleChange={content.setCurrentArticle}
             commands={content.commands}
+            saveClientLiejuPublicationProfile={saveClientLiejuPublicationProfile}
             commandStates={content.snapshot.commands}
             refreshManagement={content.refreshManagement}
           />

@@ -6,6 +6,7 @@ import {
   deleteContentQuestion,
   collectDoubaoQuestion,
   listContentClients,
+  saveClientLiejuPublicationProfile,
   listContentQuestions,
   listContentResearch,
   listContentTemplateCatalog,
@@ -76,6 +77,7 @@ export function useContentWorkbenchFeature() {
   if (!featureRef.current) {
     featureRef.current = createContentWorkbenchFeature({
       listClients: listContentClients,
+      saveClientLiejuPublicationProfile,
       listTemplateCatalog: listContentTemplateCatalog,
       listQuestions: listContentQuestions,
       listResearch: listContentResearch,

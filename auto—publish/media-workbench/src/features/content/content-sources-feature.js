@@ -29,6 +29,7 @@ const SOURCE_COMMANDS = Object.freeze({
   deleteQuestion: 'client',
   saveManualResearch: 'client',
   retryMaterial: 'sources',
+  saveClientLiejuPublicationProfile: 'workspaceSources',
   collectDoubaoQuestion: 'client',
   startPreparedDoubaoBatch: 'workspace',
   pauseDoubaoBatch: 'workspace',
@@ -424,6 +425,8 @@ export function createContentSourcesFeature(adapters = {}) {
       await Promise.all([refreshClientData(reason), refreshResearchIndex(reason)]);
     } else if (target === 'sources') {
       await refreshSources(reason);
+    } else if (target === 'workspaceSources') {
+      await refreshSources(reason);
     }
   };
 
@@ -511,6 +514,7 @@ export function createContentSourcesFeature(adapters = {}) {
     deleteQuestion: (input) => runCommand('deleteQuestion', input),
     saveManualResearch: (input) => runCommand('saveManualResearch', input),
     retryMaterial: (input) => runCommand('retryMaterial', input),
+    saveClientLiejuPublicationProfile: (input) => runCommand('saveClientLiejuPublicationProfile', input),
     collectDoubaoQuestion: (input) => runCommand('collectDoubaoQuestion', input),
     startPreparedDoubaoBatch: (input) => runCommand('startPreparedDoubaoBatch', input),
     pauseDoubaoBatch: (input) => runCommand('pauseDoubaoBatch', input),
