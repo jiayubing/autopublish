@@ -305,12 +305,13 @@ test("lifecycle projection exposes one operation decision matrix for runtime fac
     );
     assert.deepEqual(
       Object.keys(projection.operations).sort(),
-      ["edit", "queue", "retarget", "trash"],
+      ["edit", "purge", "queue", "retarget", "restore", "submit", "trash"].sort(),
       name,
     );
     assert.equal(projection.operations.edit.allowed, false, name);
     assert.equal(projection.operations.edit.reasonCodes[0], reason, name);
     assert.equal(projection.operations.queue.allowed, false, name);
+    assert.equal(projection.operations.submit.allowed, false, name);
     assert.equal(projection.operations.trash.allowed, false, name);
   }
   const failed = deriveArticleLifecycle({
@@ -320,6 +321,7 @@ test("lifecycle projection exposes one operation decision matrix for runtime fac
     ],
   });
   assert.equal(failed.operations.edit.allowed, true);
+  assert.equal(failed.operations.submit.allowed, true);
   assert.equal(failed.operations.retarget.allowed, true);
   assert.equal(failed.operations.trash.allowed, true);
   const unrelatedRemoval = deriveArticleLifecycle({

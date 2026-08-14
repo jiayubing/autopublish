@@ -17,6 +17,7 @@ import type {
 } from "../../types/content";
 import type {
   ArticleOperation,
+  ArticleWorkflowFilter,
   ArticleWorkflowStage,
 } from "../../article-workflow";
 
@@ -34,21 +35,27 @@ export type ArticleManagementReadModel = {
       label?: string;
       locks: {
         canEdit: boolean;
+        canSubmit: boolean;
         canQueue: boolean;
         canCancel: boolean;
         canTrash: boolean;
       };
       operations?: {
         edit: ArticleOperation;
+        submit: ArticleOperation;
         queue: ArticleOperation;
         retarget: ArticleOperation;
         trash: ArticleOperation;
+        restore: ArticleOperation;
+        purge: ArticleOperation;
       };
       primaryAction: string;
       allowedBulkActions: string[];
       publicationSummary: PublicationHistorySummary;
       reasonCodes?: string[];
       reasonMessage?: string | null;
+      attentionCount: number;
+      orderSummary: import("../../article-workflow").ArticleOrderSummary;
     }
   >;
   submissionPlatforms: ContentSubmissionPlatform[];
@@ -100,7 +107,7 @@ export interface GeneratedArticlesViewProps {
     query: { loading: boolean; error?: { userMessage?: string } | null };
   };
   watchRemovalTransaction: (transactionId: string) => Promise<unknown>;
-  stageFilter?: ArticleWorkflowStage | "all";
+  stageFilter?: ArticleWorkflowFilter;
   dirtyArticleId?: string | null;
   selectedAttentionId?: string;
   onArticleSelect: (
@@ -108,6 +115,6 @@ export interface GeneratedArticlesViewProps {
     source?: HTMLElement | null,
     published?: boolean,
   ) => void;
-  onStageFilterChange?: (stage: ArticleWorkflowStage | "all") => void;
+  onStageFilterChange?: (stage: ArticleWorkflowFilter) => void;
   onOpenOrders?: () => void;
 }

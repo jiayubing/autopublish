@@ -59,7 +59,10 @@ export type ArticleEditorSnapshot = {
 };
 type ArticleManagementSnapshotWire = Omit<
   ArticleManagementSnapshot,
-  "workflowByArticle" | "publicationSummaries"
+  | "workflowByArticle"
+  | "publicationSummaries"
+  | "attentionCounts"
+  | "orderSummaries"
 > & {
   workflowItems: Array<{
     articleId: string;
@@ -68,6 +71,14 @@ type ArticleManagementSnapshotWire = Omit<
   publicationSummaryItems: Array<{
     articleId: string;
     summary: ArticleManagementSnapshot["publicationSummaries"][string];
+  }>;
+  attentionCountItems: Array<{
+    articleId: string;
+    count: number;
+  }>;
+  orderSummaryItems: Array<{
+    articleId: string;
+    summary: ArticleManagementSnapshot["orderSummaries"][string];
   }>;
 };
 type CoreContentApi = {
@@ -523,7 +534,13 @@ export async function getArticleManagementSnapshot(
       requireBridgeMethod(api.getArticleManagementSnapshot)({ clientId }),
     "Unable to load article management snapshot",
     (wire) => {
-      const { workflowItems, publicationSummaryItems, ...snapshot } = wire;
+      const {
+        workflowItems = [],
+        publicationSummaryItems = [],
+        attentionCountItems = [],
+        orderSummaryItems = [],
+        ...snapshot
+      } = wire;
       return {
         ...snapshot,
         workflowByArticle: Object.fromEntries(
@@ -531,6 +548,12 @@ export async function getArticleManagementSnapshot(
         ),
         publicationSummaries: Object.fromEntries(
           publicationSummaryItems.map((item) => [item.articleId, item.summary]),
+        ),
+        attentionCounts: Object.fromEntries(
+          attentionCountItems.map((item) => [item.articleId, item.count]),
+        ),
+        orderSummaries: Object.fromEntries(
+          orderSummaryItems.map((item) => [item.articleId, item.summary]),
         ),
       };
     },

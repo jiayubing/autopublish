@@ -10,12 +10,12 @@ const article = (status = "saved") => ({
   status,
 });
 
-test("article management exposes one public stage axis with no review compatibility state", () => {
+test("article management exposes one five-category axis with no review compatibility state", () => {
   const cases = [
     ["pending_submission", {}],
-    ["queued", { submissionItems: [{ articleId: "article-1", status: "queued" }] }],
-    ["paid_processing", { orders: [{ articleId: "article-1", orderId: "order-1", supplierStatusCode: "0", mediaResourceId: "resource-1" }] }],
-    ["failed", { publications: [{ articleId: "article-1", status: "failed" }] }],
+    ["in_submission", { submissionItems: [{ articleId: "article-1", status: "queued" }] }],
+    ["in_submission", { orders: [{ articleId: "article-1", orderId: "order-1", supplierStatusCode: "0", mediaResourceId: "resource-1" }] }],
+    ["pending_submission", { publications: [{ articleId: "article-1", status: "failed" }] }],
     ["published", { publications: [{ articleId: "article-1", status: "published" }] }],
     ["trash", { article: article("trashed") }],
   ];

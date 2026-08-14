@@ -757,7 +757,7 @@ test("batch lifecycle facts use a fixed-query public port and article snapshot c
       getRevision: () => 1,
     });
     const result = await snapshot.get({ clientId: "client-facts" });
-    assert.equal(result.workflowByArticle["facts-article"].stage, "queued");
+    assert.equal(result.workflowByArticle["facts-article"].stage, "in_submission");
   } finally {
     store.close();
     fs.rmSync(root, { recursive: true, force: true });

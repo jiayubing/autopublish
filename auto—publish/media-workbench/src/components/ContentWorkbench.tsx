@@ -7,7 +7,7 @@ import ArticleGenerationView from "./content/ArticleGenerationView";
 import GeneratedArticleEditorPanel from "./content/GeneratedArticleEditorPanel";
 import GeneratedArticlesView from "./content/GeneratedArticlesView";
 import QuestionCollectionView from "./content/QuestionCollectionView";
-import { type ArticleWorkflowStage } from "../article-workflow";
+import { type ArticleWorkflowFilter } from "../article-workflow";
 import ArticleStageTabs from "./content/ArticleStageTabs";
 import { useConfirmation, useConfirmationScope } from "../confirmation";
 import type { ContentWorkbenchFeature } from "../features/content/use-content-workbench-feature";
@@ -62,7 +62,7 @@ export default function ContentWorkbench({
     "questions",
   );
   const [articleStageFilter, setArticleStageFilter] = useState<
-    ArticleWorkflowStage | "all"
+    ArticleWorkflowFilter
   >("all");
   const [error, setError] = useState("");
   const historyDirtyRef = useRef(false);
@@ -90,7 +90,7 @@ export default function ContentWorkbench({
   useEffect(() => {
     if (!attentionIntent) return;
     setTab("history");
-    setArticleStageFilter("failed");
+    setArticleStageFilter("attention");
     if (attentionIntent.clientId)
       content.selectClient(attentionIntent.clientId);
     onAttentionIntentConsumed?.();
@@ -330,6 +330,7 @@ export default function ContentWorkbench({
               value={articleStageFilter}
               onChange={setArticleStageFilter}
               counts={management.lifecycleCounts}
+              attentionCount={management.attention.counts.total}
             />
             <div className="relative flex min-h-0 min-w-0 flex-1 flex-col gap-3 lg:flex-row">
               <div className="min-h-0 min-w-0 flex-1">

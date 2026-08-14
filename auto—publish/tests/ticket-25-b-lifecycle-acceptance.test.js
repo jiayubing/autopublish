@@ -344,7 +344,7 @@ test("public article generation, explicit save, and eligibility use no review or
     assert.equal(evaluateArticleSubmissionEligibility(invalid).eligible, false);
 });
 
-test("public mutation and lifecycle seams freeze queue items, enforce one target, remove pending items, and allow explicit retarget", async (t) => {
+test("public mutation and lifecycle seams freeze submission items, enforce one target, remove pending items, and allow explicit retarget", async (t) => {
   const harness = createHarness();
   t.after(() => harness.close());
   const first = article("queue-single");
@@ -358,9 +358,10 @@ test("public mutation and lifecycle seams freeze queue items, enforce one target
   const secondItem = admitRegular(harness, second.id, profile);
   const thirdItem = admitRegular(harness, third.id, profile);
   const queuedSnapshot = await harness.snapshot.get({ clientId: CLIENT_ID });
-  assert.equal(queuedSnapshot.workflowByArticle[first.id].stage, "queued");
+  assert.equal(queuedSnapshot.workflowByArticle[first.id].stage, "in_submission");
   assert.deepEqual(queuedSnapshot.workflowByArticle[first.id].locks, {
     canEdit: false,
+    canSubmit: false,
     canQueue: false,
     canCancel: true,
     canTrash: false,
@@ -474,6 +475,7 @@ test("public regular submission preserves text-only evidence, first success, arc
   );
   assert.deepEqual(publishedSnapshot.workflowByArticle[published.id].locks, {
     canEdit: false,
+    canSubmit: false,
     canQueue: false,
     canCancel: false,
     canTrash: false,
@@ -509,16 +511,14 @@ test("public regular submission preserves text-only evidence, first success, arc
   const uncertainSnapshot = await harness.snapshot.get({ clientId: CLIENT_ID });
   assert.equal(
     uncertainSnapshot.workflowByArticle[uncertain.id].stage,
-    "failed",
+    "in_submission",
   );
   assert.equal(
     uncertainSnapshot.workflowByArticle[uncertain.id].locks.canEdit,
     false,
   );
-  assert.equal(
-    uncertainSnapshot.workflowByArticle[uncertain.id].locks.canQueue,
-    false,
-  );
+  assert.equal(uncertainSnapshot.workflowByArticle[uncertain.id].locks.canSubmit, false);
+  assert.equal(uncertainSnapshot.workflowByArticle[uncertain.id].locks.canQueue, false);
 
   const similarItems = [
     admitRegular(harness, similarA.id, profileFor(harness, "similar-a")),
@@ -528,7 +528,7 @@ test("public regular submission preserves text-only evidence, first success, arc
   assert.notEqual(similarItems[0].itemId, similarItems[1].itemId);
 });
 
-test("public management snapshot has six exclusive entrances and removal preserves terminal order evidence", async (t) => {
+test("public management snapshot has five article-library categories and removal preserves terminal order evidence", async (t) => {
   const facts = {
     publications: [
       { articleId: "queued", status: "queued", targetKey: "platform:queued" },
@@ -590,9 +590,8 @@ test("public management snapshot has six exclusive entrances and removal preserv
   const snapshot = await harness.snapshot.get({ clientId: CLIENT_ID });
   assert.deepEqual(snapshot.lifecycleCounts, {
     pending_submission: 1,
-    queued: 1,
-    paid_processing: 1,
-    failed: 1,
+    needs_completion: 0,
+    in_submission: 3,
     published: 1,
     trash: 1,
     total: 6,
@@ -601,7 +600,7 @@ test("public management snapshot has six exclusive entrances and removal preserv
     Object.values(snapshot.workflowByArticle)
       .map((workflow) => workflow.label)
       .sort(),
-    ["付费处理中", "回收站", "待投稿", "已发布", "投稿队列", "需处理"].sort(),
+    ["投稿中", "投稿中", "投稿中", "回收站", "待投稿", "已发布"].sort(),
   );
   assert.equal(snapshot.workflowByArticle.attention.locks.canEdit, false);
   assert.equal(snapshot.workflowByArticle.published.locks.canTrash, false);

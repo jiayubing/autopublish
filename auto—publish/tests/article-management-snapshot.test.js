@@ -227,8 +227,9 @@ describe("article management snapshot", function () {
     });
 
     const snapshot = await service.get({ clientId: "client-a" });
-    assert.equal(snapshot.workflowByArticle["trash-article"].stage, "failed");
-    assert.equal(snapshot.lifecycleCounts.failed, 1);
-    assert.equal(snapshot.lifecycleCounts.trash, 0);
+    assert.equal(snapshot.workflowByArticle["trash-article"].stage, "trash");
+    assert.equal(snapshot.workflowByArticle["trash-article"].operations.restore.allowed, false);
+    assert.equal(snapshot.lifecycleCounts.trash, 1);
+    assert.equal(snapshot.lifecycleCounts.in_submission, 0);
   });
 });

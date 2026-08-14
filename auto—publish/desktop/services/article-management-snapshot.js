@@ -403,6 +403,8 @@ function createArticleManagementSnapshot(options) {
       submissionPlatforms: platforms,
       workflowByArticle,
       publicationSummaries,
+      attentionCounts: lifecycle.attentionCounts,
+      orderSummaries: lifecycle.orderSummaries,
       lifecycleVersion: ARTICLE_LIFECYCLE_PROJECTION_VERSION,
       lifecycleCounts: lifecycle.counts,
     };

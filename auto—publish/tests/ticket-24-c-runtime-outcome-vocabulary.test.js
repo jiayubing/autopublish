@@ -102,7 +102,7 @@ test("paid order facts project processing and published without a generic submit
   assert.equal(published.published, 1);
 });
 
-test("projection keeps paid processing, published, and uncertain frozen outcomes distinct", () => {
+test("projection keeps submission-in-progress, published, and uncertain frozen outcomes distinct", () => {
   const target = { targetKey: "media-resource:r1", mediaResourceId: "r1" };
   const processing = deriveArticleLifecycle(
     lifecycleFacts({
@@ -119,7 +119,7 @@ test("projection keeps paid processing, published, and uncertain frozen outcomes
       ],
     }),
   );
-  assert.equal(processing.stage, "paid_processing");
+  assert.equal(processing.stage, "in_submission");
 
   const published = deriveArticleLifecycle(
     lifecycleFacts({
@@ -149,6 +149,6 @@ test("projection keeps paid processing, published, and uncertain frozen outcomes
       ],
     }),
   );
-  assert.equal(uncertain.stage, "failed");
-  assert.deepEqual(uncertain.allowedBulkActions, ["open_attention"]);
+  assert.equal(uncertain.stage, "in_submission");
+  assert.deepEqual(uncertain.allowedBulkActions, ["view_submission"]);
 });

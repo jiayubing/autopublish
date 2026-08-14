@@ -281,7 +281,7 @@ test("regular admission invalidation refreshes article management from the new w
 
     const after = await managementSnapshot.get({ clientId: "client-a" });
     assert.equal(after.revision, 1);
-    assert.equal(after.workflowByArticle["article-a"].stage, "queued");
+    assert.equal(after.workflowByArticle["article-a"].stage, "in_submission");
     assert.notEqual(after.workflowByArticle["article-a"].stage, "pending_submission");
   } finally {
     fixture.close();
@@ -324,7 +324,7 @@ test("regular queue removal invalidation refreshes cached article management fro
 
     const queued = await managementSnapshot.get({ clientId: "client-a" });
     assert.equal(queued.revision, 1);
-    assert.equal(queued.workflowByArticle["article-a"].stage, "queued");
+    assert.equal(queued.workflowByArticle["article-a"].stage, "in_submission");
     assert.equal(managementSnapshot.cacheSize(), 1);
 
     const removed = fixture.application.removePendingQueueItems(
@@ -342,6 +342,7 @@ test("regular queue removal invalidation refreshes cached article management fro
     assert.equal(restored.revision, 2);
     assert.equal(restored.workflowByArticle["article-a"].stage, "pending_submission");
     assert.equal(restored.workflowByArticle["article-a"].locks.canEdit, true);
+    assert.equal(restored.workflowByArticle["article-a"].locks.canSubmit, true);
     assert.equal(restored.workflowByArticle["article-a"].locks.canQueue, true);
   } finally {
     fixture.close();

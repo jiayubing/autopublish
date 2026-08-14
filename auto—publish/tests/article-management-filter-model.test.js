@@ -1,56 +1,31 @@
 const assert = require("node:assert/strict");
 const { describe, it } = require("node:test");
 
-const article = (status = "saved") => ({
+const article = (status = "saved", overrides = {}) => ({
   id: "article-1",
   clientId: "client-1",
   title: "文章",
   content: "正文",
   status,
+  ...overrides,
 });
 const {
   deriveArticleLifecycle,
 } = require("../src/content/article-lifecycle-projection");
 
 describe("article management filter model", () => {
-  it("projects the six mutually exclusive public stages with their labels", () => {
+  it("projects the five article-library categories with their labels", () => {
     const cases = [
       ["pending_submission", "待投稿", {}],
+      ["needs_completion", "待完善", { article: article("saved", { content: "" }) }],
       [
-        "queued",
-        "投稿队列",
+        "in_submission",
+        "投稿中",
         {
           submissionItems: [
             {
               articleId: "article-1",
               status: "queued",
-              targetKey: "platform:p1",
-            },
-          ],
-        },
-      ],
-      [
-        "paid_processing",
-        "付费处理中",
-        {
-          orders: [
-            {
-              articleId: "article-1",
-              orderId: "order-1",
-              supplierStatusCode: "0",
-              mediaResourceId: "resource-1",
-            },
-          ],
-        },
-      ],
-      [
-        "failed",
-        "需处理",
-        {
-          publications: [
-            {
-              articleId: "article-1",
-              status: "uncertain",
               targetKey: "platform:p1",
             },
           ],
@@ -89,9 +64,8 @@ describe("article management filter model", () => {
 
     assert.deepEqual(projected, [
       "pending_submission",
-      "queued",
-      "paid_processing",
-      "failed",
+      "needs_completion",
+      "in_submission",
       "published",
       "trash",
     ]);

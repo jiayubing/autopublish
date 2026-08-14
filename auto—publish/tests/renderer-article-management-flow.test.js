@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const { deriveArticleLifecycle } = require("../src/content/article-lifecycle-projection");
 
-test("article management keeps failure attention actionable while published articles stay read-only", () => {
+test("article management keeps failure attention independent while published articles stay read-only", () => {
   const base = {
     article: {
       id: "article-1",
@@ -24,7 +24,8 @@ test("article management keeps failure attention actionable while published arti
     ...base,
     publications: [{ articleId: "article-1", status: "published" }],
   });
-  assert.equal(failed.stage, "failed");
+  assert.equal(failed.stage, "pending_submission");
+  assert.equal(failed.operations.submit.allowed, true);
   assert.equal(failed.locks.canTrash, true);
   assert.equal(published.stage, "published");
   assert.equal(published.locks.canTrash, false);

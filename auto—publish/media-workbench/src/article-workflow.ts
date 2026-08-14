@@ -1,7 +1,9 @@
 import type { PublicationHistorySummary } from './types/publication';
 
-export type ArticleWorkflowStage = 'pending_submission' | 'queued' | 'paid_processing' | 'failed' | 'published' | 'trash';
-export type ArticleWorkflowAction = 'queue' | 'view_progress' | 'view_order' | 'open_attention' | 'view_publication' | 'trash' | 'restore';
+export type ArticleWorkflowStage = 'pending_submission' | 'needs_completion' | 'in_submission' | 'published' | 'trash';
+/** Library categories plus the independent attention read-model filter. */
+export type ArticleWorkflowFilter = ArticleWorkflowStage | 'all' | 'attention';
+export type ArticleWorkflowAction = 'submit' | 'edit' | 'view_submission' | 'queue' | 'view_progress' | 'view_order' | 'open_attention' | 'view_publication' | 'trash' | 'restore' | 'purge';
 
 export interface ArticleWorkflowAttention {
   articleId?: string | null;
@@ -13,6 +15,8 @@ export interface ArticleWorkflowAttention {
 
 export interface ArticleWorkflowLocks {
   canEdit: boolean;
+  canSubmit: boolean;
+  /** Temporary derived field for pre-26-H direct consumers. */
   canQueue: boolean;
   canCancel: boolean;
   canTrash: boolean;
@@ -29,7 +33,18 @@ export interface ArticleOperation {
     hasActiveTarget?: boolean;
     hasUncertain?: boolean;
     isTrash?: boolean;
+    attentionCount?: number;
+    orderStatus?: string;
   };
+}
+
+export interface ArticleOrderSummary {
+  status: string;
+  label?: string;
+  records: number;
+  active: number;
+  published: number;
+  attention: number;
 }
 
 export interface ArticleWorkflow {
@@ -41,12 +56,18 @@ export interface ArticleWorkflow {
   locks: ArticleWorkflowLocks;
   operations?: {
     edit: ArticleOperation;
+    submit: ArticleOperation;
+    /** Temporary migration seam; derived from submit by the main-process owner. */
     queue: ArticleOperation;
     retarget: ArticleOperation;
     trash: ArticleOperation;
+    restore: ArticleOperation;
+    purge: ArticleOperation;
   };
   reasonCodes?: string[];
   reasonMessage?: string | null;
+  attentionCount: number;
+  orderSummary: ArticleOrderSummary;
   publicationSummary?: PublicationHistorySummary;
   targetFacts?: Array<{
     targetKey: string;
@@ -60,9 +81,8 @@ export interface ArticleWorkflow {
 
 export const ARTICLE_WORKFLOW_STAGES: Array<{ id: ArticleWorkflowStage; label: string }> = [
   { id: 'pending_submission', label: '待投稿' },
-  { id: 'queued', label: '投稿队列' },
-  { id: 'paid_processing', label: '付费处理中' },
-  { id: 'failed', label: '需处理' },
+  { id: 'needs_completion', label: '待完善' },
+  { id: 'in_submission', label: '投稿中' },
   { id: 'published', label: '已发布' },
   { id: 'trash', label: '回收站' },
 ];

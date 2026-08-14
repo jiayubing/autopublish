@@ -145,6 +145,14 @@ const publicationSummary = exactObject({
   published: integerField({ min: 0, max: 10000 }),
   uncertain: "boolean",
 });
+const orderSummary = exactObject({
+  status: text(80),
+  label: optionalField(text(80)),
+  records: integerField({ min: 0, max: 10000 }),
+  active: integerField({ min: 0, max: 10000 }),
+  published: integerField({ min: 0, max: 10000 }),
+  attention: integerField({ min: 0, max: 10000 }),
+});
 const targetFact = exactObject({
   targetKey: text(500),
   status: text(80),
@@ -164,16 +172,17 @@ const operationDecision = exactObject({
     hasActiveTarget: optionalField("boolean"),
     hasUncertain: optionalField("boolean"),
     isTrash: optionalField("boolean"),
+    attentionCount: optionalField(integerField({ min: 0, max: 10000 })),
+    orderStatus: optionalField(text(80)),
   }),
 });
 const workflow = exactObject({
   version: optionalField(integerField({ min: 1, max: 100 })),
   stage: enumField([
     "pending_submission",
-    "queued",
-    "paid_processing",
+    "needs_completion",
+    "in_submission",
     "published",
-    "failed",
     "trash",
   ]),
   label: optionalField(text(80)),
@@ -183,16 +192,22 @@ const workflow = exactObject({
   reasonMessage: optionalField(nullableField(text(1000))),
   locks: exactObject({
     canEdit: "boolean",
+    canSubmit: "boolean",
     canQueue: "boolean",
     canCancel: "boolean",
     canTrash: "boolean",
   }),
   operations: exactObject({
     edit: operationDecision,
+    submit: operationDecision,
     queue: operationDecision,
     retarget: operationDecision,
     trash: operationDecision,
+    restore: operationDecision,
+    purge: operationDecision,
   }),
+  attentionCount: integerField({ min: 0, max: 10000 }),
+  orderSummary,
   publicationSummary,
   targetFacts: optionalField(arrayField(targetFact, { max: 1000 })),
 });
@@ -216,13 +231,20 @@ const managementSnapshot = exactObject({
     exactObject({ articleId: id, summary: publicationSummary }),
     { max: 10000 },
   ),
+  attentionCountItems: arrayField(
+    exactObject({ articleId: id, count: integerField({ min: 0, max: 10000 }) }),
+    { max: 10000 },
+  ),
+  orderSummaryItems: arrayField(
+    exactObject({ articleId: id, summary: orderSummary }),
+    { max: 10000 },
+  ),
   lifecycleVersion: optionalField(integerField({ min: 1, max: 100 })),
   lifecycleCounts: optionalField(
     exactObject({
       pending_submission: integerField({ min: 0, max: 10000 }),
-      queued: integerField({ min: 0, max: 10000 }),
-      paid_processing: integerField({ min: 0, max: 10000 }),
-      failed: integerField({ min: 0, max: 10000 }),
+      needs_completion: integerField({ min: 0, max: 10000 }),
+      in_submission: integerField({ min: 0, max: 10000 }),
       published: integerField({ min: 0, max: 10000 }),
       trash: integerField({ min: 0, max: 10000 }),
       total: integerField({ min: 0, max: 10000 }),
@@ -375,10 +397,18 @@ function projectWorkflow(value) {
     output.reasonCodes = value.reasonCodes.map((item) => String(item));
   output.locks = projectFields(value && value.locks, [
     "canEdit",
+    "canSubmit",
     "canQueue",
     "canCancel",
     "canTrash",
   ]);
+  if (output.locks.canSubmit === undefined)
+    output.locks.canSubmit = output.locks.canQueue === true;
+  if (output.locks.canQueue === undefined)
+    output.locks.canQueue = output.locks.canSubmit === true;
+  output.attentionCount = Number.isInteger(value && value.attentionCount)
+    ? value.attentionCount
+    : 0;
   const projectOperation = function (operation, fallbackAllowed) {
     const source = operation && typeof operation === "object" ? operation : {};
     const metadata = projectFields(source.safeMetadata, [
@@ -389,6 +419,8 @@ function projectWorkflow(value) {
       "hasActiveTarget",
       "hasUncertain",
       "isTrash",
+      "attentionCount",
+      "orderStatus",
     ]);
     return {
       allowed:
@@ -406,8 +438,16 @@ function projectWorkflow(value) {
       value && value.operations && value.operations.edit,
       output.locks.canEdit,
     ),
+    submit: projectOperation(
+      value &&
+        value.operations &&
+        (value.operations.submit || value.operations.queue),
+      output.locks.canSubmit,
+    ),
     queue: projectOperation(
-      value && value.operations && value.operations.queue,
+      value &&
+        value.operations &&
+        (value.operations.queue || value.operations.submit),
       output.locks.canQueue,
     ),
     retarget: projectOperation(
@@ -418,7 +458,35 @@ function projectWorkflow(value) {
       value && value.operations && value.operations.trash,
       output.locks.canTrash,
     ),
+    restore: projectOperation(
+      value && value.operations && value.operations.restore,
+      false,
+    ),
+    purge: projectOperation(
+      value && value.operations && value.operations.purge,
+      false,
+    ),
   };
+  output.orderSummary = projectFields(value && value.orderSummary, [
+    "status",
+    "label",
+    "records",
+    "active",
+    "published",
+    "attention",
+  ]);
+  if (output.orderSummary.status === undefined) {
+    output.orderSummary = {
+      status: "none",
+      label: "无订单",
+      records: 0,
+      active: 0,
+      published: 0,
+      attention: 0,
+    };
+  }
+  if (Number.isInteger(value && value.attentionCount))
+    output.attentionCount = value.attentionCount;
   output.publicationSummary = projectPublicationSummary(
     value && value.publicationSummary,
   );
@@ -491,6 +559,25 @@ function projectManagementSnapshot(value) {
       articleId,
       summary: projectPublicationSummary(value),
     })),
+    attentionCountItems: Object.entries(snapshot.attentionCounts || {}).map(
+      ([articleId, count]) => ({
+        articleId,
+        count: Number.isInteger(count) && count >= 0 ? count : 0,
+      }),
+    ),
+    orderSummaryItems: Object.entries(snapshot.orderSummaries || {}).map(
+      ([articleId, value]) => ({
+        articleId,
+        summary: projectFields(value, [
+          "status",
+          "label",
+          "records",
+          "active",
+          "published",
+          "attention",
+        ]),
+      }),
+    ),
     ...(snapshot.lifecycleVersion === undefined
       ? {}
       : { lifecycleVersion: snapshot.lifecycleVersion }),
@@ -499,9 +586,8 @@ function projectManagementSnapshot(value) {
       : {
           lifecycleCounts: projectFields(snapshot.lifecycleCounts, [
             "pending_submission",
-            "queued",
-            "paid_processing",
-            "failed",
+            "needs_completion",
+            "in_submission",
             "published",
             "trash",
             "total",

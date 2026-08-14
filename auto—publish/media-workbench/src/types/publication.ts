@@ -1,5 +1,6 @@
 import type { GeneratedContentArticle } from "./generation";
 import type { ArticleOperation } from "../article-workflow";
+import type { ArticleOrderSummary } from "../article-workflow";
 
 export type PublicationRecordStatus =
   | "queued"
@@ -638,10 +639,9 @@ export interface ArticleManagementSnapshot {
       version?: number;
       stage:
         | "pending_submission"
-        | "queued"
-        | "paid_processing"
+        | "needs_completion"
+        | "in_submission"
         | "published"
-        | "failed"
         | "trash";
       label?: string;
       primaryAction: string;
@@ -658,26 +658,33 @@ export interface ArticleManagementSnapshot {
       }>;
       locks: {
         canEdit: boolean;
+        canSubmit: boolean;
         canQueue: boolean;
         canCancel: boolean;
         canTrash: boolean;
       };
       operations?: {
         edit: ArticleOperation;
+        submit: ArticleOperation;
         queue: ArticleOperation;
         retarget: ArticleOperation;
         trash: ArticleOperation;
+        restore: ArticleOperation;
+        purge: ArticleOperation;
       };
+      attentionCount: number;
+      orderSummary: ArticleOrderSummary;
       publicationSummary: PublicationHistorySummary;
     }
   >;
   publicationSummaries: Record<string, PublicationHistorySummary>;
+  attentionCounts: Record<string, number>;
+  orderSummaries: Record<string, ArticleOrderSummary>;
   lifecycleVersion?: number;
   lifecycleCounts?: {
     pending_submission: number;
-    queued: number;
-    paid_processing: number;
-    failed: number;
+    needs_completion: number;
+    in_submission: number;
     published: number;
     trash: number;
     total: number;

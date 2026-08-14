@@ -6,8 +6,9 @@ const {
   deriveArticleLifecycle,
   projectArticleLifecycle,
 } = require("../src/content/article-lifecycle-projection");
-const { projectManagementSnapshot } = require("../desktop/ipc/contracts/article-management-contracts");
-const { publicationSummary } = require("../src/content/article-lifecycle-facts");
+const {
+  projectManagementSnapshot,
+} = require("../desktop/ipc/contracts/article-management-contracts");
 
 function article(overrides) {
   return {
@@ -32,289 +33,288 @@ function facts(overrides) {
   };
 }
 
-test("legacy submitted facts are isolated as pending confirmation, never reviewing", () => {
-  const summary = publicationSummary(
-    [{ articleId: "article-1", status: "submitted", targetKey: "media-resource:r1" }],
-    [],
-    [],
-  );
-  assert.equal(summary.status, "uncertain");
-  assert.equal(summary.label, "待确认");
-  assert.equal(summary.uncertain, true);
-});
+function operationNames(workflow) {
+  return Object.keys(workflow.operations).sort();
+}
 
-test("article lifecycle exposes the six mutually exclusive stages", () => {
+test("article library exposes the five public categories and no runtime-only stages", () => {
   assert.deepEqual(ARTICLE_LIFECYCLE_STAGES, [
     "pending_submission",
-    "queued",
-    "paid_processing",
-    "failed",
+    "needs_completion",
+    "in_submission",
     "published",
     "trash",
   ]);
 
-  assert.equal(deriveArticleLifecycle(facts()).stage, "pending_submission");
-  assert.equal(
-    deriveArticleLifecycle(facts({
-      submissionItems: [{ articleId: "article-1", status: "queued", targetKey: "platform:p1" }],
-    })).stage,
-    "queued",
-  );
-  assert.equal(
-    deriveArticleLifecycle(facts({
-      publications: [{ articleId: "article-1", status: "remote_started", targetKey: "media-resource:r1" }],
-      orders: [{ articleId: "article-1", orderId: "order-1", supplierStatusCode: "0" }],
-    })).stage,
-    "paid_processing",
-  );
-  assert.equal(
-    deriveArticleLifecycle(facts({
-      publications: [{ articleId: "article-1", status: "uncertain", targetKey: "platform:p1" }],
-    })).stage,
-    "failed",
-  );
-  assert.equal(
-    deriveArticleLifecycle(facts({
-      publications: [{ articleId: "article-1", status: "published", targetKey: "platform:p1" }],
-    })).stage,
-    "published",
-  );
-  assert.equal(
-    deriveArticleLifecycle(facts({ article: article({ status: "trashed" }) })).stage,
-    "trash",
-  );
-});
+  const matrix = [
+    [
+      "complete article without runtime facts",
+      facts(),
+      "pending_submission",
+      "待投稿",
+      { edit: true, submit: true, trash: true },
+    ],
+    [
+      "incomplete article without runtime facts",
+      facts({ article: article({ title: "" }) }),
+      "needs_completion",
+      "待完善",
+      { edit: true, submit: false, trash: true },
+    ],
+    [
+      "regular queue item",
+      facts({
+        submissionItems: [
+          { articleId: "article-1", status: "queued", targetKey: "platform:p1" },
+        ],
+      }),
+      "in_submission",
+      "投稿中",
+      { edit: false, submit: false, trash: false },
+    ],
+    [
+      "confirmed paid batch before order creation",
+      facts({
+        submissionItems: [
+          {
+            articleId: "article-1",
+            status: "paid_processing",
+            targetKey: "media-resource:r1",
+          },
+        ],
+      }),
+      "in_submission",
+      "投稿中",
+      { edit: false, submit: false, trash: false },
+    ],
+    [
+      "active paid order",
+      facts({
+        orders: [
+          {
+            articleId: "article-1",
+            orderId: "order-1",
+            mediaResourceId: "resource-1",
+            supplierStatusCode: "0",
+          },
+        ],
+      }),
+      "in_submission",
+      "投稿中",
+      { edit: false, submit: false, trash: false },
+    ],
+    [
+      "active order with a missing target still freezes",
+      facts({
+        orders: [
+          {
+            articleId: "article-1",
+            orderId: "order-without-target",
+            supplierStatusCode: "1",
+          },
+        ],
+      }),
+      "in_submission",
+      "投稿中",
+      { edit: false, submit: false, trash: false },
+    ],
+    [
+      "uncertain remote result",
+      facts({
+        publications: [
+          { articleId: "article-1", status: "uncertain", targetKey: "platform:p1" },
+        ],
+      }),
+      "in_submission",
+      "投稿中",
+      { edit: false, submit: false, trash: false },
+    ],
+    [
+      "explicit failure with ended target",
+      facts({
+        publications: [
+          { articleId: "article-1", status: "failed", targetKey: "platform:p1" },
+        ],
+        attentionItems: [
+          { attentionId: "attention-1", articleId: "article-1", kind: "failed_submission" },
+        ],
+      }),
+      "pending_submission",
+      "待投稿",
+      { edit: true, submit: true, trash: true },
+    ],
+    [
+      "published article with a late after-sales observation",
+      facts({
+        publications: [
+          { articleId: "article-1", status: "published", targetKey: "platform:p1" },
+        ],
+        orders: [
+          {
+            articleId: "article-1",
+            orderId: "order-1",
+            supplierStatusCode: "9",
+            publicationStatus: "published",
+            mediaResourceId: "resource-1",
+          },
+        ],
+      }),
+      "published",
+      "已发布",
+      { edit: false, submit: false, trash: false },
+    ],
+    [
+      "safe trash record",
+      facts({ article: article({ status: "trashed" }) }),
+      "trash",
+      "回收站",
+      { edit: false, submit: false, trash: false, restore: true, purge: true },
+    ],
+  ];
 
-test("published evidence wins over supplier rejection and after-sales facts", () => {
-  const workflow = deriveArticleLifecycle(facts({
-    publications: [{ articleId: "article-1", status: "published", targetKey: "media-resource:r1" }],
-    orders: [{ articleId: "article-1", orderId: "order-1", supplierStatusCode: "4" }],
-    attentionItems: [{ articleId: "article-1", kind: "failed_submission" }],
-  }));
-
-  assert.equal(workflow.stage, "published");
-  assert.equal(workflow.locks.canEdit, false);
-  assert.equal(workflow.locks.canQueue, false);
-});
-
-test("ordinary platform acceptance is a global published fact", () => {
-  const workflow = deriveArticleLifecycle(facts({
-    publications: [{ articleId: "article-1", status: "published", targetKey: "platform:p1" }],
-  }));
-
-  assert.equal(workflow.stage, "published");
-  assert.equal(workflow.publicationSummary.status, "published");
-  assert.equal(workflow.targetFacts["platform:p1"].status, "published");
-  assert.deepEqual(workflow.locks, { canEdit: false, canQueue: false, canCancel: false, canTrash: false });
-});
-
-test("canonical published order remains published after a later after-sales observation", () => {
-  const workflow = deriveArticleLifecycle(facts({
-    orders: [{ articleId: "article-1", orderId: "order-1", supplierStatusCode: "9", publicationStatus: "published", mediaResourceId: "r1" }],
-  }));
-
-  assert.equal(workflow.stage, "published");
-  assert.equal(workflow.publicationSummary.status, "published");
-  assert.equal(workflow.publicationSummary.label, "已发布");
-});
-
-test("hard unknown facts still freeze an article that also has a prior published fact", () => {
-  const workflow = deriveArticleLifecycle(facts({
-    publications: [{ articleId: "article-1", status: "published", targetKey: "platform:p1" }],
-    orders: [{ articleId: "article-1", orderId: "order-1", supplierStatusCode: "" }],
-  }));
-
-  assert.equal(workflow.stage, "failed");
-  assert.equal(workflow.locks.canEdit, false);
-  assert.equal(workflow.reasonCodes.includes("ORDER_STATUS_UNKNOWN"), true);
-});
-
-test("target facts preserve published success over stale queue and rejection facts", () => {
-  const workflow = deriveArticleLifecycle(facts({
-    publications: [{ articleId: "article-1", status: "published", targetKey: "platform:p1" }],
-    submissionItems: [{ articleId: "article-1", status: "queued", targetKey: "platform:p1", canCancel: true }],
-    orders: [{ articleId: "article-1", orderId: "order-1", supplierStatusCode: "4", targetKey: "platform:p1" }],
-  }));
-
-  assert.equal(workflow.targetFacts["platform:p1"].status, "published");
-  assert.equal(workflow.targetFacts["platform:p1"].canCancel, false);
-});
-
-test("unknown order facts fail closed instead of falling back to pending submission", () => {
-  const workflow = deriveArticleLifecycle(facts({
-    orders: [{ articleId: "article-1", orderId: "order-1", supplierStatusCode: "" }],
-  }));
-
-  assert.equal(workflow.stage, "failed");
-  assert.equal(workflow.locks.canEdit, false);
-  assert.equal(workflow.reasonCodes.includes("ORDER_STATUS_UNKNOWN"), true);
-});
-
-test("empty and unknown publication or queue statuses fail closed", () => {
-  for (const input of [
-    { publications: [{ articleId: "article-1", status: "", targetKey: "platform:p1" }] },
-    { publications: [{ articleId: "article-1", status: "future-state", targetKey: "platform:p1" }] },
-    { submissionItems: [{ articleId: "article-1", status: "future-state", targetKey: "platform:p1" }] },
-  ]) {
-    const workflow = deriveArticleLifecycle(facts(input));
-    assert.equal(workflow.stage, "failed");
-    assert.deepEqual(workflow.locks, { canEdit: false, canQueue: false, canCancel: false, canTrash: false });
+  for (const [name, input, stage, label, permissions] of matrix) {
+    const workflow = deriveArticleLifecycle(input);
+    assert.equal(workflow.stage, stage, name);
+    assert.equal(workflow.label, label, name);
+    for (const [operation, allowed] of Object.entries(permissions))
+      assert.equal(workflow.operations[operation].allowed, allowed, `${name}:${operation}`);
+    assert.notEqual(workflow.stage, "paid_processing", name);
+    assert.notEqual(workflow.stage, "failed", name);
   }
 });
 
-test("multiple active targets fail closed instead of creating an ambiguous queue", () => {
+test("projection keeps attention and order summaries independent from the article category", () => {
   const workflow = deriveArticleLifecycle(facts({
-    submissionItems: [
-      { articleId: "article-1", status: "queued", targetKey: "platform:p1" },
-      { articleId: "article-1", status: "queued", targetKey: "platform:p2" },
+    publications: [
+      { articleId: "article-1", status: "failed", targetKey: "platform:p1" },
+    ],
+    orders: [
+      {
+        articleId: "article-1",
+        orderId: "order-1",
+        mediaResourceId: "resource-1",
+        supplierStatusCode: "4",
+      },
+    ],
+    attentionItems: [
+      { attentionId: "attention-1", articleId: "article-1", kind: "failed_submission" },
+      { attentionId: "attention-2", articleId: "article-1", kind: "order_status_anomaly" },
     ],
   }));
 
-  assert.equal(workflow.stage, "failed");
-  assert.equal(workflow.reasonCodes.includes("MULTIPLE_ACTIVE_TARGETS"), true);
-  assert.equal(workflow.locks.canEdit, false);
+  assert.equal(workflow.stage, "pending_submission");
+  assert.equal(workflow.attentionCount, 2);
+  assert.deepEqual(workflow.orderSummary, {
+    status: "rejected",
+    label: "已退稿",
+    records: 1,
+    active: 0,
+    published: 0,
+    attention: 1,
+  });
+  assert.deepEqual(workflow.publicationSummary, {
+    status: "failed",
+    label: "失败",
+    records: 2,
+    published: 0,
+    uncertain: false,
+  });
+  assert.equal(workflow.operations.submit.allowed, true);
+  assert.deepEqual(operationNames(workflow), [
+    "purge",
+    "queue",
+    "retarget",
+    "restore",
+    "submit",
+    "trash",
+    "edit",
+  ].sort());
 });
 
-test("active website media orders participate in the single-target freeze", () => {
-  for (const supplierStatusCode of ["0", "1"]) {
-    const workflow = deriveArticleLifecycle(facts({
-      submissionItems: [{ articleId: "article-1", status: "queued", targetKey: "platform:p1" }],
-      orders: [{ articleId: "article-1", orderId: "order-1", mediaResourceId: "resource-1", supplierStatusCode }],
-    }));
-
-    assert.equal(workflow.stage, "failed");
-    assert.equal(workflow.reasonCodes.includes("MULTIPLE_ACTIVE_TARGETS"), true);
-    assert.deepEqual(workflow.locks, { canEdit: false, canQueue: false, canCancel: false, canTrash: false });
-  }
-});
-
-test("uncertain results remain frozen even when the article is otherwise complete", () => {
-  const workflow = deriveArticleLifecycle(facts({
-    submissionItems: [{ articleId: "article-1", status: "uncertain", targetKey: "platform:p1" }],
-  }));
-
-  assert.equal(workflow.stage, "failed");
-  assert.deepEqual(workflow.allowedBulkActions, ["open_attention"]);
-  assert.deepEqual(workflow.locks, { canEdit: false, canQueue: false, canCancel: false, canTrash: false });
-});
-
-test("a media publication without a matching order is a frozen attention stage", () => {
-  const workflow = deriveArticleLifecycle(facts({
-    publications: [{ articleId: "article-1", status: "published", targetKey: "media-resource:r1" }],
-  }));
-
-  assert.equal(workflow.stage, "failed");
-  assert.equal(workflow.reasonCodes.includes("MEDIA_ORDER_MISSING"), true);
-  assert.equal(workflow.locks.canQueue, false);
-  assert.equal(workflow.locks.canTrash, false);
-});
-
-test("a deletion fact with an active queue cannot be presented as a safe trash item", () => {
+test("trash conflicts stay in the trash category and fail closed", () => {
   const workflow = deriveArticleLifecycle(facts({
     article: article({ status: "trashed" }),
-    submissionItems: [{ articleId: "article-1", status: "queued", targetKey: "platform:p1" }],
+    submissionItems: [
+      { articleId: "article-1", status: "queued", targetKey: "platform:p1" },
+    ],
   }));
 
-  assert.equal(workflow.stage, "failed");
+  assert.equal(workflow.stage, "trash");
   assert.equal(workflow.reasonCodes.includes("TRASH_ACTIVE_CONFLICT"), true);
-  assert.equal(workflow.locks.canTrash, false);
+  assert.equal(workflow.operations.restore.allowed, false);
+  assert.equal(workflow.operations.purge.allowed, false);
+  assert.equal(workflow.operations.restore.reasonCodes.includes("TRASH_ACTIVE_CONFLICT"), true);
 });
 
-test("batch projection classifies every article once and returns shared counts", () => {
-  const articles = [
-    article({ id: "pending" }),
-    article({ id: "queued" }),
-    article({ id: "paid" }),
-    article({ id: "attention" }),
-    article({ id: "published" }),
-  ];
+test("batch projection classifies all articles once and exposes one set of navigation counts", () => {
   const projection = projectArticleLifecycle({
-    articles,
-    trash: [{ articleId: "trash", clientId: "client-1", status: "trashed" }],
-    submissionItems: [{ articleId: "queued", status: "queued", targetKey: "platform:p1" }],
-    publications: [
-      { articleId: "paid", status: "remote_started", targetKey: "media-resource:r1" },
-      { articleId: "attention", status: "uncertain", targetKey: "platform:p1" },
-      { articleId: "published", status: "published", targetKey: "platform:p1" },
+    articles: [
+      article({ id: "pending" }),
+      article({ id: "incomplete", content: "" }),
+      article({ id: "in-progress" }),
+      article({ id: "published" }),
+      article({ id: "failed" }),
     ],
-    orders: [{ articleId: "paid", orderId: "order-1", supplierStatusCode: "1" }],
-    attentionItems: [],
-    removalTransactions: [],
+    trash: [{ articleId: "trash", clientId: "client-1", status: "trashed" }],
+    submissionItems: [
+      { articleId: "in-progress", status: "queued", targetKey: "platform:p1" },
+    ],
+    publications: [
+      { articleId: "published", status: "published", targetKey: "platform:p1" },
+      { articleId: "failed", status: "failed", targetKey: "platform:p2" },
+    ],
+    attentionItems: [
+      { attentionId: "attention-1", articleId: "failed", kind: "failed_submission" },
+    ],
   });
 
   assert.deepEqual(
     Object.fromEntries(Object.entries(projection.byArticle).map(([id, value]) => [id, value.stage])),
     {
       pending: "pending_submission",
-      queued: "queued",
-      paid: "paid_processing",
-      attention: "failed",
+      incomplete: "needs_completion",
+      "in-progress": "in_submission",
       published: "published",
+      failed: "pending_submission",
       trash: "trash",
     },
   );
   assert.deepEqual(projection.counts, {
-    pending_submission: 1,
-    queued: 1,
-    paid_processing: 1,
-    failed: 1,
+    pending_submission: 2,
+    needs_completion: 1,
+    in_submission: 1,
     published: 1,
     trash: 1,
     total: 6,
   });
+  assert.deepEqual(Object.fromEntries(Object.entries(projection.attentionCounts)), {
+    pending: 0,
+    incomplete: 0,
+    "in-progress": 0,
+    published: 0,
+    failed: 1,
+    trash: 0,
+  });
+  assert.equal(projection.orderSummaries.failed.status, "none");
 });
 
-test("trash records identified by articleId retain conflict facts in the batch projection", () => {
-  const projection = projectArticleLifecycle({
-    articles: [],
-    trash: [{ articleId: "trash-published", clientId: "client-1", title: "已发布", content: "正文" }],
-    publications: [{ articleId: "trash-published", status: "published", targetKey: "platform:p1" }],
-  });
+test("published success remains immutable even when a later unknown observation is present", () => {
+  const workflow = deriveArticleLifecycle(facts({
+    publications: [
+      { articleId: "article-1", status: "published", targetKey: "platform:p1" },
+    ],
+    orders: [
+      { articleId: "article-1", orderId: "order-1", supplierStatusCode: "" },
+    ],
+  }));
 
-  assert.equal(projection.byArticle["trash-published"].stage, "failed");
-  assert.equal(projection.byArticle["trash-published"].reasonCodes.includes("PUBLISHED_TRASH_CONFLICT"), true);
-  assert.equal(projection.counts.failed, 1);
-  assert.equal(projection.counts.trash, 0);
+  assert.equal(workflow.stage, "published");
+  assert.equal(workflow.operations.edit.allowed, false);
+  assert.equal(workflow.operations.submit.allowed, false);
+  assert.equal(workflow.reasonCodes.includes("ORDER_STATUS_UNKNOWN"), true);
 });
 
-test("persisted removal repair transactions freeze every affected article", () => {
-  const projection = projectArticleLifecycle({
-    articles: [article({ id: "repair-article" })],
-    removalTransactions: [{
-      id: "removal-1",
-      status: "needs_repair",
-      phase: "needs_repair",
-      selections: [{ clientId: "client-1", articleId: "repair-article" }],
-      articles: [{ clientId: "client-1", articleId: "repair-article" }],
-    }],
-  });
-
-  const workflow = projection.byArticle["repair-article"];
-  assert.equal(workflow.stage, "failed");
-  assert.equal(workflow.reasonCodes.includes("REMOVAL_REPAIR_REQUIRED"), true);
-  assert.deepEqual(workflow.locks, {
-    canEdit: false,
-    canQueue: false,
-    canCancel: false,
-    canTrash: false,
-  });
-});
-
-test("removal repair transaction membership remains isolated by client", () => {
-  const projection = projectArticleLifecycle({
-    articles: [article({ id: "shared-article", clientId: "client-1" })],
-    removalTransactions: [{
-      id: "other-client-removal",
-      status: "needs_repair",
-      phase: "needs_repair",
-      selections: [{ clientId: "client-2", articleId: "shared-article" }],
-    }],
-  });
-
-  assert.equal(projection.byArticle["shared-article"].stage, "pending_submission");
-});
-
-test("IPC projection preserves target facts from the unified workflow", () => {
+test("IPC projection carries the five-stage counts and independent summaries", () => {
   const snapshot = projectManagementSnapshot({
     clientId: "client-1",
     revision: 1,
@@ -327,24 +327,81 @@ test("IPC projection preserves target facts from the unified workflow", () => {
     submissionPlatforms: [],
     workflowByArticle: {
       "article-1": {
-        version: 1,
-        stage: "published",
-        label: "已发布",
-        primaryAction: "view_publication",
-        allowedBulkActions: ["view_publication"],
-        locks: { canEdit: false, canQueue: false, canCancel: false, canTrash: false },
-        publicationSummary: { status: "published", label: "已发布", records: 1, published: 1, uncertain: false },
-        targetFacts: {
-          "platform:p1": { targetKey: "platform:p1", status: "published", canCancel: false },
+        version: 2,
+        stage: "in_submission",
+        label: "投稿中",
+        primaryAction: "view_submission",
+        allowedBulkActions: ["view_submission"],
+        reasonCodes: [],
+        reasonMessage: null,
+        locks: {
+          canEdit: false,
+          canSubmit: false,
+          canQueue: false,
+          canCancel: false,
+          canTrash: false,
         },
+        operations: {
+          edit: { allowed: false, reasonCodes: ["ARTICLE_OPERATION_FROZEN"], safeMetadata: {} },
+          submit: { allowed: false, reasonCodes: ["ARTICLE_OPERATION_FROZEN"], safeMetadata: {} },
+          queue: { allowed: false, reasonCodes: ["ARTICLE_OPERATION_FROZEN"], safeMetadata: {} },
+          retarget: { allowed: false, reasonCodes: ["ARTICLE_OPERATION_FROZEN"], safeMetadata: {} },
+          trash: { allowed: false, reasonCodes: ["ARTICLE_OPERATION_FROZEN"], safeMetadata: {} },
+          restore: { allowed: false, reasonCodes: ["ARTICLE_IN_TRASH"], safeMetadata: {} },
+          purge: { allowed: false, reasonCodes: ["ARTICLE_IN_TRASH"], safeMetadata: {} },
+        },
+        attentionCount: 1,
+        orderSummary: {
+          status: "processing",
+          label: "付费处理中",
+          records: 1,
+          active: 1,
+          published: 0,
+          attention: 0,
+        },
+        publicationSummary: {
+          status: "queued",
+          label: "已入队",
+          records: 1,
+          published: 0,
+          uncertain: false,
+        },
+        targetFacts: {},
+      },
+    },
+    attentionCounts: { "article-1": 1 },
+    orderSummaries: {
+      "article-1": {
+        status: "processing",
+        label: "付费处理中",
+        records: 1,
+        active: 1,
+        published: 0,
+        attention: 0,
       },
     },
     publicationSummaries: {},
-    lifecycleVersion: 1,
-    lifecycleCounts: { pending_submission: 0, queued: 0, paid_processing: 0, failed: 0, published: 1, trash: 0, total: 1 },
+    lifecycleVersion: 2,
+    lifecycleCounts: {
+      pending_submission: 0,
+      needs_completion: 0,
+      in_submission: 1,
+      published: 0,
+      trash: 0,
+      total: 1,
+    },
   });
 
-  assert.deepEqual(snapshot.workflowItems[0].workflow.targetFacts, [
-    { targetKey: "platform:p1", status: "published", canCancel: false },
-  ]);
+  assert.equal(snapshot.workflowItems[0].workflow.stage, "in_submission");
+  assert.equal(snapshot.workflowItems[0].workflow.attentionCount, 1);
+  assert.deepEqual(snapshot.attentionCountItems, [{ articleId: "article-1", count: 1 }]);
+  assert.equal(snapshot.orderSummaryItems[0].summary.status, "processing");
+  assert.deepEqual(snapshot.lifecycleCounts, {
+    pending_submission: 0,
+    needs_completion: 0,
+    in_submission: 1,
+    published: 0,
+    trash: 0,
+    total: 1,
+  });
 });

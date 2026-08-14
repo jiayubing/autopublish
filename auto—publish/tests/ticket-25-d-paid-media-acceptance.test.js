@@ -479,7 +479,7 @@ test("paid order views refresh through the application and preserve facts on tra
     const snapshot = await fixture.management.get({ clientId: "client-d" });
     assert.equal(
       snapshot.workflowByArticle["refresh-d"].stage,
-      "paid_processing",
+      "in_submission",
     );
     assert.equal(snapshot.workflowByArticle["refresh-d"].locks.canEdit, false);
     assert.equal(snapshot.orders[0].quotedPrice, 12.5);

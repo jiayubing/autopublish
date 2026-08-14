@@ -20,7 +20,7 @@ import type {
   PublicationHistoryRecord,
 } from "../../types/publication";
 import type { GeneratedContentArticle } from "../../types/generation";
-import { type ArticleWorkflowStage } from "../../article-workflow";
+import { type ArticleWorkflowFilter } from "../../article-workflow";
 import type {
   ArticleManagementReadModel,
   GeneratedArticlesViewProps as GeneratedArticlesViewPropsBase,
@@ -101,7 +101,7 @@ export default function GeneratedArticlesView({
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [filter, setFilter] = useState("");
   const [selectedStage, setSelectedStage] = useState<
-    ArticleWorkflowStage | "all"
+    ArticleWorkflowFilter
   >(stageFilter);
   const submissionPlatforms = useMemo(
     () =>
@@ -118,15 +118,17 @@ export default function GeneratedArticlesView({
   const [paidResolutionError, setPaidResolutionError] = useState("");
   const clientIdRef = useRef(clientId);
   const mountedRef = useRef(true);
-  const lastNonTrashStageRef = useRef<ArticleWorkflowStage | "all">(
-    stageFilter === "trash" ? "all" : stageFilter,
+  const lastNonTrashStageRef = useRef<ArticleWorkflowFilter>(
+    stageFilter === "trash" || stageFilter === "attention" ? "all" : stageFilter,
   );
   const { snapshot: attentionSnapshot, feature: attentionFeature } =
     useAttentionFeature(clientId);
   const [selected, setSelected] = useState<string[]>([]);
   const [error, setError] = useState("");
   const visibleError = error || query.error?.userMessage || "";
-  const isAttentionStage = selectedStage === "failed";
+  // Attention is an independent read model. It is no longer an article-library
+  // category; the submission-center work package owns its dedicated surface.
+  const isAttentionStage = selectedStage === "attention";
   const [cancellationPending, setCancellationPending] = useState<{
     clientId: string;
     count: number;
@@ -158,7 +160,8 @@ export default function GeneratedArticlesView({
 
   useEffect(() => {
     setSelectedStage(stageFilter);
-    if (stageFilter !== "trash") lastNonTrashStageRef.current = stageFilter;
+    if (stageFilter !== "trash" && stageFilter !== "attention")
+      lastNonTrashStageRef.current = stageFilter;
   }, [stageFilter]);
 
   useEffect(() => {
@@ -249,7 +252,10 @@ export default function GeneratedArticlesView({
   function canQueueArticle(article: GeneratedContentArticle): boolean {
     const workflow = workflowForArticle(article);
     const allowed =
-      workflow?.operations?.queue?.allowed ?? workflow?.locks.canQueue;
+      workflow?.operations?.submit?.allowed ??
+      workflow?.locks.canSubmit ??
+      workflow?.operations?.queue?.allowed ??
+      workflow?.locks.canQueue;
     return (
       allowed === true && !(dirtyArticleId && article.id === dirtyArticleId)
     );
@@ -1307,7 +1313,7 @@ export default function GeneratedArticlesView({
           {visibleError}
         </div>
       )}
-      {selectedStage === "failed" ? (
+      {isAttentionStage ? (
         <ArticleAttentionPanel
           snapshot={attentionSnapshot}
           onRefresh={attentionFeature.refresh}

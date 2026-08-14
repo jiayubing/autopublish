@@ -1,6 +1,16 @@
 const UNKNOWN_FACT_STATUS = "unknown";
-const ACTIVE_PUBLICATION_STATUSES = new Set(["queued", "remote_started"]);
-const ACTIVE_SUBMISSION_STATUSES = new Set(["queued", "claimed", "remote_started", "reserving"]);
+const ACTIVE_PUBLICATION_STATUSES = new Set([
+  "queued",
+  "remote_started",
+  "paid_processing",
+]);
+const ACTIVE_SUBMISSION_STATUSES = new Set([
+  "queued",
+  "claimed",
+  "remote_started",
+  "reserving",
+  "paid_processing",
+]);
 const FAILURE_STATUSES = new Set(["failed", "uncertain", "conflict"]);
 const KNOWN_PUBLICATION_STATUSES = new Set([
   "queued",
@@ -31,6 +41,16 @@ const SUMMARY_LABELS = Object.freeze({
   published: "已发布",
   uncertain: "待确认",
   failed: "失败",
+});
+const ORDER_SUMMARY_LABELS = Object.freeze({
+  none: "无订单",
+  processing: "付费处理中",
+  published: "已发布",
+  rejected: "已退稿",
+  after_sales: "售后中",
+  cancelled: "已取消",
+  terminal: "订单已结束",
+  unknown: "待核对",
 });
 
 function array(value) {
@@ -157,6 +177,51 @@ function publicationSummary(records, orders, submissionItems) {
   return result("failed");
 }
 
+function orderSummary(orders) {
+  const values = array(orders);
+  if (!values.length) {
+    return {
+      status: "none",
+      label: ORDER_SUMMARY_LABELS.none,
+      records: 0,
+      active: 0,
+      published: 0,
+      attention: 0,
+    };
+  }
+  const statuses = values.map(orderStatusOf);
+  const active = statuses.filter((status) => ["0", "1"].includes(status)).length;
+  const published = values.filter(
+    (order) =>
+      orderStatusOf(order) === "2" || text(order.publicationStatus) === "published",
+  ).length;
+  const unknown = values.filter((order, index) => {
+    const status = statuses[index];
+    return (
+      !isKnownOrder(order) ||
+      (!SUPPLIER_STATUSES.has(status) && status !== "cancelled")
+    );
+  }).length;
+  const rejected = statuses.filter((status) => status === "4").length;
+  const afterSales = statuses.filter((status) => status === "9").length;
+  const cancelled = statuses.filter((status) => status === "cancelled").length;
+  let status = "terminal";
+  if (unknown > 0) status = "unknown";
+  else if (published > 0) status = "published";
+  else if (active > 0) status = "processing";
+  else if (afterSales > 0) status = "after_sales";
+  else if (rejected > 0) status = "rejected";
+  else if (cancelled === values.length) status = "cancelled";
+  return {
+    status,
+    label: ORDER_SUMMARY_LABELS[status],
+    records: values.length,
+    active,
+    published,
+    attention: unknown + rejected + afterSales,
+  };
+}
+
 function mergeTargetStatus(current, next) {
   if (current === UNKNOWN_FACT_STATUS || next === UNKNOWN_FACT_STATUS) return UNKNOWN_FACT_STATUS;
   if (current === "uncertain" || next === "uncertain") return "uncertain";
@@ -207,6 +272,7 @@ module.exports = {
   SUPPLIER_STATUSES,
   SUMMARY_LABELS,
   UNKNOWN_FACT_STATUS,
+  ORDER_SUMMARY_LABELS,
   activeMediaOrderFact,
   activePublicationFact,
   activeSubmissionFact,
@@ -217,6 +283,7 @@ module.exports = {
   isMediaTarget,
   matchesOrderTarget,
   orderStatusOf,
+  orderSummary,
   publicationLifecycleStatus,
   publicationSummary,
   rawStatusOf,
