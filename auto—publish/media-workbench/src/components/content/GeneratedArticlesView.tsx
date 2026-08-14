@@ -123,6 +123,7 @@ export default function GeneratedArticlesView({
   const [selected, setSelected] = useState<string[]>([]);
   const [error, setError] = useState("");
   const visibleError = error || query.error?.userMessage || "";
+  const isAttentionStage = selectedStage === "failed";
   const [cancellationPending, setCancellationPending] = useState<{
     clientId: string;
     count: number;
@@ -207,6 +208,10 @@ export default function GeneratedArticlesView({
     });
     return grouped;
   }, [publishedArchives]);
+  const publicationRecordById = useMemo(
+    () => new Map(publicationRecords.map((record) => [record.publicationId, record])),
+    [publicationRecords],
+  );
   const workflowByArticle = useMemo(
     () =>
       new Map(
@@ -220,6 +225,22 @@ export default function GeneratedArticlesView({
 
   function workflowForArticle(article: GeneratedContentArticle) {
     return workflowByArticle.get(article.id);
+  }
+
+  function attentionTargetLabel(item: ArticleAttentionItem): string {
+    const publication = item.publicationId
+      ? publicationRecordById.get(item.publicationId)
+      : undefined;
+    const platform =
+      item.displayName ||
+      publication?.displayName ||
+      item.platformId ||
+      publication?.platformId ||
+      "未指定平台";
+    const account = /(?:^|:)account:(.+)$/.exec(
+      publication?.targetKey || "",
+    )?.[1];
+    return `${platform} / ${account || "账号未记录"}`;
   }
 
   function canQueueArticle(article: GeneratedContentArticle): boolean {
@@ -1051,7 +1072,8 @@ export default function GeneratedArticlesView({
           />
         </div>
 
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
+        {!isAttentionStage && (
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={toggleAll}
@@ -1111,7 +1133,8 @@ export default function GeneratedArticlesView({
                 当前客户全部批次均无可撤销的未开始项。
               </span>
             )}
-        </div>
+          </div>
+        )}
         {batchFeedback && (
           <div
             role={batchFeedback.kind === "error" ? "alert" : "status"}
@@ -1131,7 +1154,7 @@ export default function GeneratedArticlesView({
             {trashFeedback.text}
           </div>
         )}
-        {removalTransaction && (
+        {removalTransaction && !isAttentionStage && (
           <div
             role={removalStatus === "needs_repair" ? "alert" : "status"}
             aria-live={
@@ -1166,7 +1189,8 @@ export default function GeneratedArticlesView({
           </div>
         )}
 
-        <div className="flex min-w-0 flex-wrap items-start gap-2 rounded-md border border-slate-200 bg-slate-50 p-2">
+        {!isAttentionStage && (
+          <div className="flex min-w-0 flex-wrap items-start gap-2 rounded-md border border-slate-200 bg-slate-50 p-2">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
             <span className="shrink-0 text-xs font-medium text-slate-500">
               投稿平台
@@ -1231,7 +1255,8 @@ export default function GeneratedArticlesView({
             value={accountProfileId}
             onChange={setAccountProfileId}
           />
-        </div>
+          </div>
+        )}
       </div>
       {visibleError && (
         <div
@@ -1241,62 +1266,62 @@ export default function GeneratedArticlesView({
           {visibleError}
         </div>
       )}
-      {selectedStage === "failed" && (
-        <div className="mb-3">
-          <ArticleAttentionPanel
-            snapshot={attentionSnapshot}
-            onRefresh={attentionFeature.refresh}
-            onPreviewAction={attentionFeature.previewAction}
-            onExecutePreview={attentionFeature.executePreview}
-            selectedAttentionId={selectedAttentionId}
-            onOpenPublication={(item) => {
-              // Paid-order resolution is a dedicated attention workflow. Open
-              // its detail drawer so the typed media commands remain reachable
-              // without routing them through the generic attention resolver.
-              if (item.resolutionActions?.length) {
-                setAttentionDetail(item);
-                return;
-              }
-              const article = articles.find(
-                (candidate) => candidate.id === item.articleId,
-              );
-              if (article) setDrawerArticle(article);
-              else setAttentionDetail(item);
-            }}
-            onInspect={(item) => setAttentionDetail(item)}
-            onOpenArticle={(item) => {
-              const article = articles.find(
-                (candidate) => candidate.id === item.articleId,
-              );
-              if (article) openArticle(article);
-              else setAttentionDetail(item);
-            }}
-          />
-        </div>
+      {selectedStage === "failed" ? (
+        <ArticleAttentionPanel
+          snapshot={attentionSnapshot}
+          onRefresh={attentionFeature.refresh}
+          onPreviewAction={attentionFeature.previewAction}
+          onExecutePreview={attentionFeature.executePreview}
+          selectedAttentionId={selectedAttentionId}
+          getTargetLabel={attentionTargetLabel}
+          onOpenPublication={(item) => {
+            // Paid-order resolution is a dedicated attention workflow. Open
+            // its detail drawer so the typed media commands remain reachable
+            // without routing them through the generic attention resolver.
+            if (item.resolutionActions?.length) {
+              setAttentionDetail(item);
+              return;
+            }
+            const article = articles.find(
+              (candidate) => candidate.id === item.articleId,
+            );
+            if (article) setDrawerArticle(article);
+            else setAttentionDetail(item);
+          }}
+          onInspect={(item) => setAttentionDetail(item)}
+          onOpenArticle={(item) => {
+            const article = articles.find(
+              (candidate) => candidate.id === item.articleId,
+            );
+            if (article) openArticle(article);
+            else setAttentionDetail(item);
+          }}
+        />
+      ) : (
+        <GeneratedArticlesList
+          groups={groups}
+          visibleError={visibleError}
+          clientId={clientId}
+          collapsed={collapsed}
+          selected={selected}
+          workflowByArticle={workflowByArticle}
+          isArticleSelectable={isArticleSelectable}
+          isArticleQueueable={canQueueArticle}
+          removalSubmitDisabled={removalSubmitDisabled}
+          commandBusy={commandBusy}
+          onToggleCollapsed={(key) =>
+            setCollapsed((current) => ({
+              ...current,
+              [key]: current[key] === false,
+            }))
+          }
+          onToggleGroup={toggleGroup}
+          onToggleArticle={toggleArticle}
+          onOpenArticle={openArticle}
+          onOpenPublication={(article) => setDrawerArticle(article)}
+          onOpenOrder={onOpenOrders}
+        />
       )}
-      <GeneratedArticlesList
-        groups={groups}
-        visibleError={visibleError}
-        clientId={clientId}
-        collapsed={collapsed}
-        selected={selected}
-        workflowByArticle={workflowByArticle}
-        isArticleSelectable={isArticleSelectable}
-        isArticleQueueable={canQueueArticle}
-        removalSubmitDisabled={removalSubmitDisabled}
-        commandBusy={commandBusy}
-        onToggleCollapsed={(key) =>
-          setCollapsed((current) => ({
-            ...current,
-            [key]: current[key] === false,
-          }))
-        }
-        onToggleGroup={toggleGroup}
-        onToggleArticle={toggleArticle}
-        onOpenArticle={openArticle}
-        onOpenPublication={(article) => setDrawerArticle(article)}
-        onOpenOrder={onOpenOrders}
-      />
       {trashPreview && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/30 p-4"

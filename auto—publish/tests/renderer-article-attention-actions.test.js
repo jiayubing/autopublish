@@ -41,10 +41,10 @@ test('article attention actions produce visible publication/detail results', asy
     await page.addInitScript(() => {
       const ok = (data) => Promise.resolve({ ok: true, data });
       const article = { id: 'article-1', clientId: 'client-1', title: '失败后可重新投稿', content: '安全测试正文', status: 'saved', platform: 'hepan', scenario: '测试', templateId: 'template-1', createdAt: '2026-07-19T00:00:00.000Z', updatedAt: '2026-07-19T00:00:00.000Z' };
-      const attention = { attentionId: 'failed-active-1', kind: 'failed_submission', articleId: article.id, clientId: article.clientId, titleSnapshot: article.title, platformId: 'hepan', displayName: '蓝色河畔', publicationId: 'publication-1', attemptId: 'attempt-1', status: 'failed', message: '投稿明确失败', allowedActions: ['retry-publication', 'open-publication'] };
+      const attention = { attentionId: 'failed-active-1', kind: 'failed_submission', articleId: article.id, clientId: article.clientId, titleSnapshot: article.title, platformId: 'hepan', displayName: '蓝色河畔', publicationId: 'publication-1', attemptId: 'attempt-1', status: 'failed', updatedAt: article.updatedAt, message: '投稿明确失败', allowedActions: ['retry-publication', 'open-publication'] };
       const paidResolution = { attentionId: 'paid-resolution-1', kind: 'paid_order_uncertain', articleId: article.id, clientId: article.clientId, titleSnapshot: '付费订单待核对', platformId: 'hepan', displayName: '蓝色河畔', publicationId: 'publication-paid-1', attemptId: 'attempt-paid-1', orderCreationAttemptId: 'order-attempt-1', status: 'uncertain', message: '请核对服务商订单', allowedActions: ['open-publication'], resolutionActions: ['bind-paid-order-number', 'confirm-paid-order-absent'] };
       const repair = { attentionId: 'repair-1', kind: 'removal_needs_repair', articleId: 'article-missing', clientId: article.clientId, titleSnapshot: '删除事务待修复', transactionId: 'transaction-1', status: 'needs_repair', reasonCode: 'ARTICLE_REMOVAL_BLOCKED', message: '删除事务未完成，需要重新预检并继续', allowedActions: ['retry-removal', 'inspect'] };
-      const publication = { publicationId: 'publication-1', clientId: article.clientId, articleId: article.id, platformId: 'hepan', targetKey: 'platform:hepan', status: 'failed', updatedAt: article.updatedAt, attempts: [{ attemptId: 'attempt-1', status: 'failed', updatedAt: article.updatedAt, errorCode: 'REMOTE_REJECTED' }] };
+      const publication = { publicationId: 'publication-1', clientId: article.clientId, articleId: article.id, platformId: 'hepan', targetKey: 'platform:hepan:account:account-1', displayName: '蓝色河畔', status: 'failed', updatedAt: article.updatedAt, attempts: [{ attemptId: 'attempt-1', status: 'failed', updatedAt: article.updatedAt, errorCode: 'REMOTE_REJECTED' }] };
       const calls = [];
       const content = {
         listClients: () => ok({ clients: [{ id: article.clientId, name: '测试客户', knowledgeFiles: [] }] }),
@@ -67,10 +67,19 @@ test('article attention actions produce visible publication/detail results', asy
       };
       window.__attentionActionCalls = calls;
     });
-    await page.goto(rendererUrl, { waitUntil: 'domcontentloaded' });
+     await page.goto(rendererUrl, { waitUntil: 'domcontentloaded' });
     await page.getByRole('button', { name: 'AI内容生成' }).click();
-    await page.getByRole('button', { name: '历史文章' }).click();
+     await page.getByRole('button', { name: '历史文章' }).click();
      await page.getByRole('tab', { name: '需处理' }).click();
+    await page.getByText('失败后可重新投稿', { exact: true }).waitFor({ state: 'visible' });
+    assert.equal(await page.getByText('失败后可重新投稿', { exact: true }).count(), 1);
+    assert.ok(await page.getByText('蓝色河畔 / account-1', { exact: true }).isVisible());
+    assert.ok((await page.getByText('问题类型', { exact: true }).count()) > 0);
+    assert.ok((await page.getByText('问题说明', { exact: true }).count()) > 0);
+    assert.ok((await page.getByText('最近一次执行', { exact: true }).count()) > 0);
+    assert.ok(await page.getByText('2026-07-19 08:00:00', { exact: true }).isVisible());
+    assert.equal(await page.getByRole('button', { name: '全选当前结果' }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: '加入投稿队列' }).count(), 0);
      await page.getByRole('button', { name: '打开发布详情' }).first().click();
     await page.getByRole('dialog', { name: '文章 失败后可重新投稿 的发布详情' }).waitFor({ state: 'visible' });
     assert.deepEqual(await page.evaluate(() => window.__attentionActionCalls), []);

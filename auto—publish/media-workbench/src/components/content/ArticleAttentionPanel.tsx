@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from "react";
 import { useConfirmation } from "../../confirmation";
 import type { createAttentionFeature } from "../../features/attention/attention-feature.js";
 import type { ArticleAttentionItem } from "../../types/publication";
+import { formatBeijingTime } from "../../time-format";
 import { reportRuntimeDiagnostic } from "../../features/workspace/runtime-diagnostic-sink";
 
 type AttentionFeature = ReturnType<typeof createAttentionFeature>;
@@ -26,6 +27,11 @@ function actionLabel(action: string): string {
     "retry-archive": "重试本地归档",
   };
   return labels[action] || action;
+}
+
+function defaultTargetLabel(item: ArticleAttentionItem): string {
+  const platform = item.displayName || item.platformId || "未指定平台";
+  return `${platform} / 账号未记录`;
 }
 
 function actionError(value: unknown): string {
@@ -59,6 +65,7 @@ interface ArticleAttentionPanelProps {
   onOpenPublication: (item: ArticleAttentionItem) => void;
   onInspect: (item: ArticleAttentionItem) => void;
   onOpenArticle: (item: ArticleAttentionItem) => void;
+  getTargetLabel?: (item: ArticleAttentionItem) => string;
 }
 
 export default function ArticleAttentionPanel({
@@ -70,6 +77,7 @@ export default function ArticleAttentionPanel({
   onOpenPublication,
   onInspect,
   onOpenArticle,
+  getTargetLabel,
 }: ArticleAttentionPanelProps) {
   const { confirm } = useConfirmation();
   const itemRefs = useRef(new Map<string, HTMLDivElement>());
@@ -128,14 +136,14 @@ export default function ArticleAttentionPanel({
 
   return (
     <section
-      aria-label="需处理中心"
+      aria-label="需处理页面"
       className="rounded-md border border-amber-200 bg-amber-50/50 p-3"
     >
       <div className="flex items-center justify-between gap-2">
         <div>
-          <h3 className="text-sm font-semibold text-amber-900">需处理中心</h3>
+          <h3 className="text-sm font-semibold text-amber-900">需处理</h3>
           <p className="mt-1 text-xs text-amber-800">
-            当前快照只展示有明确可执行动作的项目。
+            按文章展示问题原因、投稿目标和当前允许的处理动作。
           </p>
         </div>
         <button
@@ -176,36 +184,67 @@ export default function ArticleAttentionPanel({
           >
             <div className="flex items-start gap-2">
               <div className="min-w-0 flex-1">
-                <div className="text-xs font-semibold text-slate-800">
+                <h4 className="break-words text-sm font-semibold text-slate-800">
                   {item.titleSnapshot ||
                     item.articleId ||
                     item.transactionId ||
                     "需处理项"}
-                </div>
-                <div className="mt-1 text-xs text-slate-600">
-                  {labelFor(item)}
-                  {item.reasonCode ? ` · ${item.reasonCode}` : ""}
-                </div>
+                </h4>
               </div>
               <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">
                 {item.status || "待处理"}
               </span>
             </div>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {item.allowedActions.map((action) => (
-                <button
-                  key={action}
-                  type="button"
-                  disabled={actionBusy}
-                  onClick={() => void resolve(item, action)}
-                  className="rounded border border-slate-300 bg-white px-2 py-1 text-[11px] text-slate-700 disabled:opacity-40"
-                >
-                  {actionLabel(action)}
-                </button>
-              ))}
+            <dl className="mt-3 grid min-w-0 gap-2 text-xs">
+              <div className="grid min-w-0 grid-cols-[6rem_minmax(0,1fr)] gap-2">
+                <dt className="text-slate-400">投稿目标</dt>
+                <dd className="min-w-0 break-words text-slate-700">
+                  {getTargetLabel?.(item) || defaultTargetLabel(item)}
+                </dd>
+              </div>
+              <div className="grid min-w-0 grid-cols-[6rem_minmax(0,1fr)] gap-2">
+                <dt className="text-slate-400">问题类型</dt>
+                <dd className="min-w-0 break-words text-slate-700">
+                  {labelFor(item)}
+                  {item.reasonCode ? ` · ${item.reasonCode}` : ""}
+                </dd>
+              </div>
+              <div className="grid min-w-0 grid-cols-[6rem_minmax(0,1fr)] gap-2">
+                <dt className="text-slate-400">最近一次执行</dt>
+                <dd className="min-w-0 break-words text-slate-700">
+                  {formatBeijingTime(item.updatedAt)}
+                </dd>
+              </div>
+            </dl>
+            <div className="mt-3 rounded border border-amber-100 bg-amber-50/60 p-2 text-xs leading-5 text-amber-900">
+              <div className="font-semibold">问题说明</div>
+              <p className="mt-1 break-words">
+                {item.message || "当前状态需要进一步处理。"}
+              </p>
+            </div>
+            <div className="mt-3">
+              <div className="text-xs font-semibold text-slate-700">允许操作</div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {item.allowedActions.map((action) => (
+                  <button
+                    key={action}
+                    type="button"
+                    disabled={actionBusy}
+                    onClick={() => void resolve(item, action)}
+                    className="rounded border border-slate-300 bg-white px-2 py-1 text-[11px] text-slate-700 disabled:opacity-40"
+                  >
+                    {actionLabel(action)}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         ))}
+        {snapshot.query.loading && !snapshot.items.length && (
+          <div className="rounded border border-dashed border-amber-300 bg-white p-4 text-center text-xs text-amber-800">
+            正在加载需处理项…
+          </div>
+        )}
         {!snapshot.items.length &&
           !snapshot.query.loading &&
           !snapshot.query.error && (
