@@ -102,7 +102,6 @@ function contentTrashFixture() {
 function contentImpactFixture() {
   return {
     articleCount: 1,
-    queuedToCancel: [],
     blockedItems: [],
     canCommit: true,
   };

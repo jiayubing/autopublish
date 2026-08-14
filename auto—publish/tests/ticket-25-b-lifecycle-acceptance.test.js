@@ -83,7 +83,7 @@ function createHarness(options) {
     mutationCoordinator: coordinator,
     submissionService: {
       previewArticleRemovalImpact() {
-        return { canCommit: true, blockedItems: [], queuedToCancel: [] };
+        return { canCommit: true, blockedItems: [] };
       },
     },
     now: () => NOW,

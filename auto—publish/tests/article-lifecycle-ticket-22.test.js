@@ -650,6 +650,8 @@ test("typed article-management archive field delegates V1 validation and rejects
     submissionPlatforms: [],
     workflowItems: [],
     publicationSummaryItems: [],
+    attentionCountItems: [],
+    orderSummaryItems: [],
   };
   const encoded = registry.success(contract, data);
   assert.equal(encoded.data.publishedArchives[0].publicationEvidenceV1.body, "实际投稿正文");
@@ -844,7 +846,6 @@ test("deletion transaction DTO is versioned while completed history remains quer
     mutationCoordinator: fixture.coordinator,
     submissionService: {
       previewArticleRemovalImpact: () => ({
-        queuedToCancel: [],
         blockedItems: [],
         canCommit: true,
       }),

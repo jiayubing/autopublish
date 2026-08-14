@@ -989,7 +989,7 @@ test("article management binds client identity to real OperationalStore publicat
   }
 });
 
-test("content removal preview and commit require typed confirmation and redact queue internals", async function () {
+test("content removal preview and commit require typed confirmation and expose only blocked facts", async function () {
   const registry = createContractRegistry(contentCoreContracts);
   const commit = registry.byChannel("content:trash-articles");
   assert.throws(
@@ -1049,9 +1049,6 @@ test("content removal preview and commit require typed confirmation and redact q
     data: {
       token: "token-1",
       articleCount: 1,
-      queuedToCancel: [
-        { clientId: "client-1", articleId: "article-1", status: "queued" },
-      ],
       blockedItems: [],
       canCommit: true,
     },

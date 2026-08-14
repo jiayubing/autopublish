@@ -651,8 +651,6 @@ test("the application facade exposes only stable submission operations", () => {
     "cancelBatch",
     "reconcileBatch",
     "previewArticleRemovalImpact",
-    "cancelArticleSubmissionItem",
-    "reconcileArticleRemovalAction",
     "inspectSubmissionPair",
     "evaluateItemAction",
     "isSubmissionItemExecutable",

@@ -47,7 +47,6 @@ function createArticleTrashService(options) {
       now: opts.now,
       tokenTtlMs: opts.tokenTtlMs,
       tokenGenerator: opts.tokenGenerator,
-      afterQueueAction: opts.afterQueueAction,
       afterArticleMove: opts.afterArticleMove,
       onTransactionStatus: opts.onTransactionStatus
     }) : null);

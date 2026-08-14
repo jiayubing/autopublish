@@ -183,7 +183,6 @@ export interface ArticleRemovalTransaction {
   createdAt?: string | null;
   updatedAt?: string | null;
   articleCount?: number;
-  queueCursor?: number;
   articleCursor?: number;
   deletionTransactionIdentityV1?: DeletionTransactionIdentityV1;
 }
@@ -193,16 +192,20 @@ export interface ArticleTrashImpactItem {
   articleId?: string;
   platformId?: string | null;
   targetPlatformId?: string | null;
+  targetKey?: string | null;
   displayName?: string | null;
   reasonCode?: string | null;
   status?: string | null;
+  source?: string | null;
+  mediaResourceId?: string | null;
+  orderId?: string | null;
+  orderNid?: string | null;
   [key: string]: unknown;
 }
 
 export interface ArticleTrashPreview {
   token?: string;
   articleCount: number;
-  queuedToCancel: ArticleTrashImpactItem[];
   blockedItems: ArticleTrashImpactItem[];
   canCommit: boolean;
   selections?: ArticleSelection[];
@@ -226,7 +229,6 @@ export interface ArticleTrashResult {
   transactionId?: string;
   status?: string;
   articleCount?: number;
-  queueActions?: ArticleTrashImpactItem[];
   errorCode?: string;
   reasonCode?: string | null;
   phase?: string | null;

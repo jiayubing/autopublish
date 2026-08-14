@@ -1135,7 +1135,7 @@ export default function GeneratedArticlesView({
             )}
             {trashPreview.canCommit && !removalSubmitDisabled && (
               <div className="mt-4 rounded border border-blue-100 bg-blue-50 p-3 text-xs leading-5 text-blue-800">
-                确认后只会撤销尚未开始的 queued 项，并将文章移入回收站；
+                确认后只会将文章内容移入回收站；投稿任务必须先在投稿中心安全结束，
                 已发布文章和发布证据不会被清理。
               </div>
             )}

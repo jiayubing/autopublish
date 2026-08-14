@@ -51,17 +51,20 @@ const impactItem = exactObject({
   itemId: optionalNullableText(200),
   platformId: optionalNullableText(200),
   targetPlatformId: optionalNullableText(200),
+  targetKey: optionalNullableText(200),
   displayName: optionalNullableText(1000),
   reasonCode: optionalNullableText(128),
   status: optionalNullableText(80),
-  action: optionalNullableText(80),
+  source: optionalNullableText(80),
+  mediaResourceId: optionalNullableText(200),
+  orderId: optionalNullableText(200),
+  orderNid: optionalNullableText(200),
   titleSnapshot: optionalNullableText(1000),
   state: optionalField(text(80)),
 });
 const impactPreview = exactObject({
   token: optionalField(opaqueToken),
   articleCount: integerField({ min: 0, max: 10000 }),
-  queuedToCancel: arrayField(impactItem, { max: 10000 }),
   blockedItems: arrayField(impactItem, { max: 10000 }),
   canCommit: "boolean",
   selections: optionalField(arrayField(selection, { max: 10000 })),
@@ -79,7 +82,6 @@ const articleRemovalTransaction = exactObject({
   createdAt: optionalNullableText(64),
   updatedAt: optionalNullableText(64),
   articleCount: optionalField(integerField({ min: 0, max: 100000 })),
-  queueCursor: optionalField(integerField({ min: 0, max: 100000 })),
   articleCursor: optionalField(integerField({ min: 0, max: 100000 })),
   revision: optionalField(integerField({ min: 0 })),
   changedScopes: optionalField(
@@ -102,7 +104,6 @@ const trashCommitResult = exactObject({
   transactionId: optionalField(id),
   status: optionalField(text(80)),
   articleCount: optionalField(integerField({ min: 0, max: 10000 })),
-  queueActions: optionalField(arrayField(impactItem, { max: 10000 })),
   errorCode: optionalNullableText(128),
   reasonCode: optionalNullableText(128),
   phase: optionalNullableText(80),
@@ -254,10 +255,14 @@ function projectImpactItem(value) {
     "itemId",
     "platformId",
     "targetPlatformId",
+    "targetKey",
     "displayName",
     "reasonCode",
     "status",
-    "action",
+    "source",
+    "mediaResourceId",
+    "orderId",
+    "orderNid",
     "titleSnapshot",
     "state",
   ]);
@@ -272,12 +277,9 @@ function projectImpactPreview(value) {
     "transactionId",
     "openTransactionId",
   ]);
-  for (const field of ["queuedToCancel", "blockedItems"]) {
-    if (own(value, field) || ["queuedToCancel", "blockedItems"].includes(field))
-      output[field] = Array.isArray(value && value[field])
-        ? value[field].map(projectImpactItem)
-        : [];
-  }
+  output.blockedItems = Array.isArray(value && value.blockedItems)
+    ? value.blockedItems.map(projectImpactItem)
+    : [];
   if (own(value, "selections"))
     output.selections = Array.isArray(value.selections)
       ? value.selections.map((item) =>
@@ -301,7 +303,6 @@ function projectArticleRemovalTransaction(input) {
     "createdAt",
     "updatedAt",
     "articleCount",
-    "queueCursor",
     "articleCursor",
     "revision",
     "changedScopes",
@@ -336,10 +337,6 @@ function projectTrashCommitResult(value) {
           projectFields(item, ["clientId", "articleId", "code"]),
         )
       : value.rejected;
-  if (own(value, "queueActions"))
-    output.queueActions = Array.isArray(value.queueActions)
-      ? value.queueActions.map(projectImpactItem)
-      : value.queueActions;
   if (own(value, "transaction"))
     output.transaction =
       value.transaction === null

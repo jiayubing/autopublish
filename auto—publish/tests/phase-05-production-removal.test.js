@@ -23,7 +23,7 @@ function article() {
   };
 }
 
-test("production removal uses OperationalStore queue facts and cancels before trashing", () => {
+test("production removal blocks on a queued regular item and leaves queue mutation to its owner", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-05-production-removal-"));
   const operationalStore = createOperationalStore({ workspaceRoot: root });
   const composition = createContentLifecycleComposition({ workspaceRoot: root, operationalStore });
@@ -48,9 +48,18 @@ test("production removal uses OperationalStore queue facts and cancels before tr
       tokenTtlMs: 5000,
     });
     const preview = removal.previewArticleRemovalImpact({ selections: [{ clientId: "client-1", articleId: "article-1" }] });
-    assert.equal(preview.canCommit, true);
-    assert.equal(preview.queuedToCancel.length, 1);
-    const result = removal.applyArticleRemovalImpact({ confirmed: true, token: preview.token });
+    assert.equal(preview.canCommit, false);
+    assert.equal(preview.queuedToCancel, undefined);
+    assert.equal(preview.blockedItems.some((item) => item.reasonCode === "ARTICLE_OPERATION_FROZEN"), true);
+    assert.equal(contentStore.isArticleTrashed("client-1", "article-1"), false);
+    assert.equal(operationalStore.getSubmissionBatch(batch.batchId).items[0].status, "queued");
+
+    const cancelPreview = submission.previewCancelBatch({ batchId: batch.batchId });
+    const cancelled = submission.cancelBatch({ batchId: batch.batchId, planId: cancelPreview.planId, confirmed: true });
+    assert.equal(cancelled.cancelledCount, 1);
+    const afterCancel = removal.previewArticleRemovalImpact({ selections: [{ clientId: "client-1", articleId: "article-1" }] });
+    assert.equal(afterCancel.canCommit, true);
+    const result = removal.applyArticleRemovalImpact({ confirmed: true, token: afterCancel.token });
     assert.equal(result.status, "committed");
     assert.equal(contentStore.isArticleTrashed("client-1", "article-1"), true);
     assert.equal(operationalStore.getSubmissionBatch(batch.batchId).items[0].status, "cancelled");
@@ -62,7 +71,7 @@ test("production removal uses OperationalStore queue facts and cancels before tr
   }
 });
 
-test("published submission history blocks article removal without a local-copy action", () => {
+test("active and published submission facts block removal without queue actions", () => {
   const views = [
     { clientId: "client-1", articleId: "queued", batchId: "batch-q", status: "queued" },
     { clientId: "client-1", articleId: "failed", batchId: "batch-f", status: "failed" },
@@ -88,9 +97,10 @@ test("published submission history blocks article removal without a local-copy a
   const preview = coordinator.previewArticleRemovalImpact({
     selections: views.map(({ clientId, articleId }) => ({ clientId, articleId })),
   });
-  assert.equal(preview.queuedToCancel.length, 1);
-  assert.equal(preview.blockedItems.length, 1);
-  assert.equal(preview.blockedItems[0].reasonCode, "ARTICLE_PUBLISHED_IMMUTABLE");
+  assert.equal(preview.queuedToCancel, undefined);
+  assert.equal(preview.blockedItems.length, 2);
+  assert.equal(preview.blockedItems.some((item) => item.articleId === "queued" && item.reasonCode === "ARTICLE_OPERATION_FROZEN"), true);
+  assert.equal(preview.blockedItems.some((item) => item.articleId === "published" && item.reasonCode === "ARTICLE_PUBLISHED_IMMUTABLE"), true);
   assert.equal(preview.canCommit, false);
   assert.equal(typeof coordinator.cleanupArticleSubmissionItem, "undefined");
   assert.equal(typeof coordinator.cleanupPublishedArticleLocal, "undefined");

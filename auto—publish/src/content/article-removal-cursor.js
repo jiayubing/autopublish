@@ -12,10 +12,20 @@ function createArticleRemovalCursor(options) {
   const makeError = typeof opts.error === "function" ? opts.error : cursorError;
 
   function operationId(transaction, kind, index) {
+    if (kind !== "article")
+      throw makeError(
+        "ARTICLE_REMOVAL_OPERATION_KIND_RETIRED",
+        "Only article removal operations are supported",
+      );
     return transaction.id + ":" + kind + ":" + index;
   }
 
   function begin(transaction, kind, index, item) {
+    if (kind !== "article")
+      throw makeError(
+        "ARTICLE_REMOVAL_OPERATION_KIND_RETIRED",
+        "Only article removal operations are supported",
+      );
     const expected = operationId(transaction, kind, index);
     if (transaction.activeOperation) {
       if (
@@ -46,11 +56,16 @@ function createArticleRemovalCursor(options) {
   }
 
   function locate(transaction, operation) {
-    const expected = operationId(transaction, operation.kind, operation.cursor);
-    const items =
-      operation.kind === "queue"
-        ? transaction.queueActions
-        : transaction.articles;
+    if (!operation || operation.kind !== "article") {
+      return {
+        error: makeError(
+          "ARTICLE_REMOVAL_OPERATION_CONFLICT",
+          "Removal operation identity is invalid",
+        ),
+      };
+    }
+    const expected = operationId(transaction, "article", operation.cursor);
+    const items = transaction.articles;
     const item = Array.isArray(items) ? items[Number(operation.cursor)] : null;
     if (
       !item ||

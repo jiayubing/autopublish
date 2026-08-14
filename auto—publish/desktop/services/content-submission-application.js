@@ -11,8 +11,6 @@ const APPLICATION_OPERATIONS = Object.freeze([
   "cancelBatch",
   "reconcileBatch",
   "previewArticleRemovalImpact",
-  "cancelArticleSubmissionItem",
-  "reconcileArticleRemovalAction",
   "inspectSubmissionPair",
   "evaluateItemAction",
   "isSubmissionItemExecutable",

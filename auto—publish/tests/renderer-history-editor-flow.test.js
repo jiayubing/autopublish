@@ -173,7 +173,7 @@ function installDesktopFixture(page, fixture) {
       listPaidMediaBatches: () => ok({ items: [] }),
       startPaidMediaBatch: () => ok({}),
       pausePaidMediaBatch: () => ok({}),
-      previewArticleRemovalImpact: (input) => ok({ articleCount: input.selections.length, queuedToCancel: [], blockedItems: [], canCommit: true, selections: input.selections }),
+      previewArticleRemovalImpact: (input) => ok({ articleCount: input.selections.length, blockedItems: [], canCommit: true, selections: input.selections }),
       applyArticleRemovalImpact: (input) => {
         const transaction = { transactionId: "removal-fixture-1", status: "needs_repair", phase: "needs_repair", errorCode: "PUBLICATION_ATTEMPT_MISMATCH", reasonCode: "PUBLICATION_ATTEMPT_MISMATCH", updatedAt: "2026-07-18T00:30:00.000Z" };
         state.removalTransaction = transaction;

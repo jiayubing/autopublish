@@ -31,13 +31,9 @@ function createArticleRemovalStateMachine(options) {
     return (
       !!transaction &&
       ((transaction.status === "pending_auto_recovery" &&
-        ["intent", "queue-actions", "articles", "committed"].includes(
-          transaction.phase,
-        )) ||
+        ["intent", "articles", "committed"].includes(transaction.phase)) ||
         (transaction.status === "pending_recovery" &&
-          ["intent", "queue-actions", "articles", "committed"].includes(
-            transaction.phase,
-          )))
+          ["intent", "articles", "committed"].includes(transaction.phase)))
     );
   }
 
@@ -46,9 +42,7 @@ function createArticleRemovalStateMachine(options) {
       transaction.resumePhase = transaction.phase;
     if (
       transaction.resumePhase === "needs_repair" ||
-      !["intent", "queue-actions", "articles", "committed"].includes(
-        transaction.resumePhase,
-      )
+      !["intent", "articles", "committed"].includes(transaction.resumePhase)
     )
       transaction.resumePhase = "articles";
     transaction.status = "needs_repair";

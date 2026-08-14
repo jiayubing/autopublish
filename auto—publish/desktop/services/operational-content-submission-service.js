@@ -106,8 +106,6 @@ function createOperationalContentSubmissionService(options) {
   const resultReconciliation = createSubmissionResultReconciliation({
     operationalStore: value.operationalStore,
     projection,
-    files: operationFiles,
-    staging: operationStaging,
     batchReader,
   });
   const queueRemoval = createSubmissionQueueRemoval({
@@ -127,8 +125,8 @@ function createOperationalContentSubmissionService(options) {
   });
   const articleRemoval = createArticleSubmissionRemovalCoordinator({
     projection,
+    lifecycleFacts: value.operationalStore,
     policy,
-    actionRecovery,
   });
   const retry = createSubmissionRetry({
     operationalStore: value.operationalStore,
@@ -150,9 +148,6 @@ function createOperationalContentSubmissionService(options) {
     cancelBatch: queueRemoval.cancelBatch,
     reconcileBatch: resultReconciliation.reconcileBatch,
     previewArticleRemovalImpact: articleRemoval.previewArticleRemovalImpact,
-    cancelArticleSubmissionItem: articleRemoval.cancelArticleSubmissionItem,
-    reconcileArticleRemovalAction:
-      resultReconciliation.reconcileArticleRemovalAction,
     inspectSubmissionPair: resultReconciliation.inspectPair,
     evaluateItemAction: policy.evaluateItemAction,
     isSubmissionItemExecutable: policy.isSubmissionItemExecutable,

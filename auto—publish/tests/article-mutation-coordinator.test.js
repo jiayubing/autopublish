@@ -140,7 +140,6 @@ function removalServiceFor(fixture) {
         return {
           canCommit: true,
           blockedItems: [],
-          queuedToCancel: [],
         };
       },
     },
@@ -644,7 +643,6 @@ test("removal release uncertainty becomes repairable and is excluded from automa
           return {
             canCommit: true,
             blockedItems: [],
-            queuedToCancel: [],
           };
         },
       },
