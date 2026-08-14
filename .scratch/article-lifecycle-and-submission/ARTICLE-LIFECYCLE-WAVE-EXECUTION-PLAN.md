@@ -4,7 +4,7 @@
 
 ## 1. 当前状态
 
-快照日期：2026-08-12。每次执行前必须以当前 Git 状态重新验证，本文不能覆盖 Git 事实。
+快照日期：2026-08-15。每次执行前必须以当前 Git 状态重新验证，本文不能覆盖 Git 事实。
 
 | 项目                       | 状态       | 说明                                                                                                                                                                         |
 | -------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -24,8 +24,11 @@
 | Dependency-Resolution Lane | `COMPLETE` | 固定顺序全部完成；final reconciliation evidence 见 `handoffs/final-clean-head-reconciliation-20260808.md`                                                                   |
 | Maintenance M05             | `COMPLETE`  | M05-I combined audit/closure、`M05-J → J3 → J4 → J5 → J6 → J7 → J8 → J9` final evidence reconciliation、blocking remediation、bounded re-audit 与 implementation-HEAD M05-specific gates 已闭合；最新 handoff 见 `handoffs/M05-J9-final-authoritative-closure-remediation.md` |
 | Maintenance M06             | `COMPLETE`  | M06-H 最终 bounded remediation 已在 `af3d116` 完成 queue `inputDir` 非法类型 fail-closed 修复；bounded re-audit 与最终 clean-HEAD full gate PASS；handoff 见 `handoffs/M06-H-final-queue-failure-closure.md` |
+| Ticket 26                  | `READY`  | 计划、SPEC、ADR、独立工作包合同与 26-0 reconciliation 已完成，Ticket 26 production implementation 尚未开始；等待用户用 Goal 主任务串行调度 26-A。合同见 `issues/26-article-library-and-submission-center-redesign.md`，主 Prompt 见 `handoffs/26-goal-mode-master-prompt.md` |
 
-**当前动作：Ticket 25=`PARTIAL/BOUNDED_REAUDIT_PASS`；`25-0 — Startup Readiness`、`25-A`、`25-B`、`25-C`、`25-D — Paid Media / Order Acceptance`、`25-E — Migration / Recovery Acceptance`、`25-F — Performance & Responsibility Gates` 与 `25-G` execution/package closure 已完成 package gate。Independent audit 确认的 F1–F6 P2 blocking remediation 与 bounded re-audit 已通过，F7 P3 provenance 也已恢复；当前停止等待授权 commit/merge、最终 clean smoke 与用户控制的真实外部验收。修复范围、当前 DIRTY evidence 和复审边界见 `handoffs/25-independent-audit-blocking-remediation.md`。在最终 clean smoke 与用户控制的真实外部验收完成前，不得把 Ticket 25/Wave 11 标记 `COMPLETE`，禁止 push。Ticket 25 尚未执行真实登录、发布、付费或平台操作。**
+**当前动作：Ticket 26=`READY/WAITING_GOAL_DISPATCH`。本线程只完成基线修复收口与计划制作，没有开始 Ticket 26 production 重构。新 Goal 主任务必须从当前 clean integration HEAD 开始，并验证基线包含 `6a9232b`、`79dbe36`、`6fc897f`、`c10a838` 及 Ticket 26 计划提交；随后按独立合同为 26-A → 26-I 各创建一个新 worktree 任务严格串行实施。完整 Prompt 见 `handoffs/26-goal-mode-master-prompt.md`。Ticket 25 保持 `PARTIAL` 历史状态；禁止 push；真实登录、发布、付费、取消和生产迁移仍未获授权。**
+
+**Wave 11.5 调度例外：** Ticket 26 会直接替换 Ticket 25 尚未完成真实外部验收的旧文章/投稿 UI 链路，因此不要求先在即将被移除的旧链路上完成 final smoke 或真实平台验收。该例外只允许从已经提交并验证的 Ticket 25 本地基线进入 Ticket 26；不会把 Ticket 25 伪记为 `COMPLETE`，也不会把真实外部操作授权带入 Ticket 26。最终新链路的真实外部验收仍须另行明确授权。
 
 **M05 final non-blocking finding:** Inventory manifest digest remains sensitive to cross-platform working-tree byte representation / line endings. Core inventory structure is stable: 248 files / 1689 declarations / 76 static guards / 0 rewrite. Defer to future tooling ownership.
 
@@ -67,7 +70,8 @@ Wave 6 closure 本身仍不得扩展进入 Ticket 10/16、M03、全库 empty-cat
 | 10   | 24-0 → 24-A → 24-B → 24-C → 24-D → 24-E → 24-F          | 02、10、14、16、23                                       | `COMPLETE`；24-F combined audit、bounded re-audit、最终 gate 与 clean-HEAD evidence 已闭合 |
 | 10.5 | M04-A → M04-B → M04-C → M05-0 → A → B → C → D → E1 → E2 → E3 → F → G → H → I → J → J3 → J4 → J5 → J6 → J7 → J8 → J9 → M06-0 → M06-A → M06-B → M06-C → M06-D → M06-E → M06-F → M06-G → M06-H | Wave 10 COMPLETE；M06-H final bounded remediation 与 implementation-HEAD clean evidence 已闭合 | `COMPLETE`；M04/M05/M06-0/M06-A～H 全部 closure、gate 与 evidence 已闭合 |
 | 11   | 25-0 → 25-A → 25-B → 25-C → 25-D → 25-E → 25-F → 25-G → Independent Combined Audit → Remediation → Bounded Closure Re-audit → authorized commit/merge → final clean smoke → authorized external acceptance | 24；10.5 COMPLETE（含 M06）；各包严格依赖左侧已验证 sourceState；真实外部操作逐次授权 | `PARTIAL`；25-0、25-A、25-B、25-C、25-D、25-E、25-F、25-G package closure COMPLETE；G implementation 与 Independent Audit Handoff 已由主任务集成到 clean integration HEAD `c9a4ed8`；本次 Goal 在此停止，不进入后续 closure |
-| 12   | 18-0 → 18-A → 18-B → 18-C → 18-D → 18-E                | 08、09、10、17；Wave 11 COMPLETE                         | `PENDING`                                                                             |
+| 11.5 | 26-0 → 26-A → 26-B → 26-C → 26-D → 26-E → 26-F → 26-G → 26-H → 26-I | Ticket 25 已提交并验证的本地基线；上述 Wave 11.5 调度例外；新 SPEC/ADR；每包独立合同；共享 owner 严格串行；真实外部操作逐次授权 | `READY`；计划与 26-0 COMPLETE，等待 Goal 主任务串行调度，production implementation 未开始 |
+| 12   | 18-0 → 18-A → 18-B → 18-C → 18-D → 18-E                | 08、09、10、17；Ticket 26 / Wave 11.5 COMPLETE           | `PENDING`                                                                             |
 | 13   | 平台逐个探索 → 仅 SUPPORTED 的 19→20→21 → 各平台真实验收 | Wave 12 COMPLETE + 每平台显式授权                        | `PENDING`                                                                             |
 
 Ticket 的 `Status: document-ready` 不等于可调度；可调度性只由本表、对应 `Blocked by`/`Scheduling gate` 和真实 Git 状态共同决定。
