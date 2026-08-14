@@ -245,7 +245,7 @@ function createOperationalStoreFactReader(context) {
           projectPaidOrderResolutionAttention(payload);
         return Object.freeze({
           attentionId: `publication:${row.attempt_id}`,
-          kind: "publication_uncertain",
+          kind: "regular_platform_uncertain",
           attemptId: row.attempt_id,
           publicationId: row.publication_id,
           articleId: row.article_id,

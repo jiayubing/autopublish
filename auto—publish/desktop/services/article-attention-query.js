@@ -2,37 +2,42 @@ const crypto = require("node:crypto");
 const {
   deriveAttentionPolicy,
   MESSAGES,
+  ATTENTION_KINDS,
 } = require("./article-attention-policy");
 const {
   evaluateArticleSubmissionEligibility,
 } = require("../../src/content/article-submission-eligibility");
 const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
-const ATTENTION_KINDS = Object.freeze({
-  REMOVAL_AUTO_RECOVERY: "removal_auto_recovery",
-  REMOVAL_NEEDS_REPAIR: "removal_needs_repair",
-  PUBLICATION_UNCERTAIN: "publication_uncertain",
-  PUBLISHED_ARCHIVE_FAILED: "published_archive_failed",
-  FAILED_SUBMISSION: "failed_submission",
-});
-
-function clone(value) {
-  if (value === undefined) return value;
-  return JSON.parse(JSON.stringify(value));
-}
-
 function stableId(kind, value) {
-  const identity = [
-    kind,
-    value.clientId || "",
-    value.articleId || "",
-    value.targetPlatformId || value.platformId || "",
-    value.batchId || "",
-    value.publicationId || "",
-    value.attemptId || "",
-    value.filename || "",
-    value.transactionId || "",
-  ].join("\u0000");
+  const source = value || {};
+  const identityParts = {
+    [ATTENTION_KINDS.REGULAR_PLATFORM_FAILED]: [
+      source.publicationId,
+      source.attemptId,
+    ],
+    [ATTENTION_KINDS.REGULAR_PLATFORM_UNCERTAIN]: [
+      source.publicationId,
+      source.attemptId,
+    ],
+    [ATTENTION_KINDS.PAID_ORDER_CREATION_UNCERTAIN]: [
+      source.orderCreationAttemptId,
+    ],
+    [ATTENTION_KINDS.ORDER_STATUS_ANOMALY]: [
+      source.orderId || source.orderNid,
+    ],
+    [ATTENTION_KINDS.REMOVAL_NEEDS_REPAIR]: [
+      source.transactionId || source.id,
+    ],
+    [ATTENTION_KINDS.PUBLISHED_ARCHIVE_FAILED]: source.jobId
+      ? [source.jobId]
+      : [source.publicationId, source.attemptId, source.filename],
+  }[kind];
+  if (!identityParts || identityParts.some((part) => !safeText(part, 512)))
+    return null;
+  const identity = [kind, ...identityParts.map((part) => safeText(part, 512))].join(
+    "\u0000",
+  );
   return `${kind}:${crypto.createHash("sha256").update(identity, "utf8").digest("hex").slice(0, 24)}`;
 }
 
@@ -106,6 +111,37 @@ function createArticleAttentionQuery(options) {
       return [];
     })();
     return Array.isArray(value) ? value : [];
+  }
+
+  function readOrderAttention() {
+    try {
+      let value = null;
+      const explicitReader = reader("listOrderAttention", null);
+      if (explicitReader) value = explicitReader();
+      if (!value && opts.orderReconciliationPort) {
+        const port = opts.orderReconciliationPort;
+        if (typeof port.listOrders === "function") value = port.listOrders();
+        else if (typeof port.listOrderViews === "function")
+          value = port.listOrderViews();
+      }
+      if (value && !Array.isArray(value) && Array.isArray(value.items))
+        value = value.items;
+      return Array.isArray(value) ? value : [];
+    } catch (error) {
+      reportDiagnostic({
+        code: "ARTICLE_ATTENTION_ORDER_READ_FAILED",
+        module: "article-attention-query",
+        category: "storage",
+        operationId: "article-attention-order-read",
+        metadata: {
+          operation: "order-attention-read",
+          phase: "read",
+          outcome: "fail-closed",
+          errorCode: diagnosticErrorCode(error, "ORDER_ATTENTION_READ_FAILED"),
+        },
+      });
+      return [];
+    }
   }
 
   function articleLookup(item) {
@@ -234,80 +270,45 @@ function createArticleAttentionQuery(options) {
     return snapshot || safeText(articleState && articleState.title, 200);
   }
 
-  function platformCapabilities() {
-    let value = null;
-    try {
-      value = reader("platformCapabilities", function () {
-        return null;
-      })();
-    } catch (error) {
-      reportDiagnostic({
-        code: "ARTICLE_ATTENTION_CAPABILITY_PROBE_FAILED",
-        module: "article-attention-query",
-        category: "storage",
-        operationId: "article-attention-platform-capabilities",
-        metadata: {
-          operation: "platform-capability-read",
-          phase: "probe",
-          outcome: "fail-closed",
-          errorCode: diagnosticErrorCode(error, "PLATFORM_CAPABILITY_READ_FAILED")
-        }
-      });
-      value = null;
-    }
-    if (
-      !value &&
-      opts.contentSubmissionService &&
-      typeof opts.contentSubmissionService.listPlatforms === "function"
-    ) {
-      try {
-        value = opts.contentSubmissionService.listPlatforms();
-      } catch (error) {
-        reportDiagnostic({
-          code: "ARTICLE_ATTENTION_CAPABILITY_PROBE_FAILED",
-          module: "article-attention-query",
-          category: "storage",
-          operationId: "article-attention-platform-capabilities-fallback",
-          metadata: {
-            operation: "platform-capability-fallback",
-            phase: "probe",
-            outcome: "fail-closed",
-            errorCode: diagnosticErrorCode(error, "PLATFORM_CAPABILITY_READ_FAILED")
-          }
-        });
-        value = null;
-      }
-    }
-    const result = new Map();
-    if (Array.isArray(value))
-      value.forEach(function (platform) {
-        if (platform && platform.id) result.set(platform.id, platform);
-      });
-    else if (value && typeof value === "object")
-      Object.keys(value).forEach(function (id) {
-        result.set(id, value[id]);
-      });
-    return result;
-  }
-
   function domainCapabilities(kind) {
-    const service = opts.contentSubmissionService;
     const removal = opts.articleRemovalService;
-    const archive = opts.archiveActionPort || opts.archiveService;
+    const archive =
+      opts.archiveActionPort || opts.archiveService || opts.postProcessingPort;
+    const regular = opts.regularPlatformOutcomeService;
+    const paid = opts.paidOrderCreationResolutionService;
+    const order = opts.orderReconciliationPort;
     return Object.assign(
       {
         canRetryRemoval: !!(
           removal &&
           typeof removal.retryArticleRemovalTransaction === "function"
         ),
-        canRetryFailedPublication: !!(
-          service &&
-          typeof service.previewRetryFailedPublication === "function" &&
-          typeof service.retryFailedPublication === "function"
-        ),
         canRetryArchive: !!(
-          archive && typeof archive.retryArchive === "function"
+          archive &&
+          (typeof archive.retryArchive === "function" ||
+            typeof archive.retry === "function")
         ),
+        canResolveRegularUncertain: !!(
+          regular &&
+          typeof regular.prepareRegularUncertainResolution === "function" &&
+          typeof regular.confirmRegularAccepted === "function" &&
+          typeof regular.confirmRegularNotAccepted === "function"
+        ),
+        canResolvePaidOrderCreation: !!(
+          paid &&
+          typeof paid.prepareBindOrderNumber === "function" &&
+          typeof paid.bindOrderNumber === "function" &&
+          typeof paid.prepareConfirmNoOrder === "function" &&
+          typeof paid.confirmNoOrder === "function"
+        ),
+        canResolveOrderStatusAnomaly: !!(
+          order &&
+          typeof order.prepareOrderStatusAnomalyResolution === "function" &&
+          typeof order.resumeOrderTracking === "function" &&
+          typeof order.confirmOrderPublished === "function" &&
+          typeof order.confirmOrderNotPublished === "function"
+        ),
+        canOpenSubmission: true,
         canOpenPublication: true,
         canInspect: true,
         canOpenArticle: true,
@@ -331,15 +332,54 @@ function createArticleAttentionQuery(options) {
           ? facts.articleSubmissionEligible
           : articleState.submissionEligible,
       articleLookupStatus: facts.articleLookupStatus || articleState.lookupStatus || "available",
+      resolutionPriority:
+        facts.resolutionPriority !== undefined
+          ? facts.resolutionPriority
+          : value.resolutionPriority,
       articleState,
     });
     const policy = deriveAttentionPolicy(
       normalizedFacts,
       domainCapabilities(kind),
     );
+    const attentionId = stableId(kind, value);
+    if (!attentionId) {
+      reportDiagnostic({
+        code: "ARTICLE_ATTENTION_IDENTITY_UNAVAILABLE",
+        module: "article-attention-query",
+        category: "storage",
+        operationId: "article-attention-identity",
+        metadata: {
+          operation: "attention-identity",
+          phase: "project",
+          outcome: "drop",
+          attentionKind: kind,
+        },
+      });
+    }
+    const safeFacts = {
+      articleId: safeText(value.articleId, 200),
+      clientId: safeText(value.clientId, 100),
+      platformId: safeText(value.platformId || value.targetPlatformId, 100),
+      targetKey: safeText(value.targetKey, 512),
+      publicationId: safeText(value.publicationId, 160),
+      attemptId: safeText(value.attemptId, 160),
+      orderCreationAttemptId: safeText(value.orderCreationAttemptId, 160),
+      orderId: safeText(value.orderId || value.orderNid, 160),
+      transactionId: safeText(value.transactionId || value.id, 160),
+      jobId: safeText(value.jobId, 160),
+      status: safeText(value.status || value.statusCode, 80),
+      reasonCode: safeText(value.reasonCode || value.errorCode, 128),
+      updatedAt: safeText(value.updatedAt || value.observedAt, 64),
+      articleStatus: safeText(normalizedFacts.articleStatus, 80),
+    };
     const copy = {
       kind,
-      attentionId: stableId(kind, value),
+      attentionId,
+      owner: policy.owner,
+      freeze: policy.freeze,
+      resolutionPriority: policy.resolutionPriority,
+      safeFacts,
       articleId: safeText(value.articleId, 200),
       titleSnapshot: titleFor(value, articleState),
       clientId: safeText(value.clientId, 100),
@@ -355,24 +395,25 @@ function createArticleAttentionQuery(options) {
       transactionId: safeText(value.transactionId || value.id, 160),
       status: safeText(value.status, 80),
       reasonCode: safeText(value.reasonCode || value.errorCode, 128),
+      orderId: safeText(value.orderId || value.orderNid, 160),
       remoteId: safeText(value.remoteId, 512),
       remoteUrl: safeText(value.remoteUrl, 2048),
       pairState: safeText(value.pairState, 64),
       updatedAt: safeText(value.updatedAt, 64),
       message: policy.message || MESSAGES[kind] || "需处理项需要进一步核对",
       recommendedAction: policy.recommendedAction,
-      // Ticket 14 resolution commands are a dedicated media capability. Keep
-      // them out of the generic attention action list, whose commands are
-      // previewed/resolved by article-attention-resolver. The renderer uses
-      // this separate projection to reach the dedicated resolution UI.
-      resolutionActions: Array.isArray(value.resolutionActions)
-        ? value.resolutionActions
-            .filter((action) => typeof action === "string")
-            .slice(0, 8)
-        : [],
       allowedActions: policy.allowedActions.slice(),
     };
-    return { item: copy, policy: policy, facts: normalizedFacts };
+    return {
+      item: copy,
+      policy: attentionId
+        ? policy
+        : Object.assign({}, policy, {
+            included: false,
+            exclusionReason: "identity_unavailable",
+          }),
+      facts: normalizedFacts,
+    };
   }
 
   function transactionEntries() {
@@ -380,32 +421,24 @@ function createArticleAttentionQuery(options) {
       .filter(function (item) {
         return (
           item &&
-          [
-            "pending_auto_recovery",
-            "pending_recovery",
-            "needs_repair",
-          ].includes(item.status)
+          (item.status === "needs_repair" || item.phase === "needs_repair")
         );
       })
       .map(function (item) {
-        const automatic =
-          ["pending_auto_recovery", "pending_recovery"].includes(item.status) &&
-          item.phase !== "needs_repair";
         return makeEntry(
-          automatic
-            ? ATTENTION_KINDS.REMOVAL_AUTO_RECOVERY
-            : ATTENTION_KINDS.REMOVAL_NEEDS_REPAIR,
+          ATTENTION_KINDS.REMOVAL_NEEDS_REPAIR,
           item,
           {
             hasRemovalTransaction: true,
-            canRetryRemoval: !automatic,
+            canRetryRemoval: true,
+            freezeArticle: true,
+            freezeReasonCode: "REMOVAL_NEEDS_REPAIR",
           },
         );
       });
   }
 
   function publicationEntries() {
-    const platforms = platformCapabilities();
     return readOperationalPublications()
       .filter(function (item) {
         return item && ["uncertain", "failed"].includes(item.status);
@@ -416,39 +449,13 @@ function createArticleAttentionQuery(options) {
             ? item.attempts[item.attempts.length - 1]
             : null;
         const articleState = articleLookup(item);
-        const platform = platforms.get(item.platformId);
+        const paidOrderCreation = Boolean(item.orderCreationAttemptId);
         const kind =
           item.status === "uncertain"
-            ? ATTENTION_KINDS.PUBLICATION_UNCERTAIN
-            : ATTENTION_KINDS.FAILED_SUBMISSION;
-        let retryEligible = false;
-        if (
-          item.status === "failed" &&
-          opts.contentSubmissionService &&
-          typeof opts.contentSubmissionService.previewRetryFailedPublication ===
-            "function"
-        ) {
-          try {
-            retryEligible =
-              opts.contentSubmissionService.previewRetryFailedPublication({
-                publicationId: item.publicationId,
-              }).eligible === true;
-          } catch (error) {
-            reportDiagnostic({
-              code: "ARTICLE_ATTENTION_RETRY_PREVIEW_FAILED",
-              module: "article-attention-query",
-              category: "storage",
-              operationId: "article-attention-retry-preview",
-              metadata: {
-                operation: "retry-preview",
-                phase: "probe",
-                outcome: "fail-closed",
-                errorCode: diagnosticErrorCode(error, "PUBLICATION_RETRY_PREVIEW_FAILED")
-              }
-            });
-            retryEligible = false;
-          }
-        }
+            ? paidOrderCreation
+              ? ATTENTION_KINDS.PAID_ORDER_CREATION_UNCERTAIN
+              : ATTENTION_KINDS.REGULAR_PLATFORM_UNCERTAIN
+            : ATTENTION_KINDS.REGULAR_PLATFORM_FAILED;
         return makeEntry(
           kind,
           Object.assign({}, item, {
@@ -467,11 +474,40 @@ function createArticleAttentionQuery(options) {
             hasQueueBinding: false,
             hasResidue: false,
             hasRemovalTransaction: false,
-            targetSupportsContentQueueImport: platform
-              ? platform.contentQueueImport === true
-              : item.contentQueueImport === true,
-            canRetryFailedPublication: retryEligible,
+            freezeArticle: item.status === "uncertain",
+            freezeReasonCode:
+              item.status === "uncertain"
+                ? paidOrderCreation
+                  ? "PAID_ORDER_CREATION_UNCERTAIN"
+                  : "REGULAR_PLATFORM_UNCERTAIN"
+                : null,
             hasPublishedEvidence: Boolean(item.remoteId && item.remoteUrl),
+          },
+        );
+      });
+  }
+
+  function orderEntries() {
+    return readOrderAttention()
+      .filter(function (item) {
+        return item && item.anomaly && (item.orderNid || item.orderId);
+      })
+      .map(function (item) {
+        const anomaly = item.anomaly || {};
+        return makeEntry(
+          ATTENTION_KINDS.ORDER_STATUS_ANOMALY,
+          Object.assign({}, item, {
+            orderId: item.orderId || item.orderNid,
+            reasonCode: anomaly.reason || item.reasonCode,
+            updatedAt:
+              anomaly.openedAt || item.updatedAt || item.observedAt,
+            status: item.statusCode || item.status,
+          }),
+          {
+            articleExists: item.articleExists,
+            articleStatus: item.articleStatus,
+            freezeArticle: true,
+            freezeReasonCode: "ORDER_STATUS_ANOMALY",
           },
         );
       });
@@ -509,23 +545,21 @@ function createArticleAttentionQuery(options) {
 
   function entries() {
     const transactions = transactionEntries();
-    const concretePublicationIds = new Set(
-      transactions
-        .map(function (entry) {
-          return entry.item.publicationId;
-        })
-        .filter(Boolean),
+    const all = transactions.concat(
+      publicationEntries(),
+      orderEntries(),
+      archiveEntries(),
     );
-    const publications = publicationEntries().filter(function (entry) {
-      return !concretePublicationIds.has(entry.item.publicationId);
-    });
-    const all = transactions.concat(publications, archiveEntries());
     const unique = new Map();
     all.forEach(function (entry) {
       if (!entry.policy.included || unique.has(entry.item.attentionId)) return;
       unique.set(entry.item.attentionId, entry);
     });
-    return [...unique.values()];
+    return [...unique.values()].sort(function (left, right) {
+      const priorityDelta =
+        right.item.resolutionPriority - left.item.resolutionPriority;
+      return priorityDelta || left.item.attentionId.localeCompare(right.item.attentionId);
+    });
   }
 
   function currentRevision() {
@@ -557,16 +591,13 @@ function createArticleAttentionQuery(options) {
       counts: {
         total: filtered.length,
         actionable: filtered.filter(function (entry) {
-          return (
-            entry.item.resolutionActions.length > 0 ||
-            entry.item.allowedActions.some(function (action) {
-              return (
-                action !== "inspect" &&
-                action !== "open-publication" &&
-                action !== "open-article"
-              );
-            })
-          );
+          return entry.item.allowedActions.some(function (action) {
+            return ![
+              "inspect",
+              "open-publication",
+              "open-article",
+            ].includes(action);
+          });
         }).length,
       },
     };

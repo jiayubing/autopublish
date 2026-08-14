@@ -77,7 +77,7 @@ function createFixture() {
             : [
                 {
                   articleId: "article-b",
-                  kind: "failed_submission",
+                  kind: "regular_platform_failed",
                   allowedActions: ["inspect"],
                 },
               ],

@@ -136,7 +136,7 @@ test("article library exposes the five public categories and no runtime-only sta
           { articleId: "article-1", status: "failed", targetKey: "platform:p1" },
         ],
         attentionItems: [
-          { attentionId: "attention-1", articleId: "article-1", kind: "failed_submission" },
+          { attentionId: "attention-1", articleId: "article-1", kind: "regular_platform_failed" },
         ],
       }),
       "pending_submission",
@@ -197,7 +197,7 @@ test("projection keeps attention and order summaries independent from the articl
       },
     ],
     attentionItems: [
-      { attentionId: "attention-1", articleId: "article-1", kind: "failed_submission" },
+      { attentionId: "attention-1", articleId: "article-1", kind: "regular_platform_failed" },
       { attentionId: "attention-2", articleId: "article-1", kind: "order_status_anomaly" },
     ],
   }));
@@ -264,7 +264,7 @@ test("batch projection classifies all articles once and exposes one set of navig
       { articleId: "failed", status: "failed", targetKey: "platform:p2" },
     ],
     attentionItems: [
-      { attentionId: "attention-1", articleId: "failed", kind: "failed_submission" },
+      { attentionId: "attention-1", articleId: "failed", kind: "regular_platform_failed" },
     ],
   });
 

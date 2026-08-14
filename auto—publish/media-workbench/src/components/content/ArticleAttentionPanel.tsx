@@ -10,22 +10,31 @@ type ArticleAttentionSnapshot = ReturnType<AttentionFeature["getSnapshot"]>;
 
 function labelFor(item: ArticleAttentionItem): string {
   if (item.kind === "removal_needs_repair") return "删除事务需要修复";
-  if (item.kind === "publication_uncertain") return "远端结果待确认";
+  if (item.kind === "regular_platform_failed") return "普通平台投稿明确失败";
+  if (item.kind === "regular_platform_uncertain") return "普通平台结果待确认";
+  if (item.kind === "paid_order_creation_uncertain") return "付费订单创建待确认";
+  if (item.kind === "order_status_anomaly") return "订单状态异常";
   if (item.kind === "published_archive_failed")
     return "远端成功，本地归档待处理";
-  if (item.kind === "failed_submission") return "投稿明确失败";
   return "需处理项需要核对";
 }
 
 function actionLabel(action: string): string {
   const labels: Record<string, string> = {
     "retry-removal": "重试修复删除",
-    "retry-publication": "重新投稿",
+    "open-submission": "打开发起投稿",
     "open-publication": "打开发布详情",
     "open-article": "打开文章",
     "trash-article": "移入回收站",
     inspect: "查看差异",
     "retry-archive": "重试本地归档",
+    "confirm-regular-accepted": "确认已接受",
+    "confirm-regular-not-accepted": "确认未接受",
+    "bind-paid-order-number": "补录订单号",
+    "confirm-paid-order-absent": "确认没有订单",
+    "resume-order-tracking": "恢复订单跟踪",
+    "confirm-order-published": "确认已发布",
+    "confirm-order-not-published": "确认未发布",
   };
   return labels[action] || action;
 }
@@ -68,8 +77,8 @@ function actionError(value: unknown): string {
     ARTICLE_ATTENTION_STALE: "状态已变化，请刷新后重新检查。",
     ARTICLE_ATTENTION_ACTION_NOT_ALLOWED: "当前状态不允许这个动作。",
     ARTICLE_ATTENTION_DOMAIN_UNAVAILABLE: "对应处理服务当前不可用。",
-    CONTENT_SUBMISSION_TARGET_UNSUPPORTED: "当前平台不支持重新投稿。",
-    ARTICLE_NOT_RETRYABLE: "只有内容完整且仍存在的文章可以重新投稿。",
+    CONTENT_SUBMISSION_TARGET_UNSUPPORTED: "当前平台不支持从统一入口发起投稿。",
+    ARTICLE_NOT_RETRYABLE: "只有内容完整且仍存在的文章可以发起投稿。",
   };
   if (typeof error.code === "string" && labels[error.code])
     return labels[error.code];
@@ -87,8 +96,10 @@ interface ArticleAttentionPanelProps {
   onPreviewAction: AttentionFeature["previewAction"];
   onExecutePreview: AttentionFeature["executePreview"];
   onOpenPublication: (item: ArticleAttentionItem) => void;
+  onOpenSubmissionCenter?: () => void;
   onInspect: (item: ArticleAttentionItem) => void;
   onOpenArticle: (item: ArticleAttentionItem) => void;
+  onAttentionAction?: (item: ArticleAttentionItem, action: string) => void;
   getTargetLabel?: (item: ArticleAttentionItem) => string;
   clientLabel?: string;
   getAdditionalActions?: (item: ArticleAttentionItem) => string[];
@@ -103,8 +114,10 @@ export default function ArticleAttentionPanel({
   onPreviewAction,
   onExecutePreview,
   onOpenPublication,
+  onOpenSubmissionCenter,
   onInspect,
   onOpenArticle,
+  onAttentionAction,
   getTargetLabel,
   clientLabel,
   getAdditionalActions,
@@ -137,12 +150,26 @@ export default function ArticleAttentionPanel({
       onOpenPublication(item);
       return;
     }
+    if (action === "open-submission") {
+      onOpenSubmissionCenter?.();
+      return;
+    }
     if (action === "inspect") {
       onInspect(item);
       return;
     }
     if (action === "open-article") {
       onOpenArticle(item);
+      return;
+    }
+    if (
+      onAttentionAction &&
+      [
+        "bind-paid-order-number",
+        "confirm-paid-order-absent",
+      ].includes(action)
+    ) {
+      onAttentionAction(item, action);
       return;
     }
     try {
@@ -299,6 +326,14 @@ export default function ArticleAttentionPanel({
                       {item.reasonCode ? ` · ${item.reasonCode}` : ""}
                     </div>
                   ))}
+                </dd>
+              </div>
+              <div className="grid min-w-0 grid-cols-[6rem_minmax(0,1fr)] gap-2">
+                <dt className="text-slate-400">文章冻结</dt>
+                <dd className="min-w-0 break-words text-slate-700">
+                  {card.items.some((item) => item.freeze.article)
+                    ? "是，仅允许当前事项动作"
+                    : "否"}
                 </dd>
               </div>
               <div className="grid min-w-0 grid-cols-[6rem_minmax(0,1fr)] gap-2">

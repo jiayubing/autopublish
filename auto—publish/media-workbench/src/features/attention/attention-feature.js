@@ -16,7 +16,14 @@ function queryState(loading = false, error = null, reason = null) {
 function fingerprintOf(data) {
   return JSON.stringify([
     data.revision,
-    data.items.map((item) => [item.attentionId, item.allowedActions, item.resolutionActions]),
+    data.items.map((item) => [
+      item.attentionId,
+      item.kind,
+      item.owner,
+      item.freeze,
+      item.resolutionPriority,
+      item.allowedActions,
+    ]),
   ]);
 }
 
@@ -115,7 +122,13 @@ export function createAttentionFeature(adapters = {}) {
       pendingPreview = null;
       publish();
       try {
-        const preview = await adapters.preview({ attentionId: input.attentionId, action: input.action });
+        const previewInput = {
+          attentionId: input.attentionId,
+          action: input.action,
+          expectedRevision: bindingRevision,
+        };
+        if (input.resolutionInput) previewInput.resolutionInput = input.resolutionInput;
+        const preview = await adapters.preview(previewInput);
         if (!previewOwner.isCurrent(token)) return undefined;
         if (revision !== bindingRevision || fingerprint !== bindingFingerprint || preview?.attentionId !== input.attentionId || preview?.action !== input.action || preview?.revision !== bindingRevision) {
           throw featureError('ARTICLE_ATTENTION_STALE', '状态已变化，请刷新后重新检查。');
@@ -146,12 +159,17 @@ export function createAttentionFeature(adapters = {}) {
           fingerprint === preview.bindingFingerprint;
         if (!matches) throw featureError('ARTICLE_ATTENTION_STALE', '状态已变化，请刷新后重新检查。');
         if (preview.requiresConfirmation && options.confirmed !== true) throw featureError('ARTICLE_ATTENTION_CONFIRMATION_REQUIRED', '需要确认后才能执行。');
-        const result = await adapters.execute({
+        const executeInput = {
           attentionId: preview.attentionId,
           action: preview.action,
           expectedRevision: preview.revision,
           confirmed: preview.requiresConfirmation ? true : undefined,
-        });
+        };
+        if (preview.confirmationToken)
+          executeInput.confirmationToken = preview.confirmationToken;
+        const resolutionInput = options.resolutionInput || preview.resolutionInput;
+        if (resolutionInput) executeInput.resolutionInput = resolutionInput;
+        const result = await adapters.execute(executeInput);
         if (!executeOwner.isCurrent(token)) return undefined;
         await feature.refresh('command-result');
         if (!executeOwner.isCurrent(token)) return undefined;

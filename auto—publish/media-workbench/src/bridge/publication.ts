@@ -66,12 +66,26 @@ type AttentionContentApi = {
   previewArticleAttention?: (input: {
     attentionId: string;
     action: string;
+    expectedRevision?: number;
+    resolutionInput?: {
+      orderId?: string;
+      observedAt?: string;
+      remoteUrl?: string;
+      reasonCode?: string;
+    };
   }) => Promise<PublicationIpcResponse<ArticleAttentionPreview>>;
   resolveArticleAttention?: (input: {
     attentionId: string;
     action: string;
     expectedRevision: number;
     confirmed?: boolean;
+    confirmationToken?: string;
+    resolutionInput?: {
+      orderId?: string;
+      observedAt?: string;
+      remoteUrl?: string;
+      reasonCode?: string;
+    };
   }) => Promise<PublicationIpcResponse<ArticleAttentionResolution>>;
 };
 
@@ -151,6 +165,13 @@ export async function listArticleAttention(
 export async function previewArticleAttention(input: {
   attentionId: string;
   action: string;
+  expectedRevision?: number;
+  resolutionInput?: {
+    orderId?: string;
+    observedAt?: string;
+    remoteUrl?: string;
+    reasonCode?: string;
+  };
 }): Promise<ArticleAttentionPreview> {
   const content = attentionContentApi();
   const result = await requireBridgeMethod(content.previewArticleAttention)(
@@ -165,6 +186,13 @@ export async function resolveArticleAttention(input: {
   action: string;
   expectedRevision: number;
   confirmed?: boolean;
+  confirmationToken?: string;
+  resolutionInput?: {
+    orderId?: string;
+    observedAt?: string;
+    remoteUrl?: string;
+    reasonCode?: string;
+  };
 }): Promise<ArticleAttentionResolution> {
   const content = attentionContentApi();
   const result = await requireBridgeMethod(content.resolveArticleAttention)(

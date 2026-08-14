@@ -585,6 +585,25 @@ export interface ContentSubmissionCancellationPreview {
 export interface ArticleAttentionItem {
   attentionId: string;
   kind: string;
+  owner: string;
+  freeze: { article: boolean; reasonCode?: string | null };
+  resolutionPriority: number;
+  safeFacts: {
+    articleId?: string | null;
+    clientId?: string | null;
+    platformId?: string | null;
+    targetKey?: string | null;
+    publicationId?: string | null;
+    attemptId?: string | null;
+    orderCreationAttemptId?: string | null;
+    orderId?: string | null;
+    transactionId?: string | null;
+    jobId?: string | null;
+    status?: string | null;
+    reasonCode?: string | null;
+    updatedAt?: string | null;
+    articleStatus?: string | null;
+  };
   articleId?: string | null;
   titleSnapshot?: string | null;
   clientId?: string | null;
@@ -594,7 +613,12 @@ export interface ArticleAttentionItem {
   publicationId?: string | null;
   attemptId?: string | null;
   orderCreationAttemptId?: string | null;
-  resolutionActions?: string[];
+  orderId?: string | null;
+  accountProfileId?: string | null;
+  targetKey?: string | null;
+  jobId?: string | null;
+  remoteId?: string | null;
+  remoteUrl?: string | null;
   transactionId?: string | null;
   status?: string | null;
   reasonCode?: string | null;
@@ -699,6 +723,13 @@ export interface ArticleAttentionPreview {
   revision: number;
   action: string;
   requiresConfirmation: boolean;
+  confirmationToken?: string;
+  resolutionInput?: {
+    orderId?: string;
+    observedAt?: string;
+    remoteUrl?: string;
+    reasonCode?: string;
+  };
   message: string;
   changedScopes: string[];
 }

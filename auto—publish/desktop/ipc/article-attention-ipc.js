@@ -13,7 +13,7 @@ function registerArticleAttentionIpc(deps) {
   const resolver = options.articleAttentionResolver;
 
   options.ipcMain.handle("content:list-article-attention", function(event, input) { return wrap(function() { return projectArticleAttentionList(query.list(input || {})); }); });
-  options.ipcMain.handle("content:preview-article-attention", function(event, input) { return wrap(function() { return projectArticleAttentionPreview(resolver.preview(input || {})); }); });
+  options.ipcMain.handle("content:preview-article-attention", function(event, input) { return wrap(async function() { return projectArticleAttentionPreview(await resolver.preview(input || {})); }); });
   options.ipcMain.handle("content:resolve-article-attention", function(event, input) { return wrap(async function() { return projectArticleAttentionResolution(await resolver.resolve(input || {})); }); });
 
   return { query, resolver };

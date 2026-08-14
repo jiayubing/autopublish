@@ -4,11 +4,23 @@ const {
   createArticleAttentionQuery,
 } = require("../desktop/services/article-attention-query");
 const {
+  ACTIONS,
+  ATTENTION_KINDS,
+} = require("../desktop/services/article-attention-policy");
+const {
   createArticleAttentionResolver,
 } = require("../desktop/services/article-attention-resolver");
 const { setDiagnosticReporter } = require("../src/diagnostics/diagnostic-producer");
 
-it("distinguishes automatic removal recovery from a transaction needing manual repair", () => {
+const regularPort = {
+  prepareRegularUncertainResolution: async () => ({
+    confirmationToken: "regular-token",
+  }),
+  confirmRegularAccepted: async () => ({ status: "published" }),
+  confirmRegularNotAccepted: async () => ({ status: "not_accepted" }),
+};
+
+it("projects only manual removal repair, not automatic recovery", () => {
   const query = createArticleAttentionQuery({
     readers: {
       listTransactions: () => [
@@ -33,55 +45,185 @@ it("distinguishes automatic removal recovery from a transaction needing manual r
     articleRemovalService: { retryArticleRemovalTransaction: () => ({}) },
   });
   const items = query.list().items;
+  assert.equal(items.some((item) => item.transactionId === "auto"), false);
+  const repair = items.find((item) => item.transactionId === "repair");
+  assert.equal(repair.kind, ATTENTION_KINDS.REMOVAL_NEEDS_REPAIR);
+  assert.equal(repair.owner, "article-removal-recovery");
+  assert.equal(repair.freeze.article, true);
+  assert.deepEqual(repair.allowedActions, [ACTIONS.RETRY_REMOVAL, ACTIONS.INSPECT]);
+});
+
+it("projects ordinary and paid uncertainty as distinct frozen attention types", () => {
+  const query = createArticleAttentionQuery({
+    operationalStore: {
+      listPublicationAttention: () => [
+        {
+          publicationId: "publication-1",
+          articleId: "article-1",
+          status: "uncertain",
+          attemptId: "attempt-1",
+        },
+        {
+          publicationId: "publication-2",
+          articleId: "article-2",
+          status: "uncertain",
+          attemptId: "attempt-2",
+          orderCreationAttemptId: "order-attempt-2",
+        },
+      ],
+    },
+    regularPlatformOutcomeService: regularPort,
+    paidOrderCreationResolutionService: {
+      prepareBindOrderNumber: async () => ({ confirmationToken: "paid-bind" }),
+      bindOrderNumber: async () => ({ status: "bound" }),
+      prepareConfirmNoOrder: async () => ({ confirmationToken: "paid-none" }),
+      confirmNoOrder: async () => ({ status: "no_order" }),
+    },
+  });
+  const items = query.list().items;
+  const regular = items.find((item) => item.publicationId === "publication-1");
+  const paid = items.find((item) => item.publicationId === "publication-2");
+  assert.equal(regular.kind, ATTENTION_KINDS.REGULAR_PLATFORM_UNCERTAIN);
+  assert.equal(paid.kind, ATTENTION_KINDS.PAID_ORDER_CREATION_UNCERTAIN);
+  assert.equal(regular.freeze.article, true);
+  assert.equal(paid.freeze.article, true);
   assert.equal(
-    items.find((item) => item.transactionId === "auto").kind,
-    "removal_auto_recovery",
+    regular.allowedActions.includes(["retry", "publication"].join("-")),
+    false,
   );
+  assert.deepEqual(paid.allowedActions, [
+    ACTIONS.BIND_PAID_ORDER_NUMBER,
+    ACTIONS.CONFIRM_PAID_ORDER_ABSENT,
+    ACTIONS.INSPECT,
+  ]);
+});
+
+it("keeps independent attention items for the same article", () => {
+  const query = createArticleAttentionQuery({
+    readers: {
+      listTransactions: () => [
+        {
+          transactionId: "repair-same-article",
+          clientId: "client-same",
+          articleId: "article-same",
+          publicationId: "publication-same",
+          status: "needs_repair",
+          phase: "needs_repair",
+        },
+      ],
+      listOrderAttention: () => [
+        {
+          orderId: "order-same",
+          clientId: "client-same",
+          articleId: "article-same",
+          anomaly: {
+            reason: "unknown-status",
+            openedAt: "2026-08-15T00:00:00.000Z",
+          },
+        },
+      ],
+    },
+    operationalStore: {
+      listPublicationAttention: () => [
+        {
+          publicationId: "publication-same",
+          attemptId: "attempt-same",
+          clientId: "client-same",
+          articleId: "article-same",
+          status: "uncertain",
+        },
+      ],
+    },
+    articleRemovalService: { retryArticleRemovalTransaction: () => ({}) },
+    orderReconciliationPort: {
+      prepareOrderStatusAnomalyResolution: async () => ({
+        confirmationToken: "order",
+      }),
+      resumeOrderTracking: async () => ({ status: "tracking_resumed" }),
+      confirmOrderPublished: async () => ({ status: "published" }),
+      confirmOrderNotPublished: async () => ({ status: "not_published" }),
+    },
+    regularPlatformOutcomeService: regularPort,
+  });
+
+  const items = query.list().items;
   assert.deepEqual(
-    items.find((item) => item.transactionId === "auto").allowedActions,
-    ["inspect"],
+    new Set(items.map((item) => item.kind)),
+    new Set([
+      ATTENTION_KINDS.REMOVAL_NEEDS_REPAIR,
+      ATTENTION_KINDS.REGULAR_PLATFORM_UNCERTAIN,
+      ATTENTION_KINDS.ORDER_STATUS_ANOMALY,
+    ]),
   );
   assert.equal(
-    items.find((item) => item.transactionId === "repair").kind,
-    "removal_needs_repair",
-  );
-  assert.ok(
-    items
-      .find((item) => item.transactionId === "repair")
-      .allowedActions.includes("retry-removal"),
+    items.filter((item) => item.articleId === "article-same").length,
+    3,
   );
 });
 
-it("keeps generic attention read-only for uncertain attempts", () => {
-  const publications = [
-    {
-      publicationId: "publication-1",
-      articleId: "article-1",
-      status: "uncertain",
-      attemptId: "attempt-1",
-    },
-    {
-      publicationId: "publication-2",
-      articleId: "article-2",
-      status: "uncertain",
-      attemptId: "attempt-2",
-      remoteId: "remote-2",
-      remoteUrl: "https://example.test/remote-2",
-    },
-  ];
+it("projects order anomalies with independent identity and preserves priority ordering", () => {
   const query = createArticleAttentionQuery({
-    operationalStore: { listPublicationAttention: () => publications },
-    publicationWorkflow: { reconcile: async () => ({}) },
+    readers: {
+      listOrderAttention: () => [
+        {
+          orderNid: "order-1",
+          title: "订单一",
+          statusCode: "4",
+          anomaly: { reason: "order-missing", openedAt: "2026-08-15T00:00:00.000Z" },
+        },
+      ],
+    },
+    capabilities: {
+      order_status_anomaly: { canResolveOrderStatusAnomaly: true },
+    },
   });
-  const items = query.list().items;
-  assert.deepEqual(
-    items.find((item) => item.publicationId === "publication-1").allowedActions,
-    ["open-publication"],
-  );
-  assert.deepEqual(
-    items.find((item) => item.publicationId === "publication-2").allowedActions,
-    ["open-publication"],
-  );
+  const item = query.list().items[0];
+  assert.equal(item.kind, ATTENTION_KINDS.ORDER_STATUS_ANOMALY);
+  assert.equal(item.orderId, "order-1");
+  assert.equal(item.owner, "order-reconciliation");
+  assert.equal(item.freeze.article, true);
+  assert.deepEqual(item.allowedActions, [
+    ACTIONS.RESUME_ORDER_TRACKING,
+    ACTIONS.CONFIRM_ORDER_PUBLISHED,
+    ACTIONS.CONFIRM_ORDER_NOT_PUBLISHED,
+    ACTIONS.INSPECT,
+  ]);
+  assert.equal(item.resolutionPriority, 460);
+});
+
+it("does not let an unavailable order projection hide other attention items", () => {
+  const diagnostics = [];
+  const restoreDiagnostics = setDiagnosticReporter((record) => {
+    diagnostics.push(record);
+    return true;
+  });
+  try {
+    const query = createArticleAttentionQuery({
+      readers: {
+        listOrderAttention: () => {
+          throw new Error("synthetic order reader failure");
+        },
+      },
+      operationalStore: {
+        listPublicationAttention: () => [
+          {
+            publicationId: "publication-safe",
+            articleId: "article-safe",
+            status: "uncertain",
+            attemptId: "attempt-safe",
+          },
+        ],
+      },
+    });
+    assert.equal(query.list().items.length, 1);
+    assert.equal(
+      diagnostics.some((record) => record.code === "ARTICLE_ATTENTION_ORDER_READ_FAILED"),
+      true,
+    );
+    assert.equal(JSON.stringify(diagnostics).includes("synthetic"), false);
+  } finally {
+    restoreDiagnostics();
+  }
 });
 
 it("deduplicates stable attention identities and rebuilds only for a newer revision", () => {
@@ -122,12 +264,13 @@ it("deduplicates stable attention identities and rebuilds only for a newer revis
   assert.equal(query.list({ clientId: "other-client" }).items.length, 0);
 });
 
-it("fails closed to safe read-only attention when optional lookups fail", () => {
+it("fails closed to safe navigation when optional lookups fail and never probes generic retry", () => {
   const diagnostics = [];
-  const restoreDiagnostics = setDiagnosticReporter(function(record) {
+  const restoreDiagnostics = setDiagnosticReporter(function (record) {
     diagnostics.push(record);
     return true;
   });
+  let genericProbeCalls = 0;
   const query = createArticleAttentionQuery({
     readers: {
       getArticle() {
@@ -146,22 +289,22 @@ it("fails closed to safe read-only attention when optional lookups fail", () => 
           publicationId: "publication-failed",
           clientId: "client-1",
           articleId: "article-1",
-          articleExists: true,
-          articleStatus: "saved",
           status: "failed",
           attemptId: "attempt-1",
         },
       ],
     },
     capabilities: {
-      failed_submission: { canInspect: false },
+      regular_platform_failed: { canInspect: false },
     },
     contentSubmissionService: {
       previewRetryFailedPublication() {
-        throw new Error("synthetic retry preview failure");
+        genericProbeCalls += 1;
+        throw new Error("must not be called");
       },
       retryFailedPublication() {
-        throw new Error("must not be exposed");
+        genericProbeCalls += 1;
+        throw new Error("must not be called");
       },
     },
   });
@@ -169,20 +312,33 @@ it("fails closed to safe read-only attention when optional lookups fail", () => 
   try {
     const snapshot = query.list();
     assert.equal(snapshot.items.length, 1);
-    assert.deepEqual(snapshot.items[0].allowedActions, ["open-publication"]);
+    assert.deepEqual(snapshot.items[0].allowedActions, [ACTIONS.OPEN_PUBLICATION]);
     assert.equal(snapshot.counts.actionable, 0);
-    assert.ok(diagnostics.some((record) => record.code === "ARTICLE_ATTENTION_LOOKUP_FAILED"));
-    assert.ok(diagnostics.some((record) => record.code === "ARTICLE_ATTENTION_CAPABILITY_PROBE_FAILED"));
-    assert.ok(diagnostics.some((record) => record.code === "ARTICLE_ATTENTION_RETRY_PREVIEW_FAILED"));
+    assert.equal(genericProbeCalls, 0);
+    assert.equal(
+      diagnostics.some((record) => record.code === "ARTICLE_ATTENTION_LOOKUP_FAILED"),
+      true,
+    );
     assert.equal(JSON.stringify(diagnostics).includes("synthetic"), false);
   } finally {
     restoreDiagnostics();
   }
 });
 
-it("requires confirmation, preserves explicit failures, and fences duplicate resolutions", async () => {
+it("requires a preview token, preserves failed resolution, and fences duplicate resolutions", async () => {
   let attempts = 0;
   let fail = true;
+  const removalPort = {
+    retryArticleRemovalTransaction() {
+      attempts += 1;
+      if (fail) {
+        const error = new Error("synthetic repair failure");
+        error.code = "ARTICLE_REMOVAL_REPAIR_FAILED";
+        throw error;
+      }
+      return { status: "committed" };
+    },
+  };
   const query = createArticleAttentionQuery({
     readers: {
       listTransactions: () => [
@@ -196,40 +352,25 @@ it("requires confirmation, preserves explicit failures, and fences duplicate res
         },
       ],
     },
-    articleRemovalService: {
-      retryArticleRemovalTransaction() {
-        attempts += 1;
-        if (fail) {
-          const error = new Error("synthetic repair failure");
-          error.code = "ARTICLE_REMOVAL_REPAIR_FAILED";
-          throw error;
-        }
-        return { status: "committed" };
-      },
-    },
+    articleRemovalService: removalPort,
   });
   const resolver = createArticleAttentionResolver({
     query,
-    articleRemovalService: {
-      retryArticleRemovalTransaction() {
-        attempts += 1;
-        if (fail) {
-          const error = new Error("synthetic repair failure");
-          error.code = "ARTICLE_REMOVAL_REPAIR_FAILED";
-          throw error;
-        }
-        return { status: "committed" };
-      },
-    },
+    articleRemovalService: removalPort,
   });
   const item = query.list().items[0];
   const expectedRevision = query.getRevision();
 
+  const preview = await resolver.preview({
+    attentionId: item.attentionId,
+    action: ACTIONS.RETRY_REMOVAL,
+    expectedRevision,
+  });
   await assert.rejects(
     () =>
       resolver.resolve({
         attentionId: item.attentionId,
-        action: "retry-removal",
+        action: ACTIONS.RETRY_REMOVAL,
         expectedRevision,
       }),
     { code: "ARTICLE_ATTENTION_CONFIRMATION_REQUIRED" },
@@ -238,9 +379,10 @@ it("requires confirmation, preserves explicit failures, and fences duplicate res
     () =>
       resolver.resolve({
         attentionId: item.attentionId,
-        action: "retry-removal",
+        action: ACTIONS.RETRY_REMOVAL,
         expectedRevision,
         confirmed: true,
+        confirmationToken: preview.confirmationToken,
       }),
     { code: "ARTICLE_REMOVAL_REPAIR_FAILED" },
   );
@@ -250,9 +392,10 @@ it("requires confirmation, preserves explicit failures, and fences duplicate res
   fail = false;
   const resolved = await resolver.resolve({
     attentionId: item.attentionId,
-    action: "retry-removal",
+    action: ACTIONS.RETRY_REMOVAL,
     expectedRevision,
     confirmed: true,
+    confirmationToken: preview.confirmationToken,
   });
   assert.equal(resolved.outcome, "resolved");
   assert.equal(query.getRevision(), expectedRevision + 1);
@@ -262,80 +405,183 @@ it("requires confirmation, preserves explicit failures, and fences duplicate res
     () =>
       resolver.resolve({
         attentionId: item.attentionId,
-        action: "retry-removal",
+        action: ACTIONS.RETRY_REMOVAL,
         expectedRevision,
         confirmed: true,
+        confirmationToken: preview.confirmationToken,
       }),
     { code: "ARTICLE_ATTENTION_STALE" },
   );
-  assert.equal(attempts, 2);
 });
 
-it("keeps Ticket 14 resolutions out of generic attention commands while preserving a reachable DTO projection", async () => {
+it("resolves paid order creation by independent attention id and input-bound token", async () => {
+  const calls = [];
+  const paid = {
+    prepareBindOrderNumber: async (input) => {
+      calls.push(["prepare-bind", input]);
+      return { confirmationToken: "paid-token" };
+    },
+    bindOrderNumber: async (input) => {
+      calls.push(["bind", input]);
+      return { status: "bound" };
+    },
+    prepareConfirmNoOrder: async () => ({ confirmationToken: "paid-none" }),
+    confirmNoOrder: async () => ({ status: "no_order" }),
+  };
   const query = createArticleAttentionQuery({
     operationalStore: {
       listPublicationAttention: () => [
         {
-          publicationId: "publication-paid-1",
-          articleId: "article-paid-1",
+          publicationId: "publication-paid",
+          articleId: "article-paid",
           status: "uncertain",
-          attemptId: "attempt-paid-1",
-          orderCreationAttemptId: "order-attempt-1",
-          resolutionActions: [
-            "bind-paid-order-number",
-            "confirm-paid-order-absent",
-          ],
+          attemptId: "attempt-paid",
+          orderCreationAttemptId: "order-attempt-paid",
         },
       ],
     },
+    paidOrderCreationResolutionService: paid,
   });
-  const snapshot = query.list();
-  const item = snapshot.items[0];
-  assert.equal(snapshot.counts.actionable, 1);
-  assert.deepEqual(item.allowedActions, ["open-publication"]);
-  assert.deepEqual(item.resolutionActions, [
-    "bind-paid-order-number",
-    "confirm-paid-order-absent",
-  ]);
-
-  const resolver = createArticleAttentionResolver({ query });
-  for (const action of item.allowedActions) {
-    const preview = resolver.preview({ attentionId: item.attentionId, action });
-    assert.equal(preview.action, action);
-    assert.equal(preview.attentionId, item.attentionId);
-    assert.equal(preview.revision, query.getRevision());
-  }
-  await assert.rejects(
-    () =>
-      resolver.resolve({
-        attentionId: item.attentionId,
-        action: "open-publication",
-        expectedRevision: query.getRevision() + 1,
-      }),
-    { code: "ARTICLE_ATTENTION_STALE" },
-  );
-  const resolved = await resolver.resolve({
+  const resolver = createArticleAttentionResolver({
+    query,
+    paidOrderCreationResolutionService: paid,
+  });
+  const item = query.list().items[0];
+  const input = { orderId: "order-123" };
+  const preview = await resolver.preview({
     attentionId: item.attentionId,
-    action: "open-publication",
+    action: ACTIONS.BIND_PAID_ORDER_NUMBER,
+    expectedRevision: query.getRevision(),
+    resolutionInput: input,
+  });
+  await resolver.resolve({
+    attentionId: item.attentionId,
+    action: ACTIONS.BIND_PAID_ORDER_NUMBER,
+    expectedRevision: preview.revision,
+    confirmed: true,
+    confirmationToken: preview.confirmationToken,
+    resolutionInput: input,
+  });
+  assert.deepEqual(calls, [
+    [
+      "prepare-bind",
+      { orderCreationAttemptId: "order-attempt-paid", orderId: "order-123" },
+    ],
+    [
+      "bind",
+      {
+        orderCreationAttemptId: "order-attempt-paid",
+        orderId: "order-123",
+        confirmationToken: "paid-token",
+      },
+    ],
+  ]);
+});
+
+it("resolves ordinary uncertainty only through the named outcome port", async () => {
+  const calls = [];
+  const regular = {
+    prepareRegularUncertainResolution: async (input) => {
+      calls.push(["prepare", input]);
+      return { confirmationToken: "regular-token" };
+    },
+    confirmRegularAccepted: async (input) => {
+      calls.push(["accepted", input]);
+      return { status: "published" };
+    },
+    confirmRegularNotAccepted: async () => ({ status: "not_accepted" }),
+  };
+  const query = createArticleAttentionQuery({
+    operationalStore: {
+      listPublicationAttention: () => [
+        {
+          publicationId: "publication-regular",
+          articleId: "article-regular",
+          status: "uncertain",
+          attemptId: "attempt-regular",
+        },
+      ],
+    },
+    regularPlatformOutcomeService: regular,
+  });
+  const resolver = createArticleAttentionResolver({
+    query,
+    regularPlatformOutcomeService: regular,
+    clock: () => new Date("2026-08-15T00:00:00.000Z"),
+  });
+  const item = query.list().items[0];
+  const preview = await resolver.preview({
+    attentionId: item.attentionId,
+    action: ACTIONS.CONFIRM_REGULAR_ACCEPTED,
+    expectedRevision: query.getRevision(),
+    resolutionInput: {
+      observedAt: "2026-08-14T23:59:00.000Z",
+      remoteUrl: "https://example.test/published/regular",
+    },
+  });
+  await resolver.resolve({
+    attentionId: item.attentionId,
+    action: ACTIONS.CONFIRM_REGULAR_ACCEPTED,
+    expectedRevision: preview.revision,
+    confirmed: true,
+    confirmationToken: preview.confirmationToken,
+    resolutionInput: preview.resolutionInput,
+  });
+  assert.equal(calls[0][0], "prepare");
+  assert.equal(calls[0][1].regularPublicationAttemptId, "attempt-regular");
+  assert.equal(calls[1][0], "accepted");
+  assert.equal(calls[1][1].confirmationToken, "regular-token");
+});
+
+it("resolves an order anomaly through its three-action reconciliation port", async () => {
+  const calls = [];
+  const order = {
+    listOrders: () => [
+      {
+        orderNid: "order-anomaly",
+        anomaly: { reason: "order-missing", openedAt: "2026-08-15T00:00:00.000Z" },
+      },
+    ],
+    prepareOrderStatusAnomalyResolution: async (input) => {
+      calls.push(["prepare", input]);
+      return { confirmationToken: "order-token" };
+    },
+    resumeOrderTracking: async (input) => {
+      calls.push(["resume", input]);
+      return { status: "tracking_resumed" };
+    },
+    confirmOrderPublished: async () => ({ status: "published" }),
+    confirmOrderNotPublished: async () => ({ status: "not_published" }),
+  };
+  const query = createArticleAttentionQuery({ orderReconciliationPort: order });
+  const resolver = createArticleAttentionResolver({
+    query,
+    orderReconciliationPort: order,
+  });
+  const item = query.list().items[0];
+  assert.deepEqual(item.allowedActions, [
+    ACTIONS.RESUME_ORDER_TRACKING,
+    ACTIONS.CONFIRM_ORDER_PUBLISHED,
+    ACTIONS.CONFIRM_ORDER_NOT_PUBLISHED,
+    ACTIONS.INSPECT,
+  ]);
+  const preview = await resolver.preview({
+    attentionId: item.attentionId,
+    action: ACTIONS.RESUME_ORDER_TRACKING,
     expectedRevision: query.getRevision(),
   });
-  assert.equal(resolved.outcome, "open-publication");
-  assert.throws(
-    () =>
-      resolver.preview({
-        attentionId: item.attentionId,
-        action: "bind-paid-order-number",
-      }),
-    { code: "ARTICLE_ATTENTION_ACTION_NOT_ALLOWED" },
-  );
-  await assert.rejects(
-    () =>
-      resolver.resolve({
-        attentionId: item.attentionId,
-        action: "confirm-paid-order-absent",
-        expectedRevision: query.getRevision(),
-        confirmed: true,
-      }),
-    { code: "ARTICLE_ATTENTION_ACTION_NOT_ALLOWED" },
-  );
+  await resolver.resolve({
+    attentionId: item.attentionId,
+    action: ACTIONS.RESUME_ORDER_TRACKING,
+    expectedRevision: preview.revision,
+    confirmed: true,
+    confirmationToken: preview.confirmationToken,
+  });
+  assert.deepEqual(calls, [
+    ["prepare", { orderId: "order-anomaly" }],
+    [
+      "resume",
+      { orderId: "order-anomaly", confirmationToken: "order-token" },
+    ],
+  ]);
 });

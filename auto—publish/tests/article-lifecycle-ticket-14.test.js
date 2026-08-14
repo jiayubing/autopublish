@@ -266,23 +266,27 @@ test("uncertain order creation stays frozen and can bind only a fully matched qu
     );
     const attention = createArticleAttentionQuery({
       operationalStore: value.store,
+      paidOrderCreationResolutionService: {
+        prepareBindOrderNumber: async () => ({}),
+        bindOrderNumber: () => ({}),
+        prepareConfirmNoOrder: () => ({}),
+        confirmNoOrder: () => ({}),
+      },
     }).list({}).items[0];
+    assert.equal(attention.kind, "paid_order_creation_uncertain");
     assert.equal(
       attention.orderCreationAttemptId,
       uncertain.claim.orderCreationAttemptId,
     );
     assert.equal(
       attention.allowedActions.includes("bind-paid-order-number"),
-      false,
+      true,
     );
     assert.equal(
       attention.allowedActions.includes("confirm-paid-order-absent"),
-      false,
+      true,
     );
-    assert.deepEqual(attention.resolutionActions, [
-      "bind-paid-order-number",
-      "confirm-paid-order-absent",
-    ]);
+    assert.equal("resolutionActions" in attention, false);
     const lifecycleAttention = value.store.listArticleLifecycleFacts({
       articleIds: ["article-a"],
     }).attentionItems[0];
@@ -300,7 +304,7 @@ test("uncertain order creation stays frozen and can bind only a fully matched qu
       },
     );
     assert.deepEqual(
-      attention.resolutionActions,
+      attention.allowedActions.slice(0, 2),
       lifecycleAttention.resolutionActions,
     );
 

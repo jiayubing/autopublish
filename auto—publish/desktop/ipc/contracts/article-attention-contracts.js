@@ -1,21 +1,88 @@
 const {
   arrayField,
+  enumField,
   exactObject,
   integerField,
+  nullableField,
   optionalField,
   stringField,
 } = require("./registry");
 const {
   contentContract,
   id,
+  opaqueToken,
   optionalNullableText,
   projectFields,
   text,
 } = require("./content-core-contract-shared");
 
+const attentionResolutionInput = exactObject({
+  orderId: optionalField(id),
+  observedAt: optionalField(text(64)),
+  remoteUrl: optionalField(text(2048)),
+  reasonCode: optionalField(
+    stringField({ max: 128, pattern: /^[A-Z][A-Z0-9_]{0,127}$/u }),
+  ),
+});
+
+const attentionKinds = enumField([
+  "regular_platform_failed",
+  "regular_platform_uncertain",
+  "paid_order_creation_uncertain",
+  "order_status_anomaly",
+  "removal_needs_repair",
+  "published_archive_failed",
+]);
+const attentionOwners = enumField([
+  "regular-platform-outcome",
+  "paid-order-creation",
+  "order-reconciliation",
+  "article-removal-recovery",
+  "publication-archive",
+]);
+const attentionActions = enumField([
+  "open-submission",
+  "open-article",
+  "open-publication",
+  "inspect",
+  "confirm-regular-accepted",
+  "confirm-regular-not-accepted",
+  "bind-paid-order-number",
+  "confirm-paid-order-absent",
+  "resume-order-tracking",
+  "confirm-order-published",
+  "confirm-order-not-published",
+  "retry-removal",
+  "retry-archive",
+]);
+
+const attentionSafeFacts = exactObject({
+  articleId: optionalNullableText(200),
+  clientId: optionalNullableText(100),
+  platformId: optionalNullableText(100),
+  targetKey: optionalNullableText(512),
+  publicationId: optionalNullableText(160),
+  attemptId: optionalNullableText(160),
+  orderCreationAttemptId: optionalNullableText(160),
+  orderId: optionalNullableText(160),
+  transactionId: optionalNullableText(160),
+  jobId: optionalNullableText(160),
+  status: optionalNullableText(80),
+  reasonCode: optionalNullableText(128),
+  updatedAt: optionalNullableText(64),
+  articleStatus: optionalNullableText(80),
+});
+
 const articleAttentionItem = exactObject({
   attentionId: id,
-  kind: stringField({ max: 80 }),
+  kind: attentionKinds,
+  owner: attentionOwners,
+  freeze: exactObject({
+    article: "boolean",
+    reasonCode: optionalNullableText(128),
+  }),
+  resolutionPriority: integerField({ min: 0 }),
+  safeFacts: attentionSafeFacts,
   articleId: optionalNullableText(200),
   titleSnapshot: optionalNullableText(1000),
   clientId: optionalNullableText(200),
@@ -25,15 +92,18 @@ const articleAttentionItem = exactObject({
   publicationId: optionalNullableText(200),
   attemptId: optionalNullableText(200),
   orderCreationAttemptId: optionalNullableText(200),
-  resolutionActions: optionalField(
-    arrayField(stringField({ max: 80 }), { max: 8 }),
-  ),
+  orderId: optionalNullableText(200),
+  accountProfileId: optionalNullableText(200),
+  targetKey: optionalNullableText(512),
+  jobId: optionalNullableText(200),
+  remoteId: optionalNullableText(512),
+  remoteUrl: optionalNullableText(2048),
   transactionId: optionalNullableText(200),
   status: optionalNullableText(80),
   reasonCode: optionalNullableText(128),
   pairState: optionalNullableText(80),
-  recommendedAction: optionalNullableText(80),
-  allowedActions: arrayField(stringField({ max: 80 }), { max: 32 }),
+  recommendedAction: optionalField(nullableField(attentionActions)),
+  allowedActions: arrayField(attentionActions, { max: 32 }),
   updatedAt: optionalNullableText(64),
   message: optionalNullableText(1000),
 });
@@ -64,14 +134,18 @@ const articleAttentionContracts = Object.freeze([
     kind: "query",
     request: exactObject({
       attentionId: id,
-      action: stringField({ max: 80 }),
+      action: attentionActions,
+      expectedRevision: optionalField(integerField({ min: 0 })),
+      resolutionInput: optionalField(attentionResolutionInput),
       clientId: optionalField(id),
     }),
     success: exactObject({
       attentionId: id,
       revision: integerField({ min: 0 }),
-      action: stringField({ max: 80 }),
+      action: attentionActions,
       requiresConfirmation: "boolean",
+      confirmationToken: optionalField(opaqueToken),
+      resolutionInput: optionalField(attentionResolutionInput),
       message: text(1000),
       changedScopes: arrayField(stringField({ max: 80 }), { max: 32 }),
     }),
@@ -85,9 +159,11 @@ const articleAttentionContracts = Object.freeze([
     kind: "command",
     request: exactObject({
       attentionId: id,
-      action: stringField({ max: 80 }),
+      action: attentionActions,
       expectedRevision: integerField({ min: 0 }),
       confirmed: optionalField("boolean"),
+      confirmationToken: optionalField(opaqueToken),
+      resolutionInput: optionalField(attentionResolutionInput),
       clientId: optionalField(id),
     }),
     success: exactObject({
@@ -106,6 +182,10 @@ function projectArticleAttentionItem(input) {
   return projectFields(value, [
     "attentionId",
     "kind",
+    "owner",
+    "freeze",
+    "resolutionPriority",
+    "safeFacts",
     "articleId",
     "titleSnapshot",
     "clientId",
@@ -115,7 +195,12 @@ function projectArticleAttentionItem(input) {
     "publicationId",
     "attemptId",
     "orderCreationAttemptId",
-    "resolutionActions",
+    "orderId",
+    "accountProfileId",
+    "targetKey",
+    "jobId",
+    "remoteId",
+    "remoteUrl",
     "transactionId",
     "status",
     "reasonCode",
@@ -147,7 +232,7 @@ function projectArticleAttentionList(input) {
 function projectArticleAttentionPreview(input) {
   const value =
     input && typeof input === "object" && !Array.isArray(input) ? input : {};
-  return {
+  const output = {
     attentionId: value.attentionId,
     revision: value.revision,
     action: value.action,
@@ -155,6 +240,11 @@ function projectArticleAttentionPreview(input) {
     message: value.message,
     changedScopes: value.changedScopes,
   };
+  if (value.confirmationToken !== undefined)
+    output.confirmationToken = value.confirmationToken;
+  if (value.resolutionInput !== undefined)
+    output.resolutionInput = value.resolutionInput;
+  return output;
 }
 
 function projectArticleAttentionResolution(input) {

@@ -382,6 +382,12 @@ function toOperationalOrderView(order) {
       ? String(value.quotedPrice)
       : "";
   return Object.freeze({
+    ...(typeof value.articleId === "string" && value.articleId
+      ? { articleId: value.articleId }
+      : {}),
+    ...(typeof value.clientId === "string" && value.clientId
+      ? { clientId: value.clientId }
+      : {}),
     title: typeof value.title === "string" ? value.title : "",
     filename: typeof value.filename === "string" ? value.filename : "",
     orderNid: String(value.orderId || ""),

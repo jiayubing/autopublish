@@ -278,7 +278,7 @@ export default function GeneratedArticlesView({
   }
 
   function attentionAdditionalActions(item: ArticleAttentionItem): string[] {
-    if (item.kind !== "failed_submission") return [];
+    if (item.kind !== "regular_platform_failed") return [];
     const article = attentionArticleFor(item);
     if (!article) return [];
     const workflow = workflowForArticle(article);
@@ -452,63 +452,23 @@ export default function GeneratedArticlesView({
     record: PublicationHistoryRecord,
     status: "published" | "failed",
   ) {
-    const requestedClientId = clientId;
-    if (record.status !== "uncertain") return;
-    if (!record.attemptId) {
-      if (isCurrentClient(requestedClientId))
-        setError("普通平台投稿尝试缺失，无法核对。");
+    const item = attentionSnapshot.items.find(
+      (candidate) =>
+        candidate.kind === "regular_platform_uncertain" &&
+        candidate.clientId === clientId &&
+        candidate.publicationId === record.publicationId &&
+        candidate.attemptId === record.attemptId,
+    );
+    if (!item) {
+      setError("需处理项已变化，请刷新后重新核对。");
       return;
     }
-    if (!record.targetKey.startsWith("platform:")) {
-      if (isCurrentClient(requestedClientId))
-        setError("付费订单结果请在订单页使用具名核对动作。");
-      return;
-    }
-    const label = status === "published" ? "确认远端已发布" : "确认远端未发布";
-    if (
-      !(await confirm({
-        title: label,
-        message: `${label}会写入发布账本，并影响后续投稿防重。请确认已在远端核对该目标，且不包含正文、密钥或完整响应。`,
-        confirmLabel: label,
-      }))
-    )
-      return;
-    setError("");
-    try {
-      const preparation = await commands.prepareRegularUncertainResolution({
-        regularPublicationAttemptId: record.attemptId,
-      });
-      const observedAt = new Date().toISOString();
-      const result =
-        status === "published"
-          ? await commands.confirmRegularAccepted({
-              regularPublicationAttemptId:
-                preparation.regularPublicationAttemptId,
-              confirmationToken: preparation.confirmationToken,
-              manualPositiveEvidence: {
-                observedAt,
-                ...(record.remoteUrl ? { remoteUrl: record.remoteUrl } : {}),
-              },
-            })
-          : await commands.confirmRegularNotAccepted({
-              regularPublicationAttemptId:
-                preparation.regularPublicationAttemptId,
-              confirmationToken: preparation.confirmationToken,
-              manualNegativeEvidence: {
-                reasonCode: "REGULAR_MANUAL_NOT_ACCEPTED",
-                observedAt,
-              },
-            });
-      if (
-        isContentCommandStaleResult(result) ||
-        !isCurrentClient(requestedClientId)
-      )
-        return;
-    } catch (value) {
-      if (isCurrentClient(requestedClientId))
-        setError(value instanceof Error ? value.message : "核对发布结果失败");
-    } finally {
-    }
+    await resolveAttentionAction(
+      item,
+      status === "published"
+        ? "confirm-regular-accepted"
+        : "confirm-regular-not-accepted",
+    );
   }
 
   async function previewTrashSelections(
@@ -783,64 +743,59 @@ export default function GeneratedArticlesView({
       />
     );
 
-  async function bindPaidOrderNumber(
+  async function resolveAttentionAction(
     item: ArticleAttentionItem,
-    orderId: string,
+    action: string,
+    orderId?: string,
   ) {
-    if (!item.orderCreationAttemptId) return;
     setPaidResolutionError("");
     try {
-      const prepared = await commands.prepareBindPaidOrderNumber({
-        orderCreationAttemptId: item.orderCreationAttemptId,
-        orderId,
+      const preview = await attentionFeature.previewAction({
+        attentionId: item.attentionId,
+        action,
+        resolutionInput: orderId ? { orderId } : undefined,
       });
-      if (
-        !(await confirm({
+      if (!preview) return;
+      const copy: Record<string, { title: string; confirmLabel: string }> = {
+        "confirm-regular-accepted": {
+          title: "确认远端已接受",
+          confirmLabel: "确认已接受",
+        },
+        "confirm-regular-not-accepted": {
+          title: "确认远端未接受",
+          confirmLabel: "确认未接受",
+        },
+        "bind-paid-order-number": {
           title: "确认补录订单号",
-          message: `已核对订单 ${orderId} 的媒体资源、标题和系统投稿标识。确认后将恢复正常订单跟踪。`,
           confirmLabel: "确认补录",
+        },
+        "confirm-paid-order-absent": {
+          title: "确认服务商没有订单",
+          confirmLabel: "确认没有订单",
+        },
+      };
+      const actionCopy = copy[action] || {
+        title: "确认处理需处理项",
+        confirmLabel: action,
+      };
+      if (
+        preview.requiresConfirmation &&
+        !(await confirm({
+          title: actionCopy.title,
+          message:
+            action === "confirm-paid-order-absent"
+              ? "仅在已人工核对服务商且确认没有生成订单时继续。"
+              : preview.message,
+          confirmLabel: actionCopy.confirmLabel,
           tone: "warning",
         }))
       )
         return;
-      await commands.bindPaidOrderNumber({
-        orderCreationAttemptId: item.orderCreationAttemptId,
-        orderId,
-        confirmationToken: prepared.confirmationToken,
-      });
+      await attentionFeature.executePreview(preview, { confirmed: true });
       setAttentionDetail(null);
     } catch (value) {
       setPaidResolutionError(
-        value instanceof Error ? value.message : "补录订单号失败。",
-      );
-    }
-  }
-
-  async function confirmPaidOrderAbsent(item: ArticleAttentionItem) {
-    if (!item.orderCreationAttemptId) return;
-    setPaidResolutionError("");
-    try {
-      const prepared = await commands.prepareConfirmPaidOrderAbsent({
-        orderCreationAttemptId: item.orderCreationAttemptId,
-      });
-      if (
-        !(await confirm({
-          title: "确认服务商没有订单",
-          message:
-            "仅在已人工核对服务商且确认没有生成订单时继续。确认后文章才能解除冻结；迟到的可信订单事实仍会重新冻结并优先保留。",
-          confirmLabel: "确认没有订单",
-          tone: "danger",
-        }))
-      )
-        return;
-      await commands.confirmPaidOrderAbsent({
-        orderCreationAttemptId: item.orderCreationAttemptId,
-        confirmationToken: prepared.confirmationToken,
-      });
-      setAttentionDetail(null);
-    } catch (value) {
-      setPaidResolutionError(
-        value instanceof Error ? value.message : "确认没有订单失败。",
+        value instanceof Error ? value.message : "处理需处理项失败。",
       );
     }
   }
@@ -1064,7 +1019,10 @@ export default function GeneratedArticlesView({
             // Paid-order resolution is a dedicated attention workflow. Open
             // its detail drawer so the typed media commands remain reachable
             // without routing them through the generic attention resolver.
-            if (item.resolutionActions?.length) {
+            if (
+              item.kind === "paid_order_creation_uncertain" ||
+              item.kind === "order_status_anomaly"
+            ) {
               setAttentionDetail(item);
               return;
             }
@@ -1073,6 +1031,16 @@ export default function GeneratedArticlesView({
             );
             if (article) setDrawerArticle(article);
             else setAttentionDetail(item);
+          }}
+          onOpenSubmissionCenter={onOpenSubmissionCenter}
+          onAttentionAction={(item, action) => {
+            if (
+              item.kind === "paid_order_creation_uncertain" &&
+              ["bind-paid-order-number", "confirm-paid-order-absent"].includes(
+                action,
+              )
+            )
+              setAttentionDetail(item);
           }}
           onInspect={(item) => setAttentionDetail(item)}
           onOpenArticle={(item) => {
@@ -1218,21 +1186,17 @@ export default function GeneratedArticlesView({
           void resolveRegularUncertain(record, status)
         }
         busy={
-          commandStates.prepareRegularUncertainResolution?.busy === true ||
-          commandStates.confirmRegularAccepted?.busy === true ||
-          commandStates.confirmRegularNotAccepted?.busy === true
+          attentionSnapshot.commands.preview.busy ||
+          attentionSnapshot.commands.execute.busy
         }
       />
       <ArticleAttentionDetailDrawer
         item={attentionDetail}
         onClose={() => setAttentionDetail(null)}
-        onBindPaidOrderNumber={bindPaidOrderNumber}
-        onConfirmPaidOrderAbsent={confirmPaidOrderAbsent}
+        onResolveAttentionAction={resolveAttentionAction}
         resolutionBusy={
-          commandStates.prepareBindPaidOrderNumber?.busy === true ||
-          commandStates.bindPaidOrderNumber?.busy === true ||
-          commandStates.prepareConfirmPaidOrderAbsent?.busy === true ||
-          commandStates.confirmPaidOrderAbsent?.busy === true
+          attentionSnapshot.commands.preview.busy ||
+          attentionSnapshot.commands.execute.busy
         }
         resolutionError={paidResolutionError}
       />

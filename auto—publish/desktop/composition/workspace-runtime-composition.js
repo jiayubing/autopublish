@@ -558,18 +558,6 @@ async function createWorkspaceRuntimeComposition(deps) {
     );
     articleLifecycleOwner = aiContentService;
     await publicationComposition.publicationWorkflow.recover();
-    const attentionPorts = publicationComposition.createAttentionPorts({
-      contentSubmissionService,
-      regularQueueApplication,
-      articleRemovalService: aiContentService,
-      getRevision: invalidation.getRevision,
-      onDataInvalidated: invalidation.invalidate,
-      readers: {
-        listTransactions: aiContentService.listArticleRemovalTransactions,
-        getArticle: aiContentService.getGeneratedArticle,
-        platformCapabilities: contentSubmissionService.listPlatforms,
-      },
-    });
     if (aiContentService.recoverPendingArticleRemovals) {
       const removalRecoveryScheduler = ownService(
         require("../../src/content/article-removal-recovery-scheduler").createArticleRemovalRecoveryScheduler(
@@ -750,6 +738,38 @@ async function createWorkspaceRuntimeComposition(deps) {
           invalidateData: invalidation.invalidate,
         },
       );
+    const attentionPorts = publicationComposition.createAttentionPorts({
+      contentSubmissionService,
+      regularQueueApplication,
+      articleRemovalService: aiContentService,
+      regularPlatformOutcomeService,
+      paidOrderCreationResolutionService:
+        paidMediaBatchComposition.orderCreationResolutionService,
+      orderReconciliationPort: {
+        prepareOrderStatusAnomalyResolution:
+          mediaApplication.prepareOrderStatusAnomalyResolution,
+        resumeOrderTracking: mediaApplication.resumeOrderTracking,
+        confirmOrderPublished: mediaApplication.confirmOrderPublished,
+        confirmOrderNotPublished: mediaApplication.confirmOrderNotPublished,
+      },
+      postProcessingPort: publicationComposition.postProcessor
+        ? {
+            retry: function (input) {
+              return publicationComposition.operationalStore.retryPostProcessing(
+                input,
+              );
+            },
+          }
+        : undefined,
+      clock: options.clock,
+      getRevision: invalidation.getRevision,
+      onDataInvalidated: invalidation.invalidate,
+      readers: {
+        listOrderAttention: mediaApplication.listOrderAttention,
+        listTransactions: aiContentService.listArticleRemovalTransactions,
+        getArticle: aiContentService.getGeneratedArticle,
+      },
+    });
     modules = {
       taskService,
       platformSettingsService,

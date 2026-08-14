@@ -812,7 +812,7 @@ function createOrderObservationAggregate(
     return Object.freeze(
       db
         .prepare(
-          "SELECT o.order_id,o.attempt_id,o.payload_json,o.created_at,p.status AS publication_status,d.title_snapshot,d.filename,d.resource_name_snapshot,d.quoted_price,h.evidence_json AS history_json,x.evidence_json AS anomaly_json FROM remote_orders o JOIN publication_attempts a ON a.attempt_id=o.attempt_id JOIN publication_records p ON p.publication_id=a.publication_id LEFT JOIN order_display_snapshots d ON d.attempt_id=o.attempt_id LEFT JOIN remote_evidence h ON h.attempt_id=o.attempt_id AND h.remote_id=('order-history:' || o.order_id) LEFT JOIN remote_evidence x ON x.attempt_id=o.attempt_id AND x.remote_id=('order-status-anomaly:' || o.order_id) ORDER BY o.created_at DESC,o.order_id DESC LIMIT 20000",
+          "SELECT o.order_id,o.attempt_id,o.payload_json,o.created_at,p.article_id,p.status AS publication_status,d.title_snapshot,d.filename,d.resource_name_snapshot,d.quoted_price,h.evidence_json AS history_json,x.evidence_json AS anomaly_json FROM remote_orders o JOIN publication_attempts a ON a.attempt_id=o.attempt_id JOIN publication_records p ON p.publication_id=a.publication_id LEFT JOIN order_display_snapshots d ON d.attempt_id=o.attempt_id LEFT JOIN remote_evidence h ON h.attempt_id=o.attempt_id AND h.remote_id=('order-history:' || o.order_id) LEFT JOIN remote_evidence x ON x.attempt_id=o.attempt_id AND x.remote_id=('order-status-anomaly:' || o.order_id) ORDER BY o.created_at DESC,o.order_id DESC LIMIT 20000",
         )
         .all()
         .map((row) => {
@@ -826,6 +826,8 @@ function createOrderObservationAggregate(
             : null;
           return Object.freeze({
             orderId: row.order_id,
+            articleId: row.article_id,
+            clientId: snapshot.articleIdentityV1.clientId,
             title: safeDisplayText(row.title_snapshot, 1000),
             filename: safeDisplayText(row.filename, 255),
             resourceName: safeDisplayText(row.resource_name_snapshot, 500),

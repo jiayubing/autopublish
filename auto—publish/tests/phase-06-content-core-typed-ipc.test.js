@@ -136,13 +136,13 @@ test("article attention list crosses the authenticated IPC seam as an exact path
           items: [
             {
               attentionId: "attention-1",
-              kind: "failed-submission",
+              kind: "regular_platform_failed",
+              owner: "regular-platform-outcome",
+              freeze: { article: false, reasonCode: null },
+              resolutionPriority: 300,
+              safeFacts: {},
               articleId: "article-1",
               titleSnapshot: "公开标题",
-              resolutionActions: [
-                "bind-paid-order-number",
-                "confirm-paid-order-absent",
-              ],
               allowedActions: ["inspect"],
               message: "请检查投稿状态",
               filePath: "F:\\private\\article.md",
@@ -171,13 +171,13 @@ test("article attention list crosses the authenticated IPC seam as an exact path
       items: [
         {
           attentionId: "attention-1",
-          kind: "failed-submission",
+          kind: "regular_platform_failed",
+          owner: "regular-platform-outcome",
+          freeze: { article: false, reasonCode: null },
+          resolutionPriority: 300,
+          safeFacts: {},
           articleId: "article-1",
           titleSnapshot: "公开标题",
-          resolutionActions: [
-            "bind-paid-order-number",
-            "confirm-paid-order-absent",
-          ],
           allowedActions: ["inspect"],
           message: "请检查投稿状态",
         },
@@ -222,7 +222,7 @@ test("article attention preview exposes only the confirmation decision DTO", asy
 
   const result = await handlers.get("content:preview-article-attention")(null, {
     schemaVersion: 1,
-    payload: { attentionId: "attention-1", action: "retry-publication" },
+    payload: { attentionId: "attention-1", action: "open-submission" },
   });
   assert.deepEqual(result, {
     schemaVersion: 1,
@@ -230,7 +230,7 @@ test("article attention preview exposes only the confirmation decision DTO", asy
     data: {
       attentionId: "attention-1",
       revision: 8,
-      action: "retry-publication",
+      action: "open-submission",
       requiresConfirmation: true,
       message: "确认后重试",
       changedScopes: ["articleAttention"],
@@ -268,7 +268,7 @@ test("article attention resolution does not expose the domain command result", a
     schemaVersion: 1,
     payload: {
       attentionId: "attention-1",
-      action: "retry-publication",
+      action: "open-submission",
       expectedRevision: 8,
       confirmed: true,
     },

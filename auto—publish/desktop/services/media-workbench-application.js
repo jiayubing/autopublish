@@ -323,6 +323,9 @@ function createMediaWorkbenchApplication(options) {
       resolutionService().prepareConfirmNoOrder(input || {}),
     confirmPaidOrderAbsent: (input) =>
       resolved(() => resolutionService().confirmNoOrder(input || {})),
+    // The attention center needs the operational identity that the public
+    // media order projection intentionally omits.
+    listOrderAttention: () => orderService.listOrderViews(),
     getOrders: () => ({
       items: orderService.listOrderViews().map(projectOrderWithCancellation),
     }),

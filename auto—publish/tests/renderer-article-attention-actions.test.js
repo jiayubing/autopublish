@@ -40,10 +40,10 @@ test('article attention actions produce visible publication/detail results', asy
     const page = await browser.newPage();
     await page.addInitScript(() => {
       const ok = (data) => Promise.resolve({ ok: true, data });
-      const article = { id: 'article-1', clientId: 'client-1', title: '失败后可重新投稿', content: '安全测试正文', status: 'saved', platform: 'hepan', scenario: '测试', templateId: 'template-1', createdAt: '2026-07-19T00:00:00.000Z', updatedAt: '2026-07-19T00:00:00.000Z' };
-      const attention = { attentionId: 'failed-active-1', kind: 'failed_submission', articleId: article.id, clientId: article.clientId, titleSnapshot: article.title, platformId: 'hepan', displayName: '蓝色河畔', publicationId: 'publication-1', attemptId: 'attempt-1', status: 'failed', reasonCode: 'REMOTE_REJECTED', updatedAt: article.updatedAt, message: '投稿明确失败', allowedActions: ['retry-publication', 'open-publication'] };
-      const paidResolution = { attentionId: 'paid-resolution-1', kind: 'paid_order_uncertain', articleId: article.id, clientId: article.clientId, titleSnapshot: '付费订单待核对', platformId: 'hepan', displayName: '蓝色河畔', publicationId: 'publication-paid-1', attemptId: 'attempt-paid-1', orderCreationAttemptId: 'order-attempt-1', status: 'uncertain', message: '请核对服务商订单', allowedActions: ['open-publication'], resolutionActions: ['bind-paid-order-number', 'confirm-paid-order-absent'] };
-      const repair = { attentionId: 'repair-1', kind: 'removal_needs_repair', articleId: 'article-missing', clientId: article.clientId, titleSnapshot: '删除事务待修复', transactionId: 'transaction-1', status: 'needs_repair', reasonCode: 'ARTICLE_REMOVAL_BLOCKED', message: '删除事务未完成，需要重新预检并继续', allowedActions: ['retry-removal', 'inspect'] };
+      const article = { id: 'article-1', clientId: 'client-1', title: '失败后可打开统一投稿入口', content: '安全测试正文', status: 'saved', platform: 'hepan', scenario: '测试', templateId: 'template-1', createdAt: '2026-07-19T00:00:00.000Z', updatedAt: '2026-07-19T00:00:00.000Z' };
+      const attention = { attentionId: 'failed-active-1', kind: 'regular_platform_failed', owner: 'regular-platform-outcome', freeze: { article: false, reasonCode: null }, resolutionPriority: 300, safeFacts: {}, articleId: article.id, clientId: article.clientId, titleSnapshot: article.title, platformId: 'hepan', displayName: '蓝色河畔', publicationId: 'publication-1', attemptId: 'attempt-1', status: 'failed', reasonCode: 'REMOTE_REJECTED', updatedAt: article.updatedAt, message: '投稿明确失败', allowedActions: ['open-submission', 'open-publication'] };
+      const paidResolution = { attentionId: 'paid-resolution-1', kind: 'paid_order_creation_uncertain', owner: 'paid-order-creation', freeze: { article: true, reasonCode: 'PAID_ORDER_CREATION_UNCERTAIN' }, resolutionPriority: 480, safeFacts: {}, articleId: article.id, clientId: article.clientId, titleSnapshot: '付费订单待核对', platformId: 'hepan', displayName: '蓝色河畔', publicationId: 'publication-paid-1', attemptId: 'attempt-paid-1', orderCreationAttemptId: 'order-attempt-1', status: 'uncertain', message: '请核对服务商订单', allowedActions: ['bind-paid-order-number', 'confirm-paid-order-absent', 'inspect'] };
+      const repair = { attentionId: 'repair-1', kind: 'removal_needs_repair', owner: 'article-removal-recovery', freeze: { article: true, reasonCode: 'REMOVAL_NEEDS_REPAIR' }, resolutionPriority: 220, safeFacts: {}, articleId: 'article-missing', clientId: article.clientId, titleSnapshot: '删除事务待修复', transactionId: 'transaction-1', status: 'needs_repair', reasonCode: 'ARTICLE_REMOVAL_BLOCKED', message: '删除事务未完成，需要重新预检并继续', allowedActions: ['retry-removal', 'inspect'] };
       const publication = { publicationId: 'publication-1', clientId: article.clientId, articleId: article.id, platformId: 'hepan', targetKey: 'platform:hepan:account:account-1', displayName: '蓝色河畔', status: 'failed', updatedAt: article.updatedAt, attempts: [{ attemptId: 'attempt-1', status: 'failed', updatedAt: article.updatedAt, errorCode: 'REMOTE_REJECTED' }] };
       const calls = [];
       const content = {
@@ -57,7 +57,7 @@ test('article attention actions produce visible publication/detail results', asy
           submissionBatches: [],
           cancellationPlans: [],
           publicationRecords: [publication],
-          attention: { revision: 1, items: [attention, paidResolution, repair], counts: { total: 3, actionable: 2 } },
+          attention: { revision: 1, items: [attention, paidResolution, repair], counts: { total: 3, actionable: 3 } },
           submissionPlatforms: [{ id: 'hepan', displayName: '蓝色河畔', contentQueueImport: true }],
           workflowItems: [{
             articleId: article.id,
@@ -89,9 +89,9 @@ test('article attention actions produce visible publication/detail results', asy
           attentionCountItems: [{ articleId: article.id, count: 2 }],
           orderSummaryItems: [{ articleId: article.id, summary: { status: 'none', label: '无订单', records: 0, active: 0, published: 0, attention: 0 } }],
         }),
-        listArticleAttention: () => ok({ revision: 1, items: [attention, paidResolution, repair], counts: { total: 3, actionable: 2 } }),
-        getArticleAttention: ({ attentionId }) => ok({ item: attentionId === repair.attentionId ? repair : attention }), previewArticleAttention: ({ action }) => ok({ attentionId: attention.attentionId, revision: 1, action, requiresConfirmation: true, message: '投稿明确失败', changedScopes: [] }),
-        resolveArticleAttention: ({ action }) => { calls.push(action); return ok({ outcome: action === 'open-publication' ? 'open-publication' : 'inspection_required', attentionId: attention.attentionId, changedScopes: [] }); },
+        listArticleAttention: () => ok({ revision: 1, items: [attention, paidResolution, repair], counts: { total: 3, actionable: 3 } }),
+        getArticleAttention: ({ attentionId }) => ok({ item: attentionId === repair.attentionId ? repair : attention }), previewArticleAttention: ({ attentionId, action, resolutionInput }) => ok({ attentionId, revision: 1, action, requiresConfirmation: true, confirmationToken: 'attention-token', resolutionInput, message: '投稿明确失败', changedScopes: [] }),
+        resolveArticleAttention: ({ attentionId, action }) => { calls.push(action); return ok({ outcome: action === 'open-publication' ? 'open-publication' : 'inspection_required', attentionId, changedScopes: [] }); },
         listSubmissionBatches: () => ok({ batches: [] }), listArticleTrash: () => ok({ trash: [] }),
         listPublicationHistory: () => ok({ records: [publication] }), listResearch: () => ok({ research: [] }), listQuestions: () => ok({ questions: [] }), listTemplateCatalog: () => ok({ revision: '1', platforms: [], templates: [], diagnostics: [] }), listTemplates: () => ok({ templates: [] }),
         getDoubaoLoginState: () => ok({ loginState: { status: 'unknown' } }), getDoubaoQueueState: () => ok({ queue: { status: 'idle', currentTaskId: null, completed: 0, total: 0, waitRemainingMs: 0, tasks: [] } }), onDoubaoQueueState: () => () => {}, onArticleRemovalTransaction: () => () => {}, listArticleRemovalTransactions: () => ok({ transactions: [] })
@@ -110,8 +110,8 @@ test('article attention actions produce visible publication/detail results', asy
     await page.getByRole('button', { name: 'AI内容生成' }).click();
     await page.getByRole('button', { name: '历史文章' }).click();
      await page.getByRole('tab', { name: '需处理' }).click();
-    await page.getByText('失败后可重新投稿', { exact: true }).waitFor({ state: 'visible' });
-    assert.equal(await page.getByText('失败后可重新投稿', { exact: true }).count(), 1);
+    await page.getByText('失败后可打开统一投稿入口', { exact: true }).waitFor({ state: 'visible' });
+    assert.equal(await page.getByText('失败后可打开统一投稿入口', { exact: true }).count(), 1);
     const attentionRegion = page.getByRole('region', { name: '需处理页面' });
     assert.equal(await attentionRegion.getByText('测试客户', { exact: true }).count(), 2);
     assert.ok(await attentionRegion.getByText('蓝色河畔 / account-1', { exact: true }).isVisible());
@@ -124,12 +124,12 @@ test('article attention actions produce visible publication/detail results', asy
     assert.ok(await page.getByText('2026-07-19 08:00:00', { exact: true }).isVisible());
     assert.equal(await page.getByRole('button', { name: '全选当前结果' }).count(), 0);
     assert.equal(await page.getByRole('button', { name: '加入投稿队列' }).count(), 0);
-     await page.getByRole('button', { name: '打开发布详情' }).first().click();
-    await page.getByRole('dialog', { name: '文章 失败后可重新投稿 的发布详情' }).waitFor({ state: 'visible' });
+    await page.getByRole('button', { name: '打开发布详情' }).first().click();
+    await page.getByRole('dialog', { name: '文章 失败后可打开统一投稿入口 的发布详情' }).waitFor({ state: 'visible' });
     assert.deepEqual(await page.evaluate(() => window.__attentionActionCalls), []);
     await page.getByRole('button', { name: '关闭发布详情' }).first().click();
     await page.setViewportSize({ width: 375, height: 800 });
-    await page.getByRole('button', { name: '打开发布详情' }).last().click();
+    await page.getByRole('button', { name: '补录订单号' }).click();
     const paidDrawer = page.getByRole('dialog', { name: '需处理详情' });
     await paidDrawer.waitFor({ state: 'visible' });
     assert.ok((await paidDrawer.boundingBox()).width <= 375);
@@ -140,12 +140,10 @@ test('article attention actions produce visible publication/detail results', asy
     assert.equal(await bindOrder.isDisabled(), false);
     assert.equal(await page.getByRole('button', { name: '确认服务商没有该订单' }).isDisabled(), false);
     await page.getByRole('button', { name: '关闭需处理详情' }).last().click();
-    await page.getByRole('button', { name: '重新投稿' }).click();
-    await page.getByRole('dialog', { name: '确认处理需处理项' }).waitFor({ state: 'visible' });
+    assert.equal(await page.getByRole('button', { name: '重新投稿' }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: '打开发起投稿' }).count(), 1);
     assert.deepEqual(await page.evaluate(() => window.__attentionActionCalls), []);
-    await page.getByRole('button', { name: '重新投稿' }).last().click();
-    await page.waitForFunction(() => window.__attentionActionCalls.includes('retry-publication'));
-    await page.getByRole('button', { name: '查看差异' }).click();
+    await page.getByRole('button', { name: '查看差异' }).last().click();
     await page.getByRole('dialog', { name: '需处理详情' }).waitFor({ state: 'visible' });
   } finally {
     if (browser) await browser.close();

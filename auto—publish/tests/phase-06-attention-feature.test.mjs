@@ -12,8 +12,8 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
-function attention(attentionId, allowedActions = ["retry-publication"]) {
-  return { attentionId, kind: "failed_submission", allowedActions };
+function attention(attentionId, allowedActions = ["open-submission"]) {
+  return { attentionId, kind: "regular_platform_failed", allowedActions };
 }
 
 describe("Phase 06 attention feature", () => {

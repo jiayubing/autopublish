@@ -43,7 +43,11 @@ function createPublicationWorkflowComposition(options) {
       retry: (command) => operationalStore.retryPostProcessing(command),
     };
     const attentionQuery = createArticleAttentionQuery(
-      Object.assign({}, deps, { operationalStore, publicationWorkflow }),
+      Object.assign({}, deps, {
+        operationalStore,
+        publicationWorkflow,
+        postProcessingPort,
+      }),
     );
     const attentionResolver = createArticleAttentionResolver(
       Object.assign({}, deps, {
