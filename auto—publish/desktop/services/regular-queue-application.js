@@ -307,6 +307,8 @@ function createRegularQueueApplication(options) {
       return Object.assign({}, item, { articleRef: ref });
     });
     const result = coordinator.removePendingQueueItems({ items, operationId: request.operationId });
+    if (result.removedCount > 0)
+      notifyDataInvalidated("SUBMISSION_BATCH_CANCELLED");
     return Object.freeze(Object.assign({}, result, {
       items: Object.freeze(result.items || []),
     }));

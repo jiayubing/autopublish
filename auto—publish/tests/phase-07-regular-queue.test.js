@@ -288,6 +288,66 @@ test("regular admission invalidation refreshes article management from the new w
   }
 });
 
+test("regular queue removal invalidation refreshes cached article management from the new workspace revision", async () => {
+  let managementSnapshot = null;
+  const invalidation = createWorkspaceDataInvalidation({
+    workspaceRuntimeId: "r2-article-management-removal",
+    sendToRenderer: (_channel, event) => {
+      if (event.scopes.includes("articleManagement") && managementSnapshot)
+        managementSnapshot.invalidate();
+    },
+  });
+  const fixture = makeFixture({
+    onDataInvalidated: (reasonCode) => invalidation.invalidate(reasonCode),
+  });
+  try {
+    fixture.add(article("article-a"));
+    const batchReader = createSubmissionBatchReader({ operationalStore: fixture.store });
+    managementSnapshot = createArticleManagementSnapshot({
+      workspaceRoot: fixture.root,
+      getRevision: invalidation.getRevision,
+      aiContentService: {
+        listGeneratedArticles: (clientId) => fixture.contentStore.listArticles(clientId),
+        listTrashedArticles: (clientId) => fixture.contentStore.listTrashedArticles(clientId),
+      },
+      contentSubmissionService: {
+        listBatches: (clientId) => batchReader.listBatches(clientId),
+        listPlatforms: () => [],
+      },
+      operationalStore: fixture.store,
+    });
+
+    const admitted = fixture.application.admitRegularQueueItems(
+      admissionInput(fixture, [ref("article-a")]),
+    );
+    assert.equal(admitted.admittedCount, 1);
+
+    const queued = await managementSnapshot.get({ clientId: "client-a" });
+    assert.equal(queued.revision, 1);
+    assert.equal(queued.workflowByArticle["article-a"].stage, "queued");
+    assert.equal(managementSnapshot.cacheSize(), 1);
+
+    const removed = fixture.application.removePendingQueueItems(
+      removalInput(admitted, ref("article-a")),
+    );
+    assert.equal(removed.removedCount, 1);
+    assert.deepEqual(fixture.invalidationReasons, [
+      "SUBMISSION_BATCH_CREATED",
+      "SUBMISSION_BATCH_CANCELLED",
+    ]);
+    assert.equal(invalidation.getRevision(), 2);
+    assert.equal(fixture.store.listSubmissionQueueItems().length, 0);
+
+    const restored = await managementSnapshot.get({ clientId: "client-a" });
+    assert.equal(restored.revision, 2);
+    assert.equal(restored.workflowByArticle["article-a"].stage, "pending_submission");
+    assert.equal(restored.workflowByArticle["article-a"].locks.canEdit, true);
+    assert.equal(restored.workflowByArticle["article-a"].locks.canQueue, true);
+  } finally {
+    fixture.close();
+  }
+});
+
 test("regular admission invalidation refreshes the platform queue view with the new queue item", async () => {
   const platformModule = await import("../media-workbench/src/features/platform/platform-feature.js");
   let platformFeature = null;
