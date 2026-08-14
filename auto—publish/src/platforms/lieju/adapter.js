@@ -49,12 +49,6 @@ var POST_SUBMIT_REJECTION_PATTERN = [
   "content is required",
   "rejected",
 ].join("|");
-var LIEJU_ACCOUNT_SELECTORS = Object.freeze([
-  '#um a[href*="uid="]',
-  '.vwmy a[href*="uid="]',
-  '.user-name a[href*="uid="]',
-  "[data-uid]",
-]);
 
 function nonEmptyString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : "";
@@ -204,29 +198,61 @@ function checkLoginInCurrentPage(runtime) {
 
 function buildAccountIdentityIndicatorScript() {
   return [
-    "  var selectors = " + JSON.stringify(LIEJU_ACCOUNT_SELECTORS) + ";",
-    "  return await page.evaluate(function (selectors) {",
-    "    for (var i = 0; i < selectors.length; i += 1) {",
-    "      if (document.querySelector(selectors[i])) return true;",
+    "  return await page.evaluate(function () {",
+    "    var links = document.querySelectorAll('a[href]');",
+    "    for (var i = 0; i < links.length; i += 1) {",
+    "      var href = String(links[i].getAttribute('href') || '');",
+    "      var parsed;",
+    "      try { parsed = new URL(href, location.href); } catch (_) { parsed = null; }",
+    "      if (parsed && /^\\/u[0-9]{1,20}$/i.test(parsed.pathname)) return true;",
     "    }",
     "    return false;",
-    "  }, selectors);",
+    "  });",
+  ].join("\n");
+}
+
+function buildAccountDocumentInspectionScript() {
+  return [
+    "function inspectDocument(doc, href) {",
+    "  var links = doc.querySelectorAll('a[href]');",
+    "  var fallback = null;",
+    "  for (var i = 0; i < links.length; i += 1) {",
+    "    var node = links[i];",
+    "    var rawHref = String(node.getAttribute('href') || '');",
+    "    var parsed;",
+    "    try { parsed = new URL(rawHref, href); } catch (_) { parsed = null; }",
+    "    var match = parsed && String(parsed.pathname || '').match(/^\\/u([0-9]{1,20})$/i);",
+    "    var displayName = String(node.textContent || '').replace(/[\\u0000-\\u001f\\u007f]/g, '').trim();",
+    "    if (match && displayName && displayName.length <= 128) {",
+    "      var evidence = { verified: true, remoteAccountId: match[1], displayName: displayName };",
+    "      if (!fallback) fallback = evidence;",
+    "      if (/(^|\\s)m3(?:\\s|$)/.test(String((node.parentElement && node.parentElement.className) || ''))) return evidence;",
+    "    }",
+    "  }",
+    "  return fallback || { verified: false };",
+    "}",
+    "return inspectDocument(document, location.href);",
   ].join("\n");
 }
 
 function buildAccountInspectionScript() {
+  var pageInspection = buildAccountDocumentInspectionScript();
   return [
-    "  var selectors = " + JSON.stringify(LIEJU_ACCOUNT_SELECTORS) + ";",
-    "  return await page.evaluate(function (selectors) {",
-    "    var node = null;",
-    "    for (var i = 0; i < selectors.length && !node; i += 1) node = document.querySelector(selectors[i]);",
-    "    if (!node) return { verified: false };",
-    "    var href = String(node.getAttribute('href') || '');",
-    "    var match = href.match(/[?&]uid=([0-9]{1,20})/);",
-    "    var remoteAccountId = String(node.getAttribute('data-uid') || (match && match[1]) || '').trim();",
-    "    var displayName = String(node.textContent || '').replace(/[\\u0000-\\u001f\\u007f]/g, '').trim();",
-    "    return remoteAccountId && displayName && displayName.length <= 128 ? { verified: true, remoteAccountId: remoteAccountId, displayName: displayName } : { verified: false };",
-    "  }, selectors);",
+    "  var currentEvidence = await page.evaluate(function () {\n" + pageInspection + "\n  });",
+    "  if (currentEvidence && currentEvidence.verified === true) return currentEvidence;",
+    "  var verificationPage = null;",
+    "  try {",
+    "    verificationPage = await page.context().newPage();",
+    "    await verificationPage.goto(" + JSON.stringify(LIEJU.accountUrl) + ");",
+    "    await verificationPage.waitForLoadState('domcontentloaded');",
+    "    return await verificationPage.evaluate(function () {\n" + pageInspection + "\n    });",
+    "  } catch (_) {",
+    "    return { verified: false };",
+    "  } finally {",
+    "    if (verificationPage) {",
+    "      try { await verificationPage.close(); } catch (closeError) { /* best-effort cleanup; do not replace account evidence */ }",
+    "    }",
+    "  }",
   ].join("\n");
 }
 
@@ -251,11 +277,12 @@ async function ensureAccountInspectionReady(runtime, options) {
   }
   if (hasAccountIdentityIndicator(runtime)) return;
   if (opts.preserveCurrentPage === true) {
+    if (hasLoginIndicator(runtime)) return;
     var pageError = new Error("Account inspection page is not ready");
     pageError.code = "PLATFORM_ACCOUNT_INSPECTION_PAGE_NOT_READY";
     throw pageError;
   }
-  runtime.invoke(["goto", LIEJU.base], { timeout: 20000 });
+  runtime.invoke(["goto", LIEJU.accountUrl], { timeout: 20000 });
   waitForLoginState(runtime, LOGIN_STATE_SETTLE_MS);
   waitForCondition(function () {
     return hasAccountIdentityIndicator(runtime);

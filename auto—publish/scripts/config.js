@@ -29,6 +29,7 @@ const PW = {
 const LIEJU = {
   base: 'https://ly.lieju.com',
   loginUrl: 'https://www.lieju.com/login/',
+  accountUrl: 'https://www.lieju.com/member/upage.php',
   publishUrl: 'https://post.lieju.com/117/239',
   selectors: {
     loginIndicator: 'a[href*="action=quit"]',

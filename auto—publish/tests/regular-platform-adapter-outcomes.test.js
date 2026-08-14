@@ -158,6 +158,91 @@ function createLiejuPageFixture(options) {
   };
 }
 
+function createLiejuAccountInspectionPageFixture() {
+  const currentUrl = "https://post.lieju.com/117/239";
+  const accountUrl = "https://www.lieju.com/member/upage.php";
+  const accountHomeNode = {
+    getAttribute(name) {
+      if (name === "href") return "https://www.lieju.com/u759917";
+      return null;
+    },
+    textContent: "fixture-home",
+    parentElement: { className: "" },
+  };
+  const accountNode = {
+    getAttribute(name) {
+      if (name === "href") return "https://www.lieju.com/u759917";
+      return null;
+    },
+    textContent: "fixture-lieju-account",
+    parentElement: { className: "m3" },
+  };
+
+  function createDocument(nodes) {
+    return {
+      querySelectorAll(selector) {
+        if (selector === 'a[href*="action=quit"]') return [{}];
+        if (selector === "a[href]") return nodes;
+        if (selector === 'a[href^="/u"]') return [];
+        return [];
+      },
+      querySelector() {
+        return null;
+      },
+    };
+  }
+
+  function createPage(document, url) {
+    const page = {
+      locator(selector) {
+        const api = {
+          first: () => api,
+          count: () =>
+            selector.includes("action=quit") ? 1 : 0,
+        };
+        return api;
+      },
+      evaluate(callback, selectors) {
+        return new Function(
+          "document",
+          "location",
+          "URL",
+          "selectors",
+          "return (" + callback.toString() + ")(selectors);",
+        )(document, { href: url }, URL, selectors);
+      },
+      context() {
+        return {
+            newPage: () =>
+            createPage(
+              createDocument([accountHomeNode, accountNode]),
+              accountUrl,
+            ),
+        };
+      },
+      goto() {},
+      waitForLoadState() {},
+      close() {},
+      url: () => url,
+    };
+    return page;
+  }
+
+  const currentDocument = createDocument([]);
+  const currentPage = createPage(currentDocument, currentUrl);
+  return {
+    currentUrl,
+    execute(source) {
+      return new Function(
+        "page",
+        "document",
+        "URL",
+        source.replace(/\bawait\s+/g, ""),
+      )(currentPage, currentDocument, URL);
+    },
+  };
+}
+
 function loadBrowserAdapter(platformId, options) {
   const value = options || {};
   const sessionName = `synthetic-${platformId}`;
@@ -213,21 +298,53 @@ function loadBrowserAdapter(platformId, options) {
           const node = identityReady
             ? {
                 getAttribute: (name) =>
-                  name === "href" ? "?uid=98765" : null,
+                  name === "href" ? "https://www.lieju.com/u98765" : null,
                 textContent: "fixture-lieju-account",
               }
             : null;
-          const document = {
-            querySelector: () => node,
-          };
-          const page = {
-            evaluate: (callback, selectors) => callback(selectors),
-          };
+          const createDocument = (accountNode) => ({
+            querySelector: () => accountNode,
+            querySelectorAll: (selector) => {
+              if (selector === 'a[href]') return accountNode ? [accountNode] : [];
+              if (selector.includes("action=quit")) return [{}];
+              return [];
+            },
+          });
+          const createPage = (document, url) => ({
+            locator: (selector) => {
+              const api = {
+                first: () => api,
+                count: () => (selector.includes("action=quit") ? 1 : 0),
+              };
+              return api;
+            },
+            evaluate: (callback, selectors) =>
+              new Function(
+                "document",
+                "location",
+                "URL",
+                "selectors",
+                "return (" + callback.toString() + ")(selectors);",
+              )(document, { href: url }, URL, selectors),
+            context: () => ({
+              newPage: () =>
+                createPage(
+                  createDocument(identityReady ? node : null),
+                  "https://www.lieju.com/member/upage.php",
+                ),
+            }),
+            goto: () => undefined,
+            waitForLoadState: () => undefined,
+            close: () => undefined,
+          });
+          const document = createDocument(node);
+          const page = createPage(document, "https://post.lieju.com/117/239");
           return new Function(
             "page",
             "document",
+            "URL",
             source.replace(/\bawait\s+/g, ""),
-          )(page, document);
+          )(page, document, URL);
         }
         if (
           source.includes("document.querySelector") &&
@@ -316,6 +433,8 @@ for (const platformId of ["lieju", "toutiao"]) {
       assert.ok(openIndex >= 0);
       assert.ok(stateLoadIndex > openIndex);
       assert.ok(gotoIndex > stateLoadIndex);
+      if (platformId === "lieju")
+        assert.deepEqual(calls[gotoIndex], ["goto", "https://www.lieju.com/member/upage.php"]);
 
       calls.splice(0, calls.length);
       await loaded.adapter.ensureAccountInspectionReady({
@@ -395,6 +514,21 @@ test("Lieju account inspection runs DOM lookup in the browser page context", asy
     assert.deepEqual(await missing.adapter.inspectAccount(), { verified: false });
   } finally {
     missing.restore();
+  }
+});
+
+test("Lieju account inspection reads the current public account link without replacing the publish page", async () => {
+  const pageFixture = createLiejuAccountInspectionPageFixture();
+  const loaded = loadBrowserAdapter("lieju", { pageFixture });
+  try {
+    assert.deepEqual(await loaded.adapter.inspectAccount(), {
+      verified: true,
+      remoteAccountId: "759917",
+      displayName: "fixture-lieju-account",
+    });
+    assert.equal(pageFixture.currentUrl, "https://post.lieju.com/117/239");
+  } finally {
+    loaded.restore();
   }
 });
 
