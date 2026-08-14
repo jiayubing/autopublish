@@ -24,6 +24,31 @@ var LOGIN_WAIT_TIMEOUT_MS = 5 * 60 * 1000;
 var LOGIN_STATE_SETTLE_MS = 5000;
 var PUBLISH_PAGE_LOGIN_CHECK_MS = 2500;
 var FAST_POLL_MS = 500;
+var POST_SUBMIT_VERIFY_TIMEOUT_MS = 25 * 1000;
+var POST_SUBMIT_VERIFY_POLL_MS = 500;
+var LIEJU_DETAIL_PATH = /\/(?:[^\/?#]+\/)*([0-9]{1,20})\.html$/i;
+var POST_SUBMIT_REJECTION_PATTERN = [
+  "发布失败",
+  "提交失败",
+  "投稿失败",
+  "发布被拒绝",
+  "提交被拒绝",
+  "投稿被拒",
+  "不能发布",
+  "无法发布",
+  "重复投稿",
+  "验证码错误",
+  "标题不能为空",
+  "内容不能为空",
+  "publish failed",
+  "submit failed",
+  "submission failed",
+  "cannot publish",
+  "unable to publish",
+  "title is required",
+  "content is required",
+  "rejected",
+].join("|");
 
 function nonEmptyString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : "";
@@ -120,6 +145,8 @@ function createLiejuRuntime(runtimeContext) {
     invoke: invoke,
     evaluate: evaluate,
     lifecycle: lifecycle,
+    postSubmitVerificationTimeoutMs: context.postSubmitVerificationTimeoutMs,
+    postSubmitVerificationPollMs: context.postSubmitVerificationPollMs,
   };
 }
 
@@ -327,6 +354,157 @@ function switchCity(runtime, cityName) {
   diagnose("PLATFORM_CITY_SWITCH_COMPLETED", "remote", "city-switch");
 }
 
+function isLiejuHostname(value) {
+  var hostname = String(value || "").toLowerCase();
+  return hostname === "lieju.com" || hostname.endsWith(".lieju.com");
+}
+
+function normalizeLiejuDetailUrl(value) {
+  var normalized = domain.normalizePublishedArticleUrl(value);
+  if (!normalized) return null;
+  try {
+    var url = new URL(normalized);
+    if (!isLiejuHostname(url.hostname)) return null;
+    var match = url.pathname.match(LIEJU_DETAIL_PATH);
+    if (!match) return null;
+    return { remoteId: match[1], remoteUrl: normalized };
+  } catch (_) {
+    return null;
+  }
+}
+
+function isLiejuPublishPageUrl(value) {
+  if (typeof value !== "string" || !value) return false;
+  try {
+    var current = new URL(value);
+    var publish = new URL(LIEJU.publishUrl);
+    return (
+      current.protocol === publish.protocol &&
+      current.hostname.toLowerCase() === publish.hostname.toLowerCase() &&
+      current.pathname === publish.pathname
+    );
+  } catch (_) {
+    return false;
+  }
+}
+
+function buildPostSubmitEvidenceScript() {
+  return [
+    "  var currentUrl = String(page.url() || '');",
+    "  var bodyText = '';",
+    "  try { bodyText = await page.locator('body').innerText(); } catch (_) {}",
+    "  bodyText = String(bodyText || '').replace(/\\s+/g, ' ').slice(0, 20000);",
+    "  var rejectionPattern = " +
+      JSON.stringify(POST_SUBMIT_REJECTION_PATTERN) +
+      ";",
+    "  var hasExplicitRejection = new RegExp(rejectionPattern, 'i').test(bodyText);",
+    "  var hasDetailPageSignals = ['修改', '删除', '更新时间'].every(function(marker) { return bodyText.indexOf(marker) !== -1; });",
+    "  var hasSubmissionForm = false;",
+    "  try {",
+    "    hasSubmissionForm = await page.locator('#atc_title, #atc_content, #atc_mobphone, #atc_linkman').count() > 0;",
+    "  } catch (_) {}",
+    "  var detailUrls = [currentUrl];",
+    "  try {",
+    "    var hrefs = await page.locator('a[href]').evaluateAll(function(nodes) {",
+    "      return nodes.map(function(node) {",
+    "        var href = node.getAttribute('href');",
+    "        if (!href) return '';",
+    "        try { return new URL(href, document.baseURI).href; } catch (_) { return ''; }",
+    "      }).filter(Boolean).slice(0, 64);",
+    "    });",
+    "    detailUrls = detailUrls.concat(hrefs);",
+    "  } catch (_) {}",
+    "  return { url: currentUrl, detailUrls: detailUrls, hasExplicitRejection: hasExplicitRejection, hasDetailPageSignals: hasDetailPageSignals, hasSubmissionForm: hasSubmissionForm };",
+  ].join("\n");
+}
+
+function evidenceCandidates(evidence) {
+  if (typeof evidence === "string") return [evidence];
+  if (!evidence || typeof evidence !== "object") return [];
+  var candidates = [];
+  for (var key of ["url", "remoteUrl", "detailUrl"]) {
+    if (typeof evidence[key] === "string") candidates.push(evidence[key]);
+  }
+  if (evidence.hasDetailPageSignals === true && Array.isArray(evidence.detailUrls)) {
+    candidates = candidates.concat(
+      evidence.detailUrls.filter(function (value) {
+        return typeof value === "string";
+      }),
+    );
+  }
+  return candidates;
+}
+
+function remoteIdentityFromPostSubmitEvidence(evidence) {
+  var candidates = evidenceCandidates(evidence);
+  for (var index = 0; index < candidates.length; index += 1) {
+    var identity = normalizeLiejuDetailUrl(candidates[index]);
+    if (identity) return identity;
+  }
+  return null;
+}
+
+function normalizePostSubmitEvidence(evidence) {
+  var identity = remoteIdentityFromPostSubmitEvidence(evidence);
+  if (identity) return { status: "accepted", ...identity };
+  if (
+    evidence &&
+    typeof evidence === "object" &&
+    evidence.hasExplicitRejection === true &&
+    (evidence.hasSubmissionForm === true || isLiejuPublishPageUrl(evidence.url))
+  ) {
+    return { status: "article_rejected", errorCode: "REMOTE_REJECTED" };
+  }
+  return null;
+}
+
+function postSubmitVerificationTimeout(runtime) {
+  return typeof runtime.postSubmitVerificationTimeoutMs === "number" &&
+    Number.isFinite(runtime.postSubmitVerificationTimeoutMs) &&
+    runtime.postSubmitVerificationTimeoutMs >= 0
+    ? runtime.postSubmitVerificationTimeoutMs
+    : POST_SUBMIT_VERIFY_TIMEOUT_MS;
+}
+
+function postSubmitVerificationPoll(runtime) {
+  return typeof runtime.postSubmitVerificationPollMs === "number" &&
+    Number.isFinite(runtime.postSubmitVerificationPollMs) &&
+    runtime.postSubmitVerificationPollMs > 0
+    ? runtime.postSubmitVerificationPollMs
+    : POST_SUBMIT_VERIFY_POLL_MS;
+}
+
+function verifyPostSubmit(runtime) {
+  var lastOutcome = null;
+  function check() {
+    var evidence = null;
+    try {
+      evidence = runtime.evaluate(buildPostSubmitEvidenceScript());
+    } catch (_) {
+      return false;
+    }
+    var outcome = normalizePostSubmitEvidence(evidence);
+    if (!outcome) return false;
+    lastOutcome = outcome;
+    return true;
+  }
+
+  if (check()) return lastOutcome;
+  var timeoutMs = postSubmitVerificationTimeout(runtime);
+  if (timeoutMs === 0)
+    return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
+  if (
+    waitForCondition(check, {
+      timeoutMs: timeoutMs,
+      intervalMs: postSubmitVerificationPoll(runtime),
+    }) &&
+    lastOutcome
+  ) {
+    return lastOutcome;
+  }
+  return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
+}
+
 function buildFillScript(article) {
   var code = "";
   code += "  await page.waitForSelector('#atc_title');\n";
@@ -429,10 +607,17 @@ async function prepareArticleSubmission(runtime, article, options) {
         throwIfStopped();
         if (!preparedContentMatches(runtime, article))
           return { status: "uncertain", errorCode: "PREPARED_CONTENT_DRIFT" };
-        runtime.invoke(["click", LIEJU.selectors.submitBtn], { timeout: 20000 });
-        // The current page URL and generic post-submit page structure cannot
-        // prove that this article was created. Do not manufacture published.
-        return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
+        runtime.invoke(["click", LIEJU.selectors.submitBtn], {
+          timeout: 20000,
+        });
+        var outcome = verifyPostSubmit(runtime);
+        if (outcome.status === "uncertain")
+          diagnose("PLATFORM_SUBMIT_UNCERTAIN", "remote", "submit");
+        else if (outcome.status === "article_rejected")
+          diagnose("PLATFORM_SUBMIT_REJECTED", "remote", "submit");
+        else if (outcome.status === "accepted")
+          diagnose("PLATFORM_SUBMIT_ACCEPTED", "remote", "submit");
+        return outcome;
       } catch (_) {
         diagnose("PLATFORM_SUBMIT_UNCERTAIN", "remote", "submit");
         return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
