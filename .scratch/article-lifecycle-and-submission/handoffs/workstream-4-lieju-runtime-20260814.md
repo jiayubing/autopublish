@@ -51,3 +51,19 @@
 
 - 本线程暂不建立 Lieju accepted/rejected/uncertain 的远端身份判定；该项属于 Workstream 5。
 - 本线程不实现图片选择、上传、同平台多账号 profile 或 HTTP 发文路线。
+
+## 本次 Thread 4 执行补充
+
+当前执行基线：`9b46c0b`。在不扩大 Workstream 4 边界的前提下补齐了两个直接验收缺口：
+
+- `preparePlatformSubmission()` 现在在任何远端导航前要求客户级 `city/contact/phone` 均为非空字符串；缺失或空白统一返回既有 `REGULAR_CONTENT_INVALID`，不会继续使用默认城市或空表单字段。
+- Lieju 字段回归测试改为可执行页面 fixture，验证城市切换、区域选择、标题、正文、联系人和电话的实际页面操作；另增不完整档案 fail-closed 测试。
+
+本次实际验证：
+
+- `node --test --test-concurrency=1 tests/runtime-diagnostics.test.js tests/regular-platform-adapter-outcomes.test.js tests/adapter-workspace-injection.test.js tests/platform-account-inspector.test.js tests/platform-account-runtime.test.js tests/platform-browser-session-lifecycle.test.js`：47/47 PASS。
+- `node --test --test-concurrency=1 tests/article-lifecycle-ticket-08.test.js tests/regular-platform-outcomes.test.js`：54/54 PASS。
+- `npm run typecheck:main`、`npm run typecheck:renderer`、`npm run typecheck:bridge`：PASS。
+- Thread 4 修改文件定向 ESLint、相关文件 `node --check`、`git diff --check`：PASS。
+
+未执行真实列举网登录、真实发文、Thread 5 结果识别复审、commit/merge/push；这些均不属于本次 Thread 4 Manual Dispatch 授权范围。

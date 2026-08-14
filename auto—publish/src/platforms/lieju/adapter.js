@@ -661,13 +661,13 @@ async function publishArticle(runtime, article, options) {
 
 async function preparePlatformSubmission(runtime, claim) {
   const evidence = domain.createTextOnlyPreparedSubmissionEvidenceV1(claim);
-  const profile = claim && claim.publicationProfile || {};
+  const profile = requireLiejuPublicationProfile(claim);
   const preparedArticle = Object.freeze({
     title: evidence.title,
     body: evidence.body,
-    city: typeof profile.city === "string" ? profile.city : "",
-    contact: typeof profile.contact === "string" ? profile.contact : "",
-    phone: typeof profile.phone === "string" ? profile.phone : "",
+    city: profile.city,
+    contact: profile.contact,
+    phone: profile.phone,
   });
   const prepared = await prepareArticleSubmission(runtime, preparedArticle, {
     autoSubmit: true,
@@ -676,6 +676,26 @@ async function preparePlatformSubmission(runtime, claim) {
     preparedSubmissionEvidenceV1: evidence,
     submitPreparedPublication: prepared.submitPreparedPublication,
   });
+}
+
+function requireLiejuPublicationProfile(claim) {
+  const profile = claim && claim.publicationProfile;
+  const fields = ["city", "contact", "phone"];
+  const missing = fields.filter(
+    (field) =>
+      !profile ||
+      typeof profile[field] !== "string" ||
+      profile[field].trim() === "",
+  );
+  if (missing.length) {
+    const error = new Error("Lieju publication profile is incomplete");
+    error.code = "REGULAR_CONTENT_INVALID";
+    error.missingFields = missing;
+    throw error;
+  }
+  return Object.freeze(
+    Object.fromEntries(fields.map((field) => [field, profile[field].trim()])),
+  );
 }
 
 function isStopError(error) {

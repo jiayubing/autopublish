@@ -11,7 +11,7 @@ const {
 } = require("../src/platforms/platform-runtime-context");
 
 function claim(platformId) {
-  return {
+  const value = {
     platformId,
     regularPublicationAttemptId: `attempt-${platformId}`,
     articleIdentityV1: {
@@ -26,6 +26,83 @@ function claim(platformId) {
       accountProfileId: `account-${platformId}`,
     },
     publicationSnapshot: { title: "合成标题", body: "合成正文" },
+  };
+  if (platformId === "lieju") {
+    value.publicationProfile = {
+      city: "北京",
+      contact: "测试联系人",
+      phone: "010-12345678",
+    };
+  }
+  return value;
+}
+
+function createLiejuPageFixture() {
+  const fields = {};
+  const events = [];
+
+  function fieldName(selector) {
+    return {
+      "#atc_title": "title",
+      "#atc_content": "body",
+      "#atc_mobphone": "phone",
+      "#atc_linkman": "contact",
+    }[selector];
+  }
+
+  function locator(selector, textFilter) {
+    const api = {
+      first: () => api,
+      filter: (options) =>
+        locator(selector, options && typeof options.hasText === "string" ? options.hasText : ""),
+      count: () => {
+        if (selector.includes("action=quit")) return 1;
+        if (selector.includes("city.php?post=239")) return 1;
+        if (selector === "a" && textFilter) return 1;
+        if (selector === "#atc_zone_id option") return 1;
+        if (fieldName(selector)) return 1;
+        return 0;
+      },
+      click: () => {
+        if (selector === "a" && textFilter) {
+          events.push({ type: "city", value: textFilter });
+        } else if (selector.includes("city.php?post=239")) {
+          events.push({ type: "city-switch" });
+        }
+      },
+      fill: (value) => {
+        fields[fieldName(selector)] = value;
+        events.push({ type: "fill", field: fieldName(selector), value });
+      },
+      inputValue: () => fields[fieldName(selector)] || "",
+      evaluateAll: (callback) =>
+        callback([{ value: "zone-shanghai", textContent: "上海" }]),
+      selectOption: (value) => {
+        fields.cityZone = value;
+        events.push({ type: "zone", value });
+      },
+    };
+    return api;
+  }
+
+  const page = {
+    locator,
+    waitForLoadState: () => undefined,
+    waitForSelector: () => undefined,
+    waitForTimeout: () => undefined,
+    evaluate: (callback, selectors) => callback(selectors),
+  };
+
+  return {
+    fields,
+    events,
+    execute(source) {
+      return new Function(
+        "page",
+        "document",
+        source.replace(/\bawait\s+/g, ""),
+      )(page, {});
+    },
   };
 }
 
@@ -77,7 +154,9 @@ function loadBrowserAdapter(platformId, options) {
         if (source.includes("page.url()"))
           return value.postSubmitEvidence ||
             "https://mp.toutiao.com/profile_v4/graphic/publish";
-        if (source.includes("targetCity")) return "北京";
+        if (source.includes("targetCity") && !value.pageFixture) return "北京";
+        if (value.pageFixture && typeof value.pageFixture.execute === "function")
+          return value.pageFixture.execute(source);
         if (platformId === "lieju" && source.includes("page.evaluate")) {
           const node = identityReady
             ? {
@@ -200,17 +279,48 @@ for (const platformId of ["lieju", "toutiao"]) {
   });
 }
 
-test("Lieju fills the customer publication profile passed by preparation", async () => {
-  const codeSources = [];
-  const loaded = loadBrowserAdapter("lieju", { codeSources });
+test("Lieju fills the customer publication profile through browser page actions", async () => {
+  const pageFixture = createLiejuPageFixture();
+  const loaded = loadBrowserAdapter("lieju", { pageFixture });
   try {
     await loaded.adapter.preparePlatformSubmission(Object.assign(claim("lieju"), {
       publicationProfile: { city: "上海", contact: "张三", phone: "13800138000" },
     }));
-    const source = codeSources.join("\n");
-    assert.match(source, /targetCity = "上海"/);
-    assert.match(source, /#atc_linkman'\)\.fill\("张三"\)/);
-    assert.match(source, /#atc_mobphone'\)\.fill\("13800138000"\)/);
+    assert.deepEqual(pageFixture.fields, {
+      title: "合成标题",
+      body: "合成正文",
+      cityZone: "zone-shanghai",
+      phone: "13800138000",
+      contact: "张三",
+    });
+    assert.deepEqual(pageFixture.events.slice(0, 3), [
+      { type: "city-switch" },
+      { type: "city", value: "上海" },
+      { type: "zone", value: "zone-shanghai" },
+    ]);
+  } finally {
+    loaded.restore();
+  }
+});
+
+test("Lieju rejects an incomplete publication profile before opening the remote form", async () => {
+  const calls = [];
+  const loaded = loadBrowserAdapter("lieju", { calls });
+  try {
+    await assert.rejects(
+      () =>
+        loaded.adapter.preparePlatformSubmission(
+          Object.assign(claim("lieju"), {
+            publicationProfile: {
+              city: "",
+              contact: "张三",
+              phone: "13800138000",
+            },
+          }),
+        ),
+      { code: "REGULAR_CONTENT_INVALID" },
+    );
+    assert.equal(calls.some((args) => args[0] === "goto"), false);
   } finally {
     loaded.restore();
   }
