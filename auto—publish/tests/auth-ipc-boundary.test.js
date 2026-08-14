@@ -23,4 +23,35 @@ describe("auth IPC boundary", function() {
     assert.equal(result.ok, true);
     assert.equal(events[0][0], "auth-state-changed");
   });
+
+  it("does not publish authenticated state before the workspace runtime is ready", async function() {
+    const events = [];
+    let notify = null;
+    let releaseRuntime;
+    const runtimeReady = new Promise((resolve) => {
+      releaseRuntime = resolve;
+    });
+    let state = { authenticated: false };
+    registerAuthIpc({
+      ipcMain: { handle: () => {} },
+      sendToRenderer: (channel, payload) => events.push([channel, payload]),
+      authService: {
+        getState: () => state,
+        onStateChanged: (listener) => {
+          notify = listener;
+          return () => {};
+        },
+      },
+      onAuthenticated: () => runtimeReady,
+    });
+
+    state = { authenticated: true, user: { loginName: "admin" } };
+    notify(state);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(events, []);
+
+    releaseRuntime();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(events, [["auth-state-changed", state]]);
+  });
 });

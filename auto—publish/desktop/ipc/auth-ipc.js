@@ -1,5 +1,6 @@
 const { ok, fail } = require("../services/ipc-response");
 const { AUTH_ERROR_CODES, AUTH_ERRORS } = require("../../src/contracts/auth-contract");
+const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
 const AUTH_ERROR_CODES_SET = AUTH_ERROR_CODES;
 
@@ -25,7 +26,31 @@ function registerAuthIpc(deps) {
   if (!ipcMain || typeof ipcMain.handle !== "function" || !service) throw new Error("Auth IPC dependencies are required");
 
   function broadcast() { sendToRenderer("auth-state-changed", service.getState()); }
-  if (typeof service.onStateChanged === "function") service.onStateChanged((state) => sendToRenderer("auth-state-changed", state));
+  async function broadcastStateAfterRuntime(state) {
+    if (
+      state &&
+      state.authenticated &&
+      typeof options.onAuthenticated === "function"
+    ) {
+      try {
+        await options.onAuthenticated();
+      } catch (_) {
+        reportDiagnostic({
+          code: "AUTH_RUNTIME_START_FAILED",
+          module: "auth-ipc",
+          category: "lifecycle",
+          operationId: "auth-state-broadcast",
+          metadata: { action: "runtime-start", outcome: "failed" },
+        });
+        return;
+      }
+    }
+    broadcast();
+  }
+  if (typeof service.onStateChanged === "function")
+    service.onStateChanged((state) => {
+      void broadcastStateAfterRuntime(state);
+    });
 
   ipcMain.handle("auth:get-state", async function(event, input) {
     try {

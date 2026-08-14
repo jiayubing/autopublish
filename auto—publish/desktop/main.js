@@ -300,6 +300,7 @@ authenticatedRuntime = createAuthenticatedRuntime({
 });
 
 function initializeWorkspaceBootstrap() {
+  if (workspaceBootstrap) return workspaceBootstrap;
   const userDataPath = app.getPath("userData");
   const localAppData = process.env.LOCALAPPDATA;
   const sessionDataPath =
@@ -333,13 +334,14 @@ function initializeWorkspaceBootstrap() {
     dialog: dialog,
     workspaceBootstrapService: workspaceBootstrapService,
   });
-  return {
+  workspaceBootstrap = {
     service: workspaceBootstrapService,
     appRoot: appRoot,
     resourcesPath: process.resourcesPath,
     userDataPath: userDataPath,
     sessionDataPath: sessionDataPath,
   };
+  return workspaceBootstrap;
 }
 
 function createAuthenticatedIpcMain() {
@@ -357,7 +359,6 @@ async function activateAuthenticatedRuntime() {
   if (runtimeState.phase === "running" || runtimeState.phase === "starting")
     return;
   const workspace = initializeWorkspaceBootstrap();
-  workspaceBootstrap = workspace;
   runtimeContext = workspace;
   const bootstrapState = workspace.service.bootstrap();
   if (

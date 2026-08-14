@@ -248,7 +248,7 @@ function loadMainWithStartupHarness(bootstrapState, harnessOptions) {
       initialize: function() { return Promise.resolve({ authenticated: options.authenticated !== false }); },
       requireAuthenticated: function() { return Promise.resolve("access"); }
     }; } }],
-    ["./ipc/auth-ipc", { registerAuthIpc: function() { events.push(["auth-ipc"]); } }],
+    ["./ipc/auth-ipc", { registerAuthIpc: function(options) { events.push(["auth-ipc", options]); } }],
     ["./workspace-bootstrap-service", {
       createWorkspaceBootstrapService: function(options) {
         events.push(["create-bootstrap", options]);
@@ -482,6 +482,20 @@ describe("source assembly and packaging contract", function() {
       assert.equal(harness.events.some(function(event) { return event[0] === "doubao"; }), false, state);
       assert.equal(harness.events.some(function(event) { return event[0] === "business-ipc"; }), false, state);
     }
+  });
+
+  it("does not register workspace bootstrap IPC more than once across repeated auth activation", async function() {
+    const harness = loadMainWithStartupHarness({ state: "invalid" }, { authenticated: false });
+    await harness.ready();
+
+    const authEvent = harness.events.find(function(event) { return event[0] === "auth-ipc"; });
+    assert.ok(authEvent && authEvent[1] && typeof authEvent[1].onAuthenticated === "function");
+    await authEvent[1].onAuthenticated();
+    const firstRegistrationCount = harness.events.filter(function(event) { return event[0] === "handle"; }).length;
+    assert.ok(firstRegistrationCount > 0);
+    await authEvent[1].onAuthenticated();
+
+    assert.equal(harness.events.filter(function(event) { return event[0] === "handle"; }).length, firstRegistrationCount);
   });
 
   it("fails closed when workspace bootstrap throws and activate does not create a window", async function() {
