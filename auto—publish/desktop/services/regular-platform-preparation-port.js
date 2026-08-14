@@ -51,31 +51,26 @@ function createRegularPlatformPreparationPort(options) {
       const prepared = domain.createPreparedSubmission(
         await adapter.preparePlatformSubmission(adapterInput),
       );
+      let finalInspection;
+      try {
+        finalInspection = await inspector.inspect(
+          Object.assign({}, inspectionTask, {
+            preserveCurrentPage: true,
+          }),
+        );
+      } catch (_) {
+        finalInspection = null;
+      }
+      if (
+        !finalInspection ||
+        finalInspection.verified !== true ||
+        finalInspection.accountProfileId !== input.accountProfileId ||
+        finalInspection.remoteFingerprint !== inspection.remoteFingerprint
+      )
+        throw fail("REGULAR_ACCOUNT_PROFILE_UNVERIFIED");
       return domain.createPreparedSubmission({
         preparedSubmissionEvidenceV1: prepared.preparedSubmissionEvidenceV1,
-        submitPreparedPublication: async function () {
-          let finalInspection;
-          try {
-            finalInspection = await inspector.inspect(
-              Object.assign({}, inspectionTask, {
-                preserveCurrentPage: true,
-              }),
-            );
-          } catch (_) {
-            finalInspection = null;
-          }
-          if (
-            !finalInspection ||
-            finalInspection.verified !== true ||
-            finalInspection.accountProfileId !== input.accountProfileId ||
-            finalInspection.remoteFingerprint !== inspection.remoteFingerprint
-          )
-            return Object.freeze({
-              status: "uncertain",
-              errorCode: "REGULAR_ACCOUNT_PROFILE_DRIFT",
-            });
-          return prepared.submitPreparedPublication();
-        },
+        submitPreparedPublication: prepared.submitPreparedPublication,
       });
     },
   });

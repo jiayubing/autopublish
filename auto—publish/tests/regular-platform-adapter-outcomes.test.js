@@ -78,6 +78,26 @@ function loadBrowserAdapter(platformId, options) {
           return value.postSubmitEvidence ||
             "https://mp.toutiao.com/profile_v4/graphic/publish";
         if (source.includes("targetCity")) return "北京";
+        if (platformId === "lieju" && source.includes("page.evaluate")) {
+          const node = identityReady
+            ? {
+                getAttribute: (name) =>
+                  name === "href" ? "?uid=98765" : null,
+                textContent: "fixture-lieju-account",
+              }
+            : null;
+          const document = {
+            querySelector: () => node,
+          };
+          const page = {
+            evaluate: (callback, selectors) => callback(selectors),
+          };
+          return new Function(
+            "page",
+            "document",
+            source.replace(/\bawait\s+/g, ""),
+          )(page, document);
+        }
         if (
           source.includes("document.querySelector") &&
           source.includes("selectors")
@@ -193,6 +213,26 @@ test("Lieju fills the customer publication profile passed by preparation", async
     assert.match(source, /#atc_mobphone'\)\.fill\("13800138000"\)/);
   } finally {
     loaded.restore();
+  }
+});
+
+test("Lieju account inspection runs DOM lookup in the browser page context", async () => {
+  const ready = loadBrowserAdapter("lieju", { identityReady: true });
+  try {
+    assert.deepEqual(await ready.adapter.inspectAccount(), {
+      verified: true,
+      remoteAccountId: "98765",
+      displayName: "fixture-lieju-account",
+    });
+  } finally {
+    ready.restore();
+  }
+
+  const missing = loadBrowserAdapter("lieju", { identityReady: false });
+  try {
+    assert.deepEqual(await missing.adapter.inspectAccount(), { verified: false });
+  } finally {
+    missing.restore();
   }
 });
 

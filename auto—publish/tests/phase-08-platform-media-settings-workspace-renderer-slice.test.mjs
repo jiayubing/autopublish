@@ -289,6 +289,28 @@ describe("Phase 08 platform/media/settings/workspace renderer slice", () => {
     listedGroups = [
       {
         ...group,
+        runState: "paused",
+        pauseIntent: "system",
+        manuallyPaused: false,
+        actions: {
+          canStart: true,
+          canPause: false,
+          reasonCode: "REGULAR_ACCOUNT_PROFILE_UNVERIFIED",
+        },
+      },
+    ];
+    await feature.refreshRegularQueueGroups();
+    assert.equal(
+      feature.getSnapshot().regularQueueGroupViews[0].actions.reasonCode,
+      "REGULAR_ACCOUNT_PROFILE_UNVERIFIED",
+    );
+    assert.equal(
+      feature.getSnapshot().regularQueueGroupViews[0].stateLabel,
+      "系统暂停",
+    );
+    listedGroups = [
+      {
+        ...group,
         runState: "running",
         pauseIntent: "none",
         manuallyPaused: false,

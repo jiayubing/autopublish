@@ -503,7 +503,7 @@ test("production preparation port verifies the account profile before adapter pr
   assert.equal(preparations, 1);
 });
 
-test("prepared browser submission rechecks the bound account immediately before submit", async () => {
+test("prepared browser submission rejects account drift before the remote boundary", async () => {
   let inspections = 0;
   let submissions = 0;
   const inspectionTasks = [];
@@ -558,16 +558,88 @@ test("prepared browser submission rechecks the bound account immediately before 
     ],
   });
 
-  const prepared = await port.preparePlatformSubmission(claim);
-  assert.equal(inspections, 1);
-  assert.equal(inspectionTasks[0].preserveCurrentPage, false);
-  assert.deepEqual(await prepared.submitPreparedPublication(), {
-    status: "uncertain",
-    errorCode: "REGULAR_ACCOUNT_PROFILE_DRIFT",
+  await assert.rejects(port.preparePlatformSubmission(claim), {
+    code: "REGULAR_ACCOUNT_PROFILE_UNVERIFIED",
   });
   assert.equal(inspections, 2);
+  assert.equal(inspectionTasks[0].preserveCurrentPage, false);
   assert.equal(inspectionTasks[1].preserveCurrentPage, true);
   assert.equal(submissions, 0);
+});
+
+test("queue execution does not begin remote submission when final account verification fails", async () => {
+  const current = fixture();
+  let inspections = 0;
+  let submissions = 0;
+  const beginCalls = [];
+  try {
+    const profile = addProfile(current, "toutiao");
+    const admitted = admit(current, {
+      articleId: "article-account-boundary",
+      accountProfileId: profile.accountProfileId,
+    });
+    const transitions = Object.fromEntries(
+      Object.keys(current.transitions).map((method) => [
+        method,
+        current.transitions[method],
+      ]),
+    );
+    transitions.beginRegularRemoteSubmission = (input) => {
+      beginCalls.push(input);
+      return current.transitions.beginRegularRemoteSubmission(input);
+    };
+    const port = createRegularPlatformPreparationPort({
+      accountInspector: {
+        inspect: async () => {
+          inspections += 1;
+          return {
+            verified: true,
+            accountProfileId: profile.accountProfileId,
+            remoteFingerprint:
+              inspections === 1 ? "fingerprint-a" : "fingerprint-b",
+          };
+        },
+      },
+      adapters: [
+        {
+          id: "toutiao",
+          preparePlatformSubmission: async (claim) =>
+            domain.createPreparedSubmission({
+              preparedSubmissionEvidenceV1:
+                domain.createTextOnlyPreparedSubmissionEvidenceV1(claim),
+              submitPreparedPublication: async () => {
+                submissions += 1;
+                return { status: "accepted", remoteId: "should-not-submit" };
+              },
+            }),
+        },
+      ],
+    });
+    const orchestrator = createRegularQueueGroupOrchestrator({
+      regularQueueGroupTransitions: transitions,
+      platformSubmissionExecutor: port,
+      regularPlatformOutcomeService: {
+        applyRegularOutcome: (input) => input.outcome,
+      },
+    });
+
+    const result = await orchestrator.startGroup({
+      queueGroupId: admitted.queueGroupId,
+    });
+
+    assert.equal(result.status, "observation_ready");
+    assert.equal(result.observation.status, "group_blocked");
+    assert.equal(
+      result.observation.errorCode,
+      "REGULAR_ACCOUNT_PROFILE_UNVERIFIED",
+    );
+    assert.equal(result.observation.articleRecoverable, true);
+    assert.equal(inspections, 2);
+    assert.equal(beginCalls.length, 0);
+    assert.equal(submissions, 0);
+  } finally {
+    current.close();
+  }
 });
 
 test("preparation resolves the Lieju profile by the claimed article client and passes only prepared data to the adapter", async () => {

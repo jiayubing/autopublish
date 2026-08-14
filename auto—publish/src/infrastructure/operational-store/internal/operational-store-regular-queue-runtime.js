@@ -8,6 +8,7 @@ const {
 
 const PLATFORM_ID = /^[a-z][a-z0-9-]{0,63}$/;
 const PAUSE_INTENTS = new Set(["none", "manual", "system"]);
+const PAUSE_REASON_CODE = /^[A-Z][A-Z0-9_]{0,127}$/;
 
 function createRegularQueueRuntime(context) {
   const {
@@ -34,6 +35,12 @@ function createRegularQueueRuntime(context) {
     )
       throw fail(code);
     return value.trim();
+  }
+
+  function safePauseReasonCode(value) {
+    return typeof value === "string" && PAUSE_REASON_CODE.test(value)
+      ? value
+      : null;
   }
 
   function pauseIntent(input, fallback) {
@@ -75,7 +82,7 @@ function createRegularQueueRuntime(context) {
     }
     return db
       .prepare(
-        "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,s.claim_until current_claim_until,json_extract(s.payload_json,'$.attemptId') current_attempt_id,json_extract(i.payload_json,'$.detail.phase') current_phase FROM submission_queue_groups g LEFT JOIN submission_queue_items q ON q.queue_group_id=g.queue_group_id LEFT JOIN submission_items s ON s.item_id=q.item_id AND s.status IN('claimed','remote_started') LEFT JOIN recovery_intents i ON i.attempt_id=json_extract(s.payload_json,'$.attemptId') " +
+        "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,s.claim_until current_claim_until,json_extract(s.payload_json,'$.attemptId') current_attempt_id,json_extract(i.payload_json,'$.detail.phase') current_phase,(SELECT json_extract(i2.payload_json,'$.detail.lastGroupBlockedCode') FROM submission_queue_items q2 JOIN submission_items s2 ON s2.item_id=q2.item_id JOIN recovery_intents i2 ON i2.attempt_id=json_extract(s2.payload_json,'$.attemptId') WHERE q2.queue_group_id=g.queue_group_id AND json_extract(i2.payload_json,'$.detail.lastGroupBlockedCode') IS NOT NULL ORDER BY q2.position LIMIT 1) last_group_blocked_code FROM submission_queue_groups g LEFT JOIN submission_queue_items q ON q.queue_group_id=g.queue_group_id LEFT JOIN submission_items s ON s.item_id=q.item_id AND s.status IN('claimed','remote_started') LEFT JOIN recovery_intents i ON i.attempt_id=json_extract(s.payload_json,'$.attemptId') " +
           where +
           " ORDER BY g.platform_id,g.account_profile_id,g.queue_group_id,q.position",
       )
@@ -134,6 +141,9 @@ function createRegularQueueRuntime(context) {
       }),
     );
     const hasWork = Boolean(current) || remaining.length > 0;
+    const lastGroupBlockedCode = safePauseReasonCode(
+      row.last_group_blocked_code,
+    );
     return Object.freeze({
       queueGroupId: row.queue_group_id,
       platformId: row.platform_id,
@@ -150,7 +160,9 @@ function createRegularQueueRuntime(context) {
       actions: Object.freeze({
         canStart: hasWork && row.pause_intent !== "none",
         canPause: hasWork && row.pause_intent === "none",
-        reasonCode: hasWork ? null : "REGULAR_QUEUE_GROUP_EMPTY",
+        reasonCode: hasWork
+          ? lastGroupBlockedCode
+          : lastGroupBlockedCode || "REGULAR_QUEUE_GROUP_EMPTY",
       }),
       revision: row.revision,
       createdAt: row.created_at,
@@ -530,8 +542,12 @@ function createRegularQueueRuntime(context) {
         queueGroupId,
         itemId: head.item_id,
       });
+      const nextDetail = Object.assign({}, intent.detail || {}, {
+        phase: "prepared",
+      });
+      delete nextDetail.lastGroupBlockedCode;
       const nextIntent = Object.assign({}, intent, {
-        detail: Object.assign({}, intent.detail || {}, { phase: "prepared" }),
+        detail: nextDetail,
         regularSubmission: {
           queueGroupId,
           itemId: head.item_id,

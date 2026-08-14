@@ -182,19 +182,23 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
     );
   }
 
-  function releasedIntent(row) {
-    const next = Object.assign({}, row.intent, {
-      detail: Object.assign({}, row.intent.detail || {}, {
-        phase: "admitted",
-      }),
+  function releasedIntent(row, observed) {
+    const detail = Object.assign({}, row.intent.detail || {}, {
+      phase: "admitted",
     });
-    delete next.detail.observation;
+    delete detail.observation;
+    if (observed && observed.status === "group_blocked")
+      detail.lastGroupBlockedCode = observed.code;
+    else delete detail.lastGroupBlockedCode;
+    const next = Object.assign({}, row.intent, {
+      detail,
+    });
     delete next.regularSubmission;
     delete next.preparedSubmissionEvidenceV1;
     return next;
   }
 
-  function requeueRecoverableGroupBlocked(row, id, stamp) {
+  function requeueRecoverableGroupBlocked(row, id, stamp, observed) {
     const attemptChanged = db
       .prepare(
         "UPDATE publication_attempts SET status='queued',finished_at=NULL WHERE attempt_id=? AND status IN('queued','remote_started')",
@@ -233,7 +237,7 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
       .prepare(
         "UPDATE recovery_intents SET state='resolved',payload_json=?,updated_at=? WHERE attempt_id=? AND state IN('resolved','remote_started','outcome_pending')",
       )
-      .run(text(releasedIntent(row)), stamp, id).changes;
+      .run(text(releasedIntent(row, observed)), stamp, id).changes;
     if (intentChanged !== 1) throw fail("REGULAR_OUTCOME_STATE_CONFLICT");
     refreshBatch(row.batch_id, stamp);
   }
@@ -440,7 +444,7 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
         throw fail("REGULAR_OUTCOME_CONFLICT");
       }
       const requeue = canRequeueRecoverableGroupBlocked(row, status, observed);
-      if (requeue) requeueRecoverableGroupBlocked(row, id, stamp);
+      if (requeue) requeueRecoverableGroupBlocked(row, id, stamp, observed);
       const keepFrozen =
         status === "uncertain" ||
         (status === "group_blocked" && observed.articleRecoverable === false);

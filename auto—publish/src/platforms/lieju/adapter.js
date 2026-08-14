@@ -49,6 +49,12 @@ var POST_SUBMIT_REJECTION_PATTERN = [
   "content is required",
   "rejected",
 ].join("|");
+var LIEJU_ACCOUNT_SELECTORS = Object.freeze([
+  '#um a[href*="uid="]',
+  '.vwmy a[href*="uid="]',
+  '.user-name a[href*="uid="]',
+  "[data-uid]",
+]);
 
 function nonEmptyString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : "";
@@ -196,17 +202,37 @@ function checkLoginInCurrentPage(runtime) {
   return hasLoginIndicator(runtime);
 }
 
+function buildAccountIdentityIndicatorScript() {
+  return [
+    "  var selectors = " + JSON.stringify(LIEJU_ACCOUNT_SELECTORS) + ";",
+    "  return await page.evaluate(function (selectors) {",
+    "    for (var i = 0; i < selectors.length; i += 1) {",
+    "      if (document.querySelector(selectors[i])) return true;",
+    "    }",
+    "    return false;",
+    "  }, selectors);",
+  ].join("\n");
+}
+
+function buildAccountInspectionScript() {
+  return [
+    "  var selectors = " + JSON.stringify(LIEJU_ACCOUNT_SELECTORS) + ";",
+    "  return await page.evaluate(function (selectors) {",
+    "    var node = null;",
+    "    for (var i = 0; i < selectors.length && !node; i += 1) node = document.querySelector(selectors[i]);",
+    "    if (!node) return { verified: false };",
+    "    var href = String(node.getAttribute('href') || '');",
+    "    var match = href.match(/[?&]uid=([0-9]{1,20})/);",
+    "    var remoteAccountId = String(node.getAttribute('data-uid') || (match && match[1]) || '').trim();",
+    "    var displayName = String(node.textContent || '').replace(/[\\u0000-\\u001f\\u007f]/g, '').trim();",
+    "    return remoteAccountId && displayName && displayName.length <= 128 ? { verified: true, remoteAccountId: remoteAccountId, displayName: displayName } : { verified: false };",
+    "  }, selectors);",
+  ].join("\n");
+}
+
 function hasAccountIdentityIndicator(runtime) {
   try {
-    return runtime.evaluate(
-      [
-        "  var selectors = ['#um a[href*=\"uid=\"]', '.vwmy a[href*=\"uid=\"]', '.user-name a[href*=\"uid=\"]', '[data-uid]'];",
-        "  for (var i = 0; i < selectors.length; i += 1) {",
-        "    if (document.querySelector(selectors[i])) return true;",
-        "  }",
-        "  return false;",
-      ].join("\n"),
-    ) === true;
+    return runtime.evaluate(buildAccountIdentityIndicatorScript()) === true;
   } catch (_) {
     return false;
   }
@@ -241,19 +267,7 @@ async function ensureAccountInspectionReady(runtime, options) {
 
 function inspectAccount(runtime) {
   try {
-    var evidence = runtime.evaluate(
-      [
-        "  var selectors = ['#um a[href*=\"uid=\"]', '.vwmy a[href*=\"uid=\"]', '.user-name a[href*=\"uid=\"]', '[data-uid]'];",
-        "  var node = null;",
-        "  for (var i = 0; i < selectors.length && !node; i += 1) node = document.querySelector(selectors[i]);",
-        "  if (!node) return { verified: false };",
-        "  var href = String(node.getAttribute('href') || '');",
-        "  var match = href.match(/[?&]uid=([0-9]{1,20})/);",
-        "  var remoteAccountId = String(node.getAttribute('data-uid') || (match && match[1]) || '').trim();",
-        "  var displayName = String(node.textContent || '').replace(/[\\u0000-\\u001f\\u007f]/g, '').trim();",
-        "  return remoteAccountId && displayName && displayName.length <= 128 ? { verified: true, remoteAccountId: remoteAccountId, displayName: displayName } : { verified: false };",
-      ].join("\n"),
-    );
+    var evidence = runtime.evaluate(buildAccountInspectionScript());
     return evidence && evidence.verified === true
       ? evidence
       : { verified: false };

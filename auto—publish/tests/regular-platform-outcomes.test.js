@@ -1183,6 +1183,11 @@ test("recoverable group-blocked after submission-start releases the claim withou
       "system",
     );
     assert.equal(
+      f.groupTransitions.listRegularQueueGroupSnapshots({})[0].actions
+        .reasonCode,
+      "LOGIN_REQUIRED",
+    );
+    assert.equal(
       f.groupTransitions.listRegularQueueGroupSnapshots({})[0].remaining[0]
         .regularPublicationAttemptId,
       prepared.claim.regularPublicationAttemptId,
@@ -1243,6 +1248,11 @@ test("recoverable group-blocked releases the queue item and allows the same atte
     assert.equal(snapshot.activeTargetState, "queued");
     assert.equal(snapshot.pauseIntent, "system");
     assert.equal(snapshot.observation, null);
+    assert.equal(
+      f.groupTransitions.listRegularQueueGroupSnapshots({})[0].actions
+        .reasonCode,
+      "LOGIN_REQUIRED",
+    );
     assert.equal(
       f.store.listArticleLifecycleFacts({
         articleIds: ["article-group-blocked-retry"],
