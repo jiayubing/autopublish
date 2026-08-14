@@ -547,6 +547,45 @@ it("does not treat an empty current plan as permission to bypass an old journal"
   }
 });
 
+it("ignores a detected journal when only current runtime artifacts remain", () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "migration-23-d-current-artifacts-"),
+  );
+  try {
+    const composition = createWorkspaceMigrationComposition({
+      workspaceRoot: root,
+      planner: {
+        planResult() {
+          return {
+            plan: { ...plan(), entries: [] },
+            report: { counts: { unplanned: 0, corrupt: 0 } },
+          };
+        },
+        getCurrentRuntimeArtifactCount() {
+          return 2;
+        },
+      },
+      backup: { ensure() {}, verify() {} },
+      inspectMigrationJournals() {
+        return [
+          {
+            ...plan(),
+            migrationRunId: "older-run",
+            sourceVersion: 1,
+            phase: "detected",
+          },
+        ];
+      },
+    });
+    const result = composition.run({});
+    assert.equal(result.allowed, true);
+    assert.equal(result.status, "stale_detected_journal_ignored");
+    composition.close();
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 it("does not construct normal or remote composition while migration is blocked", async () => {
   let normalConstructions = 0;
   await assert.rejects(

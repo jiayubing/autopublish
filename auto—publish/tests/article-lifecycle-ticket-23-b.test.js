@@ -54,6 +54,66 @@ function fact(articleId, target, status, extra) {
   );
 }
 
+test("23-B ignores current generated content and batch files during legacy evidence scan", () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "ticket-23-b-generation-batch-")
+  );
+  try {
+    const batchDirectory = path.join(root, ".autopublish", "batches");
+    const generatedDirectory = path.join(root, "generated", "畅速");
+    fs.mkdirSync(batchDirectory, { recursive: true });
+    fs.mkdirSync(generatedDirectory, { recursive: true });
+    fs.writeFileSync(
+      path.join(generatedDirectory, "current-article.json"),
+      JSON.stringify({
+        id: "current-article",
+        clientId: "畅速",
+        status: "generated",
+        title: "current article",
+        content: "current content",
+        generationBatchId: "current-batch",
+        generationTaskId: "current-task",
+      }) + "\n",
+      "utf8",
+    );
+    fs.writeFileSync(
+      path.join(batchDirectory, "batch-current.json"),
+      JSON.stringify({
+        version: 1,
+        id: "current-batch",
+        concurrency: 1,
+        status: "completed",
+        createdAt: "2026-08-14T00:00:00.000Z",
+        updatedAt: "2026-08-14T00:01:00.000Z",
+        aiConfigFingerprint: FINGERPRINT,
+        clientSources: [],
+        templates: [],
+        tasks: [],
+        counts: {
+          total: 0,
+          succeeded: 0,
+          failed: 0,
+          pending: 0,
+          interrupted: 0,
+          cancelled: 0,
+        },
+      }) + "\n",
+      "utf8",
+    );
+
+    const result = createLegacyMigrationPlanner({
+      workspaceRoot: root,
+    }).planResult();
+
+    assert.deepEqual(result.report.diagnostics, []);
+    assert.equal(result.report.counts.unplanned, 0);
+    assert.equal(result.report.counts.corrupt, 0);
+    assert.deepEqual(result.plan.entries, []);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 function completeSource() {
   return {
     workspaceFingerprint: FINGERPRINT,

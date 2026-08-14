@@ -133,6 +133,29 @@ function createWorkspaceMigrationComposition(options) {
         journal.planFingerprint === planned.plan.planFingerprint &&
         journal.sourceVersion === 1,
     );
+    const currentRuntimeArtifactCount =
+      planner && typeof planner.getCurrentRuntimeArtifactCount === "function"
+        ? planner.getCurrentRuntimeArtifactCount()
+        : 0;
+    // A detected-only journal has not backed up or imported any evidence. If
+    // the current scan is clean and only current runtime artifacts were
+    // reclassified out of the legacy scan, retain the journal as history but
+    // do not block normal startup on that stale detection marker.
+    if (
+      !migrationRequired &&
+      currentRuntimeArtifactCount > 0 &&
+      journals.length > 0 &&
+      journals.every((journal) => journal && journal.phase === "detected")
+    ) {
+      return Object.freeze({
+        allowed: true,
+        status: "stale_detected_journal_ignored",
+        code: null,
+        phase: "detected",
+        executionGroupsPaused: true,
+        repair: null,
+      });
+    }
     if (!migrationRequired && journals.length === 0) {
       return Object.freeze({
         allowed: true,

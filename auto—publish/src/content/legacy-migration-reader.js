@@ -442,6 +442,29 @@ function readJson(filename, root, diagnostics) {
   }
 }
 
+function isCurrentGenerationBatch(value) {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      value.version === 1 &&
+      typeof value.id === "string" &&
+      Array.isArray(value.clientSources) &&
+      Array.isArray(value.templates) &&
+      Array.isArray(value.tasks),
+  );
+}
+
+function isCurrentGeneratedArticle(value) {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      typeof value.generationBatchId === "string" &&
+      typeof value.generationTaskId === "string",
+  );
+}
+
 function articleFromFile(value, sourceRef, relativeParts) {
   const parts = relativeParts || [];
   const generatedIndex = Math.max(
@@ -468,7 +491,7 @@ function articleFromFile(value, sourceRef, relativeParts) {
   );
 }
 
-function readArticles(root, diagnostics) {
+function readArticles(root, diagnostics, markCurrentRuntimeArtifact) {
   const result = [];
   for (const directory of ["generated", "published", "failed"]) {
     for (const filename of walkFiles(root, directory, diagnostics)) {
@@ -476,6 +499,11 @@ function readArticles(root, diagnostics) {
         continue;
       const value = readJson(filename, root, diagnostics);
       if (!value) continue;
+      if (isCurrentGeneratedArticle(value)) {
+        if (typeof markCurrentRuntimeArtifact === "function")
+          markCurrentRuntimeArtifact();
+        continue;
+      }
       try {
         result.push(
           articleFromFile(
@@ -537,7 +565,7 @@ function readPublications(root, diagnostics) {
   return result;
 }
 
-function readBatches(root, diagnostics) {
+function readBatches(root, diagnostics, markCurrentRuntimeArtifact) {
   const result = [];
   const directories = [
     ".autopublish/submission-batches",
@@ -551,6 +579,11 @@ function readBatches(root, diagnostics) {
       if (seen.has(filename)) continue;
       seen.add(filename);
       const value = readJson(filename, root, diagnostics);
+      if (isCurrentGenerationBatch(value)) {
+        if (typeof markCurrentRuntimeArtifact === "function")
+          markCurrentRuntimeArtifact();
+        continue;
+      }
       if (!value || !Array.isArray(value.items)) {
         addDiagnostic(
           diagnostics,
@@ -907,12 +940,20 @@ function readRecoveryRecords(root, diagnostics) {
 function scanWorkspace(options) {
   const root = assertSourceRoot(options.workspaceRoot || options.sourceRoot);
   const diagnostics = [];
+  let currentRuntimeArtifactCount = 0;
+  const markCurrentRuntimeArtifact = () => {
+    currentRuntimeArtifactCount += 1;
+  };
   const evidence = {
     version: 1,
     workspaceFingerprint: options.workspaceFingerprint,
-    articles: readArticles(root, diagnostics),
+    articles: readArticles(root, diagnostics, markCurrentRuntimeArtifact),
     publications: readPublications(root, diagnostics),
-    submissions: readBatches(root, diagnostics),
+    submissions: readBatches(
+      root,
+      diagnostics,
+      markCurrentRuntimeArtifact,
+    ),
     queues: [
       ...readQueueRecords(root, diagnostics),
       ...readSidecars(root, diagnostics),
@@ -921,6 +962,7 @@ function scanWorkspace(options) {
     deletions: readDeletionRecords(root, diagnostics),
     recoveries: readRecoveryRecords(root, diagnostics),
     diagnostics,
+    currentRuntimeArtifactCount,
   };
   return evidence;
 }
@@ -940,6 +982,7 @@ function fromSource(options, source) {
     deletions: [],
     recoveries: [],
     diagnostics: [],
+    currentRuntimeArtifactCount: 0,
   };
   for (const name of Object.keys(COLLECTION_ALIASES)) {
     const kind =
@@ -983,13 +1026,15 @@ function fromSource(options, source) {
   return result;
 }
 
-function normalizeEvidence(options, input) {
+function normalizeEvidence(options, input, onScanComplete) {
   const values = input || {};
   const source =
     values.legacySource ||
     values.source ||
     (values.workspaceRoot || values.sourceRoot ? null : values);
   const scanned = source ? fromSource(values, source) : scanWorkspace(values);
+  if (typeof onScanComplete === "function")
+    onScanComplete(scanned.currentRuntimeArtifactCount || 0);
   const evidence = {
     version: 1,
     workspaceFingerprint: workspaceFingerprintOf(values, scanned),
@@ -1016,8 +1061,13 @@ function normalizeEvidence(options, input) {
 
 function createLegacyMigrationReader(options) {
   const values = options || {};
+  let currentRuntimeArtifactCount = 0;
   return Object.freeze({
-    read: () => normalizeEvidence(values, values),
+    read: () =>
+      normalizeEvidence(values, values, (count) => {
+        currentRuntimeArtifactCount = count;
+      }),
+    getCurrentRuntimeArtifactCount: () => currentRuntimeArtifactCount,
   });
 }
 

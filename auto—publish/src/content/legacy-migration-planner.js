@@ -1853,6 +1853,10 @@ function createLegacyMigrationPlanner(options) {
   }
   return Object.freeze({
     read: () => values.evidence || reader.read(),
+    getCurrentRuntimeArtifactCount: () =>
+      reader && typeof reader.getCurrentRuntimeArtifactCount === "function"
+        ? reader.getCurrentRuntimeArtifactCount()
+        : 0,
     plan: () => build().plan,
     dryRun: () => {
       const result = build();
