@@ -1,7 +1,5 @@
 "use strict";
 
-const { URL } = require("node:url");
-
 const { ClientId } = require("./identities");
 const { exact, dtoError } = require("./safe-operational-error");
 const {
@@ -175,7 +173,7 @@ function remoteUrl(value) {
   if (value === null) return null;
   if (typeof value !== "string" || value.length > 2048) invalid();
   try {
-    const parsed = new URL(value);
+    const parsed = new globalThis.URL(value);
     if (parsed.protocol !== "https:" || parsed.username || parsed.password)
       invalid();
     return value;
