@@ -17,8 +17,10 @@ const {
 } = require("../../core/operator-flow");
 const {
   createBrowserSessionLifecycle,
+  createStateFileLease,
 } = require("../shared/browser-session-lifecycle");
 const httpFormParser = require("./http-form-parser");
+const { createLiejuHttpSession } = require("./http-session");
 
 var DEFAULT_CITY = "北京";
 var LOGIN_WAIT_TIMEOUT_MS = 5 * 60 * 1000;
@@ -124,12 +126,16 @@ function createLiejuRuntime(runtimeContext) {
     );
   }
 
+  var browserStateLease = createStateFileLease({ stateFile: session.stateFile });
+  var httpStateLease = createStateFileLease({ stateFile: session.stateFile });
   var lifecycle = createBrowserSessionLifecycle({
     session: session,
     stateDir: path.dirname(session.stateFile),
     run: invoke,
     ensureDir: ensureDir,
     sleep: sleep,
+    stateLease: browserStateLease,
+    atomicStateSave: true,
     start: function () {
       invoke(
         [
@@ -150,6 +156,11 @@ function createLiejuRuntime(runtimeContext) {
     invoke: invoke,
     evaluate: evaluate,
     lifecycle: lifecycle,
+    httpSession: createLiejuHttpSession({
+      stateFile: session.stateFile,
+      stateLease: httpStateLease,
+      request: context.httpRequest,
+    }),
     postSubmitVerificationTimeoutMs: context.postSubmitVerificationTimeoutMs,
     postSubmitVerificationPollMs: context.postSubmitVerificationPollMs,
   };
@@ -843,6 +854,9 @@ function createLiejuAdapter(runtimeContext) {
     preparePlatformSubmission: function (claim, imagePlan) {
       return preparePlatformSubmission(runtime, claim, imagePlan);
     },
+    withHttpGetPort: function (operation) {
+      return runtime.httpSession.withGetPort(operation);
+    },
     saveSession: function () {
       return runtime.lifecycle.saveState();
     },
@@ -855,4 +869,5 @@ function createLiejuAdapter(runtimeContext) {
 module.exports = Object.assign(createLiejuAdapter(), {
   createPlatformAdapter: createLiejuAdapter,
   httpFormParser,
+  createLiejuHttpSession,
 });

@@ -21,6 +21,11 @@ function makeFixture() {
   write(root, "node_modules/@playwright/cli/LICENSE", "CLI license\n");
   write(root, "node_modules/@playwright/cli/package.json", JSON.stringify({ version: "0.1.14" }));
   write(root, "node_modules/playwright/LICENSE", "Playwright license\n");
+  write(
+    root,
+    "node_modules/playwright/package.json",
+    JSON.stringify({ version: "1.61.0-alpha-1781023400000" }),
+  );
   write(root, "node_modules/playwright-core/LICENSE", "Core license\n");
   return root;
 }
@@ -57,4 +62,13 @@ it("fails red on development-machine absolute references and private runtime dat
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+it("declares the Playwright request runtime directly for production packaging", function() {
+  const packageJson = require("../package.json");
+  assert.equal(
+    packageJson.dependencies.playwright,
+    "1.61.0-alpha-1781023400000",
+  );
+  assert.doesNotThrow(() => require.resolve("playwright"));
 });

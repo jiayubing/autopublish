@@ -10,6 +10,7 @@ const REQUIRED_FILES = [
   "node_modules/@playwright/cli/playwright-cli.js",
   "node_modules/@playwright/cli/LICENSE",
   "node_modules/playwright/LICENSE",
+  "node_modules/playwright/package.json",
   "node_modules/playwright-core/LICENSE",
 ];
 
@@ -195,6 +196,25 @@ function verifyStaticPackage(appDir, options) {
     throw verificationError(
       "PACKAGED_CLI_VERSION_INVALID",
       "Packaged Playwright CLI version is not approved",
+    );
+  let playwrightPackage;
+  try {
+    playwrightPackage = JSON.parse(
+      fs.readFileSync(
+        path.join(root, "node_modules", "playwright", "package.json"),
+        "utf8",
+      ),
+    );
+  } catch (_) {
+    throw verificationError(
+      "PACKAGED_PLAYWRIGHT_INVALID",
+      "Packaged Playwright metadata is invalid",
+    );
+  }
+  if (playwrightPackage.version !== "1.61.0-alpha-1781023400000")
+    throw verificationError(
+      "PACKAGED_PLAYWRIGHT_VERSION_INVALID",
+      "Packaged Playwright version is not approved",
     );
   const manifest = externalNode
     ? JSON.parse(

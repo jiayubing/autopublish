@@ -382,6 +382,7 @@ function loadBrowserAdapter(platformId, options) {
     runtimeCalls,
     sessionConfigs,
     restore() {
+      adapter.closeSession();
       delete require.cache[adapterPath];
       if (previousAdapter) require.cache[adapterPath] = previousAdapter;
       if (previousPlaywright)
