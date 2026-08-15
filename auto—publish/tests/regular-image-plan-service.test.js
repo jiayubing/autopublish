@@ -242,8 +242,16 @@ describe("regular image plan service", function () {
     const workspacePath = path.join(root, "workspace");
     const imageLibraryPath =
       require.resolve("../src/content/client-image-library");
+    const preparationPortPath = require.resolve(
+      "../desktop/services/regular-platform-preparation-port",
+    );
     const originalModule = require.cache[imageLibraryPath];
+    const originalPreparationPort = require.cache[preparationPortPath];
     const capturedOptions = [];
+    const preparationOptions = [];
+    const originalCreatePreparationPort = require(
+      "../desktop/services/regular-platform-preparation-port",
+    ).createRegularPlatformPreparationPort;
     require.cache[imageLibraryPath] = {
       id: imageLibraryPath,
       filename: imageLibraryPath,
@@ -256,6 +264,17 @@ describe("regular image plan service", function () {
               return { images: [], diagnostics: [] };
             },
           };
+        },
+      },
+    };
+    require.cache[preparationPortPath] = {
+      id: preparationPortPath,
+      filename: preparationPortPath,
+      loaded: true,
+      exports: {
+        createRegularPlatformPreparationPort(options) {
+          preparationOptions.push(options);
+          return originalCreatePreparationPort(options);
         },
       },
     };
@@ -286,10 +305,17 @@ describe("regular image plan service", function () {
         typeof composition.modules.regularImagePlanService.createPlan,
         "function",
       );
+      assert.strictEqual(
+        preparationOptions[0].regularImagePlanService,
+        composition.modules.regularImagePlanService,
+      );
     } finally {
       if (composition) await composition.dispose();
       if (originalModule) require.cache[imageLibraryPath] = originalModule;
       else delete require.cache[imageLibraryPath];
+      if (originalPreparationPort)
+        require.cache[preparationPortPath] = originalPreparationPort;
+      else delete require.cache[preparationPortPath];
     }
   });
 });

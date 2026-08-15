@@ -32,7 +32,7 @@ function createHepanRegularPreparationAdapter(options) {
 
   return Object.freeze({
     id: "hepan",
-    async preparePlatformSubmission(claim) {
+    async preparePlatformSubmission(claim, imagePlan) {
       const runtime = settingsService.getAdapterForRuntime("hepan");
       if (
         !runtime.adapter ||
@@ -52,7 +52,10 @@ function createHepanRegularPreparationAdapter(options) {
         tempDir: payloadRoot,
         runtime: preparedRuntime,
       });
-      const prepared = await adapter.preparePlatformSubmission(claim);
+      const prepared = await adapter.preparePlatformSubmission(
+        claim,
+        imagePlan,
+      );
       let consumed = false;
       return domain.createPreparedSubmission({
         preparedSubmissionEvidenceV1: prepared.preparedSubmissionEvidenceV1,

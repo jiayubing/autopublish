@@ -635,6 +635,7 @@ function createRegularQueueRuntime(context) {
         queueGroupId,
         platformId: group.platform_id,
         accountProfileId: group.account_profile_id,
+        imageCount: group.image_count,
         itemId: head.item_id,
         batchId: head.batch_id,
         articleIdentityV1: domain.parseArticleIdentityV1({

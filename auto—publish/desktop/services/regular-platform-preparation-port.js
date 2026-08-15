@@ -1,6 +1,10 @@
 "use strict";
 
 const domain = require("../../src/domain");
+const {
+  isRecoverableImageLibraryFailure,
+  unavailablePlan,
+} = require("./regular-image-plan-service");
 
 function fail(code) {
   const error = new Error(code);
@@ -8,12 +12,20 @@ function fail(code) {
   return error;
 }
 
+function requestedImageCount(claim) {
+  const imageCount = claim && claim.imageCount;
+  return imageCount === undefined ? 0 : imageCount;
+}
+
 function createRegularPlatformPreparationPort(options) {
   const value = options || {};
   const inspector = value.accountInspector;
   const resolveClientPublicationProfile = value.resolveClientPublicationProfile;
+  const imagePlanService = value.regularImagePlanService;
   if (!inspector || typeof inspector.inspect !== "function")
     throw fail("REGULAR_ACCOUNT_INSPECTOR_REQUIRED");
+  if (!imagePlanService || typeof imagePlanService.createPlan !== "function")
+    throw fail("REGULAR_IMAGE_PLAN_SERVICE_REQUIRED");
   const adapters = new Map();
   for (const adapter of value.adapters || [])
     if (adapter && typeof adapter.id === "string")
@@ -39,6 +51,17 @@ function createRegularPlatformPreparationPort(options) {
         !inspection.remoteFingerprint
       )
         throw fail("REGULAR_ACCOUNT_PROFILE_UNVERIFIED");
+      const imageCount = requestedImageCount(input);
+      let imagePlan;
+      try {
+        imagePlan = await imagePlanService.createPlan({
+          clientId: input.articleIdentityV1 && input.articleIdentityV1.clientId,
+          imageCount,
+        });
+      } catch (error) {
+        if (!isRecoverableImageLibraryFailure(error)) throw error;
+        imagePlan = unavailablePlan(imageCount);
+      }
       const publicationProfile = typeof resolveClientPublicationProfile === "function"
         ? await resolveClientPublicationProfile({
           clientId: input.articleIdentityV1 && input.articleIdentityV1.clientId,
@@ -49,7 +72,7 @@ function createRegularPlatformPreparationPort(options) {
         ? input
         : Object.assign({}, input, { publicationProfile: publicationProfile });
       const prepared = domain.createPreparedSubmission(
-        await adapter.preparePlatformSubmission(adapterInput),
+        await adapter.preparePlatformSubmission(adapterInput, imagePlan),
       );
       let finalInspection;
       try {

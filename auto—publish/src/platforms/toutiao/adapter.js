@@ -530,7 +530,7 @@ async function publishArticle(article, options) {
   }
 }
 
-async function preparePlatformSubmission(claim) {
+async function preparePlatformSubmission(claim, imagePlan) {
   const evidence = domain.createTextOnlyPreparedSubmissionEvidenceV1(claim);
   const preparedArticle = Object.freeze({
     title: evidence.title,

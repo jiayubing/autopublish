@@ -740,7 +740,7 @@ async function publishArticle(runtime, article, options) {
   }
 }
 
-async function preparePlatformSubmission(runtime, claim) {
+async function preparePlatformSubmission(runtime, claim, imagePlan) {
   const evidence = domain.createTextOnlyPreparedSubmissionEvidenceV1(claim);
   const profile = requireLiejuPublicationProfile(claim);
   const preparedArticle = Object.freeze({
@@ -839,8 +839,8 @@ function createLiejuAdapter(runtimeContext) {
     publishArticle: function (article, options) {
       return publishArticle(runtime, article, options);
     },
-    preparePlatformSubmission: function (claim) {
-      return preparePlatformSubmission(runtime, claim);
+    preparePlatformSubmission: function (claim, imagePlan) {
+      return preparePlatformSubmission(runtime, claim, imagePlan);
     },
     saveSession: function () {
       return runtime.lifecycle.saveState();

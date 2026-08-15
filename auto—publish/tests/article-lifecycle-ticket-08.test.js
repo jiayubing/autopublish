@@ -73,7 +73,7 @@ function admit(fixtureValue, input) {
   const articleId = value.articleId;
   const platformId = value.platformId || "toutiao";
   const accountProfileId = value.accountProfileId || "account-toutiao";
-  return fixtureValue.admission.admitRegularQueueItem({
+  const admission = {
     articleId,
     clientId: value.clientId || "client-a",
     articleRef: {
@@ -91,7 +91,10 @@ function admit(fixtureValue, input) {
       body: `Body ${articleId}`,
       fingerprint: "a".repeat(64),
     },
-  });
+  };
+  if (value.imageCount !== undefined)
+    admission.queueConfig = { imageCount: value.imageCount };
+  return fixtureValue.admission.admitRegularQueueItem(admission);
 }
 
 function evidence(claim, overrides) {
@@ -112,6 +115,30 @@ function evidence(claim, overrides) {
     },
     overrides || {},
   );
+}
+
+function imagePlan(imageCount) {
+  const images =
+    imageCount > 0
+      ? Array.from({ length: imageCount }, (_, index) =>
+          Object.freeze({
+            imageId: `client-image:fixture-image-${index}`,
+            name: `fixture-image-${index}.png`,
+            extension: ".png",
+            mimeType: "image/png",
+            width: 80,
+            height: 40,
+            size: 120,
+          }),
+        )
+      : [];
+  return Object.freeze({
+    requestedCount: imageCount,
+    selectedCount: images.length,
+    textOnly: images.length === 0,
+    images: Object.freeze(images),
+    warnings: Object.freeze([]),
+  });
 }
 
 function executorFor(prepare) {
@@ -480,6 +507,9 @@ test("production preparation port verifies the account profile before adapter pr
           : {}),
       }),
     },
+    regularImagePlanService: {
+      createPlan: async (request) => imagePlan(request.imageCount),
+    },
     adapters: [
       {
         id: "toutiao",
@@ -542,6 +572,9 @@ test("prepared browser submission rejects account drift before the remote bounda
             };
       },
     },
+    regularImagePlanService: {
+      createPlan: async (request) => imagePlan(request.imageCount),
+    },
     adapters: [
       {
         id: "toutiao",
@@ -600,6 +633,9 @@ test("queue execution does not begin remote submission when final account verifi
           };
         },
       },
+      regularImagePlanService: {
+        createPlan: async (request) => imagePlan(request.imageCount),
+      },
       adapters: [
         {
           id: "toutiao",
@@ -655,6 +691,9 @@ test("preparation resolves the Lieju profile by the claimed article client and p
   };
   const port = createRegularPlatformPreparationPort({
     accountInspector: { inspect: async () => ({ verified: true, accountProfileId: "account-a", remoteFingerprint: "fingerprint-a" }) },
+    regularImagePlanService: {
+      createPlan: async (request) => imagePlan(request.imageCount),
+    },
     resolveClientPublicationProfile: async (input) => {
       profileRequests.push(input);
       return input.clientId === "client-b"
@@ -680,6 +719,439 @@ test("preparation resolves the Lieju profile by the claimed article client and p
   });
   assert.equal(claims[0].publicationSnapshot.title, "Title B");
   assert.equal(claims[0].publicationSnapshot.body, "Body B");
+});
+
+test("preparation obtains one image plan after account verification and passes it through the common adapter seam", async () => {
+  const events = [];
+  const planRequests = [];
+  const adapterCalls = [];
+  const adapters = ["lieju", "toutiao", "hepan"].map((platformId) => ({
+    id: platformId,
+    async preparePlatformSubmission(claim, plan) {
+      events.push(`${platformId}:adapter`);
+      adapterCalls.push({ claim, plan });
+      return domain.createPreparedSubmission({
+        preparedSubmissionEvidenceV1:
+          domain.createTextOnlyPreparedSubmissionEvidenceV1(claim),
+        submitPreparedPublication: async () => ({ status: "accepted" }),
+      });
+    },
+  }));
+  const port = createRegularPlatformPreparationPort({
+    accountInspector: {
+      inspect: async (task) => {
+        events.push(
+          `${task.targetPlatformId}:inspect:${task.preserveCurrentPage}`,
+        );
+        return {
+          verified: true,
+          accountProfileId: task.accountProfileId,
+          remoteFingerprint: `fingerprint-${task.accountProfileId}`,
+        };
+      },
+    },
+    regularImagePlanService: {
+      createPlan: async (request) => {
+        events.push(`${request.clientId}:plan`);
+        planRequests.push(request);
+        return imagePlan(request.imageCount);
+      },
+    },
+    adapters,
+  });
+
+  for (const platformId of ["lieju", "toutiao", "hepan"]) {
+    const claim = {
+      platformId,
+      accountProfileId: `account-${platformId}`,
+      imageCount: 2,
+      regularPublicationAttemptId: `attempt-image-seam-${platformId}`,
+      articleIdentityV1: {
+        version: 1,
+        clientId: `client-${platformId}`,
+        articleId: `article-${platformId}`,
+      },
+      targetIdentityV1: {
+        version: 1,
+        kind: "platform",
+        platformId,
+        accountProfileId: `account-${platformId}`,
+      },
+      publicationSnapshot: { title: "Title", body: "Body" },
+    };
+    const prepared = await port.preparePlatformSubmission(claim);
+    assert.deepEqual(
+      {
+        deliveryMode: prepared.preparedSubmissionEvidenceV1.deliveryMode,
+        images: prepared.preparedSubmissionEvidenceV1.images,
+        decisionKind: prepared.preparedSubmissionEvidenceV1.decisionKind,
+      },
+      { deliveryMode: "text_only", images: [], decisionKind: "initial" },
+    );
+  }
+
+  assert.deepEqual(planRequests, [
+    { clientId: "client-lieju", imageCount: 2 },
+    { clientId: "client-toutiao", imageCount: 2 },
+    { clientId: "client-hepan", imageCount: 2 },
+  ]);
+  assert.deepEqual(
+    events,
+    [
+      "lieju:inspect:false",
+      "client-lieju:plan",
+      "lieju:adapter",
+      "lieju:inspect:true",
+      "toutiao:inspect:false",
+      "client-toutiao:plan",
+      "toutiao:adapter",
+      "toutiao:inspect:true",
+      "hepan:inspect:false",
+      "client-hepan:plan",
+      "hepan:adapter",
+      "hepan:inspect:true",
+    ],
+  );
+  assert.equal(adapterCalls.length, 3);
+  for (const call of adapterCalls) {
+    assert.equal(call.plan.requestedCount, 2);
+    assert.equal("imagePlan" in call.claim, false);
+    assert.equal("images" in call.claim, false);
+  }
+});
+
+test("recoverable image-plan faults downgrade to text-only before the submission boundary", async () => {
+  const current = fixture();
+  let planCalls = 0;
+  let submissions = 0;
+  const beginCalls = [];
+  try {
+    const profile = addProfile(current, "toutiao");
+    const admitted = admit(current, {
+      articleId: "article-image-plan-recoverable",
+      accountProfileId: profile.accountProfileId,
+      imageCount: 3,
+    });
+    const transitions = Object.fromEntries(
+      Object.keys(current.transitions).map((method) => [
+        method,
+        current.transitions[method],
+      ]),
+    );
+    transitions.beginRegularRemoteSubmission = (input) => {
+      beginCalls.push(input);
+      return current.transitions.beginRegularRemoteSubmission(input);
+    };
+    const port = createRegularPlatformPreparationPort({
+      accountInspector: {
+        inspect: async () => ({
+          verified: true,
+          accountProfileId: profile.accountProfileId,
+          remoteFingerprint: "fingerprint-image-plan-recoverable",
+        }),
+      },
+      regularImagePlanService: {
+        createPlan: async () => {
+          planCalls += 1;
+          const error = new Error("temporary image directory read failure");
+          error.code = "EIO";
+          throw error;
+        },
+      },
+      adapters: [
+        {
+          id: "toutiao",
+          async preparePlatformSubmission(claim, plan) {
+            assert.deepEqual(plan, {
+              requestedCount: 3,
+              selectedCount: 0,
+              textOnly: true,
+              images: [],
+              warnings: [
+                { code: "REGULAR_IMAGE_PLAN_UNAVAILABLE", stage: "selection" },
+              ],
+            });
+            return domain.createPreparedSubmission({
+              preparedSubmissionEvidenceV1:
+                domain.createTextOnlyPreparedSubmissionEvidenceV1(claim),
+              submitPreparedPublication: async () => {
+                submissions += 1;
+                return { status: "accepted", remoteId: "text-only-accepted" };
+              },
+            });
+          },
+        },
+      ],
+    });
+    const orchestrator = createRegularQueueGroupOrchestrator({
+      regularQueueGroupTransitions: transitions,
+      platformSubmissionExecutor: port,
+    });
+
+    const result = await orchestrator.startGroup({
+      queueGroupId: admitted.queueGroupId,
+    });
+
+    assert.equal(result.status, "observation_ready");
+    assert.equal(result.observation.status, "accepted");
+    assert.equal(planCalls, 1);
+    assert.equal(submissions, 1);
+    assert.equal(beginCalls.length, 1);
+    assert.deepEqual(
+      {
+        deliveryMode: beginCalls[0].preparedSubmissionEvidenceV1.deliveryMode,
+        images: beginCalls[0].preparedSubmissionEvidenceV1.images,
+        decisionKind: beginCalls[0].preparedSubmissionEvidenceV1.decisionKind,
+      },
+      { deliveryMode: "text_only", images: [], decisionKind: "initial" },
+    );
+  } finally {
+    current.close();
+  }
+});
+
+test("adapter image preparation may retain only actual successful images or continue as text", async () => {
+  for (const scenario of [
+    {
+      name: "partial",
+      expected: {
+        deliveryMode: "with_images",
+        images: [
+          {
+            assetFingerprint: "b".repeat(64),
+            layoutSlot: 7,
+          },
+        ],
+      },
+    },
+    {
+      name: "all-failed",
+      expected: { deliveryMode: "text_only", images: [] },
+    },
+  ]) {
+    const current = fixture();
+    const beginCalls = [];
+    try {
+      const profile = addProfile(current, "toutiao");
+      const admitted = admit(current, {
+        articleId: `article-image-adapter-${scenario.name}`,
+        accountProfileId: profile.accountProfileId,
+        imageCount: 2,
+      });
+      const transitions = Object.fromEntries(
+        Object.keys(current.transitions).map((method) => [
+          method,
+          current.transitions[method],
+        ]),
+      );
+      transitions.beginRegularRemoteSubmission = (input) => {
+        beginCalls.push(input);
+        return current.transitions.beginRegularRemoteSubmission(input);
+      };
+      const port = createRegularPlatformPreparationPort({
+        accountInspector: {
+          inspect: async () => ({
+            verified: true,
+            accountProfileId: profile.accountProfileId,
+            remoteFingerprint: `fingerprint-image-adapter-${scenario.name}`,
+          }),
+        },
+        regularImagePlanService: {
+          createPlan: async (request) => imagePlan(request.imageCount),
+        },
+        adapters: [
+          {
+            id: "toutiao",
+            async preparePlatformSubmission(claim, plan) {
+              assert.equal(plan.selectedCount, 2);
+              const preparedEvidence = evidence(claim, {
+                deliveryMode: scenario.expected.deliveryMode,
+                images: scenario.expected.images,
+              });
+              return domain.createPreparedSubmission({
+                preparedSubmissionEvidenceV1: preparedEvidence,
+                submitPreparedPublication: async () => ({
+                  status: "accepted",
+                  remoteId: `image-adapter-${scenario.name}`,
+                }),
+              });
+            },
+          },
+        ],
+      });
+      const orchestrator = createRegularQueueGroupOrchestrator({
+        regularQueueGroupTransitions: transitions,
+        platformSubmissionExecutor: port,
+      });
+
+      const result = await orchestrator.startGroup({
+        queueGroupId: admitted.queueGroupId,
+      });
+
+      assert.equal(result.observation.status, "accepted");
+      assert.equal(beginCalls.length, 1);
+      assert.deepEqual(
+        {
+          deliveryMode:
+            beginCalls[0].preparedSubmissionEvidenceV1.deliveryMode,
+          images: beginCalls[0].preparedSubmissionEvidenceV1.images,
+          decisionKind:
+            beginCalls[0].preparedSubmissionEvidenceV1.decisionKind,
+        },
+        { ...scenario.expected, decisionKind: "initial" },
+      );
+    } finally {
+      current.close();
+    }
+  }
+});
+
+test("unexpected image-plan faults end preparation before the remote boundary", async () => {
+  const current = fixture();
+  let planCalls = 0;
+  let adapterCalls = 0;
+  let beginCalls = 0;
+  try {
+    const profile = addProfile(current, "toutiao");
+    const admitted = admit(current, {
+      articleId: "article-image-plan-before-boundary",
+      accountProfileId: profile.accountProfileId,
+      imageCount: 1,
+    });
+    const transitions = Object.fromEntries(
+      Object.keys(current.transitions).map((method) => [
+        method,
+        current.transitions[method],
+      ]),
+    );
+    transitions.beginRegularRemoteSubmission = (input) => {
+      beginCalls += 1;
+      return current.transitions.beginRegularRemoteSubmission(input);
+    };
+    const port = createRegularPlatformPreparationPort({
+      accountInspector: {
+        inspect: async () => ({
+          verified: true,
+          accountProfileId: profile.accountProfileId,
+          remoteFingerprint: "fingerprint-image-plan-before-boundary",
+        }),
+      },
+      regularImagePlanService: {
+        createPlan: async () => {
+          planCalls += 1;
+          const error = new Error("image plan contract violated");
+          error.code = "REGULAR_IMAGE_PLAN_LIBRARY_RESULT_INVALID";
+          throw error;
+        },
+      },
+      adapters: [
+        {
+          id: "toutiao",
+          async preparePlatformSubmission() {
+            adapterCalls += 1;
+            throw new Error("adapter must not run");
+          },
+        },
+      ],
+    });
+    const orchestrator = createRegularQueueGroupOrchestrator({
+      regularQueueGroupTransitions: transitions,
+      platformSubmissionExecutor: port,
+    });
+
+    await assert.rejects(
+      orchestrator.startGroup({ queueGroupId: admitted.queueGroupId }),
+      { code: "REGULAR_IMAGE_PLAN_LIBRARY_RESULT_INVALID" },
+    );
+
+    assert.equal(planCalls, 1);
+    assert.equal(adapterCalls, 0);
+    assert.equal(beginCalls, 0);
+    assert.equal(
+      current.transitions.listRegularQueueGroupSnapshots({})[0].current.phase,
+      "prepared",
+    );
+  } finally {
+    current.close();
+  }
+});
+
+test("post-boundary submission faults stay uncertain without reselecting images or resubmitting", async () => {
+  const current = fixture();
+  let planCalls = 0;
+  let submissions = 0;
+  let beginCalls = 0;
+  try {
+    const profile = addProfile(current, "toutiao");
+    const admitted = admit(current, {
+      articleId: "article-image-plan-after-boundary",
+      accountProfileId: profile.accountProfileId,
+      imageCount: 2,
+    });
+    const transitions = Object.fromEntries(
+      Object.keys(current.transitions).map((method) => [
+        method,
+        current.transitions[method],
+      ]),
+    );
+    transitions.beginRegularRemoteSubmission = (input) => {
+      beginCalls += 1;
+      return current.transitions.beginRegularRemoteSubmission(input);
+    };
+    const port = createRegularPlatformPreparationPort({
+      accountInspector: {
+        inspect: async () => ({
+          verified: true,
+          accountProfileId: profile.accountProfileId,
+          remoteFingerprint: "fingerprint-image-plan-after-boundary",
+        }),
+      },
+      regularImagePlanService: {
+        createPlan: async (request) => {
+          planCalls += 1;
+          return imagePlan(request.imageCount);
+        },
+      },
+      adapters: [
+        {
+          id: "toutiao",
+          async preparePlatformSubmission(claim) {
+            return domain.createPreparedSubmission({
+              preparedSubmissionEvidenceV1:
+                domain.createTextOnlyPreparedSubmissionEvidenceV1(claim),
+              submitPreparedPublication: async () => {
+                submissions += 1;
+                throw new Error("remote response lost after submission");
+              },
+            });
+          },
+        },
+      ],
+    });
+    const orchestrator = createRegularQueueGroupOrchestrator({
+      regularQueueGroupTransitions: transitions,
+      platformSubmissionExecutor: port,
+    });
+
+    const result = await orchestrator.startGroup({
+      queueGroupId: admitted.queueGroupId,
+    });
+    const replay = await orchestrator.startGroup({
+      queueGroupId: admitted.queueGroupId,
+    });
+
+    assert.equal(result.observation.status, "uncertain");
+    assert.equal(replay.status, "idle");
+    assert.equal(planCalls, 1);
+    assert.equal(submissions, 1);
+    assert.equal(beginCalls, 1);
+    assert.equal(
+      current.transitions.listRegularQueueGroupSnapshots({})[0].current.phase,
+      "remote_call_started",
+    );
+  } finally {
+    current.close();
+  }
 });
 
 test("start all skips manually paused groups and pause all preserves the in-flight request", async () => {
@@ -1331,6 +1803,7 @@ test("Hepan production preparation owns temporary credential cleanup", async () 
   let cookieCreations = 0;
   let expiredCleanups = 0;
   let preparedRuntime = null;
+  let receivedImagePlan = null;
   let rejectSubmission = false;
   const claim = {
     platformId: "hepan",
@@ -1381,18 +1854,31 @@ test("Hepan production preparation owns temporary credential cleanup", async () 
     createHepanAdapter: (options) => {
       preparedRuntime = options.runtime;
       return {
-        preparePlatformSubmission: async () =>
-          domain.createPreparedSubmission({
+        preparePlatformSubmission: async (preparedClaim, imagePlanInput) => {
+          assert.strictEqual(preparedClaim, claim);
+          receivedImagePlan = imagePlanInput;
+          return domain.createPreparedSubmission({
             preparedSubmissionEvidenceV1: preparedEvidence,
             submitPreparedPublication: async () => {
               if (rejectSubmission) throw new Error("synthetic submit failure");
               return { status: "accepted" };
             },
-          }),
+          });
+        },
       };
     },
   });
-  const prepared = await adapter.preparePlatformSubmission(claim);
+  const selectedPlan = imagePlan(1);
+  const prepared = await adapter.preparePlatformSubmission(claim, selectedPlan);
+  assert.strictEqual(receivedImagePlan, selectedPlan);
+  assert.deepEqual(
+    {
+      deliveryMode: prepared.preparedSubmissionEvidenceV1.deliveryMode,
+      images: prepared.preparedSubmissionEvidenceV1.images,
+      decisionKind: prepared.preparedSubmissionEvidenceV1.decisionKind,
+    },
+    { deliveryMode: "text_only", images: [], decisionKind: "initial" },
+  );
   assert.equal(expiredCleanups, 2);
   assert.equal(cookieCreations, 0);
   assert.equal(cookieCleanups, 0);

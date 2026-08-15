@@ -37,6 +37,26 @@ function claim(platformId) {
   return value;
 }
 
+function imagePlan() {
+  return Object.freeze({
+    requestedCount: 1,
+    selectedCount: 1,
+    textOnly: false,
+    images: Object.freeze([
+      Object.freeze({
+        imageId: "client-image:adapter-contract",
+        name: "adapter-contract.png",
+        extension: ".png",
+        mimeType: "image/png",
+        width: 80,
+        height: 40,
+        size: 120,
+      }),
+    ]),
+    warnings: Object.freeze([]),
+  });
+}
+
 function createLiejuPageFixture(options) {
   const value = options || {};
   const fields = {};
@@ -396,7 +416,18 @@ test("Hepan accepted result carries a closed safe remote identity", async () => 
         stderr: "",
       }),
     });
-    const prepared = await adapter.preparePlatformSubmission(claim("hepan"));
+    const prepared = await adapter.preparePlatformSubmission(
+      claim("hepan"),
+      imagePlan(),
+    );
+    assert.deepEqual(
+      {
+        deliveryMode: prepared.preparedSubmissionEvidenceV1.deliveryMode,
+        images: prepared.preparedSubmissionEvidenceV1.images,
+        decisionKind: prepared.preparedSubmissionEvidenceV1.decisionKind,
+      },
+      { deliveryMode: "text_only", images: [], decisionKind: "initial" },
+    );
     assert.deepEqual(await prepared.submitPreparedPublication(), {
       status: "accepted",
       remoteId: "hepan-safe-1",
@@ -454,9 +485,20 @@ test("Lieju fills the customer publication profile through browser page actions"
   const pageFixture = createLiejuPageFixture();
   const loaded = loadBrowserAdapter("lieju", { pageFixture });
   try {
-    await loaded.adapter.preparePlatformSubmission(Object.assign(claim("lieju"), {
-      publicationProfile: { city: "上海", contact: "张三", phone: "13800138000" },
-    }));
+    const prepared = await loaded.adapter.preparePlatformSubmission(
+      Object.assign(claim("lieju"), {
+        publicationProfile: { city: "上海", contact: "张三", phone: "13800138000" },
+      }),
+      imagePlan(),
+    );
+    assert.deepEqual(
+      {
+        deliveryMode: prepared.preparedSubmissionEvidenceV1.deliveryMode,
+        images: prepared.preparedSubmissionEvidenceV1.images,
+        decisionKind: prepared.preparedSubmissionEvidenceV1.decisionKind,
+      },
+      { deliveryMode: "text_only", images: [], decisionKind: "initial" },
+    );
     assert.deepEqual(pageFixture.fields, {
       title: "合成标题",
       body: "合成正文",
@@ -597,6 +639,15 @@ for (const platformId of ["lieju", "toutiao"]) {
           : loaded.adapter;
       const prepared = await adapter.preparePlatformSubmission(
         claim(platformId),
+        imagePlan(),
+      );
+      assert.deepEqual(
+        {
+          deliveryMode: prepared.preparedSubmissionEvidenceV1.deliveryMode,
+          images: prepared.preparedSubmissionEvidenceV1.images,
+          decisionKind: prepared.preparedSubmissionEvidenceV1.decisionKind,
+        },
+        { deliveryMode: "text_only", images: [], decisionKind: "initial" },
       );
       assert.deepEqual(await prepared.submitPreparedPublication(), {
         status: "uncertain",

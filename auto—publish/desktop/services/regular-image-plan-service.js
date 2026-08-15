@@ -95,6 +95,12 @@ function emptyPlan(requestedCount, warnings) {
   });
 }
 
+function unavailablePlan(requestedCount) {
+  return emptyPlan(requestedCount, [
+    safeWarning("REGULAR_IMAGE_PLAN_UNAVAILABLE", "selection"),
+  ]);
+}
+
 function isRecoverableImageLibraryFailure(error) {
   return Boolean(
     error &&
@@ -120,9 +126,7 @@ function createRegularImagePlanService(options) {
       });
     } catch (error) {
       if (!isRecoverableImageLibraryFailure(error)) throw error;
-      return emptyPlan(request.imageCount, [
-        safeWarning("REGULAR_IMAGE_PLAN_UNAVAILABLE", "selection"),
-      ]);
+      return unavailablePlan(request.imageCount);
     }
     if (!selection || !Array.isArray(selection.images))
       throw fail("REGULAR_IMAGE_PLAN_LIBRARY_RESULT_INVALID");
@@ -149,4 +153,8 @@ function createRegularImagePlanService(options) {
   return Object.freeze({ createPlan });
 }
 
-module.exports = { createRegularImagePlanService };
+module.exports = {
+  createRegularImagePlanService,
+  isRecoverableImageLibraryFailure,
+  unavailablePlan,
+};

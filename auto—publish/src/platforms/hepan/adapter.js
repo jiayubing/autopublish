@@ -670,7 +670,7 @@ function createHepanAdapter(options) {
     }
   }
 
-  async function preparePlatformSubmission(claim) {
+  async function preparePlatformSubmission(claim, imagePlan) {
     const evidence = domain.createTextOnlyPreparedSubmissionEvidenceV1(claim);
     const config = runtime();
     if (!config.pythonPath) {

@@ -606,6 +606,7 @@ async function createWorkspaceRuntimeComposition(deps) {
         {
           adapters: regularPlatformAdapters,
           accountInspector,
+          regularImagePlanService,
           resolveClientPublicationProfile: function(input) {
             if (!input || input.platformId !== "lieju") return undefined;
             return require("../../src/content/client-knowledge").getLiejuPublicationProfile(
