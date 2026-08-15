@@ -223,7 +223,6 @@ function installDesktopFixture(page, scenario) {
             blockedResources: [],
             submitableResources: [],
           }),
-        stopSubmit: () => ok({ stopped: true }),
         refreshResources: () =>
           ok({
             status: "complete",
@@ -273,15 +272,8 @@ function installDesktopFixture(page, scenario) {
         removeFromPool: () => ok({ completed: true }),
         getBalance: () => ok({ balance: "0" }),
       };
-      const platformStatus = {
-        isBatchRunning: false,
-        isStopPending: false,
-        isPlatformRunning: false,
-      };
       const platforms = {
         getQueue: () => ok({ platforms: [], queue: [] }),
-        getState: () => ok(platformStatus),
-        onState: () => () => {},
       };
       const orders = {
         getOrders: () => ok({ items: [] }),

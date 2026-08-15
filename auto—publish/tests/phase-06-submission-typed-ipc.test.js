@@ -3,10 +3,6 @@ const assert = require("node:assert/strict");
 
 const { createContractRegistry } = require("../desktop/ipc/contracts/registry");
 const {
-  submissionBatchContracts,
-  submissionBatchContractFixtures,
-} = require("../desktop/ipc/contracts/submission-batch-contracts");
-const {
   submissionMaintenanceContracts,
   submissionMaintenanceContractFixtures,
 } = require("../desktop/ipc/contracts/submission-maintenance-contracts");
@@ -23,13 +19,11 @@ const {
 } = require("../desktop/ipc/content-submission-ipc");
 
 const submissionContracts = Object.freeze([
-  ...submissionBatchContracts,
   ...submissionMaintenanceContracts,
   ...submissionRegularContracts,
   ...submissionPaidMediaContracts,
 ]);
 const submissionContractFixtures = Object.freeze([
-  ...submissionBatchContractFixtures,
   ...submissionMaintenanceContractFixtures,
   ...submissionRegularContractFixtures,
   ...submissionPaidMediaContractFixtures,
@@ -104,14 +98,13 @@ test("ordinary submission mutations have independent legal fixtures", () => {
 
 test("destructive submission prepare-execute capabilities have independent fixtures", () => {
   const channels = new Set([
-    "content:cancel-submission-batch",
     "content:preview-trashed-article-queue-residue",
     "content:cleanup-trashed-article-queue-residue",
   ]);
   const fixtures = submissionContractFixtures.filter((entry) =>
     channels.has(entry.channel),
   );
-  assert.equal(fixtures.length, 3);
+  assert.equal(fixtures.length, 2);
   for (const fixture of fixtures) {
     const contract = registry.byChannel(fixture.channel);
     assert.ok(contract, fixture.channel);
@@ -132,46 +125,6 @@ test("destructive submission prepare-execute capabilities have independent fixtu
       fixture.result,
     );
   }
-});
-
-test("destructive execution requires confirmation and preserves only preview identity", async () => {
-  const handlers = new Map();
-  let received;
-  registerContentSubmissionIpc({
-    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
-    contentSubmissionService: {
-      cancelBatch: (input) => {
-        received = input;
-        return {
-          batchId: "batch-1",
-          planId: "plan-1",
-          cancelledCount: 1,
-          idempotentCount: 0,
-          skippedCount: 0,
-          batchStatus: "cancelled",
-          changedScopes: ["articleManagement"],
-          items: [],
-        };
-      },
-    },
-  });
-  const denied = await handlers.get("content:cancel-submission-batch")(null, {
-    batchId: "batch-1",
-    planId: "plan-1",
-    confirmed: false,
-  });
-  const executed = await handlers.get("content:cancel-submission-batch")(null, {
-    batchId: "batch-1",
-    planId: "plan-1",
-    confirmed: true,
-  });
-  assert.equal(denied.ok, false);
-  assert.deepEqual(received, {
-    batchId: "batch-1",
-    planId: "plan-1",
-    confirmed: true,
-  });
-  assert.equal(executed.ok, true);
 });
 
 test("residue public contracts reject retired cleanup vocabulary", () => {

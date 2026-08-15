@@ -960,10 +960,6 @@ test("production submission surfaces do not retain retired orchestration paths",
   const root = path.resolve(__dirname, "..");
   const sources = [
     fs.readFileSync(
-      path.join(root, "desktop", "ipc", "publication-ipc.js"),
-      "utf8",
-    ),
-    fs.readFileSync(
       path.join(root, "desktop", "ipc", "platform-ipc.js"),
       "utf8",
     ),

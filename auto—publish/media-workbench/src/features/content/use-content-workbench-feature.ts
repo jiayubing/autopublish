@@ -45,17 +45,6 @@ import {
   restoreContentArticle,
   trashContentArticles,
 } from "../../bridge/content-removal";
-import {
-  prepareRegularUncertainResolution,
-  confirmRegularAccepted,
-  confirmRegularNotAccepted,
-} from "../../bridge/publication";
-import {
-  prepareBindPaidOrderNumber,
-  bindPaidOrderNumber,
-  prepareConfirmPaidOrderAbsent,
-  confirmPaidOrderAbsent,
-} from "../../bridge/media";
 import type { DoubaoBatchTask } from "../../types/content";
 import type { GeneratedContentArticle } from "../../types/generation";
 import {
@@ -88,9 +77,6 @@ export function useContentWorkbenchFeature() {
         article: GeneratedContentArticle;
         expectedFingerprint: string;
       }) => saveContentArticle(input.article, input.expectedFingerprint),
-      prepareRegularUncertainResolution,
-      confirmRegularAccepted,
-      confirmRegularNotAccepted,
       collectDoubaoQuestion,
       startPreparedDoubaoBatch: (input: { tasks: DoubaoBatchTask[] }) =>
         startPreparedDoubaoBatch(input.tasks),
@@ -106,10 +92,6 @@ export function useContentWorkbenchFeature() {
       startPaidMediaBatch,
       pausePaidMediaBatch,
       cancelRemainingPaidMediaBatchItems,
-      prepareBindPaidOrderNumber,
-      bindPaidOrderNumber,
-      prepareConfirmPaidOrderAbsent,
-      confirmPaidOrderAbsent,
       previewContentArticleRemoval: (input: {
         selections: Array<{ clientId: string; articleId: string }>;
       }) => previewContentArticleRemoval(input.selections),

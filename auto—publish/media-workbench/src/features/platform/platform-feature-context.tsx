@@ -1,15 +1,10 @@
-import { createContext, useContext, useEffect, useRef, useSyncExternalStore } from 'react';
+import { createContext, useContext, useRef, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
 import {
   checkPlatformLogin,
   getPlatformDisplayName,
   getPlatformQueue,
-  getPlatformState,
-  onPlatformState,
-  onPlatformStateDiagnostic,
   openPlatformLogin,
-  pausePlatformSubmit,
-  stopPlatformSubmit,
 } from '../../bridge/platform';
 import {
   cleanupTrashedArticleQueueResidue,
@@ -27,7 +22,6 @@ import {
   startRegularQueueGroup,
 } from '../../bridge/content';
 import { createPlatformFeature } from './platform-feature.js';
-import { routePlatformTransportEvent } from './platform-event-router.js';
 
 type PlatformFeature = ReturnType<typeof createPlatformFeature>;
 
@@ -37,11 +31,6 @@ function createProductionPlatformFeature(): PlatformFeature {
   return createPlatformFeature({
     platformDisplayName: getPlatformDisplayName,
     loadQueue: (_reason: string) => getPlatformQueue(),
-    getRunState: getPlatformState,
-    onRunState: (listener) => onPlatformState((state) =>
-      routePlatformTransportEvent(state, listener, reportRuntimeDiagnostic)),
-    pause: pausePlatformSubmit,
-    stop: stopPlatformSubmit,
     previewResidue: previewTrashedArticleQueueResidue,
     cleanupResidue: cleanupTrashedArticleQueueResidue,
     openLogin: openPlatformLogin,
@@ -76,13 +65,6 @@ export function PlatformFeatureProvider({ children }: { children: ReactNode }) {
       reportRuntimeDiagnostic('PLATFORM_REGULAR_GROUP_REFRESH_FAILED', 'platform-event');
     });
   });
-
-  useEffect(() => {
-    const disposeDiagnostic = onPlatformStateDiagnostic(() =>
-      reportRuntimeDiagnostic('PLATFORM_EVENT_TRANSPORT_REJECTED', 'platform-event'));
-    void feature.start();
-    return () => { disposeDiagnostic(); feature.stopTransport(); };
-  }, [feature]);
 
   return <PlatformFeatureContext.Provider value={feature}>{children}</PlatformFeatureContext.Provider>;
 }

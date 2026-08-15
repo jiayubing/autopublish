@@ -6,7 +6,6 @@ const ACTIVE_SUBMISSION_STATUSES = new Set([
   "remote_started",
   "reserving",
   "paid_processing",
-  "submitting",
 ]);
 const TERMINAL_SUBMISSION_STATUSES = new Set(["failed", "cancelled"]);
 const ACTIVE_ORDER_STATUSES = new Set(["0", "1"]);

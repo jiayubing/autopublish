@@ -91,7 +91,7 @@ test("restarted composition rebuilds uncertain attention from OperationalStore w
       item.accountProfileId,
       second.operationalStore.listPublicationAttention()[0].accountProfileId,
     );
-    assert.deepEqual(item.allowedActions, ["open-publication"]);
+    assert.deepEqual(item.allowedActions, ["open-publication", "inspect"]);
     const before = second.operationalStore.listPublicationRecords({
       articleIds: ["article-1"],
     });

@@ -1,5 +1,4 @@
 const { wrap } = require("../services/ipc-response");
-const { projectSubmissionBatchResult } = require("./contracts/submission-batch-contracts");
 const {
   projectSubmissionResiduePreview,
   projectSubmissionResidueResult,
@@ -33,14 +32,6 @@ function createSubmissionInterface(service, regularQueueService, regularQueueGro
       previewBatch: bind(service, "previewBatch"),
       createBatch: bind(service, "createBatch"),
       listPlatforms: bind(service, "listPlatforms"),
-    },
-    batch: {
-      buildActionPlan: bind(service, "buildSubmissionActionPlan"),
-      previewCancel: bind(service, "previewCancelBatch"),
-      cancel: bind(service, "cancelBatch"),
-      get: bind(service, "getBatch"),
-      list: bind(service, "listBatches"),
-      reconcile: bind(service, "reconcileBatch"),
     },
     cleanup: {
       previewResidue: bind(service, "previewTrashedArticleQueueResidue"),
@@ -190,43 +181,6 @@ function registerContentSubmissionIpc(deps) {
     );
   const paidMedia = deps.paidMediaPreflightService || deps.paidMediaPreflight;
   const paidExecution = deps.paidMediaExecutionService;
-  function batchInput(input, confirmed) {
-    if (
-      !input ||
-      typeof input !== "object" ||
-      Object.keys(input).some(function (key) {
-        return (
-          [
-            "clientId",
-            "articleIds",
-            "confirmed",
-            "batchId",
-            "planId",
-          ].indexOf(key) === -1
-        );
-      })
-    ) {
-      const e = new Error("Invalid content submission batch input");
-      e.code = "CONTENT_SUBMISSION_BATCH_INPUT_INVALID";
-      throw e;
-    }
-    if (confirmed && input.confirmed !== true) {
-      const e = new Error("Batch confirmation is required");
-      e.code = "CONTENT_SUBMISSION_CONFIRMATION_REQUIRED";
-      throw e;
-    }
-    return input;
-  }
-  deps.ipcMain.handle(
-    "content:cancel-submission-batch",
-    function (event, input) {
-      return wrap(function () {
-        return projectSubmissionBatchResult(
-          workflow.batch.cancel(batchInput(input, true)),
-        );
-      });
-    },
-  );
   deps.ipcMain.handle(
     "content:preview-trashed-article-queue-residue",
     function () {

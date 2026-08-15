@@ -188,7 +188,6 @@ function registerIpc(deps) {
       articleAttentionQuery: modules.attention.query,
       publishedArchiveQueries: values.publishedArchiveQueries,
     }));
-    modules.publication = require("./publication-ipc").registerPublicationIpc(guarded);
     modules.doubao = require("./doubao-collection-ipc").registerDoubaoCollectionIpc(guarded);
     modules.diagnostics = require("./runtime-diagnostics-ipc").registerRuntimeDiagnosticsIpc(guarded);
     if (values.storageMaintenanceService) {

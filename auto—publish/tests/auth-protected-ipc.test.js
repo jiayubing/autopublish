@@ -12,7 +12,7 @@ describe("protected business IPC", function() {
       throw error;
     });
     let handler;
-    guarded.handle("platforms:get-state", () => { invoked = true; return { ok: true }; });
+    guarded.handle("platforms:get-queue", () => { invoked = true; return { ok: true }; });
     handler = guarded.lastHandler;
     const response = await handler({}, undefined);
     assert.equal(response.ok, false);
@@ -27,7 +27,7 @@ describe("protected business IPC", function() {
       error.code = "AUTH_SERVICE_UNAVAILABLE";
       throw error;
     });
-    guarded.handle("platforms:get-state", () => { invoked = true; return { ok: true }; });
+    guarded.handle("platforms:get-queue", () => { invoked = true; return { ok: true }; });
     const response = await guarded.lastHandler({}, undefined);
     assert.equal(response.ok, false);
     assert.deepEqual(response.error, {

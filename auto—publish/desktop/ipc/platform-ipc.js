@@ -14,9 +14,6 @@ function registerPlatformIpc(deps) {
   ipcMain.handle("platforms:get-queue", () => invoke(() => application.getQueue()));
   ipcMain.handle("platforms:open-login", (event, input) => invoke(() => application.openLogin(input)));
   ipcMain.handle("platforms:check-login", (event, input) => invoke(() => application.checkLogin(input)));
-  ipcMain.handle("platforms:pause-submit", (event, input) => invoke(() => application.pauseSubmit(input)));
-  ipcMain.handle("platforms:stop-submit", (event, input) => invoke(() => application.stopSubmit(input)));
-  ipcMain.handle("platforms:get-state", () => invoke(() => application.getState()));
 
   return { application };
 }

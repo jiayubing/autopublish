@@ -22,7 +22,6 @@ const ARCHIVE_FILES = [
   "desktop/services/content-generation-batch-service.js",
   "desktop/ai-provider-config-store.js",
   "desktop/ipc/content-generation-batch-ipc.js",
-  "desktop/ipc/publication-ipc.js",
   "desktop/ipc/runtime-diagnostics-ipc.js",
   "desktop/services/publication-submission-orchestrator.js",
   "desktop/services/platform-workbench/command-preparer.js",

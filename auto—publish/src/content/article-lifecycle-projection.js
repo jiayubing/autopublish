@@ -176,7 +176,7 @@ function deriveArticleLifecycle(input) {
   // Orders in this projection are website-media lifecycle facts. Keep the
   // freeze keyed by the order's trusted identity and supplier state even when
   // a legacy/malformed observation lost its target fields; otherwise the
-  // article could be edited and submitted again while an order is active.
+  // article could be edited and posted again while an order is active.
   const hasActiveOrder = orders.some(
     (order) => isKnownOrder(order) && ["0", "1"].includes(orderStatusOf(order)),
   );

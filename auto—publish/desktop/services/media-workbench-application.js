@@ -125,19 +125,8 @@ function createMediaWorkbenchApplication(options) {
         })
       : null);
   const paidMediaBatchOrchestrator = values.paidMediaBatchOrchestrator || null;
-  const paidOrderCreationResolutionService =
-    values.paidOrderCreationResolutionService || null;
   const invalidateData =
     typeof values.invalidateData === "function" ? values.invalidateData : null;
-
-  function resolutionService() {
-    if (!paidOrderCreationResolutionService) {
-      const error = new Error("Paid order resolution is unavailable");
-      error.code = "PAID_ORDER_RESOLUTION_UNAVAILABLE";
-      throw error;
-    }
-    return paidOrderCreationResolutionService;
-  }
 
   function cancellationService() {
     if (!orderCancellationService) {
@@ -156,13 +145,6 @@ function createMediaWorkbenchApplication(options) {
             orderId: order.orderNid,
           })
         : null,
-    });
-  }
-
-  function resolved(command) {
-    return Promise.resolve(command()).then((result) => {
-      if (invalidateData) invalidateData("PAID_ORDER_RESOLUTION_CHANGED");
-      return result;
     });
   }
 
@@ -315,14 +297,6 @@ function createMediaWorkbenchApplication(options) {
           };
         });
     },
-    prepareBindPaidOrderNumber: (input) =>
-      resolutionService().prepareBindOrderNumber(input || {}),
-    bindPaidOrderNumber: (input) =>
-      resolved(() => resolutionService().bindOrderNumber(input || {})),
-    prepareConfirmPaidOrderAbsent: (input) =>
-      resolutionService().prepareConfirmNoOrder(input || {}),
-    confirmPaidOrderAbsent: (input) =>
-      resolved(() => resolutionService().confirmNoOrder(input || {})),
     // The attention center needs the operational identity that the public
     // media order projection intentionally omits.
     listOrderAttention: () => orderService.listOrderViews(),

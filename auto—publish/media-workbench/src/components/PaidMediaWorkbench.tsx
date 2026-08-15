@@ -5,6 +5,9 @@ import type { PaidMediaExecutionBatch } from "../types/publication";
 
 export interface PaidMediaWorkbenchProps {
   content: ContentWorkbenchFeature;
+  onStartPaidMediaBatch: ContentWorkbenchFeature["commands"]["startPaidMediaBatch"];
+  onPausePaidMediaBatch: ContentWorkbenchFeature["commands"]["pausePaidMediaBatch"];
+  onCancelRemainingPaidMediaBatchItems: ContentWorkbenchFeature["commands"]["cancelRemainingPaidMediaBatchItems"];
 }
 
 function messageOf(value: unknown, fallback: string): string {
@@ -31,46 +34,23 @@ function itemLabel(batch: PaidMediaExecutionBatch): string {
 
 export default function PaidMediaWorkbench({
   content,
+  onStartPaidMediaBatch,
+  onPausePaidMediaBatch,
+  onCancelRemainingPaidMediaBatchItems,
 }: PaidMediaWorkbenchProps) {
   const { paidMediaExecution, scope } = content.snapshot;
   const [actionError, setActionError] = useState("");
   const commandStates = content.snapshot.commands;
-  const batches = paidMediaExecution.items || [];
+  const batches: PaidMediaExecutionBatch[] = Array.isArray(
+    paidMediaExecution.items,
+  )
+    ? paidMediaExecution.items
+    : [];
   const queryError = paidMediaExecution.query.error?.userMessage;
 
   const refresh = async () => {
     setActionError("");
     await content.refreshPaidMediaBatches("paid-manual");
-  };
-
-  const startBatch = async (batchId: string) => {
-    if (commandStates.startPaidMediaBatch?.busy) return;
-    setActionError("");
-    try {
-      await content.commands.startPaidMediaBatch({ batchId });
-    } catch (value) {
-      setActionError(messageOf(value, "启动付费投稿批次失败。"));
-    }
-  };
-
-  const pauseBatch = async (batchId: string) => {
-    if (commandStates.pausePaidMediaBatch?.busy) return;
-    setActionError("");
-    try {
-      await content.commands.pausePaidMediaBatch({ batchId });
-    } catch (value) {
-      setActionError(messageOf(value, "暂停付费投稿批次失败。"));
-    }
-  };
-
-  const cancelRemaining = async (batchId: string) => {
-    if (commandStates.cancelRemainingPaidMediaBatchItems?.busy) return;
-    setActionError("");
-    try {
-      await content.commands.cancelRemainingPaidMediaBatchItems({ batchId });
-    } catch (value) {
-      setActionError(messageOf(value, "取消剩余未开始项失败。"));
-    }
   };
 
   if (!scope || (paidMediaExecution.query.loading && batches.length === 0))
@@ -148,7 +128,18 @@ export default function PaidMediaWorkbench({
                       {canStart && (
                         <button
                           type="button"
-                          onClick={() => void startBatch(batch.batchId)}
+                          onClick={async () => {
+                            setActionError("");
+                            try {
+                              await onStartPaidMediaBatch({
+                                batchId: batch.batchId,
+                              });
+                            } catch (value) {
+                              setActionError(
+                                messageOf(value, "启动付费投稿批次失败。"),
+                              );
+                            }
+                          }}
                           disabled={commandStates.startPaidMediaBatch?.busy}
                           className="rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
                         >
@@ -158,7 +149,15 @@ export default function PaidMediaWorkbench({
                       {canPause && (
                         <button
                           type="button"
-                          onClick={() => void pauseBatch(batch.batchId)}
+                          onClick={() => {
+                            setActionError("");
+                            void onPausePaidMediaBatch({ batchId: batch.batchId })
+                              .catch((value) =>
+                                setActionError(
+                                  messageOf(value, "暂停付费投稿批次失败。"),
+                                ),
+                              );
+                          }}
                           disabled={commandStates.pausePaidMediaBatch?.busy}
                           className="rounded border border-slate-300 px-3 py-2 text-xs text-slate-700 disabled:opacity-40"
                         >
@@ -168,7 +167,17 @@ export default function PaidMediaWorkbench({
                       {canCancel && (
                         <button
                           type="button"
-                          onClick={() => void cancelRemaining(batch.batchId)}
+                          onClick={() => {
+                            setActionError("");
+                            void onCancelRemainingPaidMediaBatchItems({
+                              batchId: batch.batchId,
+                            })
+                              .catch((value) =>
+                                setActionError(
+                                  messageOf(value, "取消剩余未开始项失败。"),
+                                ),
+                              );
+                          }}
                           disabled={
                             commandStates.cancelRemainingPaidMediaBatchItems?.busy
                           }

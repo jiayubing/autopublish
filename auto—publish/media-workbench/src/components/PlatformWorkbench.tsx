@@ -270,7 +270,20 @@ export default function PlatformWorkbench({
           </div>
         )}
 
-        {section === "paid" && <PaidMediaWorkbench content={content} />}
+        {section === "paid" && (
+          <PaidMediaWorkbench
+            content={content}
+            onStartPaidMediaBatch={(input) =>
+              content.commands.startPaidMediaBatch(input)
+            }
+            onPausePaidMediaBatch={(input) =>
+              content.commands.pausePaidMediaBatch(input)
+            }
+            onCancelRemainingPaidMediaBatchItems={(input) =>
+              content.commands.cancelRemainingPaidMediaBatchItems(input)
+            }
+          />
+        )}
 
         {section === "attention" && (
           <div className="grid gap-3 p-1">

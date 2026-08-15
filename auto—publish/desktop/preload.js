@@ -290,33 +290,6 @@ const api = {
     checkLogin: function (platformId) {
       return ipcRenderer.invoke("platforms:check-login", platformId);
     },
-    pauseSubmit: function (runId) {
-      return ipcRenderer.invoke(
-        "platforms:pause-submit",
-        runId ? { runId: runId } : undefined,
-      );
-    },
-    stopSubmit: function (runId) {
-      return ipcRenderer.invoke(
-        "platforms:stop-submit",
-        runId ? { runId: runId } : undefined,
-      );
-    },
-    getState: function () {
-      return ipcRenderer.invoke("platforms:get-state");
-    },
-    onState: function (listener) {
-      var handler = function (event, payload) {
-        listener(payload);
-      };
-      ipcRenderer.on("platform-state", handler);
-      return function () {
-        ipcRenderer.removeListener("platform-state", handler);
-      };
-    },
-    onStateDiagnostic: function (listener) {
-      return onEventDiagnostic("platform-state", listener);
-    },
   },
   content: {
     listClients: function () {
@@ -417,9 +390,6 @@ const api = {
         "content:cancel-remaining-paid-media-batch-items",
         input,
       );
-    },
-    cancelSubmissionBatch: function (input) {
-      return ipcRenderer.invoke("content:cancel-submission-batch", input);
     },
     previewTrashedArticleQueueResidue: function () {
       return ipcRenderer.invoke(
@@ -584,23 +554,6 @@ const api = {
       };
     },
   },
-  publication: {
-    prepareRegularUncertainResolution: function (input) {
-      return ipcRenderer.invoke(
-        "publication:prepare-regular-uncertain-resolution",
-        input,
-      );
-    },
-    confirmRegularAccepted: function (input) {
-      return ipcRenderer.invoke("publication:confirm-regular-accepted", input);
-    },
-    confirmRegularNotAccepted: function (input) {
-      return ipcRenderer.invoke(
-        "publication:confirm-regular-not-accepted",
-        input,
-      );
-    },
-  },
   orders: {
     getOrders: function () {
       return ipcRenderer.invoke("media:get-orders");
@@ -646,21 +599,6 @@ const api = {
     },
     openPublishedUrl: function (orderNid) {
       return ipcRenderer.invoke("media:open-published-url", orderNid);
-    },
-    prepareBindPaidOrderNumber: function (input) {
-      return ipcRenderer.invoke("media:prepare-bind-paid-order-number", input);
-    },
-    bindPaidOrderNumber: function (input) {
-      return ipcRenderer.invoke("media:bind-paid-order-number", input);
-    },
-    prepareConfirmPaidOrderAbsent: function (input) {
-      return ipcRenderer.invoke(
-        "media:prepare-confirm-paid-order-absent",
-        input,
-      );
-    },
-    confirmPaidOrderAbsent: function (input) {
-      return ipcRenderer.invoke("media:confirm-paid-order-absent", input);
     },
   },
 };

@@ -650,66 +650,6 @@ const PRODUCTION_CALLERS = Object.freeze({
     application: "application.openPublishedUrl",
     featureBinding: "openPublishedUrl",
   }),
-  "media.prepareBindPaidOrderNumber": Object.freeze({
-    view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    viewSymbol: "GeneratedArticlesView",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/media.ts",
-    bridgeSymbol: "prepareBindPaidOrderNumber",
-    preloadMethod: "prepareBindPaidOrderNumber",
-    command: "media.prepareBindPaidOrderNumber",
-    channel: "media:prepare-bind-paid-order-number",
-    registrar: "desktop/ipc/media-ipc.js",
-    application: "application.prepareBindPaidOrderNumber",
-    featureBinding: "prepareBindPaidOrderNumber",
-  }),
-  "media.bindPaidOrderNumber": Object.freeze({
-    view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    viewSymbol: "GeneratedArticlesView",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/media.ts",
-    bridgeSymbol: "bindPaidOrderNumber",
-    preloadMethod: "bindPaidOrderNumber",
-    command: "media.bindPaidOrderNumber",
-    channel: "media:bind-paid-order-number",
-    registrar: "desktop/ipc/media-ipc.js",
-    application: "application.bindPaidOrderNumber",
-    featureBinding: "bindPaidOrderNumber",
-  }),
-  "media.prepareConfirmPaidOrderAbsent": Object.freeze({
-    view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    viewSymbol: "GeneratedArticlesView",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/media.ts",
-    bridgeSymbol: "prepareConfirmPaidOrderAbsent",
-    preloadMethod: "prepareConfirmPaidOrderAbsent",
-    command: "media.prepareConfirmPaidOrderAbsent",
-    channel: "media:prepare-confirm-paid-order-absent",
-    registrar: "desktop/ipc/media-ipc.js",
-    application: "application.prepareConfirmPaidOrderAbsent",
-    featureBinding: "prepareConfirmPaidOrderAbsent",
-  }),
-  "media.confirmPaidOrderAbsent": Object.freeze({
-    view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    viewSymbol: "GeneratedArticlesView",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/media.ts",
-    bridgeSymbol: "confirmPaidOrderAbsent",
-    preloadMethod: "confirmPaidOrderAbsent",
-    command: "media.confirmPaidOrderAbsent",
-    channel: "media:confirm-paid-order-absent",
-    registrar: "desktop/ipc/media-ipc.js",
-    application: "application.confirmPaidOrderAbsent",
-    featureBinding: "confirmPaidOrderAbsent",
-  }),
   "platform.getQueue": Object.freeze({
     view: "media-workbench/src/components/PlatformWorkbench.tsx",
     viewSymbol: "usePlatformFeature",
@@ -784,69 +724,6 @@ const PRODUCTION_CALLERS = Object.freeze({
     registrar: "desktop/ipc/platform-ipc.js",
     application: "application.checkLogin",
     featureBinding: "checkLogin",
-  }),
-  "platform.pauseSubmit": Object.freeze({
-    view: "media-workbench/src/components/PlatformWorkbench.tsx",
-    viewSymbol: "usePlatformFeature",
-    feature:
-      "media-workbench/src/features/platform/platform-feature-context.tsx",
-    featureSymbol: "usePlatformFeature",
-    bridge: "media-workbench/src/bridge/platform.ts",
-    bridgeSymbol: "pausePlatformSubmit",
-    preloadMethod: "pauseSubmit",
-    command: "platform.pauseSubmit",
-    channel: "platforms:pause-submit",
-    registrar: "desktop/ipc/platform-ipc.js",
-    application: "application.pauseSubmit",
-    featureBinding: "pause",
-  }),
-  "platform.stopSubmit": Object.freeze({
-    view: "media-workbench/src/components/PlatformWorkbench.tsx",
-    viewSymbol: "usePlatformFeature",
-    feature:
-      "media-workbench/src/features/platform/platform-feature-context.tsx",
-    featureSymbol: "usePlatformFeature",
-    bridge: "media-workbench/src/bridge/platform.ts",
-    bridgeSymbol: "stopPlatformSubmit",
-    preloadMethod: "stopSubmit",
-    command: "platform.stopSubmit",
-    channel: "platforms:stop-submit",
-    registrar: "desktop/ipc/platform-ipc.js",
-    application: "application.stopSubmit",
-    featureBinding: "stop",
-  }),
-  "platform.getState": Object.freeze({
-    view: "media-workbench/src/components/PlatformWorkbench.tsx",
-    viewSymbol: "usePlatformFeature",
-    feature:
-      "media-workbench/src/features/platform/platform-feature-context.tsx",
-    featureSymbol: "usePlatformFeature",
-    bridge: "media-workbench/src/bridge/platform.ts",
-    bridgeSymbol: "getPlatformState",
-    preloadMethod: "getState",
-    command: "platform.getState",
-    channel: "platforms:get-state",
-    registrar: "desktop/ipc/platform-ipc.js",
-    application: "application.getState",
-    featureBinding: "getRunState",
-  }),
-  "platform.stateChanged": Object.freeze({
-    view: "media-workbench/src/components/PlatformWorkbench.tsx",
-    viewSymbol: "usePlatformFeature",
-    feature:
-      "media-workbench/src/features/platform/platform-feature-context.tsx",
-    featureSymbol: "usePlatformFeature",
-    bridge: "media-workbench/src/bridge/platform.ts",
-    bridgeSymbol: "onPlatformState",
-    preloadMethod: "onState",
-    command: "platform.stateChanged",
-    channel: "platform-state",
-    registrar: "desktop/ipc/contracts/production-registry.js",
-    application: "webContents.send",
-    producer: "desktop/composition/workspace-runtime-composition.js",
-    producerApplication: "sendToRenderer",
-    dispose: "ipcRenderer.removeListener",
-    featureBinding: "onRunState",
   }),
   "content.listClients": Object.freeze({
     view: "media-workbench/src/components/ContentWorkbench.tsx",
@@ -1533,21 +1410,6 @@ const PRODUCTION_CALLERS = Object.freeze({
     application: "workflow.regularQueue.removePending",
     featureBinding: "removePendingQueueItems",
   }),
-  "content.cancelSubmissionBatch": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "cancelContentSubmissionBatch",
-    preloadMethod: "cancelSubmissionBatch",
-    command: "content.cancelSubmissionBatch",
-    channel: "content:cancel-submission-batch",
-    registrar: "desktop/ipc/content-submission-ipc.js",
-    application: "workflow.batch.cancel",
-    featureBinding: "cancelContentSubmissionBatch",
-  }),
   "content.previewTrashedArticleQueueResidue": Object.freeze({
     view: "media-workbench/src/components/PlatformWorkbench.tsx",
     viewSymbol: "usePlatformFeature",
@@ -1821,51 +1683,6 @@ const PRODUCTION_CALLERS = Object.freeze({
     dispose: "ipcRenderer.removeListener",
     featureBinding: "subscribeDoubaoQueue",
   }),
-  "publication.prepareRegularUncertainResolution": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/publication.ts",
-    bridgeSymbol: "prepareRegularUncertainResolution",
-    preloadMethod: "prepareRegularUncertainResolution",
-    command: "publication.prepareRegularUncertainResolution",
-    channel: "publication:prepare-regular-uncertain-resolution",
-    registrar: "desktop/ipc/publication-ipc.js",
-    application: "outcomeService.prepareRegularUncertainResolution",
-    featureBinding: "prepareRegularUncertainResolution",
-  }),
-  "publication.confirmRegularAccepted": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/publication.ts",
-    bridgeSymbol: "confirmRegularAccepted",
-    preloadMethod: "confirmRegularAccepted",
-    command: "publication.confirmRegularAccepted",
-    channel: "publication:confirm-regular-accepted",
-    registrar: "desktop/ipc/publication-ipc.js",
-    application: "outcomeService.confirmRegularAccepted",
-    featureBinding: "confirmRegularAccepted",
-  }),
-  "publication.confirmRegularNotAccepted": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/publication.ts",
-    bridgeSymbol: "confirmRegularNotAccepted",
-    preloadMethod: "confirmRegularNotAccepted",
-    command: "publication.confirmRegularNotAccepted",
-    channel: "publication:confirm-regular-not-accepted",
-    registrar: "desktop/ipc/publication-ipc.js",
-    application: "outcomeService.confirmRegularNotAccepted",
-    featureBinding: "confirmRegularNotAccepted",
-  }),
   "workspace.getRuntimeIdentity": Object.freeze({
     view: "media-workbench/src/main.tsx",
     viewSymbol: "WorkspaceCoordinatorProvider",
@@ -2110,26 +1927,6 @@ const PRODUCTION_CONSUMERS = Object.freeze({
     "media-workbench/src/App.tsx",
     "openPublishedUrl",
   ],
-  "media.prepareBindPaidOrderNumber": [
-    "direct",
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    "bindPaidOrderNumber",
-  ],
-  "media.bindPaidOrderNumber": [
-    "direct",
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    "bindPaidOrderNumber",
-  ],
-  "media.prepareConfirmPaidOrderAbsent": [
-    "direct",
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    "confirmPaidOrderAbsent",
-  ],
-  "media.confirmPaidOrderAbsent": [
-    "direct",
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    "confirmPaidOrderAbsent",
-  ],
   "platform.getQueue": [
     "direct",
     "media-workbench/src/features/platform/platform-feature-context.tsx",
@@ -2154,26 +1951,6 @@ const PRODUCTION_CONSUMERS = Object.freeze({
     "direct",
     "media-workbench/src/components/content/AccountProfileSelector.tsx",
     "checkLogin",
-  ],
-  "platform.pauseSubmit": [
-    "direct",
-    "media-workbench/src/components/PlatformWorkbench.tsx",
-    "pause",
-  ],
-  "platform.stopSubmit": [
-    "direct",
-    "media-workbench/src/components/PlatformWorkbench.tsx",
-    "stop",
-  ],
-  "platform.getState": [
-    "lifecycle",
-    "media-workbench/src/features/platform/platform-feature-context.tsx",
-    "start",
-  ],
-  "platform.stateChanged": [
-    "event",
-    "media-workbench/src/features/platform/platform-feature-context.tsx",
-    "start",
   ],
   "content.listClients": [
     "lifecycle",
@@ -2383,12 +2160,12 @@ const PRODUCTION_CONSUMERS = Object.freeze({
   ],
   "content.previewPaidMediaPreflight": [
     "direct",
-    "media-workbench/src/components/PaidMediaWorkbench.tsx",
+    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
     "previewPaidMediaPreflight",
   ],
   "content.confirmPaidMediaBatch": [
     "direct",
-    "media-workbench/src/components/PaidMediaWorkbench.tsx",
+    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
     "confirmPaidMediaBatch",
   ],
   "content.listPaidMediaBatches": [
@@ -2398,28 +2175,23 @@ const PRODUCTION_CONSUMERS = Object.freeze({
   ],
   "content.startPaidMediaBatch": [
     "direct",
-    "media-workbench/src/components/PaidMediaWorkbench.tsx",
+    "media-workbench/src/components/PlatformWorkbench.tsx",
     "startPaidMediaBatch",
   ],
   "content.pausePaidMediaBatch": [
     "direct",
-    "media-workbench/src/components/PaidMediaWorkbench.tsx",
+    "media-workbench/src/components/PlatformWorkbench.tsx",
     "pausePaidMediaBatch",
   ],
   "content.cancelRemainingPaidMediaBatchItems": [
     "direct",
-    "media-workbench/src/components/PaidMediaWorkbench.tsx",
+    "media-workbench/src/components/PlatformWorkbench.tsx",
     "cancelRemainingPaidMediaBatchItems",
   ],
   "content.removePendingQueueItems": [
     "direct",
     "media-workbench/src/components/PlatformWorkbench.tsx",
     "removePendingQueueItems",
-  ],
-  "content.cancelSubmissionBatch": [
-    "direct",
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    "cancelContentSubmissionBatch",
   ],
   "content.previewTrashedArticleQueueResidue": [
     "direct",
@@ -2511,21 +2283,6 @@ const PRODUCTION_CONSUMERS = Object.freeze({
     "media-workbench/src/features/content/use-content-workbench-feature.ts",
     "setScope",
   ],
-  "publication.prepareRegularUncertainResolution": [
-    "direct",
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    "prepareRegularUncertainResolution",
-  ],
-  "publication.confirmRegularAccepted": [
-    "direct",
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    "confirmRegularAccepted",
-  ],
-  "publication.confirmRegularNotAccepted": [
-    "direct",
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    "confirmRegularNotAccepted",
-  ],
   "workspace.getRuntimeIdentity": [
     "lifecycle",
     "media-workbench/src/features/workspace/workspace-coordinator-context.tsx",
@@ -2602,11 +2359,6 @@ const PRODUCTION_STATE_CONSUMERS = Object.freeze({
     "snapshot",
     "accountProfiles",
   ],
-  "platform.getState": [
-    "media-workbench/src/components/PlatformWorkbench.tsx",
-    "snapshot",
-    "run",
-  ],
   "content.listRegularQueueGroups": [
     "media-workbench/src/components/PlatformWorkbench.tsx",
     "snapshot",
@@ -2643,8 +2395,8 @@ const PRODUCTION_STATE_CONSUMERS = Object.freeze({
     "paidMediaExecution",
   ],
   "attention.listArticleAttention": [
-    "media-workbench/src/components/content/ArticleAttentionPanel.tsx",
-    "snapshot",
+    "media-workbench/src/components/PlatformWorkbench.tsx",
+    "attentionSnapshot",
     "items",
   ],
   "generation.getRuntimeSnapshot": [
@@ -2847,10 +2599,6 @@ const PRODUCTION_NESTED_COMMAND_FEATURES = Object.freeze(
           "content.admitRegularQueueItems",
           "content.previewPaidMediaPreflight",
           "content.confirmPaidMediaBatch",
-          "content.cancelSubmissionBatch",
-          "publication.prepareRegularUncertainResolution",
-          "publication.confirmRegularAccepted",
-          "publication.confirmRegularNotAccepted",
         ],
       ],
       [
@@ -2860,10 +2608,6 @@ const PRODUCTION_NESTED_COMMAND_FEATURES = Object.freeze(
           "content.startPaidMediaBatch",
           "content.pausePaidMediaBatch",
           "content.cancelRemainingPaidMediaBatchItems",
-          "media.prepareBindPaidOrderNumber",
-          "media.bindPaidOrderNumber",
-          "media.prepareConfirmPaidOrderAbsent",
-          "media.confirmPaidOrderAbsent",
         ],
       ],
     ].flatMap(([source, factory, capabilities]) =>
@@ -2887,11 +2631,11 @@ const PRODUCTION_PROP_WIRINGS = Object.freeze({
     "refreshPaidMediaBatches",
   ],
   "attention.previewArticleAttention": [
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
+    "media-workbench/src/components/PlatformWorkbench.tsx",
     "onPreviewAction",
   ],
   "attention.resolveArticleAttention": [
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
+    "media-workbench/src/components/PlatformWorkbench.tsx",
     "onExecutePreview",
   ],
   "generation.previewCancelPending": [
@@ -2936,8 +2680,6 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
           "platform.getQueue",
           "platform.listAccountProfiles",
           "platform.confirmAccountProfile",
-          "platform.getState",
-          "platform.stateChanged",
           "content.listClients",
           "content.listResearch",
           "content.listTemplateCatalog",
@@ -2981,8 +2723,6 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
         [
           "platform.openLogin",
           "platform.checkLogin",
-          "platform.pauseSubmit",
-          "platform.stopSubmit",
           "content.previewTrashedArticleQueueResidue",
           "content.cleanupTrashedArticleQueueResidue",
           "content.listRegularQueueGroups",
@@ -3008,10 +2748,11 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
           "content.retryArticleRemovalTransaction",
           "content.previewRegularQueueAdmission",
           "content.admitRegularQueueItems",
-          "media.prepareBindPaidOrderNumber",
-          "media.bindPaidOrderNumber",
-          "media.prepareConfirmPaidOrderAbsent",
-          "media.confirmPaidOrderAbsent",
+          "content.previewPaidMediaPreflight",
+          "content.confirmPaidMediaBatch",
+          "content.startPaidMediaBatch",
+          "content.pausePaidMediaBatch",
+          "content.cancelRemainingPaidMediaBatchItems",
           "content.createQuestion",
           "content.updateQuestion",
           "content.deleteQuestion",
@@ -3025,19 +2766,6 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
           "content.stopDoubaoBatch",
           "content.retryFailedDoubao",
           "content.saveManualResearch",
-          "publication.prepareRegularUncertainResolution",
-          "publication.confirmRegularAccepted",
-          "publication.confirmRegularNotAccepted",
-        ],
-      ],
-      [
-        "content.commands",
-        [
-          "content.previewPaidMediaPreflight",
-          "content.confirmPaidMediaBatch",
-          "content.startPaidMediaBatch",
-          "content.pausePaidMediaBatch",
-          "content.cancelRemainingPaidMediaBatchItems",
         ],
       ],
       ["generationFeature", ["content.generateArticle"]],
@@ -3076,21 +2804,11 @@ const PRODUCTION_DIRECT_FEATURE_CALLS = new Set([
 ]);
 
 const PRODUCTION_EVENT_CLEANUP_METHODS = Object.freeze({
-  "platform.stateChanged": "stopTransport",
   "generation.runtimeChanged": "dispose",
   "workspace.invalidated": "stop",
 });
 
 const PRODUCTION_EVENT_PRODUCERS = Object.freeze({
-  "platform.stateChanged": Object.freeze({
-    producerEntry: "desktop/composition/workspace-runtime-composition.js",
-    producerEntryOwner: "createWorkspaceRuntimeComposition",
-    producerOwner: "subscribePlatformState",
-    producerCallback: "taskService.subscribe",
-    applicationSource: "desktop/main.js",
-    applicationOwner: "sendToRenderer",
-    applicationReceiver: "mainWindow.webContents",
-  }),
   "content.articleRemovalTransactionChanged": Object.freeze({
     producerEntry: "desktop/composition/workspace-runtime-composition.js",
     producerEntryOwner: "createWorkspaceRuntimeComposition",
@@ -3171,10 +2889,6 @@ const PRODUCTION_REGISTRARS = Object.freeze({
   "desktop/ipc/doubao-collection-ipc.js": [
     "registerDoubaoCollectionIpc",
     "ipcMain",
-  ],
-  "desktop/ipc/publication-ipc.js": [
-    "registerPublicationIpc",
-    "values.ipcMain",
   ],
   "desktop/ipc/workspace-runtime-ipc.js": [
     "registerWorkspaceRuntimeIpc",
@@ -3290,7 +3004,9 @@ function productionConsumer(capability, productionFeatureSource) {
       ? { cleanupMethod: PRODUCTION_EVENT_CLEANUP_METHODS[capability] }
       : {}),
     ...(PRODUCTION_EVENT_CLEANUP_CONSUMERS[capability] || {}),
-    ...(receiver === "commands" || receiver === "content.commands"
+    ...(receiver === "commands" ||
+    receiver === "content.commands" ||
+    nestedFeature?.container === "commands"
       ? { featureContainer: "commands" }
       : {}),
     ...(PRODUCTION_DIRECT_FEATURE_CALLS.has(capability)
@@ -3989,70 +3705,6 @@ const rawProductionIpcContractFixtures = [
     },
   },
   {
-    capability: "media.prepareBindPaidOrderNumber",
-    channel: "media:prepare-bind-paid-order-number",
-    owner: "media",
-    productionCaller: "desktop/preload.js:media:prepare-bind-paid-order-number",
-    request: {
-      orderCreationAttemptId: "paid-attempt-1",
-      orderId: "order-1",
-    },
-    result: {
-      orderCreationAttemptId: "paid-attempt-1",
-      action: "bind_verified_order",
-      confirmationToken: "paid-order-resolution-token",
-      expiresAt: "2026-08-07T00:05:00.000Z",
-      orderId: "order-1",
-      observationFingerprint: "fingerprint-1",
-    },
-  },
-  {
-    capability: "media.bindPaidOrderNumber",
-    channel: "media:bind-paid-order-number",
-    owner: "media",
-    productionCaller: "desktop/preload.js:media:bind-paid-order-number",
-    request: {
-      orderCreationAttemptId: "paid-attempt-1",
-      orderId: "order-1",
-      confirmationToken: "paid-order-resolution-token",
-    },
-    result: {
-      orderCreationAttemptId: "paid-attempt-1",
-      orderId: "order-1",
-      status: "order_bound",
-      idempotent: false,
-    },
-  },
-  {
-    capability: "media.prepareConfirmPaidOrderAbsent",
-    channel: "media:prepare-confirm-paid-order-absent",
-    owner: "media",
-    productionCaller:
-      "desktop/preload.js:media:prepare-confirm-paid-order-absent",
-    request: { orderCreationAttemptId: "paid-attempt-1" },
-    result: {
-      orderCreationAttemptId: "paid-attempt-1",
-      action: "confirm_no_order",
-      confirmationToken: "paid-order-resolution-token",
-      expiresAt: "2026-08-07T00:05:00.000Z",
-    },
-  },
-  {
-    capability: "media.confirmPaidOrderAbsent",
-    channel: "media:confirm-paid-order-absent",
-    owner: "media",
-    productionCaller: "desktop/preload.js:media:confirm-paid-order-absent",
-    request: {
-      orderCreationAttemptId: "paid-attempt-1",
-      confirmationToken: "paid-order-resolution-token",
-    },
-    result: {
-      orderCreationAttemptId: "paid-attempt-1",
-      status: "no_order",
-      idempotent: false,
-    },
-  },
-  {
     capability: "platform.getQueue",
     channel: "platforms:get-queue",
     owner: "platform",
@@ -4115,87 +3767,6 @@ const rawProductionIpcContractFixtures = [
     result: {
       platformId: "fixture-1",
       authenticated: false,
-    },
-  },
-  {
-    capability: "platform.pauseSubmit",
-    channel: "platforms:pause-submit",
-    owner: "platform",
-    productionCaller: "desktop/preload.js:platforms:pause-submit",
-    request: {
-      runId: null,
-    },
-    result: {
-      accepted: false,
-      alreadyStopped: false,
-    },
-  },
-  {
-    capability: "platform.stopSubmit",
-    channel: "platforms:stop-submit",
-    owner: "platform",
-    productionCaller: "desktop/preload.js:platforms:stop-submit",
-    request: {
-      runId: null,
-    },
-    result: {
-      accepted: false,
-      alreadyStopped: false,
-    },
-  },
-  {
-    capability: "platform.getState",
-    channel: "platforms:get-state",
-    owner: "platform",
-    productionCaller: "desktop/preload.js:platforms:get-state",
-    request: {},
-    result: {
-      workspaceRuntimeId: "fixture-1",
-      runId: null,
-      phase: "idle",
-      total: 0,
-      processed: 0,
-      succeeded: 0,
-      failed: 0,
-      skipped: 0,
-      uncertain: 0,
-      currentTask: null,
-      nextTask: null,
-      waitRemainingMs: 0,
-      startedAt: null,
-      updatedAt: null,
-      terminalResult: null,
-      isBatchRunning: false,
-      isStopPending: false,
-      isPlatformRunning: false,
-      queueRevision: null,
-    },
-  },
-  {
-    capability: "platform.stateChanged",
-    channel: "platform-state",
-    owner: "platform",
-    productionCaller: "desktop/preload.js:platform-state",
-    event: {
-      workspaceRuntimeId: "fixture-1",
-      runId: null,
-      phase: "idle",
-      total: 0,
-      processed: 0,
-      succeeded: 0,
-      failed: 0,
-      skipped: 0,
-      uncertain: 0,
-      currentTask: null,
-      nextTask: null,
-      waitRemainingMs: 0,
-      startedAt: null,
-      updatedAt: null,
-      terminalResult: null,
-      isBatchRunning: false,
-      isStopPending: false,
-      isPlatformRunning: false,
-      queueRevision: null,
     },
   },
   {
@@ -4412,12 +3983,12 @@ const rawProductionIpcContractFixtures = [
     productionCaller: "desktop/preload.js:content:preview-article-attention",
     request: {
       attentionId: "fixture-1",
-      action: "fixture-1",
+      action: "open-submission",
     },
     result: {
       attentionId: "fixture-1",
       revision: 0,
-      action: "fixture-1",
+      action: "open-submission",
       requiresConfirmation: false,
       message: "fixture-1",
       changedScopes: [],
@@ -4430,7 +4001,7 @@ const rawProductionIpcContractFixtures = [
     productionCaller: "desktop/preload.js:content:resolve-article-attention",
     request: {
       attentionId: "fixture-1",
-      action: "fixture-1",
+      action: "open-submission",
       expectedRevision: 0,
     },
     result: {
@@ -4982,27 +4553,6 @@ const rawProductionIpcContractFixtures = [
     },
   },
   {
-    capability: "content.cancelSubmissionBatch",
-    channel: "content:cancel-submission-batch",
-    owner: "content",
-    productionCaller: "desktop/preload.js:content:cancel-submission-batch",
-    request: {
-      batchId: "fixture-1",
-      planId: "fixture-1",
-      confirmed: true,
-    },
-    result: {
-      batchId: "fixture-1",
-      planId: "fixture-1",
-      cancelledCount: 0,
-      idempotentCount: 0,
-      skippedCount: 0,
-      batchStatus: "fixture-1",
-      changedScopes: [],
-      items: [],
-    },
-  },
-  {
     capability: "content.previewTrashedArticleQueueResidue",
     channel: "content:preview-trashed-article-queue-residue",
     owner: "content",
@@ -5304,52 +4854,6 @@ const rawProductionIpcContractFixtures = [
       waitRemainingMs: 0,
       tasks: [],
     },
-  },
-  {
-    capability: "publication.prepareRegularUncertainResolution",
-    channel: "publication:prepare-regular-uncertain-resolution",
-    owner: "content",
-    productionCaller:
-      "desktop/preload.js:publication:prepare-regular-uncertain-resolution",
-    request: { regularPublicationAttemptId: "attempt-1" },
-    result: {
-      regularPublicationAttemptId: "attempt-1",
-      confirmationToken: "token-1",
-      expiresAt: "2026-08-07T00:05:00.000Z",
-      actions: ["confirm_accepted", "confirm_not_accepted"],
-      observationFingerprint: "fingerprint-1",
-      preparedEvidenceFingerprint: "fingerprint-2",
-    },
-  },
-  {
-    capability: "publication.confirmRegularAccepted",
-    channel: "publication:confirm-regular-accepted",
-    owner: "content",
-    productionCaller: "desktop/preload.js:publication:confirm-regular-accepted",
-    request: {
-      regularPublicationAttemptId: "attempt-1",
-      confirmationToken: "token-1",
-      manualPositiveEvidence: { observedAt: "2026-08-07T00:00:00.000Z" },
-      confirmed: true,
-    },
-    result: { attemptId: "attempt-1", status: "published" },
-  },
-  {
-    capability: "publication.confirmRegularNotAccepted",
-    channel: "publication:confirm-regular-not-accepted",
-    owner: "content",
-    productionCaller:
-      "desktop/preload.js:publication:confirm-regular-not-accepted",
-    request: {
-      regularPublicationAttemptId: "attempt-1",
-      confirmationToken: "token-1",
-      manualNegativeEvidence: {
-        reasonCode: "REGULAR_MANUAL_NOT_ACCEPTED",
-        observedAt: "2026-08-07T00:00:00.000Z",
-      },
-      confirmed: true,
-    },
-    result: { attemptId: "attempt-1", status: "not_accepted" },
   },
   {
     capability: "workspace.getRuntimeIdentity",

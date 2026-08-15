@@ -19,66 +19,46 @@ function fixture(overrides = {}) {
     startPaidMediaBatch: async () => ({}),
     pausePaidMediaBatch: async () => ({}),
     cancelRemainingPaidMediaBatchItems: async () => ({}),
-    prepareBindPaidOrderNumber: async () => ({}),
-    bindPaidOrderNumber: async () => ({}),
-    prepareConfirmPaidOrderAbsent: async () => ({}),
-    confirmPaidOrderAbsent: async () => ({}),
     ...overrides,
   });
 }
 
-test("paid resolution feature exposes named loading and success command states", async () => {
+test("paid execution exposes named loading and success command states", async () => {
   const pending = deferred();
-  const feature = fixture({
-    prepareBindPaidOrderNumber: () => pending.promise,
-  });
+  const feature = fixture({ startPaidMediaBatch: () => pending.promise });
   feature.setScope({ workspaceRuntimeId: "workspace-14" });
-  const running = feature.commands.prepareBindPaidOrderNumber({
-    orderCreationAttemptId: "paid-attempt-1",
-    orderId: "order-1",
-  });
-  assert.equal(
-    feature.getSnapshot().commands.prepareBindPaidOrderNumber.busy,
-    true,
-  );
-  pending.resolve({ confirmationToken: "token-1" });
+  const running = feature.commands.startPaidMediaBatch({ batchId: "batch-1" });
+  assert.equal(feature.getSnapshot().commands.startPaidMediaBatch.busy, true);
+  pending.resolve({ executionStatus: "submitted" });
   await running;
-  assert.equal(
-    feature.getSnapshot().commands.prepareBindPaidOrderNumber.busy,
-    false,
-  );
-  assert.equal(
-    feature.getSnapshot().commands.prepareBindPaidOrderNumber.result
-      .confirmationToken,
-    "token-1",
+  assert.equal(feature.getSnapshot().commands.startPaidMediaBatch.busy, false);
+  assert.deepEqual(
+    feature.getSnapshot().commands.startPaidMediaBatch.result,
+    { executionStatus: "submitted" },
   );
   feature.dispose();
 });
-test("paid resolution feature keeps safe command errors visible and releases disabled state", async () => {
+
+test("paid execution keeps safe command errors visible and releases disabled state", async () => {
   const feature = fixture({
-    confirmPaidOrderAbsent: async () => {
+    cancelRemainingPaidMediaBatchItems: async () => {
       throw Object.assign(new Error("safe"), {
-        code: "PAID_ORDER_RESOLUTION_STATE_STALE",
+        code: "PAID_MEDIA_EXECUTION_STATE_STALE",
         category: "validation",
         retryability: "manual-check",
-        userMessage: "文章或订单事实已变化，请刷新后重新核对。",
+        userMessage: "付费批次事实已变化，请刷新后重新核对。",
       });
     },
   });
   feature.setScope({ workspaceRuntimeId: "workspace-14" });
   await assert.rejects(
-    feature.commands.confirmPaidOrderAbsent({
-      orderCreationAttemptId: "paid-attempt-1",
-      confirmationToken: "token-1",
-    }),
-    { code: "PAID_ORDER_RESOLUTION_STATE_STALE" },
+    feature.commands.cancelRemainingPaidMediaBatchItems({ batchId: "batch-1" }),
+    { code: "PAID_MEDIA_EXECUTION_STATE_STALE" },
   );
-  const state = feature.getSnapshot().commands.confirmPaidOrderAbsent;
+  const state =
+    feature.getSnapshot().commands.cancelRemainingPaidMediaBatchItems;
   assert.equal(state.busy, false);
   assert.equal(state.error.category, "validation");
-  assert.equal(
-    state.error.userMessage,
-    "文章或订单事实已变化，请刷新后重新核对。",
-  );
+  assert.equal(state.error.userMessage, "付费批次事实已变化，请刷新后重新核对。");
   feature.dispose();
 });

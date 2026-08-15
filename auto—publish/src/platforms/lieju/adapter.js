@@ -89,7 +89,11 @@ function createLiejuRuntime(runtimeContext) {
     }
   }
 
-  var session = pwSessionConfig(sessionInput);
+  var session = Object.assign({}, pwSessionConfig(sessionInput));
+  if (!nonEmptyString(session.stateFile)) {
+    session.stateFile =
+      sessionInput.stateFile || path.join(stateDir, "lieju.json");
+  }
   var runtimeOptions = {
     browserChannel:
       nonEmptyString(browserRuntime.browserChannel) || PW.browserChannel,

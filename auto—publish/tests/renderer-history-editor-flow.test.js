@@ -228,10 +228,6 @@ function installDesktopFixture(page, fixture) {
         }, 300);
         return ok({ transaction: state.removalTransaction });
       },
-      previewSubmissionBatch: () => ok({ queueableTaskCount: 0, idempotentCount: 0, conflictCount: 0 }),
-      createSubmissionBatch: () => { state.calls.submission.push("createSubmissionBatch"); return ok({}); },
-      previewCancelSubmissionBatch: () => ok({ allowedCount: 0, blockedCount: 0, items: [] }),
-      cancelSubmissionBatch: () => { state.calls.submission.push("cancelSubmissionBatch"); return ok({}); },
       restoreArticle: () => ok({}),
       preparePermanentDeleteArticle: () => ok({ token: "fixture-token" }),
       permanentlyDeleteArticle: () => ok({ deleted: true })
@@ -254,8 +250,7 @@ function installDesktopFixture(page, fixture) {
       storageMaintenance,
       media,
       orders,
-      platforms: { getQueue: () => ok({ platforms: [], queue: [] }), getState: () => ok({ isBatchRunning: false, isStopPending: false, isPlatformRunning: false }), onState: () => () => {}, listAccountProfiles: () => ok({ profiles: [{ accountProfileId: "fixture-account-1", platformId: "fixture-platform", displayName: "测试账号" }] }), confirmAccountProfile: () => ok({ profile: { accountProfileId: "fixture-account-1", platformId: "fixture-platform", displayName: "测试账号" } }) },
-      publication: { listForArticles: ({ articleIds }) => ok(state.publicationRecords.filter((record) => articleIds.includes(record.articleId))), reconcile: () => ok(state.publicationRecords[0]) },
+      platforms: { getQueue: () => ok({ platforms: [], queue: [] }), listAccountProfiles: () => ok({ profiles: [{ accountProfileId: "fixture-account-1", platformId: "fixture-platform", displayName: "测试账号" }] }), confirmAccountProfile: () => ok({ profile: { accountProfileId: "fixture-account-1", platformId: "fixture-platform", displayName: "测试账号" } }) },
       content
     };
   }, fixture);

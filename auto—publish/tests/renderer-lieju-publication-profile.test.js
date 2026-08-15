@@ -35,20 +35,12 @@ function renderArticleManagement() {
 
           const noop = async () => undefined;
           const commands = {
-            cancelContentSubmissionBatch: noop,
             admitRegularQueueItems: noop,
-            prepareBindPaidOrderNumber: noop,
-            bindPaidOrderNumber: noop,
-            prepareConfirmPaidOrderAbsent: noop,
-            confirmPaidOrderAbsent: noop,
             getContentArticleRemovalTransaction: noop,
             permanentlyDeleteContentArticle: noop,
             preparePermanentDeleteContentArticle: noop,
             previewContentArticleRemoval: noop,
             previewRegularQueueAdmission: noop,
-            prepareRegularUncertainResolution: noop,
-            confirmRegularAccepted: noop,
-            confirmRegularNotAccepted: noop,
             restoreContentArticle: noop,
             removePendingQueueItems: noop,
             retryContentArticleRemovalTransaction: noop,

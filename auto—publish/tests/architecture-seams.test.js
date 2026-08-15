@@ -130,7 +130,7 @@ test("electron transport facade is gone and domains own their bridge seams", () 
   );
   assert.match(
     read("media-workbench/src/bridge/publication.ts"),
-    /prepareRegularUncertainResolution/,
+    /previewArticleAttention/,
   );
   assert.doesNotMatch(
     read("media-workbench/src/bridge/content.ts"),

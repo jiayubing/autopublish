@@ -43,42 +43,13 @@ it("returns the complete queue-group snapshot after pausing one group", async fu
   assert.deepEqual(calls, [{ queueGroupId: "group-a" }]);
   assert.deepEqual(result, { ok: true, data: { items: groups } });
 });
-it("forwards only the preview action plan token for batch cancellation", async function () {
+it("does not register the retired submission batch cancellation capability", async function () {
   const handlers = new Map();
-  let received;
   registerContentSubmissionIpc({
     ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
-    contentSubmissionService: {
-      cancelBatch: (input) => {
-        received = input;
-        return {
-          batchId: input.batchId,
-          planId: input.planId,
-          cancelledCount: 1,
-          blockedItems: [],
-        };
-      },
-    },
+    contentSubmissionService: {},
   });
-  const result = await handlers.get("content:cancel-submission-batch")(null, {
-    batchId: "batch-1",
-    planId: "plan-1",
-    confirmed: true,
-  });
-  assert.deepEqual(received, {
-    batchId: "batch-1",
-    planId: "plan-1",
-    confirmed: true,
-  });
-  assert.deepEqual(result, {
-    ok: true,
-    data: {
-      batchId: "batch-1",
-      planId: "plan-1",
-      cancelledCount: 1,
-      blockedItems: [],
-    },
-  });
+  assert.equal(handlers.has("content:cancel-submission-batch"), false);
 });
 
 it("does not register the retired failed queue-copy cleanup capability", async function () {

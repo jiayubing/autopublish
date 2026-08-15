@@ -6,9 +6,6 @@ const {
   projectArticleRemovalTransaction,
 } = require("../ipc/contracts/article-removal-contracts");
 const {
-  encodePlatformStateEvent,
-} = require("../ipc/platform-state-event");
-const {
   reportDiagnostic,
 } = require("../../src/diagnostics/diagnostic-producer");
 
@@ -19,19 +16,6 @@ function reportCompositionDiagnostic(code, operation) {
     category: "lifecycle",
     operationId: operation || "composition",
     metadata: { action: operation || "composition" },
-  });
-}
-function subscribePlatformState(taskService, sendToRenderer) {
-  if (!taskService || typeof taskService.subscribe !== "function")
-    return function () {};
-  const eventContract = productionIpcRegistry.byCapability(
-    "platform.stateChanged",
-  );
-  return taskService.subscribe(function (value) {
-    sendToRenderer(
-      eventContract.channel,
-      encodePlatformStateEvent(value),
-    );
   });
 }
 function subscribeGenerationRuntimeState(
@@ -719,8 +703,6 @@ async function createWorkspaceRuntimeComposition(deps) {
           paidLifecycleFacts:
             operationalStoreTransitionPorts.paidAdmissionTransitions,
           paidMediaBatchOrchestrator: paidMediaBatchComposition.orchestrator,
-          paidOrderCreationResolutionService:
-            paidMediaBatchComposition.orderCreationResolutionService,
           systemSubmissionCodeProvider: function () {
             try {
               return (
@@ -858,7 +840,6 @@ async function createWorkspaceRuntimeComposition(deps) {
       modules.storageMaintenanceService = storageMaintenanceService;
       ipcDeps.storageMaintenanceService = storageMaintenanceService;
     }
-    ownDisposer(subscribePlatformState(taskService, sendToRenderer));
     ownDisposer(
       subscribeGenerationRuntimeState(
         contentGenerationBatchService,

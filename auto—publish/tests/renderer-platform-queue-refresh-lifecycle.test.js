@@ -23,22 +23,13 @@ function installDesktopFixture(page) {
       queueCalls: 0,
       groupCalls: 0,
       queueRevision: 0,
-      phase: 'idle',
       invalidationListeners: [],
-      platformStateListeners: [],
       authStateListeners: [],
     };
     const queueData = () => ({
       revision: state.queueRevision,
       platforms: [],
       queue: [],
-    });
-    const platformState = () => ({
-      workspaceRuntimeId: state.workspaceRuntimeId,
-      isBatchRunning: state.phase === 'running',
-      isStopPending: false,
-      isPlatformRunning: state.phase === 'running',
-      phase: state.phase,
     });
     const response = (data) => Promise.resolve({ ok: true, data });
     const authState = { authenticated: true, user: { id: 'fixture-admin', loginName: 'admin' }, entitlements: [{ product: 'AutoPublish', enabled: true, expiresAt: null }], errorCode: null };
@@ -72,15 +63,6 @@ function installDesktopFixture(page) {
         state.queueCalls += 1;
         return response(queueData());
       },
-      getState: () => response(platformState()),
-      onState: (listener) => {
-        state.platformStateListeners.push(listener);
-        return () => {
-          state.platformStateListeners = state.platformStateListeners.filter((item) => item !== listener);
-        };
-      },
-      pauseSubmit: () => response(undefined),
-      stopSubmit: () => response(undefined),
     };
     const content = {
       previewTrashedArticleQueueResidue: () => response({ items: [], cleanableItems: [], reportedItems: [], cleanableCount: 0, reportedCount: 0 }),
@@ -130,11 +112,9 @@ function installDesktopFixture(page) {
         const event = { schemaVersion: 1, workspaceRuntimeId: nextRuntimeId, revision, scopes: ['platformQueue'], reasonCode: 'FIXTURE_RUNTIME_SWITCH' };
         state.invalidationListeners.slice().forEach((listener) => listener(event));
       },
-      emitPlatformState(next) {
-        state.phase = next.phase || next.status || 'idle';
-        state.queueRevision = typeof next.queueRevision === 'number' ? next.queueRevision : state.queueRevision;
-        const event = { ...platformState(), ...next };
-        state.platformStateListeners.slice().forEach((listener) => listener(event));
+      emitWorkspaceInvalidated(runtimeId, revision) {
+        const event = { schemaVersion: 1, workspaceRuntimeId: runtimeId, revision, scopes: ['platformQueue'], reasonCode: 'FIXTURE_DELAYED_INVALIDATION' };
+        state.invalidationListeners.slice().forEach((listener) => listener(event));
       },
       getQueueCalls() {
         return state.queueCalls;
@@ -218,7 +198,7 @@ describe('renderer platform queue lifecycle', { concurrency: false }, () => {
     await page.close();
   });
 
-  it('rejects delayed platform events from workspace A after the production runtime switches to B', async () => {
+  it('rejects stale workspace invalidations after the production runtime switches to B', async () => {
     const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
     page.setDefaultTimeout(10000);
     await installDesktopFixture(page);
@@ -232,16 +212,8 @@ describe('renderer platform queue lifecycle', { concurrency: false }, () => {
     await page.waitForFunction((expected) => window.__platformQueueLifecycle.getQueueCalls() > expected, beforeSwitch);
     const beforeDelayedA = await page.evaluate(() => window.__platformQueueLifecycle.getQueueCalls());
     await page.evaluate(() => {
-      window.__platformQueueLifecycle.emitPlatformState({
-        workspaceRuntimeId: 'fixture-runtime-1', runId: 'run-a', phase: 'heartbeat', total: 20, processed: 19,
-        succeeded: 19, failed: 0, skipped: 0, uncertain: 0,
-        updatedAt: new Date(Date.now() + 2000).toISOString(),
-      });
-      window.__platformQueueLifecycle.emitPlatformState({
-        workspaceRuntimeId: 'fixture-runtime-1', runId: 'run-a', phase: 'completed', queueRevision: 61,
-        total: 20, processed: 20, succeeded: 20, failed: 0, skipped: 0, uncertain: 0,
-        updatedAt: new Date(Date.now() + 3000).toISOString(),
-      });
+      window.__platformQueueLifecycle.emitWorkspaceInvalidated('fixture-runtime-2', 59);
+      window.__platformQueueLifecycle.emitWorkspaceInvalidated('fixture-runtime-2', 60);
     });
     await page.waitForTimeout(400);
     assert.equal(await page.evaluate(() => window.__platformQueueLifecycle.getQueueCalls()), beforeDelayedA, 'A terminal event must not refresh B queue');

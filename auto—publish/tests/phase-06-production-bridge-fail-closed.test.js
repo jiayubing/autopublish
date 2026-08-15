@@ -111,7 +111,7 @@ test("missing query and command capabilities fail closed instead of resolving bu
   await rejectsCapability(() => bridges.media.getDrafts());
   await rejectsCapability(() => bridges.media.syncOrder("order-1"));
   await rejectsCapability(() => bridges.platform.openPlatformLogin("toutiao"));
-  await rejectsCapability(() => bridges.platform.pausePlatformSubmit(null));
+  await rejectsCapability(() => bridges.platform.getPlatformQueue());
   await rejectsCapability(() =>
     bridges.settings.getLegacyPlatformSettingsStatus(),
   );
@@ -121,10 +121,6 @@ test("missing query and command capabilities fail closed instead of resolving bu
 
 test("missing event capability throws instead of returning a noop disposer", () => {
   setDesktopConsole({ platforms: {}, workspaceData: {} });
-  assert.throws(
-    () => bridges.platform.onPlatformState(() => {}),
-    (error) => assertOperationalError(error, "IPC_CAPABILITY_UNAVAILABLE"),
-  );
   assert.throws(
     () => bridges.workspace.onWorkspaceDataInvalidated(() => {}),
     (error) => assertOperationalError(error, "IPC_CAPABILITY_UNAVAILABLE"),
@@ -182,8 +178,6 @@ test("missing envelopes and command data fail closed", async () => {
     },
     platforms: {
       openLogin: async () => ({ ok: true }),
-      pauseSubmit: async () => ({ ok: true, data: null }),
-      stopSubmit: async () => ({ ok: true }),
     },
     workspace: {
       openCurrent: async () => ({ ok: true }),
@@ -192,21 +186,13 @@ test("missing envelopes and command data fail closed", async () => {
 
   await rejectsResult(() => bridges.media.scanArticles());
   await rejectsResult(() => bridges.platform.openPlatformLogin("toutiao"));
-  await rejectsResult(() => bridges.platform.pausePlatformSubmit(null));
-  await rejectsResult(() => bridges.platform.stopPlatformSubmit(null));
   await rejectsResult(() => bridges.workspace.openCurrentWorkspace());
 });
 
 test("event subscriptions reject a missing disposer", () => {
   setDesktopConsole({
-    platforms: { onState: () => undefined },
     workspaceData: { onInvalidated: () => undefined },
   });
-
-  assert.throws(
-    () => bridges.platform.onPlatformState(() => {}),
-    (error) => assertOperationalError(error, "IPC_RESULT_INVALID"),
-  );
   assert.throws(
     () => bridges.workspace.onWorkspaceDataInvalidated(() => {}),
     (error) => assertOperationalError(error, "IPC_RESULT_INVALID"),

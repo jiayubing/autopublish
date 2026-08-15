@@ -58,22 +58,6 @@ export function createPaidMediaExecutionFeature(adapters = {}) {
       feature: "content",
       command: "cancelRemainingPaidMediaBatchItems",
     }),
-    prepareBindPaidOrderNumber: createCommandOwner({
-      feature: "content",
-      command: "prepareBindPaidOrderNumber",
-    }),
-    bindPaidOrderNumber: createCommandOwner({
-      feature: "content",
-      command: "bindPaidOrderNumber",
-    }),
-    prepareConfirmPaidOrderAbsent: createCommandOwner({
-      feature: "content",
-      command: "prepareConfirmPaidOrderAbsent",
-    }),
-    confirmPaidOrderAbsent: createCommandOwner({
-      feature: "content",
-      command: "confirmPaidOrderAbsent",
-    }),
   });
   const listeners = new Set();
   let disposed = false;
@@ -172,13 +156,6 @@ export function createPaidMediaExecutionFeature(adapters = {}) {
       pausePaidMediaBatch: (input) => runCommand("pausePaidMediaBatch", input),
       cancelRemainingPaidMediaBatchItems: (input) =>
         runCommand("cancelRemainingPaidMediaBatchItems", input),
-      prepareBindPaidOrderNumber: (input) =>
-        runCommand("prepareBindPaidOrderNumber", input),
-      bindPaidOrderNumber: (input) => runCommand("bindPaidOrderNumber", input),
-      prepareConfirmPaidOrderAbsent: (input) =>
-        runCommand("prepareConfirmPaidOrderAbsent", input),
-      confirmPaidOrderAbsent: (input) =>
-        runCommand("confirmPaidOrderAbsent", input),
     }),
     dispose() {
       if (disposed) return;

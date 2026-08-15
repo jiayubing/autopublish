@@ -22,6 +22,11 @@ function claim(platformId) {
       title: "合成浏览器标题",
       body: "合成浏览器正文",
     },
+    publicationProfile: {
+      city: "北京",
+      contact: "合成联系人",
+      phone: "13800000000",
+    },
   };
 }
 

@@ -26,9 +26,6 @@ const EMPTY_MANAGEMENT = Object.freeze({
 const COMMAND_SCOPES = Object.freeze({
   getArticleEditor: null,
   saveArticle: "management",
-  prepareRegularUncertainResolution: "management",
-  confirmRegularAccepted: "management",
-  confirmRegularNotAccepted: "management",
   previewRegularQueueAdmission: null,
   admitRegularQueueItems: "management",
   previewPaidMediaPreflight: null,
@@ -486,12 +483,6 @@ export function createArticleManagementFeature(adapters = {}) {
   const commands = Object.freeze({
     getArticleEditor: (input) => runCommand("getArticleEditor", input),
     saveArticle: (input) => runCommand("saveArticle", input),
-    prepareRegularUncertainResolution: (input) =>
-      runCommand("prepareRegularUncertainResolution", input),
-    confirmRegularAccepted: (input) =>
-      runCommand("confirmRegularAccepted", input),
-    confirmRegularNotAccepted: (input) =>
-      runCommand("confirmRegularNotAccepted", input),
     previewRegularQueueAdmission: (input) =>
       runCommand("previewRegularQueueAdmission", input),
     admitRegularQueueItems: (input) =>

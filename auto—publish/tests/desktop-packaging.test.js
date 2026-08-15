@@ -142,7 +142,7 @@ function loadPreloadHarness() {
   };
   const preloadRegistry = {
     byChannel: function(channel) {
-      const eventChannels = ["auth-state-changed", "workspace:data-invalidated", "platform-state", "content:article-removal-transaction", "content:doubao-queue-state", "content:generation-batch-state"];
+      const eventChannels = ["auth-state-changed", "workspace:data-invalidated", "content:article-removal-transaction", "content:doubao-queue-state", "content:generation-batch-state"];
       return {
         channel: channel,
         kind: eventChannels.includes(channel) ? "event" : "query",
@@ -331,7 +331,6 @@ describe("source assembly and packaging contract", function() {
       "desktop/services/content-generation-batch-service.js",
       "desktop/device-identity-store.js",
       "desktop/ipc/content-generation-batch-ipc.js",
-      "desktop/ipc/publication-ipc.js",
       "media-workbench/dist/index.html"
     ]) {
       assert.match(verifier, new RegExp('"' + escapeRegExp(requiredSurface) + '"'), requiredSurface + " must be verified");

@@ -28,7 +28,6 @@ const SUBMISSION_CHANNELS = [
   "content:start-paid-media-batch",
   "content:pause-paid-media-batch",
   "content:cancel-remaining-paid-media-batch-items",
-  "content:cancel-submission-batch",
   "content:preview-trashed-article-queue-residue",
   "content:cleanup-trashed-article-queue-residue",
 ];
@@ -158,8 +157,8 @@ const DOUBAO_FIXTURES = {
   ],
 };
 
-test("content operations inventory has 33 exact versioned contracts", () => {
-  assert.equal(contentOperationsContracts.length, 33);
+test("content operations inventory has 32 exact versioned contracts", () => {
+  assert.equal(contentOperationsContracts.length, 32);
   for (const channel of [...SUBMISSION_CHANNELS, ...DOUBAO_CHANNELS]) {
     const contract = productionIpcRegistry.byChannel(channel);
     assert.ok(contract, channel);

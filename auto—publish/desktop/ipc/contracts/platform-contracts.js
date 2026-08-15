@@ -13,7 +13,6 @@ const {
   TYPED_PLATFORM_OUTCOMES,
   PLATFORM_RESULT_STATUSES,
   projectPlatformQueue,
-  projectPlatformSnapshot,
 } = require("../../application/read-models/platform-read-model");
 
 const safeText = (max, min = 0) =>
@@ -139,53 +138,6 @@ const task = exactObject({
   targetPlatformId: safeText(128),
 });
 
-const terminalResultItem = exactObject({
-  task,
-  status: enumField(PLATFORM_RESULT_STATUSES),
-  publicationStatus: nullableField(enumField(TYPED_PLATFORM_OUTCOMES)),
-  errorCode: nullableField(safeText(128)),
-});
-
-const terminalResult = exactObject({
-  ok: integerField({ min: 0, max: 100000 }),
-  fail: integerField({ min: 0, max: 100000 }),
-  skipped: integerField({ min: 0, max: 100000 }),
-  uncertain: integerField({ min: 0, max: 100000 }),
-  results: arrayField(terminalResultItem, { max: 100000 }),
-});
-
-const snapshot = exactObject({
-  workspaceRuntimeId: identifier,
-  runId: nullableField(identifier),
-  phase: enumField([
-    "idle",
-    "running",
-    "waiting-interval",
-    "stopping",
-    "paused",
-    "completed",
-    "failed",
-    "stopped",
-    "interrupted",
-  ]),
-  total: integerField({ min: 0, max: 100000 }),
-  processed: integerField({ min: 0, max: 100000 }),
-  succeeded: integerField({ min: 0, max: 100000 }),
-  failed: integerField({ min: 0, max: 100000 }),
-  skipped: integerField({ min: 0, max: 100000 }),
-  uncertain: integerField({ min: 0, max: 100000 }),
-  currentTask: nullableField(task),
-  nextTask: nullableField(task),
-  waitRemainingMs: integerField({ min: 0, max: 86400000 }),
-  startedAt: nullableField(safeText(64)),
-  updatedAt: nullableField(safeText(64)),
-  terminalResult: nullableField(terminalResult),
-  isBatchRunning: "boolean",
-  isStopPending: "boolean",
-  isPlatformRunning: "boolean",
-  queueRevision: nullableField(integerField({ min: 0 })),
-});
-
 const accountProfile = exactObject({
   accountProfileId: identifier,
   platformId: identifier,
@@ -283,51 +235,9 @@ const platformContracts = [
     },
     ["PLATFORM_LOGIN_INPUT_INVALID", "PLATFORM_LOGIN_UNAVAILABLE"],
   ),
-  contract(
-    {
-      capability: "platform.pauseSubmit",
-      channel: "platforms:pause-submit",
-      kind: "command",
-      request: exactObject({ runId: nullableField(identifier) }),
-      success: exactObject({ accepted: "boolean", alreadyStopped: "boolean" }),
-      fromArgs: (args) => ({ runId: args[0] || null }),
-      toArgs: (payload) => [{ runId: payload.runId }],
-    },
-    ["PLATFORM_RUN_MISMATCH"],
-  ),
-  contract(
-    {
-      capability: "platform.stopSubmit",
-      channel: "platforms:stop-submit",
-      kind: "command",
-      request: exactObject({ runId: nullableField(identifier) }),
-      success: exactObject({ accepted: "boolean", alreadyStopped: "boolean" }),
-      fromArgs: (args) => ({ runId: args[0] || null }),
-      toArgs: (payload) => [{ runId: payload.runId }],
-    },
-    ["PLATFORM_RUN_MISMATCH"],
-  ),
-  contract({
-    capability: "platform.getState",
-    channel: "platforms:get-state",
-    kind: "query",
-    request: emptyRequest,
-    success: snapshot,
-    fromArgs: noArgs,
-    toArgs: noLegacyInput,
-  }),
-  defineContract({
-    capability: "platform.stateChanged",
-    channel: "platform-state",
-    feature: "platform",
-    kind: "event",
-    event: snapshot,
-    errorCodes: [],
-  }),
 ];
 
 module.exports = {
   platformContracts,
   projectPlatformQueue,
-  projectPlatformSnapshot,
 };

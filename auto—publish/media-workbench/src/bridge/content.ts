@@ -1,9 +1,6 @@
 import type {
   ArticleManagementSnapshot,
-  ContentSubmissionActionPlanItem,
-  ContentSubmissionBatchItem,
   ContentSubmissionBatchRecord,
-  ContentSubmissionCancellationPreview,
   PaidMediaAdmissionResult,
   PaidMediaConfirmationInput,
   PaidMediaExecutionBatch,
@@ -219,22 +216,6 @@ type SubmissionContentApi = {
   >;
   pauseAllRegularQueueGroups: () => Promise<
     ContentIpcResponse<{ items: RegularQueueGroupSnapshot[] }>
-  >;
-  cancelSubmissionBatch: (input: {
-    batchId: string;
-    planId: string;
-    confirmed: true;
-  }) => Promise<
-    ContentIpcResponse<{
-      batchId: string;
-      planId: string;
-      cancelledCount: number;
-      idempotentCount: number;
-      blockedItems: ContentSubmissionActionPlanItem[];
-      batchStatus: string;
-      changedScopes: string[];
-      items: ContentSubmissionBatchItem[];
-    }>
   >;
 };
 
@@ -681,28 +662,5 @@ export async function removePendingQueueItems(
         confirmed: true,
       }),
     "pending queue removal failed",
-  );
-}
-export async function cancelContentSubmissionBatch(
-  batchId: string,
-  planId: string,
-): Promise<{
-  batchId: string;
-  planId: string;
-  cancelledCount: number;
-  idempotentCount: number;
-  blockedItems: ContentSubmissionActionPlanItem[];
-  batchStatus: string;
-  changedScopes: string[];
-  items: ContentSubmissionBatchItem[];
-}> {
-  return callSubmission(
-    (api) =>
-      requireBridgeMethod(api.cancelSubmissionBatch)({
-        batchId,
-        planId,
-        confirmed: true,
-      }),
-    "submission batch cancellation failed",
   );
 }

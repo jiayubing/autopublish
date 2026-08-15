@@ -322,7 +322,7 @@ test("status 4 restores unpublished work while status 9 never revokes publicatio
   });
   assert.deepEqual(
     [rejectedLifecycle.stage, rejectedLifecycle.operations.edit.allowed],
-    ["failed", true],
+    ["pending_submission", true],
   );
   assert.equal(
     rejected.store.reservePublicationTarget({

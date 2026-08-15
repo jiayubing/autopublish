@@ -6,7 +6,6 @@ const { createPlatformSessionService } = require("./platform-session-service");
 const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 const {
   projectPlatformQueue,
-  projectPlatformSnapshot,
 } = require("../application/read-models/platform-read-model");
 
 function diagnose(code, action) {
@@ -81,15 +80,6 @@ function createPlatformWorkbenchApplication(options) {
     getQueue,
     openLogin: (input) => platformSessionService.openLogin(input.platformId),
     checkLogin: (input) => platformSessionService.checkLogin(input.platformId),
-    pauseSubmit: (input) => {
-      const result = (values.taskService || {}).pausePlatformSubmit(input && input.runId) || {};
-      return { accepted: result.ok === true, alreadyStopped: result.alreadyStopped === true };
-    },
-    stopSubmit: (input) => {
-      const result = (values.taskService || {}).stopPlatformSubmit(input && input.runId) || {};
-      return { accepted: result !== false && result.alreadyStopped !== true, alreadyStopped: result.alreadyStopped === true };
-    },
-    getState: () => projectPlatformSnapshot((values.taskService || {}).getState()),
   });
 }
 
