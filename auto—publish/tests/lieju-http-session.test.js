@@ -14,6 +14,8 @@ const {
 const {
   createLiejuHttpSession,
 } = require("../src/platforms/lieju/http-session");
+
+const LOGIN_PROBE_URL = "https://post.lieju.com/117/239";
 const { createPlatformAdapter } = require("../src/platforms/lieju/adapter");
 
 function response(options) {
@@ -101,6 +103,7 @@ test("Lieju HTTP probe and city/form GETs use request contexts without launching
     const session = createLiejuHttpSession({
       stateFile: fixture.stateFile,
       request: runtime.request,
+      loginProbeUrl: LOGIN_PROBE_URL,
     });
     const result = await session.withGetPort(async (port) => {
       assert.deepEqual(await port.probeLogin(), { status: "authenticated" });
@@ -170,6 +173,7 @@ test("Lieju HTTP session classifies missing, corrupt, expired, unclassified, tim
       request: makeRequestRuntime({
         responses: [response({ status: 403 })],
       }).request,
+      loginProbeUrl: LOGIN_PROBE_URL,
     });
     assert.deepEqual(await expired.withGetPort((port) => port.probeLogin()), {
       status: "expired",
@@ -182,6 +186,7 @@ test("Lieju HTTP session classifies missing, corrupt, expired, unclassified, tim
           response({ url: "https://www.lieju.com/member/upage.php" }),
         ],
       }).request,
+      loginProbeUrl: LOGIN_PROBE_URL,
     });
     assert.deepEqual(
       await unclassified.withGetPort((port) => port.probeLogin()),

@@ -185,6 +185,7 @@ function createLiejuRuntime(runtimeContext) {
         stateFile: session.stateFile,
         stateLease: createStateFileLease({ stateFile: session.stateFile }),
         request: context.httpRequest,
+        loginProbeUrl: LIEJU.publishUrl,
       });
     },
     imageResolver: context.imageResolver,
@@ -1184,6 +1185,7 @@ function createLiejuAdapter(runtimeContext) {
     id: "lieju",
     publicationTarget: { kind: "platform", granularity: "platform" },
     contentQueueImport: true,
+    imagePublishingCapability: Object.freeze({ supported: true }),
     scanDir: LIEJU.selectors.articleDir,
     ensureSession: function () {
       return runtime.lifecycle.ensureStarted();

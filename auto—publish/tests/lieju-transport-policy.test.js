@@ -304,6 +304,11 @@ test("Lieju registers only its prepared-submission contract", () => {
   assert.equal(Object.hasOwn(adapter, "publishArticle"), false);
 });
 
+test("Lieju declares the existing image capability after multipart support is ready", () => {
+  const adapter = createPlatformAdapter({ liejuSubmissionMode: "auto" });
+  assert.deepEqual(adapter.imagePublishingCapability, { supported: true });
+});
+
 test("Lieju auto verifies the account and freezes HTTP preparation without starting a browser", async () => {
   const fixture = stateFixture();
   const http = createHttpRuntime({

@@ -26,7 +26,7 @@
 1. 普通投稿 UI 不暴露逐篇 HTTP / Playwright 选择器。列举网默认为 `auto`：独立 HTTP Session 优先；只保留平台级 `playwright_only` 紧急开关，不建立文章级 transport 状态。
 2. 正常 HTTP 路径使用独立 `APIRequestContext` 加载 AutoPublish 专用 `storageState`，不启动 Chromium。只有首次登录、Session 明确失效或 HTTP 准备阶段明确不兼容时才进入浏览器路径。
 3. 一个账号的 `storageState` 只允许一个 writer。HTTP 与浏览器 Session 不得并发回写同一文件；有效 HTTP 响应产生的 Cookie 更新必须在账号专用互斥边界内原子保存。Cookie / Token / state 原文不得进入日志、DTO 或 evidence。
-4. 城市规则由列举网 adapter 内唯一纯决策 owner 持有：GET `https://www.lieju.com/city.php?post=239`；对去除首尾空格的客户城市按 DOM 顺序做现有语义的模糊匹配（城市链接文本包含配置值），取第一个匹配；无匹配回退北京。空城市仍按既有公开合同拒绝为客户档案不完整。
+4. 城市规则由列举网 adapter 内唯一纯决策 owner 持有：GET `https://post.lieju.com/city.php?post=239`；对去除首尾空格的客户城市按 DOM 顺序做现有语义的模糊匹配（城市链接文本包含配置值），取第一个匹配；无匹配回退北京。空城市仍按既有公开合同拒绝为客户档案不完整。
 5. 城市 URL 必须是 HTTPS、hostname 精确为 `post.lieju.com`、pathname 符合 `/{numericCityId}/239`。GET 目标投稿页后，`postdb[zone_id]` 统一选择最后一个非空 option；不建立“其他”文本特例和静态城市 ID 真源。
 6. HTTP 和 Playwright 必须消费同一份已冻结的城市 / 区域决策，不得各自重新解析并产生分歧。
 7. 只有 HTTP POST **尚未调用**时才允许转 Playwright 保底。一旦调用 POST，超时、断线、解码失败、结果缺失或任何无法确认的异常都必须进入 `uncertain`，不得启动 Playwright 再发一次。HTTP 客户端 `maxRetries=0`，不跟随未验证重定向。

@@ -2,7 +2,6 @@
 
 const fs = require("node:fs");
 const { request: playwrightRequest } = require("playwright");
-const { LIEJU } = require("../../../scripts/config");
 const { reportDiagnostic } = require("../../diagnostics/diagnostic-producer");
 const { createStateFileLease } = require("../shared/browser-session-lifecycle");
 
@@ -329,7 +328,12 @@ function createLiejuHttpSession(options) {
   }
 
   async function probeLogin() {
-    const response = await get(opts.loginProbeUrl || LIEJU.publishUrl);
+    if (typeof opts.loginProbeUrl !== "string" || !opts.loginProbeUrl)
+      throw sessionError(
+        "LIEJU_HTTP_LOGIN_PROBE_URL_REQUIRED",
+        "Lieju HTTP login probe URL is required",
+      );
+    const response = await get(opts.loginProbeUrl);
     if (isAuthenticatedProbeResponse(response))
       return Object.freeze({ status: "authenticated" });
     if (isExpiredProbeResponse(response))
