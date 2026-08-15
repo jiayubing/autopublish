@@ -355,7 +355,7 @@ test("Lieju auto verifies the account and freezes HTTP preparation without start
         "https://post.lieju.com/117/239",
         "https://www.lieju.com/member/upage.php",
         "https://post.lieju.com/117/239",
-        "https://post.lieju.com/city.php?post=239",
+        "https://www.lieju.com/city.php?post=239",
         "https://post.lieju.com/3/239",
         "https://post.lieju.com/117/239",
         "https://www.lieju.com/member/upage.php",

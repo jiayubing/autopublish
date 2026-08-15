@@ -2,7 +2,7 @@
 
 const cheerio = require("cheerio");
 
-const CITY_DIRECTORY_URL = "https://post.lieju.com/city.php?post=239";
+const CITY_DIRECTORY_URL = "https://www.lieju.com/city.php?post=239";
 const DEFAULT_CITY = "北京";
 const CITY_TARGET_PATH = /^\/(\d{1,20})\/239$/;
 const FORM_ACTION = "postnew";
@@ -413,6 +413,7 @@ function parseLiejuPublicationForm(html, cityTarget) {
 }
 
 module.exports = {
+  CITY_DIRECTORY_URL,
   decodeLiejuHttpHtml,
   parseLiejuPublicationForm,
   resolveLiejuCityTarget,

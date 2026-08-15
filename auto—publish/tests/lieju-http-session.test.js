@@ -107,7 +107,7 @@ test("Lieju HTTP probe and city/form GETs use request contexts without launching
     });
     const result = await session.withGetPort(async (port) => {
       assert.deepEqual(await port.probeLogin(), { status: "authenticated" });
-      const city = await port.get("https://post.lieju.com/city.php?post=239");
+      const city = await port.get("https://www.lieju.com/city.php?post=239");
       const form = await port.get("https://post.lieju.com/117/239");
       assert.throws(() => JSON.stringify(city), {
         code: "LIEJU_HTTP_RESPONSE_SERIALIZATION_FORBIDDEN",

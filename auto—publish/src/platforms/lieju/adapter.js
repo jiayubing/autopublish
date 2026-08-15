@@ -854,7 +854,7 @@ async function prepareHttpPublicationForm(runtime, profile) {
   return runtime.createHttpSession().withGetPort(async function (port) {
     requireAuthenticatedHttpSession(await port.probeLogin());
     const cityResponse = requireHttpPublicationResponse(
-      await port.get("https://post.lieju.com/city.php?post=239"),
+      await port.get(httpFormParser.CITY_DIRECTORY_URL),
     );
     const city = httpFormParser.resolveLiejuCityTarget(
       httpFormParser.decodeLiejuHttpHtml(cityResponse).html,
@@ -910,7 +910,7 @@ async function ensureBrowserSubmissionReady(runtime) {
 
 async function prepareBrowserPublicationForm(runtime, profile) {
   await ensureBrowserSubmissionReady(runtime);
-  runtime.invoke(["goto", "https://post.lieju.com/city.php?post=239"], {
+  runtime.invoke(["goto", httpFormParser.CITY_DIRECTORY_URL], {
     timeout: 20000,
   });
   throwIfStopped();

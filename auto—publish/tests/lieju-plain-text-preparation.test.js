@@ -229,7 +229,7 @@ test("Lieju HTTP prepare freezes the actual plain-text form body and leaves arti
 
     assert.deepEqual(fixture.getCalls, [
       "https://post.lieju.com/117/239",
-      "https://post.lieju.com/city.php?post=239",
+      "https://www.lieju.com/city.php?post=239",
       "https://post.lieju.com/1/239",
     ]);
     assert.equal(evidence.body, "标题\n\n正文含有 图片。");
