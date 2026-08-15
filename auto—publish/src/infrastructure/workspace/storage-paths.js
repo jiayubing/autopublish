@@ -8,6 +8,7 @@ const STORAGE_ROOTS = Object.freeze([
   "contentLibrary",
 ]);
 const CONTENT_MARKER = ".autopublish-workspace.json";
+const CLIENT_IMAGE_DIRECTORY_NAME = "images";
 
 function createPortableContentPaths(contentLibrary) {
   const root = path.resolve(contentLibrary);
@@ -17,6 +18,7 @@ function createPortableContentPaths(contentLibrary) {
     root: root,
     contentLibrary: root,
     clients: path.join(root, "clients"),
+    clientImageDirectoryName: CLIENT_IMAGE_DIRECTORY_NAME,
     generated: path.join(root, "generated"),
     templates: path.join(root, "templates"),
     autopublish: autopublish,
@@ -193,6 +195,7 @@ function ensureContentLibrary(paths) {
 module.exports = {
   STORAGE_ROOTS,
   CONTENT_MARKER,
+  CLIENT_IMAGE_DIRECTORY_NAME,
   createPortableContentPaths,
   createStoragePaths,
   validateStoragePaths,

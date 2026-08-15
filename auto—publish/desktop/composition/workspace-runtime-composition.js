@@ -146,6 +146,14 @@ async function createWorkspaceRuntimeComposition(deps) {
     const paths = runtime.paths;
     const injectedPaths = paths && paths.installation ? paths : undefined;
     const workspaceRoot = runtime.workspaceRoot;
+    const clientImageLibrary =
+      require("../../src/content/client-image-library").createClientImageLibrary(
+        {
+          workspaceRoot,
+          paths: injectedPaths,
+          imageDirectoryName: paths.clientImageDirectoryName,
+        },
+      );
     const { loadPlatforms } = require("../../src/core/platforms");
     const platformRuntimeContext =
       require("../../src/platforms/platform-runtime-context").createPlatformRuntimeContextFromWorkspacePaths(
@@ -589,6 +597,10 @@ async function createWorkspaceRuntimeComposition(deps) {
           )
         : platform;
     });
+    const regularImagePlanService =
+      require("../services/regular-image-plan-service").createRegularImagePlanService(
+        { imageLibrary: clientImageLibrary },
+      );
     const platformSubmissionExecutor =
       require("../services/regular-platform-preparation-port").createRegularPlatformPreparationPort(
         {
@@ -762,6 +774,7 @@ async function createWorkspaceRuntimeComposition(deps) {
       contentStore,
       contentSubmissionService,
       regularQueueApplication,
+      regularImagePlanService,
       regularQueueGroupOrchestrator: regularQueueGroupComposition.orchestrator,
       regularPlatformOutcomeService,
       paidMediaBatchOrchestrator: paidMediaBatchComposition.orchestrator,
