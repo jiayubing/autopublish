@@ -4,7 +4,7 @@
 
 **Blocked by:** 18 — 普通平台随机配图准备
 
-**Status:** `READY`；Wave 12 已完成，列举网探索结论已冻结为 `SUPPORTED`，下一可调度项为 19-0
+**Status:** `PARTIAL`；19-0～19-G 本地 implementation、combined audit、bounded re-audit、最终 clean-HEAD gate 与 evidence 已完成；独立 HTTP multipart POST 的真实带图验收仍需本次单独授权，保持 `USER_EXTERNAL_IMAGE_ACCEPTANCE_REQUIRED`
 
 **Scheduling gate:** Wave 12 `COMPLETE` 后，必须由用户对列举网单独明确授权真实能力探索并得到 `SUPPORTED`。`UNSUPPORTED` / `INCONCLUSIVE` 不创建实施线程且图片入口保持关闭。探索授权不等于实施期真实发布授权；adapter 合并后的真实带图验收需再次单独授权。
 
