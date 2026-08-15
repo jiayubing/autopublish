@@ -21,6 +21,13 @@ const {
 } = require("../shared/browser-session-lifecycle");
 const httpFormParser = require("./http-form-parser");
 const { createLiejuHttpSession } = require("./http-session");
+const {
+  classifyLiejuHttpSubmitResponse,
+  normalizeLiejuDetailUrl,
+} = require("./http-outcome");
+const {
+  prepareLiejuImageMultipart,
+} = require("./image-multipart-preparation");
 const { renderLiejuPlainText } = require("./plain-text-renderer");
 
 var DEFAULT_CITY = "北京";
@@ -30,7 +37,6 @@ var PUBLISH_PAGE_LOGIN_CHECK_MS = 2500;
 var FAST_POLL_MS = 500;
 var POST_SUBMIT_VERIFY_TIMEOUT_MS = 25 * 1000;
 var POST_SUBMIT_VERIFY_POLL_MS = 500;
-var LIEJU_DETAIL_PATH = /\/(?:[^\/?#]+\/)*([0-9]{1,20})\.html$/i;
 var POST_SUBMIT_REJECTION_PATTERN = [
   "发布失败",
   "提交失败",
@@ -128,7 +134,6 @@ function createLiejuRuntime(runtimeContext) {
   }
 
   var browserStateLease = createStateFileLease({ stateFile: session.stateFile });
-  var httpStateLease = createStateFileLease({ stateFile: session.stateFile });
   var lifecycle = createBrowserSessionLifecycle({
     session: session,
     stateDir: path.dirname(session.stateFile),
@@ -157,11 +162,14 @@ function createLiejuRuntime(runtimeContext) {
     invoke: invoke,
     evaluate: evaluate,
     lifecycle: lifecycle,
-    httpSession: createLiejuHttpSession({
-      stateFile: session.stateFile,
-      stateLease: httpStateLease,
-      request: context.httpRequest,
-    }),
+    createHttpSession: function () {
+      return createLiejuHttpSession({
+        stateFile: session.stateFile,
+        stateLease: createStateFileLease({ stateFile: session.stateFile }),
+        request: context.httpRequest,
+      });
+    },
+    imageResolver: context.imageResolver,
     postSubmitVerificationTimeoutMs: context.postSubmitVerificationTimeoutMs,
     postSubmitVerificationPollMs: context.postSubmitVerificationPollMs,
   };
@@ -410,25 +418,6 @@ function switchCity(runtime, cityName) {
   }
 
   diagnose("PLATFORM_CITY_SWITCH_COMPLETED", "remote", "city-switch");
-}
-
-function isLiejuHostname(value) {
-  var hostname = String(value || "").toLowerCase();
-  return hostname === "lieju.com" || hostname.endsWith(".lieju.com");
-}
-
-function normalizeLiejuDetailUrl(value) {
-  var normalized = domain.normalizePublishedArticleUrl(value);
-  if (!normalized) return null;
-  try {
-    var url = new URL(normalized);
-    if (!isLiejuHostname(url.hostname)) return null;
-    var match = url.pathname.match(LIEJU_DETAIL_PATH);
-    if (!match) return null;
-    return { remoteId: match[1], remoteUrl: normalized };
-  } catch (_) {
-    return null;
-  }
 }
 
 function isLiejuPublishPageUrl(value) {
@@ -753,6 +742,104 @@ async function publishArticle(runtime, article, options) {
   }
 }
 
+function defaultImagePlan() {
+  return Object.freeze({
+    requestedCount: 0,
+    selectedCount: 0,
+    textOnly: true,
+    images: Object.freeze([]),
+    warnings: Object.freeze([]),
+  });
+}
+
+function requireLiejuFormOverrides(form, evidence, profile) {
+  const values = {
+    "postdb[title]": evidence.title,
+    "postdb[content]": evidence.body,
+    "postdb[mobphone]": profile.phone,
+    "postdb[linkman]": profile.contact,
+  };
+  if (typeof form.zoneId !== "string" || !form.zoneId)
+    throw liejuPreparationError("LIEJU_PUBLICATION_ZONE_UNAVAILABLE");
+  values["postdb[zone_id]"] = form.zoneId;
+
+  const controls = Array.isArray(form.controls) ? form.controls : [];
+  for (const name of Object.keys(values)) {
+    const matched = controls.filter((control) => control.name === name);
+    if (
+      matched.length !== 1 ||
+      matched[0].type === "hidden" ||
+      matched[0].type === "file"
+    )
+      throw liejuPreparationError("LIEJU_PUBLICATION_FORM_FIELDS_INVALID");
+  }
+  return Object.freeze(values);
+}
+
+function liejuPreparationError(code) {
+  const error = new Error(code);
+  error.code = code;
+  return error;
+}
+
+function requireAuthenticatedHttpSession(probe) {
+  if (probe && probe.status === "authenticated") return;
+  throw liejuPreparationError("LOGIN_REQUIRED");
+}
+
+function requireHttpPublicationResponse(response) {
+  if (response && response.status !== 401 && response.status !== 403)
+    return response;
+  throw liejuPreparationError("LOGIN_REQUIRED");
+}
+
+function diagnoseHttpSubmit(outcome) {
+  if (outcome.status === "accepted")
+    diagnose("LIEJU_HTTP_SUBMIT_ACCEPTED", "remote", "http-submit");
+  else if (outcome.status === "article_rejected")
+    diagnose("LIEJU_HTTP_SUBMIT_REJECTED", "remote", "http-submit");
+  else if (outcome.status === "group_blocked")
+    diagnose("LIEJU_HTTP_SUBMIT_BLOCKED", "remote", "http-submit");
+  else diagnose("LIEJU_HTTP_SUBMIT_UNCERTAIN", "remote", "http-submit");
+}
+
+function createHttpSubmitCapability(runtime, action, multipart) {
+  let submissionStarted = false;
+  return async function submitPreparedPublication() {
+    if (submissionStarted)
+      return Object.freeze({
+        status: "uncertain",
+        errorCode: "REMOTE_RESULT_UNKNOWN",
+      });
+    submissionStarted = true;
+    diagnose("LIEJU_HTTP_SUBMIT_STARTED", "remote", "http-submit");
+    try {
+      const payload = multipart.consume();
+      const result = await runtime.createHttpSession().withSubmissionPort((port) =>
+        port.post(action, {
+          body: payload.body.getBuffer(),
+          headers: payload.headers,
+        }),
+      );
+      const outcome = result.stateSaved
+        ? classifyLiejuHttpSubmitResponse(result.result)
+        : Object.freeze({
+            status: "uncertain",
+            errorCode: "REMOTE_RESULT_UNKNOWN",
+          });
+      diagnoseHttpSubmit(outcome);
+      return outcome;
+    } catch (_) {
+      const outcome = Object.freeze({
+        status: "uncertain",
+        errorCode: "REMOTE_RESULT_UNKNOWN",
+      });
+      diagnoseHttpSubmit(outcome);
+      return outcome;
+    }
+  };
+}
+
 async function preparePlatformSubmission(runtime, claim, imagePlan) {
   const sourceEvidence =
     domain.createTextOnlyPreparedSubmissionEvidenceV1(claim);
@@ -766,19 +853,36 @@ async function preparePlatformSubmission(runtime, claim, imagePlan) {
     }),
   });
   const profile = requireLiejuPublicationProfile(claim);
-  const preparedArticle = Object.freeze({
-    title: evidence.title,
-    body: evidence.body,
-    city: profile.city,
-    contact: profile.contact,
-    phone: profile.phone,
+  const form = await runtime.createHttpSession().withGetPort(async function (port) {
+    requireAuthenticatedHttpSession(await port.probeLogin());
+    const cityResponse = requireHttpPublicationResponse(
+      await port.get("https://post.lieju.com/city.php?post=239"),
+    );
+    const city = httpFormParser.resolveLiejuCityTarget(
+      httpFormParser.decodeLiejuHttpHtml(cityResponse).html,
+      profile.city,
+    );
+    const formResponse = requireHttpPublicationResponse(await port.get(city.url));
+    return httpFormParser.parseLiejuPublicationForm(
+      httpFormParser.decodeLiejuHttpHtml(formResponse).html,
+      city,
+    );
   });
-  const prepared = await prepareArticleSubmission(runtime, preparedArticle, {
-    autoSubmit: true,
+  const prepared = prepareLiejuImageMultipart({
+    clientId: evidence.articleIdentityV1.clientId,
+    imagePlan: imagePlan === undefined ? defaultImagePlan() : imagePlan,
+    form,
+    preparedSubmissionEvidenceV1: evidence,
+    imageResolver: runtime.imageResolver,
+    formValueOverrides: requireLiejuFormOverrides(form, evidence, profile),
   });
   return domain.createPreparedSubmission({
-    preparedSubmissionEvidenceV1: evidence,
-    submitPreparedPublication: prepared.submitPreparedPublication,
+    preparedSubmissionEvidenceV1: prepared.preparedSubmissionEvidenceV1,
+    submitPreparedPublication: createHttpSubmitCapability(
+      runtime,
+      form.action,
+      prepared.multipart,
+    ),
   });
 }
 
@@ -866,7 +970,7 @@ function createLiejuAdapter(runtimeContext) {
       return preparePlatformSubmission(runtime, claim, imagePlan);
     },
     withHttpGetPort: function (operation) {
-      return runtime.httpSession.withGetPort(operation);
+      return runtime.createHttpSession().withGetPort(operation);
     },
     saveSession: function () {
       return runtime.lifecycle.saveState();

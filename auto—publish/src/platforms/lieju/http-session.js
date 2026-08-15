@@ -40,12 +40,57 @@ function safeLiejuUrl(value) {
   }
 }
 
+function safeLiejuResponseUrl(value) {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase();
+    if (
+      url.protocol !== "https:" ||
+      url.port ||
+      url.username ||
+      url.password ||
+      (host !== "lieju.com" && !host.endsWith(".lieju.com"))
+    )
+      return null;
+    return url;
+  } catch (_) {
+    return null;
+  }
+}
+
+function safeLiejuSubmissionUrl(value) {
+  const url = safeLiejuUrl(value);
+  if (
+    !url ||
+    url.hostname.toLowerCase() !== "post.lieju.com" ||
+    !/^\/\d{1,20}\/239$/.test(url.pathname) ||
+    url.hash ||
+    url.searchParams.size !== 1 ||
+    url.searchParams.getAll("action").length !== 1 ||
+    url.searchParams.get("action") !== "postnew"
+  )
+    return null;
+  return url;
+}
+
 function responseContentType(headers) {
   const entries = Object.entries(headers || {});
   const found = entries.find(function ([name]) {
     return name.toLowerCase() === "content-type";
   });
   return found && typeof found[1] === "string" ? found[1] : "";
+}
+
+function redirectLocation(headers, currentUrl) {
+  const location = Object.entries(headers || {}).find(function ([name]) {
+    return name.toLowerCase() === "location";
+  });
+  if (!location || typeof location[1] !== "string") return null;
+  try {
+    return new URL(location[1], currentUrl).toString();
+  } catch (_) {
+    return null;
+  }
 }
 
 function isRedirect(status) {
@@ -92,6 +137,7 @@ function createLiejuHttpSession(options) {
   let context = null;
   let closed = false;
   let receivedValidResponse = false;
+  let submissionResponseObserved = false;
 
   function diagnose(code, category, action) {
     const event = {
@@ -157,13 +203,9 @@ function createLiejuHttpSession(options) {
       const status = response.status();
       const headers = response.headers();
       if (isRedirect(status)) {
-        const location = Object.entries(headers || {}).find(function ([name]) {
-          return name.toLowerCase() === "location";
-        });
-        const redirectedUrl =
-          location && typeof location[1] === "string"
-            ? safeLiejuUrl(new URL(location[1], currentUrl).toString())
-            : null;
+        const redirectedUrl = safeLiejuUrl(
+          redirectLocation(headers, currentUrl),
+        );
         if (!redirectedUrl)
           throw sessionError(
             "LIEJU_HTTP_REDIRECT_UNSAFE",
@@ -208,6 +250,77 @@ function createLiejuHttpSession(options) {
     );
   }
 
+  async function post(url, input) {
+    const target = safeLiejuSubmissionUrl(url);
+    const payload = input || {};
+    if (!target)
+      throw sessionError(
+        "LIEJU_HTTP_SUBMIT_URL_INVALID",
+        "Lieju HTTP submission URL is invalid",
+      );
+    if (!Buffer.isBuffer(payload.body) || !payload.headers)
+      throw sessionError(
+        "LIEJU_HTTP_SUBMIT_PAYLOAD_INVALID",
+        "Lieju HTTP submission payload is invalid",
+      );
+    await open();
+
+    let response;
+    try {
+      response = await context.post(target.toString(), {
+        data: Buffer.from(payload.body),
+        headers: payload.headers,
+        timeout: Number.isFinite(payload.timeoutMs) ? payload.timeoutMs : 20000,
+        maxRedirects: 0,
+        maxRetries: 0,
+        failOnStatusCode: false,
+      });
+    } catch (_) {
+      throw sessionError("LIEJU_HTTP_POST_FAILED", "Lieju HTTP POST failed");
+    }
+
+    const status = response.status();
+    const headers = response.headers();
+    const responseUrl = safeLiejuUrl(response.url());
+    if (!responseUrl)
+      throw sessionError(
+        "LIEJU_HTTP_RESPONSE_URL_UNSAFE",
+        "Lieju HTTP response URL is unsafe",
+      );
+    // A submission response can update the authenticated storage state even
+    // when its body, redirect, or result classification later proves unsafe.
+    // Preserve that state best-effort, but let a failed save make the caller's
+    // post-boundary result uncertain.
+    submissionResponseObserved = true;
+    let redirectUrl = null;
+    if (isRedirect(status)) {
+      redirectUrl = safeLiejuResponseUrl(redirectLocation(headers, target));
+      if (!redirectUrl)
+        throw sessionError(
+          "LIEJU_HTTP_REDIRECT_UNSAFE",
+          "Lieju HTTP redirect is unsafe",
+        );
+    }
+    let body;
+    try {
+      body = await response.body();
+    } catch (_) {
+      throw sessionError(
+        "LIEJU_HTTP_BODY_UNAVAILABLE",
+        "Lieju HTTP response body is unavailable",
+      );
+    }
+    if (status >= 200 && status <= 299) receivedValidResponse = true;
+    return Object.freeze({
+      url: responseUrl.toString(),
+      status,
+      contentType: responseContentType(headers),
+      body: Buffer.from(body),
+      redirectUrl: redirectUrl ? redirectUrl.toString() : null,
+      toJSON: forbidSerialization,
+    });
+  }
+
   async function probeLogin() {
     const response = await get(opts.loginProbeUrl || LIEJU.publishUrl);
     if (isAuthenticatedProbeResponse(response))
@@ -243,10 +356,16 @@ function createLiejuHttpSession(options) {
   }
 
   async function close() {
-    if (closed) return;
+    if (closed)
+      return Object.freeze({ stateSaveAttempted: false, stateSaved: true });
     closed = true;
+    let stateSaveAttempted = false;
+    let stateSaved = true;
     try {
-      if (context && receivedValidResponse) await saveState();
+      if (context && (receivedValidResponse || submissionResponseObserved)) {
+        stateSaveAttempted = true;
+        stateSaved = await saveState();
+      }
     } finally {
       if (context) {
         try {
@@ -261,6 +380,7 @@ function createLiejuHttpSession(options) {
         diagnose("LIEJU_HTTP_STATE_LEASE_RELEASE_FAILED", "storage", "lease");
       }
     }
+    return Object.freeze({ stateSaveAttempted, stateSaved });
   }
 
   async function withGetPort(operation) {
@@ -279,7 +399,23 @@ function createLiejuHttpSession(options) {
     return result;
   }
 
-  return Object.freeze({ withGetPort });
+  async function withSubmissionPort(operation) {
+    if (typeof operation !== "function")
+      throw new Error("Lieju HTTP submission operation is required");
+    await open();
+    let result;
+    let primaryError = null;
+    try {
+      result = await operation(Object.freeze({ post }));
+    } catch (error) {
+      primaryError = error;
+    }
+    const closeResult = await close();
+    if (primaryError) throw primaryError;
+    return Object.freeze({ result, stateSaved: closeResult.stateSaved });
+  }
+
+  return Object.freeze({ withGetPort, withSubmissionPort });
 }
 
 module.exports = { createLiejuHttpSession };

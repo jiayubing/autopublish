@@ -155,10 +155,14 @@ async function createWorkspaceRuntimeComposition(deps) {
         },
       );
     const { loadPlatforms } = require("../../src/core/platforms");
-    const platformRuntimeContext =
-      require("../../src/platforms/platform-runtime-context").createPlatformRuntimeContextFromWorkspacePaths(
+    const platformRuntimeContext = Object.freeze({
+      ...require("../../src/platforms/platform-runtime-context").createPlatformRuntimeContextFromWorkspacePaths(
         paths,
-      );
+      ),
+      imageResolver: Object.freeze({
+        resolveImage: clientImageLibrary.resolveImage,
+      }),
+    });
     const loadedPlatforms = loadPlatforms({ runtimeContext: platformRuntimeContext });
     const operationalStoreTransitionPorts = {};
     let contentStore = null;

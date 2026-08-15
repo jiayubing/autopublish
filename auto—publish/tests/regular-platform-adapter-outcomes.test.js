@@ -57,6 +57,18 @@ function imagePlan() {
   });
 }
 
+function liejuBrowserArticle(value) {
+  const profile = (value && value.publicationProfile) || claim("lieju").publicationProfile;
+  const snapshot = (value && value.publicationSnapshot) || claim("lieju").publicationSnapshot;
+  return {
+    title: snapshot.title,
+    body: snapshot.body,
+    city: profile.city,
+    contact: profile.contact,
+    phone: profile.phone,
+  };
+}
+
 function createLiejuPageFixture(options) {
   const value = options || {};
   const fields = {};
@@ -486,19 +498,18 @@ test("Lieju fills the customer publication profile through browser page actions"
   const pageFixture = createLiejuPageFixture();
   const loaded = loadBrowserAdapter("lieju", { pageFixture });
   try {
-    const prepared = await loaded.adapter.preparePlatformSubmission(
-      Object.assign(claim("lieju"), {
-        publicationProfile: { city: "上海", contact: "张三", phone: "13800138000" },
-      }),
-      imagePlan(),
-    );
     assert.deepEqual(
-      {
-        deliveryMode: prepared.preparedSubmissionEvidenceV1.deliveryMode,
-        images: prepared.preparedSubmissionEvidenceV1.images,
-        decisionKind: prepared.preparedSubmissionEvidenceV1.decisionKind,
-      },
-      { deliveryMode: "text_only", images: [], decisionKind: "initial" },
+      await loaded.adapter.publishArticle(
+        liejuBrowserArticle({
+          publicationProfile: {
+            city: "上海",
+            contact: "张三",
+            phone: "13800138000",
+          },
+        }),
+        { autoSubmit: false },
+      ),
+      { status: "group_blocked", errorCode: "MANUAL_SUBMIT_REQUIRED" },
     );
     assert.deepEqual(pageFixture.fields, {
       title: "合成标题",
@@ -628,37 +639,36 @@ test("Lieju factory binds the injected runtime session and Playwright toolchain"
   }
 });
 
-for (const platformId of ["lieju", "toutiao"]) {
-  test(`${platformId} returns uncertain when final submit cannot bind a remote identity`, async () => {
-    const loaded = loadBrowserAdapter(platformId);
-    try {
-      const adapter =
-        platformId === "lieju"
-          ? loaded.adapter.createPlatformAdapter({
-              postSubmitVerificationTimeoutMs: 0,
-            })
-          : loaded.adapter;
-      const prepared = await adapter.preparePlatformSubmission(
-        claim(platformId),
-        imagePlan(),
-      );
-      assert.deepEqual(
-        {
-          deliveryMode: prepared.preparedSubmissionEvidenceV1.deliveryMode,
-          images: prepared.preparedSubmissionEvidenceV1.images,
-          decisionKind: prepared.preparedSubmissionEvidenceV1.decisionKind,
-        },
-        { deliveryMode: "text_only", images: [], decisionKind: "initial" },
-      );
-      assert.deepEqual(await prepared.submitPreparedPublication(), {
-        status: "uncertain",
-        errorCode: "REMOTE_RESULT_UNKNOWN",
-      });
-    } finally {
-      loaded.restore();
-    }
-  });
-}
+test("toutiao returns uncertain when final submit cannot bind a remote identity", async () => {
+  const loaded = loadBrowserAdapter("toutiao");
+  try {
+    const prepared = await loaded.adapter.preparePlatformSubmission(
+      claim("toutiao"),
+      imagePlan(),
+    );
+    assert.deepEqual(await prepared.submitPreparedPublication(), {
+      status: "uncertain",
+      errorCode: "REMOTE_RESULT_UNKNOWN",
+    });
+  } finally {
+    loaded.restore();
+  }
+});
+
+test("Lieju legacy browser submission remains separate from HTTP-first preparation", async () => {
+  const loaded = loadBrowserAdapter("lieju");
+  try {
+    const adapter = loaded.adapter.createPlatformAdapter({
+      postSubmitVerificationTimeoutMs: 0,
+    });
+    assert.deepEqual(await adapter.publishArticle(liejuBrowserArticle()), {
+      status: "uncertain",
+      errorCode: "REMOTE_RESULT_UNKNOWN",
+    });
+  } finally {
+    loaded.restore();
+  }
+});
 
 test("Lieju accepts only a verified article detail URL and records its remote ID", async () => {
   const loaded = loadBrowserAdapter("lieju", {
@@ -673,8 +683,7 @@ test("Lieju accepts only a verified article detail URL and records its remote ID
     const adapter = loaded.adapter.createPlatformAdapter({
       postSubmitVerificationTimeoutMs: 0,
     });
-    const prepared = await adapter.preparePlatformSubmission(claim("lieju"));
-    assert.deepEqual(await prepared.submitPreparedPublication(), {
+    assert.deepEqual(await adapter.publishArticle(liejuBrowserArticle()), {
       status: "accepted",
       remoteId: "123456",
       remoteUrl: "https://ly.lieju.com/shanghai/123456.html",
@@ -694,8 +703,7 @@ test("Lieju accepts a remote detail URL observed from the post-submit response",
     const adapter = loaded.adapter.createPlatformAdapter({
       postSubmitVerificationTimeoutMs: 0,
     });
-    const prepared = await adapter.preparePlatformSubmission(claim("lieju"));
-    assert.deepEqual(await prepared.submitPreparedPublication(), {
+    assert.deepEqual(await adapter.publishArticle(liejuBrowserArticle()), {
       status: "accepted",
       remoteId: "654321",
       remoteUrl: detailUrl,
@@ -722,8 +730,7 @@ test("Lieju maps an explicit form rejection to an article-level rejection", asyn
     const adapter = loaded.adapter.createPlatformAdapter({
       postSubmitVerificationTimeoutMs: 0,
     });
-    const prepared = await adapter.preparePlatformSubmission(claim("lieju"));
-    assert.deepEqual(await prepared.submitPreparedPublication(), {
+    assert.deepEqual(await adapter.publishArticle(liejuBrowserArticle()), {
       status: "article_rejected",
       errorCode: "REMOTE_REJECTED",
     });
@@ -741,8 +748,7 @@ test("Lieju maps an explicit browser rejection dialog to article_rejected", asyn
     const adapter = loaded.adapter.createPlatformAdapter({
       postSubmitVerificationTimeoutMs: 0,
     });
-    const prepared = await adapter.preparePlatformSubmission(claim("lieju"));
-    assert.deepEqual(await prepared.submitPreparedPublication(), {
+    assert.deepEqual(await adapter.publishArticle(liejuBrowserArticle()), {
       status: "article_rejected",
       errorCode: "REMOTE_REJECTED",
     });
@@ -766,8 +772,7 @@ test("Lieju keeps a generic success message uncertain without a remote identity"
     const adapter = loaded.adapter.createPlatformAdapter({
       postSubmitVerificationTimeoutMs: 0,
     });
-    const prepared = await adapter.preparePlatformSubmission(claim("lieju"));
-    assert.deepEqual(await prepared.submitPreparedPublication(), {
+    assert.deepEqual(await adapter.publishArticle(liejuBrowserArticle()), {
       status: "uncertain",
       errorCode: "REMOTE_RESULT_UNKNOWN",
     });
@@ -776,7 +781,7 @@ test("Lieju keeps a generic success message uncertain without a remote identity"
   }
 });
 
-test("Lieju keeps a success-looking page uncertain and does not submit twice", async () => {
+test("Lieju legacy browser success-looking page remains uncertain", async () => {
   const pageFixture = createLiejuPageFixture({
     bodyText: "发布成功",
     formVisible: false,
@@ -786,13 +791,11 @@ test("Lieju keeps a success-looking page uncertain and does not submit twice", a
     const adapter = loaded.adapter.createPlatformAdapter({
       postSubmitVerificationTimeoutMs: 0,
     });
-    const prepared = await adapter.preparePlatformSubmission(claim("lieju"));
     const expected = {
       status: "uncertain",
       errorCode: "REMOTE_RESULT_UNKNOWN",
     };
-    assert.deepEqual(await prepared.submitPreparedPublication(), expected);
-    assert.deepEqual(await prepared.submitPreparedPublication(), expected);
+    assert.deepEqual(await adapter.publishArticle(liejuBrowserArticle()), expected);
     assert.equal(
       pageFixture.events.filter((event) => event.type === "submit").length,
       1,

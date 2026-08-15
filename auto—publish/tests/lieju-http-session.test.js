@@ -30,12 +30,20 @@ function response(options) {
 function makeRequestRuntime(options) {
   const value = options || {};
   const calls = [];
+  const postCalls = [];
   const newContexts = [];
   const responses = (value.responses || []).slice();
+  const postResponses = (value.postResponses || []).slice();
   const context = {
     get: async (url, input) => {
       calls.push({ url, input });
       const next = responses.shift();
+      if (next instanceof Error) throw next;
+      return typeof next === "function" ? next(url, input) : next;
+    },
+    post: async (url, input) => {
+      postCalls.push({ url, input });
+      const next = postResponses.shift();
       if (next instanceof Error) throw next;
       return typeof next === "function" ? next(url, input) : next;
     },
@@ -53,6 +61,7 @@ function makeRequestRuntime(options) {
   };
   return {
     calls,
+    postCalls,
     newContexts,
     request: {
       newContext: async (input) => {
@@ -312,6 +321,77 @@ test("Lieju adapter exposes only the narrow HTTP GET port", async () => {
       contentType: "text/html; charset=utf-8",
     });
     assert.equal("stateFile" in adapter, false);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test("Lieju HTTP submission port sends one bounded no-retry POST and reports state-save failure", async () => {
+  const fixture = stateFixture();
+  const diagnostics = [];
+  try {
+    const runtime = makeRequestRuntime({
+      postResponses: [
+        response({
+          status: 302,
+          headers: {
+            location: "https://ly.lieju.com/beijing/123456.html",
+            "content-type": "text/html; charset=utf-8",
+          },
+        }),
+      ],
+    });
+    const result = await createLiejuHttpSession({
+      stateFile: fixture.stateFile,
+      request: runtime.request,
+    }).withSubmissionPort(async (port) => {
+      assert.deepEqual(Object.keys(port), ["post"]);
+      return port.post("https://post.lieju.com/1/239?action=postnew", {
+        body: Buffer.from("synthetic-multipart"),
+        headers: { "content-type": "multipart/form-data; boundary=synthetic" },
+      });
+    });
+
+    assert.equal(runtime.postCalls.length, 1);
+    assert.deepEqual(runtime.postCalls[0], {
+      url: "https://post.lieju.com/1/239?action=postnew",
+      input: {
+        data: Buffer.from("synthetic-multipart"),
+        headers: { "content-type": "multipart/form-data; boundary=synthetic" },
+        timeout: 20000,
+        maxRedirects: 0,
+        maxRetries: 0,
+        failOnStatusCode: false,
+      },
+    });
+    assert.equal(result.stateSaved, true);
+    assert.equal(
+      result.result.redirectUrl,
+      "https://ly.lieju.com/beijing/123456.html",
+    );
+
+    const failedSave = await createLiejuHttpSession({
+      stateFile: fixture.stateFile,
+      fs: Object.assign({}, fs, {
+        renameSync() {
+          throw new Error("save failed with cookie=secret");
+        },
+      }),
+      diagnose: (event) => diagnostics.push(event),
+      request: makeRequestRuntime({
+        postResponses: [response({ body: '<meta charset="utf-8">发布成功' })],
+      }).request,
+    }).withSubmissionPort((port) =>
+      port.post("https://post.lieju.com/1/239?action=postnew", {
+        body: Buffer.from("synthetic-multipart"),
+        headers: { "content-type": "multipart/form-data; boundary=synthetic" },
+      }),
+    );
+    assert.equal(failedSave.stateSaved, false);
+    assert.deepEqual(diagnostics.map((event) => event.code), [
+      "LIEJU_HTTP_STATE_SAVE_FAILED",
+    ]);
+    assert.equal(JSON.stringify(diagnostics).includes("secret"), false);
   } finally {
     removeFixture(fixture);
   }

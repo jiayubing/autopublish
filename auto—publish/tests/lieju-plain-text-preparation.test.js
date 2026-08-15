@@ -11,6 +11,7 @@ const { createArticleStore } = require("../src/content/article-store");
 const {
   renderLiejuPlainText,
 } = require("../src/platforms/lieju/plain-text-renderer");
+const { createPlatformAdapter } = require("../src/platforms/lieju/adapter");
 
 function claim(body) {
   return {
@@ -36,71 +37,53 @@ function claim(body) {
   };
 }
 
-function loadAdapterWithFormFixture() {
-  const fields = {};
-  const playwrightPath = require.resolve("../src/core/playwright");
-  const adapterPath = require.resolve("../src/platforms/lieju/adapter");
-  const previousPlaywright = require.cache[playwrightPath];
-  const previousAdapter = require.cache[adapterPath];
-  const page = {
-    waitForSelector() {},
-    locator(selector) {
-      const locator = {
-        count() {
-          return 1;
-        },
-        first() {
-          return locator;
-        },
-        evaluateAll(callback) {
-          return callback([]);
-        },
-        fill(value) {
-          fields[selector] = value;
-        },
-        selectOption() {},
-      };
-      return locator;
-    },
-  };
-  require.cache[playwrightPath] = {
-    id: playwrightPath,
-    filename: playwrightPath,
-    loaded: true,
-    exports: {
-      pwSessionConfig(input) {
-        return {
-          session: "lieju-plain-text-fixture",
-          profileDir: "synthetic-profile",
-          daemonDir: "synthetic-daemon",
-          stateFile: (input && input.stateFile) || "synthetic-state.json",
-        };
-      },
-      pwInvokeSync() {
-        return "";
-      },
-      runCode(source) {
-        if (source.includes("var targetCity")) return "北京";
-        if (source.includes("page.locator('#atc_content').fill")) {
-          new Function("page", source.replace(/\bawait\s+/g, ""))(page);
-        }
-        return true;
-      },
-    },
-  };
-  delete require.cache[adapterPath];
-  const adapter = require(adapterPath);
+function loadAdapterWithFormFixture(root) {
+  const stateFile = path.join(root, "lieju-state.json");
+  const getCalls = [];
+  const responses = [
+    response('<meta charset="utf-8">'),
+    response(
+      '<meta charset="utf-8"><a href="https://post.lieju.com/1/239">北京</a>',
+    ),
+    response([
+      '<meta charset="utf-8">',
+      '<form method="post" enctype="multipart/form-data" action="/1/239?action=postnew">',
+      '<input type="hidden" name="fid" value="opaque-current-form-value">',
+      '<input type="text" name="postdb[title]">',
+      '<textarea name="postdb[content]"></textarea>',
+      '<select name="postdb[zone_id]"><option value="">请选择</option><option value="zone-final">最终区域</option></select>',
+      '<input type="text" name="postdb[mobphone]">',
+      '<input type="text" name="postdb[linkman]">',
+      "</form>",
+    ].join("")),
+  ];
+  fs.writeFileSync(stateFile, '{"cookies":[]}', "utf8");
   return {
-    adapter,
-    fields,
-    restore() {
-      adapter.closeSession();
-      delete require.cache[adapterPath];
-      if (previousAdapter) require.cache[adapterPath] = previousAdapter;
-      if (previousPlaywright)
-        require.cache[playwrightPath] = previousPlaywright;
-      else delete require.cache[playwrightPath];
-    },
+    getCalls,
+    adapter: createPlatformAdapter({
+      browserRuntime: { stateFile },
+      httpRequest: {
+        newContext: async () => ({
+          get: async (url) => {
+            getCalls.push(url);
+            return responses.shift();
+          },
+          storageState: async ({ path: filename }) =>
+            fs.writeFileSync(filename, '{"cookies":[]}', "utf8"),
+          dispose: async () => undefined,
+        }),
+      },
+    }),
+    restore() {},
+  };
+}
+
+function response(body) {
+  return {
+    status: () => 200,
+    url: () => "https://post.lieju.com/1/239",
+    headers: () => ({ "content-type": "text/html; charset=utf-8" }),
+    body: async () => Buffer.from(body, "utf8"),
   };
 }
 
@@ -217,7 +200,7 @@ test("Lieju plain-text renderer removes Setext and reference-style presentation 
   assert.doesNotMatch(rendered, /[!\[\]=]|file:\/\/|docs\.example\.test/);
 });
 
-test("Lieju prepare freezes the actual plain-text form body and leaves article bytes untouched", async () => {
+test("Lieju HTTP prepare freezes the actual plain-text form body and leaves article bytes untouched", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "lieju-plain-text-"));
   const source = "## 标题\n\n**正文**含有 ![图片](C:\\private\\cover.png)。";
   const store = createArticleStore(root);
@@ -236,7 +219,7 @@ test("Lieju prepare freezes the actual plain-text form body and leaves article b
     markdown: fs.readFileSync(markdown),
     metadata: fs.readFileSync(metadata),
   };
-  const fixture = loadAdapterWithFormFixture();
+  const fixture = loadAdapterWithFormFixture(root);
   try {
     const article = store.getArticle("client-plain-text", "article-plain-text");
     const prepared = await fixture.adapter.preparePlatformSubmission(
@@ -244,15 +227,18 @@ test("Lieju prepare freezes the actual plain-text form body and leaves article b
     );
     const evidence = prepared.preparedSubmissionEvidenceV1;
 
-    assert.equal(fixture.fields["#atc_title"], article.title);
-    assert.equal(fixture.fields["#atc_content"], evidence.body);
+    assert.deepEqual(fixture.getCalls, [
+      "https://post.lieju.com/117/239",
+      "https://post.lieju.com/city.php?post=239",
+      "https://post.lieju.com/1/239",
+    ]);
     assert.equal(evidence.body, "标题\n\n正文含有 图片。");
     assert.notEqual(evidence.body, article.content);
     assert.equal(
       evidence.contentFingerprint,
       domain.preparedContentFingerprint({
         title: evidence.title,
-        body: fixture.fields["#atc_content"],
+        body: evidence.body,
       }),
     );
     assert.deepEqual(
