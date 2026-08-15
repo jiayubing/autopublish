@@ -11,6 +11,7 @@ const COMMAND_NAMES = Object.freeze([
   'pauseGroup',
   'startAllGroups',
   'pauseAllGroups',
+  'updateImageCount',
   'removePendingQueueItems',
 ]);
 
@@ -508,6 +509,24 @@ export function createPlatformFeature(bridge = {}) {
         requireScope(),
         () => bridge.pauseAllRegularQueueGroups(),
         '暂停全部普通平台队列组失败',
+        (items) => {
+          regularGroupQuery.invalidate();
+          regularQueueGroups = Object.freeze({
+            items: Object.freeze(Array.isArray(items) ? [...items] : []),
+            query: Object.freeze({ loading: false, error: null }),
+          });
+        },
+      );
+    },
+    updateImageCount(input) {
+      if (owners.updateImageCount.getSnapshot().busy)
+        return Promise.resolve({ ignored: true });
+      regularGroupQuery.invalidate();
+      return ownedCommand(
+        owners.updateImageCount,
+        { ...requireScope(), queueGroupId: input?.queueGroupId },
+        () => bridge.updateRegularQueueGroupImageCount(input),
+        '保存普通平台队列图片数量失败',
         (items) => {
           regularGroupQuery.invalidate();
           regularQueueGroups = Object.freeze({

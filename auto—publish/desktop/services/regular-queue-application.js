@@ -7,6 +7,7 @@ const {
 } = require("../../src/content/article-ref");
 const { deriveArticleLifecycle } = require("../../src/content/article-lifecycle-projection");
 const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
+const { imagePublishingCapability } = require("../../src/core/platforms");
 
 function fail(code, message) {
   const error = new Error(message || code);
@@ -43,6 +44,8 @@ function createRegularQueueApplication(options) {
   const coordinator = value.articleMutationCoordinator;
   const transitions = value.regularQueueTransitions;
   const groupTransitions = value.regularQueueGroupTransitions || null;
+  const groupImageCountTransitions =
+    value.regularQueueGroupImageCountTransitions || null;
   const accountProfileResolver = value.accountProfileResolver;
   const clientSnapshotResolver = typeof value.clientSnapshotResolver === "function"
     ? value.clientSnapshotResolver
@@ -144,12 +147,55 @@ function createRegularQueueApplication(options) {
   function queueConfigFrom(input) {
     const queueConfig = input && input.queueConfig;
     if (queueConfig === undefined) return undefined;
-    if (!plainObject(queueConfig) || Object.keys(queueConfig).some(function (key) { return key !== "queueGroupId"; }))
+    if (!plainObject(queueConfig) || Object.keys(queueConfig).some(function (key) {
+      return key !== "queueGroupId" && key !== "imageCount";
+    }))
       throw fail("REGULAR_QUEUE_CONFIG_INVALID");
     if (queueConfig.queueGroupId !== undefined &&
         (typeof queueConfig.queueGroupId !== "string" || !queueConfig.queueGroupId.trim()))
       throw fail("REGULAR_QUEUE_CONFIG_INVALID");
+    if (
+      queueConfig.imageCount !== undefined &&
+      (!Number.isInteger(queueConfig.imageCount) ||
+        queueConfig.imageCount < 0 ||
+        queueConfig.imageCount > 5)
+    )
+      throw fail("REGULAR_QUEUE_CONFIG_INVALID");
     return Object.freeze(Object.assign({}, queueConfig));
+  }
+
+  function imageCountUpdateFrom(input) {
+    const request = input || {};
+    if (
+      !plainObject(request) ||
+      Object.keys(request).some(function (key) {
+        return (
+          key !== "queueGroupId" &&
+          key !== "imageCount" &&
+          key !== "expectedRevision"
+        );
+      }) ||
+      typeof request.queueGroupId !== "string" ||
+      !request.queueGroupId.trim() ||
+      !Number.isInteger(request.imageCount) ||
+      request.imageCount < 0 ||
+      request.imageCount > 5 ||
+      !Number.isInteger(request.expectedRevision) ||
+      request.expectedRevision < 0
+    )
+      throw fail("REGULAR_QUEUE_CONFIG_INVALID");
+    return Object.freeze({
+      queueGroupId: request.queueGroupId.trim(),
+      imageCount: request.imageCount,
+      expectedRevision: request.expectedRevision,
+    });
+  }
+
+  function groupImagePublishingSupported(platformId) {
+    const platform = platformList().find(function (candidate) {
+      return candidate.id === platformId;
+    });
+    return imagePublishingCapability(platform).supported;
   }
 
   function factsFor(refs) {
@@ -444,6 +490,12 @@ function createRegularQueueApplication(options) {
       groups.map((group) => {
         if (!group || !Array.isArray(group.remaining))
           throw fail("REGULAR_QUEUE_GROUP_QUERY_INVALID");
+        if (
+          !Number.isInteger(group.imageCount) ||
+          group.imageCount < 0 ||
+          group.imageCount > 5
+        )
+          throw fail("REGULAR_QUEUE_GROUP_QUERY_INVALID");
         const reasonCode =
           typeof group.actions?.reasonCode === "string" &&
           /^[A-Z][A-Z0-9_]{0,127}$/.test(group.actions.reasonCode)
@@ -453,6 +505,8 @@ function createRegularQueueApplication(options) {
           queueGroupId: group.queueGroupId,
           platformId: group.platformId,
           accountProfileId: group.accountProfileId,
+          imageCount: group.imageCount,
+          imagePublishingSupported: groupImagePublishingSupported(group.platformId),
           runState: group.runState,
           pauseIntent: group.pauseIntent,
           manuallyPaused: group.manuallyPaused,
@@ -471,11 +525,25 @@ function createRegularQueueApplication(options) {
     );
   }
 
+  function updateRegularQueueGroupImageCount(input) {
+    if (
+      !groupImageCountTransitions ||
+      typeof groupImageCountTransitions.setRegularQueueGroupImageCount !==
+        "function"
+    )
+      throw fail("REGULAR_QUEUE_GROUP_IMAGE_COUNT_UNAVAILABLE");
+    const request = imageCountUpdateFrom(input);
+    groupImageCountTransitions.setRegularQueueGroupImageCount(request);
+    notifyDataInvalidated("REGULAR_QUEUE_GROUP_IMAGE_COUNT_UPDATED");
+    return listRegularQueueGroups();
+  }
+
   return Object.freeze({
     previewRegularQueueAdmission,
     admitRegularQueueItems,
     listRegularQueueGroups,
     removePendingQueueItems,
+    updateRegularQueueGroupImageCount,
   });
 }
 

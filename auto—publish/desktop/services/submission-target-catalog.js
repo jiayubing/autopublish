@@ -1,6 +1,9 @@
 "use strict";
 
-const { loadPlatforms } = require("../../src/core/platforms");
+const {
+  loadPlatforms,
+  imagePublishingCapability,
+} = require("../../src/core/platforms");
 
 function queueTarget(platform) {
   return {
@@ -9,6 +12,7 @@ function queueTarget(platform) {
     scanDir: platform.scanDir || platform.id,
     contentQueueImport: platform.contentQueueImport === true,
     publicationTarget: platform.publicationTarget || { kind: "platform" },
+    imagePublishingCapability: imagePublishingCapability(platform),
   };
 }
 
@@ -40,6 +44,7 @@ function createSubmissionTargetCatalog(options) {
       displayName: platform.displayName || platform.id,
       scanDir: platform.scanDir || platform.id,
       contentQueueImport: platform.contentQueueImport === true,
+      imagePublishingCapability: imagePublishingCapability(platform),
     }));
   }
 

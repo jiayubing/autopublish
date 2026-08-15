@@ -21,6 +21,18 @@ function normalizePlatformIds(platformIds) {
   return selected;
 }
 
+function imagePublishingCapability(adapter) {
+  const declared = adapter && adapter.imagePublishingCapability;
+  return Object.freeze({
+    supported: Boolean(
+      declared &&
+        typeof declared === "object" &&
+        !Array.isArray(declared) &&
+        declared.supported === true,
+    ),
+  });
+}
+
 function validateAdapter(adapter, id) {
   if (!adapter || adapter.id !== id) {
     return (
@@ -124,4 +136,4 @@ function loadPlatforms(options) {
   return platforms;
 }
 
-module.exports = { loadPlatforms, validateAdapter };
+module.exports = { loadPlatforms, validateAdapter, imagePublishingCapability };

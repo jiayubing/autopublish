@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { RegularQueueGroupSnapshot } from "../types/publication";
 
 type QueueGroupView = RegularQueueGroupSnapshot & {
@@ -15,23 +16,127 @@ function articleLabel(item: {
   return `${title}（客户：${customerName}）`;
 }
 
+function imageCountFrom(value: string) {
+  if (!/^(?:0|[1-5])$/.test(value)) return null;
+  return Number(value);
+}
+
+function QueueGroupImageCountControl({
+  group,
+  busy,
+  onUpdate,
+}: {
+  group: QueueGroupView;
+  busy: boolean;
+  onUpdate: (input: {
+    queueGroupId: string;
+    imageCount: number;
+    expectedRevision: number;
+  }) => Promise<unknown>;
+}) {
+  const [draft, setDraft] = useState(String(group.imageCount));
+  const [feedback, setFeedback] = useState("");
+  const imageCount = imageCountFrom(draft);
+  const changed = imageCount !== null && imageCount !== group.imageCount;
+
+  useEffect(() => {
+    setDraft(String(group.imageCount));
+  }, [group.queueGroupId, group.imageCount]);
+
+  useEffect(() => {
+    setFeedback("");
+  }, [group.queueGroupId]);
+
+  if (!group.imagePublishingSupported) return null;
+
+  async function save() {
+    if (imageCount === null) {
+      setFeedback("请输入 0 到 5 的整数。");
+      return;
+    }
+    setFeedback("");
+    try {
+      await onUpdate({
+        queueGroupId: group.queueGroupId,
+        imageCount,
+        expectedRevision: group.revision,
+      });
+      setFeedback("图片数量已保存。");
+    } catch (error) {
+      setFeedback(
+        error instanceof Error && error.message
+          ? error.message
+          : "保存图片数量失败。",
+      );
+    }
+  }
+
+  return (
+    <div className="mt-3 flex flex-col gap-2 rounded border border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-end sm:justify-between">
+      <label className="grid gap-1 text-xs font-medium text-slate-700">
+        每篇图片数量
+        <input
+          type="number"
+          inputMode="numeric"
+          min={0}
+          max={5}
+          value={draft}
+          aria-invalid={imageCount === null}
+          aria-label={`${group.platformLabel} 每篇图片数量`}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            setFeedback("");
+          }}
+          className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm sm:w-24"
+        />
+      </label>
+      <button
+        type="button"
+        disabled={busy || imageCount === null || !changed}
+        onClick={() => void save()}
+        className="rounded border border-sky-300 bg-white px-3 py-2 text-xs font-semibold text-sky-800 disabled:opacity-40"
+      >
+        {busy ? "保存中…" : "保存图片数量"}
+      </button>
+      {feedback && (
+        <p
+          role={feedback === "图片数量已保存。" ? "status" : "alert"}
+          className={`text-xs ${
+            feedback === "图片数量已保存。" ? "text-emerald-700" : "text-rose-700"
+          } sm:col-span-2`}
+        >
+          {feedback}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function RegularQueueGroupsPanel({
   groups,
   loading,
   startBusy,
   pauseBusy,
+  imageCountBusy,
   removeBusy,
   onStart,
   onPause,
+  onUpdateImageCount,
   onRemove,
 }: {
   groups: QueueGroupView[];
   loading: boolean;
   startBusy: boolean;
   pauseBusy: boolean;
+  imageCountBusy: boolean;
   removeBusy: boolean;
   onStart: (queueGroupId: string) => void;
   onPause: (queueGroupId: string) => void;
+  onUpdateImageCount: (input: {
+    queueGroupId: string;
+    imageCount: number;
+    expectedRevision: number;
+  }) => Promise<unknown>;
   onRemove: (item: RegularQueueGroupSnapshot["remaining"][number]) => void;
 }) {
   if (loading) return <p role="status" className="text-sm text-slate-500">正在读取普通平台队列组…</p>;
@@ -51,6 +156,11 @@ export default function RegularQueueGroupsPanel({
             <button type="button" disabled={pauseBusy || !group.actions.canPause} onClick={() => onPause(group.queueGroupId)} className="rounded border border-amber-300 px-3 py-2 text-xs font-semibold text-amber-800 disabled:opacity-40">暂停</button>
           </div>
         </div>
+        <QueueGroupImageCountControl
+          group={group}
+          busy={imageCountBusy}
+          onUpdate={onUpdateImageCount}
+        />
         {group.current && <p className="mt-3 text-xs text-blue-700">当前文章：{articleLabel(group.current)}</p>}
         <ol className="mt-3 list-decimal space-y-1 pl-5 text-xs text-slate-600">
           {group.remaining.map((item) => (

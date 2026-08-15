@@ -45,7 +45,10 @@ const regularQueueTarget = exactObject({
   platformId: id,
   accountProfileId: id,
 });
-const regularQueueConfig = exactObject({ queueGroupId: optionalField(id) });
+const regularQueueConfig = exactObject({
+  queueGroupId: optionalField(id),
+  imageCount: optionalField(integerField({ min: 0, max: 5 })),
+});
 const regularAdmissionFields = {
   articleRefs: arrayField(articleRef, { min: 1, max: 1000 }),
   platformId: id,
@@ -118,6 +121,8 @@ const regularQueueGroupSnapshot = exactObject({
   queueGroupId: id,
   platformId: id,
   accountProfileId: id,
+  imageCount: integerField({ min: 0, max: 5 }),
+  imagePublishingSupported: "boolean",
   runState: enumField(["paused", "running", "in_flight"]),
   pauseIntent: enumField(["none", "manual", "system"]),
   manuallyPaused: "boolean",
@@ -176,6 +181,19 @@ const submissionRegularContracts = Object.freeze([
     success: regularQueueGroupList,
     fromArgs: noArgs,
     toArgs: noLegacyInput,
+  }),
+  submissionContract({
+    capability: "content.updateRegularQueueGroupImageCount",
+    channel: "content:update-regular-queue-group-image-count",
+    kind: "command",
+    request: exactObject({
+      queueGroupId: id,
+      imageCount: integerField({ min: 0, max: 5 }),
+      expectedRevision: revision,
+    }),
+    success: regularQueueGroupList,
+    fromArgs: directArgs,
+    toArgs: directInput,
   }),
   submissionContract({
     capability: "content.startRegularQueueGroup",
@@ -358,6 +376,17 @@ const submissionRegularContractFixtures = Object.freeze([
       idempotentCount: 0,
       conflictCount: 0,
     },
+  },
+  {
+    channel: "content:update-regular-queue-group-image-count",
+    owner: "content",
+    productionCaller: "desktopConsole.content.updateRegularQueueGroupImageCount",
+    request: {
+      queueGroupId: "regular-group-1",
+      imageCount: 3,
+      expectedRevision: 2,
+    },
+    result: { items: [] },
   },
 ]);
 

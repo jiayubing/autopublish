@@ -358,6 +358,12 @@ const api = {
     listRegularQueueGroups: function () {
       return ipcRenderer.invoke("content:list-regular-queue-groups");
     },
+    updateRegularQueueGroupImageCount: function (input) {
+      return ipcRenderer.invoke(
+        "content:update-regular-queue-group-image-count",
+        input,
+      );
+    },
     startRegularQueueGroup: function (input) {
       return ipcRenderer.invoke("content:start-regular-queue-group", input);
     },

@@ -208,6 +208,8 @@ async function createWorkspaceRuntimeComposition(deps) {
             operationalStoreTransitionPorts.regularQueueTransitions,
           regularQueueGroupTransitions:
             operationalStoreTransitionPorts.regularQueueGroupTransitions,
+          regularQueueGroupImageCountTransitions:
+            operationalStoreTransitionPorts.regularQueueGroupImageCountTransitions,
           onDataInvalidated: invalidation.invalidate,
           accountProfileResolver:
             operationalStore.assertExecutableAccountProfile,

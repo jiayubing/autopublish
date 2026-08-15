@@ -205,6 +205,11 @@ type SubmissionContentApi = {
   listRegularQueueGroups: () => Promise<
     ContentIpcResponse<{ items: RegularQueueGroupSnapshot[] }>
   >;
+  updateRegularQueueGroupImageCount: (input: {
+    queueGroupId: string;
+    imageCount: number;
+    expectedRevision: number;
+  }) => Promise<ContentIpcResponse<{ items: RegularQueueGroupSnapshot[] }>>;
   startRegularQueueGroup: (input: {
     queueGroupId: string;
   }) => Promise<ContentIpcResponse<{ items: RegularQueueGroupSnapshot[] }>>;
@@ -557,6 +562,17 @@ export async function listRegularQueueGroups(): Promise<
   return callSubmission(
     (api) => requireBridgeMethod(api.listRegularQueueGroups)(),
     "regular queue group query failed",
+    { map: (wire) => wire.items },
+  );
+}
+export async function updateRegularQueueGroupImageCount(input: {
+  queueGroupId: string;
+  imageCount: number;
+  expectedRevision: number;
+}): Promise<RegularQueueGroupSnapshot[]> {
+  return callSubmission(
+    (api) => requireBridgeMethod(api.updateRegularQueueGroupImageCount)(input),
+    "regular queue group image-count update failed",
     { map: (wire) => wire.items },
   );
 }

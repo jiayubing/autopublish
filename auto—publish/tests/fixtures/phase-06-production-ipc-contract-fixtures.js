@@ -1245,6 +1245,21 @@ const PRODUCTION_CALLERS = Object.freeze({
     application: "workflow.regularQueueGroups.list",
     featureBinding: "listRegularQueueGroups",
   }),
+  "content.updateRegularQueueGroupImageCount": Object.freeze({
+    view: "media-workbench/src/components/PlatformWorkbench.tsx",
+    viewSymbol: "usePlatformFeature",
+    feature:
+      "media-workbench/src/features/platform/platform-feature-context.tsx",
+    featureSymbol: "usePlatformFeature",
+    bridge: "media-workbench/src/bridge/content.ts",
+    bridgeSymbol: "updateRegularQueueGroupImageCount",
+    preloadMethod: "updateRegularQueueGroupImageCount",
+    command: "content.updateRegularQueueGroupImageCount",
+    channel: "content:update-regular-queue-group-image-count",
+    registrar: "desktop/ipc/content-submission-ipc.js",
+    application: "workflow.regularQueueGroups.updateImageCount",
+    featureBinding: "updateRegularQueueGroupImageCount",
+  }),
   "content.startRegularQueueGroup": Object.freeze({
     view: "media-workbench/src/components/PlatformWorkbench.tsx",
     viewSymbol: "usePlatformFeature",
@@ -2138,6 +2153,11 @@ const PRODUCTION_CONSUMERS = Object.freeze({
     "media-workbench/src/features/platform/platform-feature-context.tsx",
     "refreshRegularQueueGroups",
   ],
+  "content.updateRegularQueueGroupImageCount": [
+    "direct",
+    "media-workbench/src/components/PlatformWorkbench.tsx",
+    "updateImageCount",
+  ],
   "content.startRegularQueueGroup": [
     "direct",
     "media-workbench/src/components/PlatformWorkbench.tsx",
@@ -2726,6 +2746,7 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
           "content.previewTrashedArticleQueueResidue",
           "content.cleanupTrashedArticleQueueResidue",
           "content.listRegularQueueGroups",
+          "content.updateRegularQueueGroupImageCount",
           "content.startRegularQueueGroup",
           "content.pauseRegularQueueGroup",
           "content.startAllRegularQueueGroups",
@@ -4420,6 +4441,19 @@ const rawProductionIpcContractFixtures = [
     owner: "content",
     productionCaller: "desktop/preload.js:content:list-regular-queue-groups",
     request: {},
+    result: { items: [] },
+  },
+  {
+    capability: "content.updateRegularQueueGroupImageCount",
+    channel: "content:update-regular-queue-group-image-count",
+    owner: "content",
+    productionCaller:
+      "desktop/preload.js:content:update-regular-queue-group-image-count",
+    request: {
+      queueGroupId: "fixture-1",
+      imageCount: 3,
+      expectedRevision: 2,
+    },
     result: { items: [] },
   },
   {

@@ -146,6 +146,16 @@ const COMMON_ERRORS = Object.freeze({
     retryability: "never",
     userMessage: "普通平台队列配置无效。",
   },
+  REGULAR_QUEUE_GROUP_IMAGE_COUNT_UNAVAILABLE: {
+    category: "internal",
+    retryability: "manual-check",
+    userMessage: "普通平台队列图片配置当前不可用。",
+  },
+  OPERATIONAL_QUEUE_GROUP_REVISION_CONFLICT: {
+    category: "conflict",
+    retryability: "safe",
+    userMessage: "队列组配置已变化，请刷新后重试。",
+  },
   REGULAR_QUEUE_ARTICLES_REQUIRED: {
     category: "validation",
     retryability: "never",

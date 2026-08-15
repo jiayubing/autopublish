@@ -48,6 +48,7 @@ function createSubmissionInterface(service, regularQueueService, regularQueueGro
     },
     regularQueueGroups: {
       list: bind(regular, "listRegularQueueGroups"),
+      updateImageCount: bind(regular, "updateRegularQueueGroupImageCount"),
       start: bind(regularQueueGroups, "startGroup"),
       pause: bind(regularQueueGroups, "pauseGroup"),
       startAll: bind(regularQueueGroups, "startAll"),
@@ -165,6 +166,33 @@ function regularRemovalInput(input) {
   return input;
 }
 
+function regularQueueGroupImageCountInput(input) {
+  if (
+    !input ||
+    typeof input !== "object" ||
+    Array.isArray(input) ||
+    Object.keys(input).some(function (key) {
+      return (
+        key !== "queueGroupId" &&
+        key !== "imageCount" &&
+        key !== "expectedRevision"
+      );
+    }) ||
+    typeof input.queueGroupId !== "string" ||
+    !input.queueGroupId.trim() ||
+    !Number.isInteger(input.imageCount) ||
+    input.imageCount < 0 ||
+    input.imageCount > 5 ||
+    !Number.isInteger(input.expectedRevision) ||
+    input.expectedRevision < 0
+  ) {
+    const error = new Error("Invalid regular queue image-count request");
+    error.code = "REGULAR_QUEUE_CONFIG_INVALID";
+    throw error;
+  }
+  return input;
+}
+
 function registerContentSubmissionIpc(deps) {
   const service = deps.contentSubmissionService;
   if (!service) {
@@ -238,6 +266,18 @@ function registerContentSubmissionIpc(deps) {
       return { items: workflow.regularQueueGroups.list() };
     });
   });
+  deps.ipcMain.handle(
+    "content:update-regular-queue-group-image-count",
+    function (event, input) {
+      return wrap(function () {
+        return {
+          items: workflow.regularQueueGroups.updateImageCount(
+            regularQueueGroupImageCountInput(input),
+          ),
+        };
+      });
+    },
+  );
   deps.ipcMain.handle("content:start-regular-queue-group", function (event, input) {
     return wrap(async function () {
       await workflow.regularQueueGroups.start(input);

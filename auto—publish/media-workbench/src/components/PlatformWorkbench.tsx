@@ -244,9 +244,11 @@ export default function PlatformWorkbench({
               loading={groupQuery.loading}
               startBusy={commands.startGroup.busy}
               pauseBusy={commands.pauseGroup.busy}
+              imageCountBusy={commands.updateImageCount.busy}
               removeBusy={commands.removePendingQueueItems.busy}
               onStart={(id) => void feature.startGroup(id)}
               onPause={(id) => void feature.pauseGroup(id)}
+              onUpdateImageCount={(input) => feature.updateImageCount(input)}
               onRemove={(item) => void removePendingItem(item)}
             />
             <section aria-labelledby="queue-residue-heading" className="mt-4 rounded border border-slate-200 bg-slate-50 p-3">

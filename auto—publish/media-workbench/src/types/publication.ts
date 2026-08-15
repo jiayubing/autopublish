@@ -305,6 +305,8 @@ export interface RegularQueueGroupSnapshot {
   queueGroupId: string;
   platformId: string;
   accountProfileId: string;
+  imageCount: number;
+  imagePublishingSupported: boolean;
   runState: "paused" | "running" | "in_flight";
   pauseIntent: "none" | "manual" | "system";
   manuallyPaused: boolean;
@@ -406,7 +408,7 @@ export interface RegularQueueAdmissionInput {
   articleRefs: ArticleSelection[];
   platformId: string;
   accountProfileId: string;
-  queueConfig?: { queueGroupId?: string };
+  queueConfig?: { queueGroupId?: string; imageCount?: number };
 }
 export interface RegularQueueAdmissionPreview {
   target: RegularQueueTarget;
