@@ -191,7 +191,7 @@ test("backup verifier reads destination and missing or corrupt targets have no s
   const backup = path.join(dir, "backup.db");
   const result = store.backup(backup);
   assert.equal(result.rows, 1);
-  assert.equal(verifyOperationalDatabase(backup).schemaVersion, 7);
+  assert.equal(verifyOperationalDatabase(backup).schemaVersion, 8);
   const missing = path.join(dir, "missing.db");
   assert.throws(() => verifyOperationalDatabase(missing), {
     code: "OPERATIONAL_RESTORE_TARGET_INVALID",
@@ -242,7 +242,7 @@ test("database reopens after close and explicit batch writes stay isolated from 
   const db = store.databasePath;
   store.close();
   const reopened = createOperationalStore({ workspaceRoot: dir });
-  assert.equal(reopened.verify().schemaVersion, 7);
+  assert.equal(reopened.verify().schemaVersion, 8);
   assert.equal(
     fs.existsSync(path.join(dir, ".autopublish", "publications")),
     false,
@@ -269,12 +269,12 @@ test("upgrades a real schema v1 database to the operation schema without changin
   legacy.close();
 
   const upgraded = createOperationalStore({ workspaceRoot: dir });
-  assert.equal(SCHEMA_VERSION, 7);
-  assert.equal(upgraded.verify().schemaVersion, 7);
+  assert.equal(SCHEMA_VERSION, 8);
+  assert.equal(upgraded.verify().schemaVersion, 8);
   upgraded.close();
 
   const verified = verifyOperationalDatabase(database);
-  assert.equal(verified.schemaVersion, 7);
+  assert.equal(verified.schemaVersion, 8);
   const reopened = new DatabaseSync(database, { readOnly: true });
   assert.deepEqual(
     reopened
@@ -295,6 +295,7 @@ test("upgrades a real schema v1 database to the operation schema without changin
       { version: 5 },
       { version: 6 },
       { version: 7 },
+      { version: 8 },
     ],
   );
   assert.ok(
@@ -368,7 +369,7 @@ test("repairs the known v1 history plus legacy operation table left by an early 
   legacy.close();
 
   const upgraded = createOperationalStore({ workspaceRoot: dir });
-  assert.equal(upgraded.verify().schemaVersion, 7);
+  assert.equal(upgraded.verify().schemaVersion, 8);
   assert.deepEqual(
     upgraded.getSubmissionItemAction("operation-legacy-phase-05"),
     {
@@ -469,7 +470,7 @@ test("rejects a future operational schema before changing its database", () => {
       .prepare("SELECT version FROM schema_migrations ORDER BY version")
       .all()
       .map((row) => row.version),
-    [1, 2, 3, 4, 5, 6, 7, 8],
+    [1, 2, 3, 4, 5, 6, 7, 8, 9],
   );
   unchanged.close();
 });
@@ -679,7 +680,7 @@ test("v1 to v2 migration preserves every pre-v2 table and rolls back detected ol
   assert.deepEqual(after, before);
   assert.deepEqual(
     history.map((row) => row.version),
-    [1, 2, 3, 4, 5, 6, 7],
+    [1, 2, 3, 4, 5, 6, 7, 8],
   );
   assert.equal(Number.isFinite(Date.parse(history[1].applied_at)), true);
 });

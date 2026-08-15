@@ -434,7 +434,7 @@ test("23-C v4 to v5 schema migration is atomic and retryable at every fault", ()
     facade.close();
     const database = new DatabaseSync(databasePath);
     database.exec(
-      "DROP TABLE IF EXISTS paid_staging_items; DROP TABLE submission_migration_notices; DROP TABLE migration_import_order_identities; DROP TABLE migration_import_entries; DROP TABLE migration_journals; DELETE FROM schema_migrations WHERE version>=5;",
+      "DROP TABLE IF EXISTS paid_staging_items; DROP TABLE submission_queue_items; DROP TABLE submission_queue_groups; CREATE TABLE submission_queue_groups(queue_group_id TEXT PRIMARY KEY NOT NULL, platform_id TEXT NOT NULL, account_profile_id TEXT NOT NULL REFERENCES account_profiles(account_profile_id), pause_intent TEXT NOT NULL CHECK(pause_intent IN('none','manual','system')), revision INTEGER NOT NULL CHECK(revision > 0), created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(platform_id,account_profile_id)); CREATE INDEX queue_group_pause_intent ON submission_queue_groups(pause_intent,updated_at,queue_group_id); CREATE TABLE submission_queue_items(item_id TEXT PRIMARY KEY NOT NULL REFERENCES submission_items(item_id), queue_group_id TEXT NOT NULL REFERENCES submission_queue_groups(queue_group_id), position INTEGER NOT NULL CHECK(position > 0), created_at TEXT NOT NULL, UNIQUE(queue_group_id,position)); CREATE INDEX queue_item_article ON submission_queue_items(item_id,queue_group_id); DROP TABLE submission_migration_notices; DROP TABLE migration_import_order_identities; DROP TABLE migration_import_entries; DROP TABLE migration_journals; DELETE FROM schema_migrations WHERE version>=5;",
     );
     database.close();
 
@@ -474,7 +474,7 @@ test("23-C v4 to v5 schema migration is atomic and retryable at every fault", ()
         .prepare("SELECT version FROM schema_migrations ORDER BY version")
         .all()
         .map((row) => row.version),
-      [1, 2, 3, 4, 5, 6, 7],
+      [1, 2, 3, 4, 5, 6, 7, 8],
     );
     upgraded.close();
     fs.rmSync(root, { recursive: true, force: true });

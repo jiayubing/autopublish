@@ -81,7 +81,7 @@ function downgradeToV6WithLegacyRows(database) {
   const db = new DatabaseSync(database);
   try {
     db.exec(
-      "DROP TABLE submission_migration_notices; DELETE FROM schema_migrations WHERE version=7; CREATE TABLE paid_staging_items(client_id TEXT NOT NULL, article_id TEXT NOT NULL, selected_media_resource_id TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY(client_id,article_id)); CREATE INDEX paid_staging_client ON paid_staging_items(client_id,created_at,article_id);",
+      "DROP TABLE submission_migration_notices; DROP TABLE submission_queue_items; DROP TABLE submission_queue_groups; CREATE TABLE submission_queue_groups(queue_group_id TEXT PRIMARY KEY NOT NULL, platform_id TEXT NOT NULL, account_profile_id TEXT NOT NULL REFERENCES account_profiles(account_profile_id), pause_intent TEXT NOT NULL CHECK(pause_intent IN('none','manual','system')), revision INTEGER NOT NULL CHECK(revision > 0), created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(platform_id,account_profile_id)); CREATE INDEX queue_group_pause_intent ON submission_queue_groups(pause_intent,updated_at,queue_group_id); CREATE TABLE submission_queue_items(item_id TEXT PRIMARY KEY NOT NULL REFERENCES submission_items(item_id), queue_group_id TEXT NOT NULL REFERENCES submission_queue_groups(queue_group_id), position INTEGER NOT NULL CHECK(position > 0), created_at TEXT NOT NULL, UNIQUE(queue_group_id,position)); CREATE INDEX queue_item_article ON submission_queue_items(item_id,queue_group_id); DELETE FROM schema_migrations WHERE version>=7; CREATE TABLE paid_staging_items(client_id TEXT NOT NULL, article_id TEXT NOT NULL, selected_media_resource_id TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY(client_id,article_id)); CREATE INDEX paid_staging_client ON paid_staging_items(client_id,created_at,article_id);",
     );
     const insert = db.prepare(
       "INSERT INTO paid_staging_items(client_id,article_id,selected_media_resource_id,created_at,updated_at) VALUES(?,?,?,?,?)",
@@ -203,7 +203,10 @@ test("paid selection is an in-memory preflight session and confirmation admits d
   const staleResourceModel = await service.preflight(input);
   currentResource = { ...currentResource, price: 13.5 };
   await assert.rejects(
-    () => service.confirm({ confirmationToken: staleResourceModel.confirmationToken }),
+    () =>
+      service.confirm({
+        confirmationToken: staleResourceModel.confirmationToken,
+      }),
     { code: "PAID_MEDIA_CONFIRMATION_STALE" },
   );
   assert.equal(admissionCalls.length, 1);
@@ -212,7 +215,10 @@ test("paid selection is an in-memory preflight session and confirmation admits d
   const staleArticleModel = await service.preflight(input);
   currentArticle = { ...currentArticle, content: "正文已修改" };
   await assert.rejects(
-    () => service.confirm({ confirmationToken: staleArticleModel.confirmationToken }),
+    () =>
+      service.confirm({
+        confirmationToken: staleArticleModel.confirmationToken,
+      }),
     { code: "PAID_MEDIA_CONFIRMATION_STALE" },
   );
   assert.equal(admissionCalls.length, 1);
@@ -226,14 +232,15 @@ test("paid admission creates the target and batch without a staging row", () => 
     transitionPorts,
   });
   try {
-    const result = transitionPorts.paidAdmissionTransitions.admitPaidBatch(
-      paidAdmissionInput(),
-    );
+    const result =
+      transitionPorts.paidAdmissionTransitions.admitPaidBatch(
+        paidAdmissionInput(),
+      );
     assert.equal(result.status, "queued");
     assert.equal(store.listPaidSubmissionBatches().length, 1);
     assert.equal(
-      store.listArticleLifecycleFacts({ articleIds: ["article-1"] }).submissionItems
-        .length,
+      store.listArticleLifecycleFacts({ articleIds: ["article-1"] })
+        .submissionItems.length,
       1,
     );
     const db = new DatabaseSync(store.databasePath, { readOnly: true });
@@ -247,8 +254,9 @@ test("paid admission creates the target and batch without a staging row", () => 
         0,
       );
       assert.equal(
-        db.prepare("SELECT COUNT(*) AS count FROM submission_migration_notices").get()
-          .count,
+        db
+          .prepare("SELECT COUNT(*) AS count FROM submission_migration_notices")
+          .get().count,
         0,
       );
     } finally {
@@ -291,7 +299,7 @@ test("v6 legacy paid selection migration records one safe notice and is atomic/r
     assert.equal(failed.noticeCount, 0);
 
     const retried = createOperationalStore({ workspaceRoot: root });
-    assert.equal(retried.verify().schemaVersion, 7);
+    assert.equal(retried.verify().schemaVersion, 8);
     retried.close();
     const db = new DatabaseSync(database, { readOnly: true });
     try {
@@ -300,7 +308,7 @@ test("v6 legacy paid selection migration records one safe notice and is atomic/r
           .prepare("SELECT version FROM schema_migrations ORDER BY version")
           .all()
           .map((row) => row.version),
-        [1, 2, 3, 4, 5, 6, 7],
+        [1, 2, 3, 4, 5, 6, 7, 8],
       );
       assert.equal(
         db
@@ -327,12 +335,14 @@ test("v6 legacy paid selection migration records one safe notice and is atomic/r
       });
       assert.equal(notice.summary_json.includes("media-secret"), false);
       assert.equal(
-        db.prepare("SELECT COUNT(*) AS count FROM paid_submission_batches").get()
-          .count,
+        db
+          .prepare("SELECT COUNT(*) AS count FROM paid_submission_batches")
+          .get().count,
         0,
       );
       assert.equal(
-        db.prepare("SELECT COUNT(*) AS count FROM publication_records").get().count,
+        db.prepare("SELECT COUNT(*) AS count FROM publication_records").get()
+          .count,
         0,
       );
     } finally {

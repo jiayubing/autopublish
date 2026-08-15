@@ -52,12 +52,26 @@ function createRegularQueueRuntime(context) {
     return input;
   }
 
+  function queueGroupImageCount(value, fallback) {
+    const imageCount = value === undefined ? fallback : value;
+    if (!Number.isInteger(imageCount) || imageCount < 0 || imageCount > 5)
+      throw fail("OPERATIONAL_QUEUE_GROUP_IMAGE_COUNT_INVALID");
+    return imageCount;
+  }
+
+  function expectedQueueGroupRevision(value) {
+    if (!Number.isSafeInteger(value) || value < 1)
+      throw fail("OPERATIONAL_QUEUE_GROUP_REVISION_INVALID");
+    return value;
+  }
+
   function queueGroupRow(row) {
     if (!row) return null;
     return Object.freeze({
       queueGroupId: row.queue_group_id,
       platformId: row.platform_id,
       accountProfileId: row.account_profile_id,
+      imageCount: row.image_count,
       pauseIntent: row.pause_intent,
       paused: row.pause_intent !== "none",
       revision: row.revision,
@@ -82,7 +96,7 @@ function createRegularQueueRuntime(context) {
     }
     return db
       .prepare(
-          "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.clientId') current_client_id,s.claim_until current_claim_until,json_extract(s.payload_json,'$.attemptId') current_attempt_id,json_extract(i.payload_json,'$.detail.phase') current_phase,(SELECT json_extract(i2.payload_json,'$.detail.lastGroupBlockedCode') FROM submission_queue_items q2 JOIN submission_items s2 ON s2.item_id=q2.item_id JOIN recovery_intents i2 ON i2.attempt_id=json_extract(s2.payload_json,'$.attemptId') WHERE q2.queue_group_id=g.queue_group_id AND json_extract(i2.payload_json,'$.detail.lastGroupBlockedCode') IS NOT NULL ORDER BY q2.position LIMIT 1) last_group_blocked_code FROM submission_queue_groups g LEFT JOIN submission_queue_items q ON q.queue_group_id=g.queue_group_id LEFT JOIN submission_items s ON s.item_id=q.item_id AND s.status IN('claimed','remote_started') LEFT JOIN recovery_intents i ON i.attempt_id=json_extract(s.payload_json,'$.attemptId') " +
+        "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.clientId') current_client_id,s.claim_until current_claim_until,json_extract(s.payload_json,'$.attemptId') current_attempt_id,json_extract(i.payload_json,'$.detail.phase') current_phase,(SELECT json_extract(i2.payload_json,'$.detail.lastGroupBlockedCode') FROM submission_queue_items q2 JOIN submission_items s2 ON s2.item_id=q2.item_id JOIN recovery_intents i2 ON i2.attempt_id=json_extract(s2.payload_json,'$.attemptId') WHERE q2.queue_group_id=g.queue_group_id AND json_extract(i2.payload_json,'$.detail.lastGroupBlockedCode') IS NOT NULL ORDER BY q2.position LIMIT 1) last_group_blocked_code FROM submission_queue_groups g LEFT JOIN submission_queue_items q ON q.queue_group_id=g.queue_group_id LEFT JOIN submission_items s ON s.item_id=q.item_id AND s.status IN('claimed','remote_started') LEFT JOIN recovery_intents i ON i.attempt_id=json_extract(s.payload_json,'$.attemptId') " +
           where +
           " ORDER BY g.platform_id,g.account_profile_id,g.queue_group_id,q.position",
       )
@@ -109,7 +123,7 @@ function createRegularQueueRuntime(context) {
     }
     return db
       .prepare(
-          "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.clientId') client_id,json_extract(s.payload_json,'$.attemptId') attempt_id,q.position FROM submission_queue_items q JOIN submission_items s ON s.item_id=q.item_id WHERE s.status='queued'" +
+        "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.clientId') client_id,json_extract(s.payload_json,'$.attemptId') attempt_id,q.position FROM submission_queue_items q JOIN submission_items s ON s.item_id=q.item_id WHERE s.status='queued'" +
           groupFilter +
           " ORDER BY q.queue_group_id,q.position LIMIT 20000",
       )
@@ -150,6 +164,7 @@ function createRegularQueueRuntime(context) {
       queueGroupId: row.queue_group_id,
       platformId: row.platform_id,
       accountProfileId: row.account_profile_id,
+      imageCount: row.image_count,
       runState: current
         ? "in_flight"
         : row.pause_intent === "none"
@@ -212,6 +227,7 @@ function createRegularQueueRuntime(context) {
       value.pauseIntent,
       value.paused === false ? "none" : "system",
     );
+    const imageCount = queueGroupImageCount(value.imageCount, 1);
     const stamp = iso(clock);
     return transaction(() => {
       const profile = db
@@ -224,7 +240,7 @@ function createRegularQueueRuntime(context) {
         throw fail("ACCOUNT_PROFILE_PLATFORM_MISMATCH");
       try {
         db.prepare(
-          "INSERT INTO submission_queue_groups(queue_group_id,platform_id,account_profile_id,pause_intent,revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
+          "INSERT INTO submission_queue_groups(queue_group_id,platform_id,account_profile_id,pause_intent,revision,created_at,updated_at,image_count) VALUES(?,?,?,?,?,?,?,?)",
         ).run(
           queueGroupId,
           platformId,
@@ -233,6 +249,7 @@ function createRegularQueueRuntime(context) {
           1,
           stamp,
           stamp,
+          imageCount,
         );
       } catch (error) {
         if (String((error && error.code) || "").startsWith("SQLITE_CONSTRAINT"))
@@ -314,6 +331,41 @@ function createRegularQueueRuntime(context) {
         .run(intent, stamp, queueGroupId).changes;
       if (changed !== 1) throw fail("OPERATIONAL_QUEUE_GROUP_NOT_FOUND");
       regularQueueFault("after-group-run-intent", { queueGroupId, intent });
+      return regularQueueGroupSnapshots({ queueGroupId })[0];
+    });
+  }
+
+  function setRegularQueueGroupImageCount(input) {
+    open();
+    const value = input || {};
+    const queueGroupId = requiredText(
+      value.queueGroupId,
+      128,
+      "OPERATIONAL_QUEUE_GROUP_ID_INVALID",
+    );
+    const imageCount = queueGroupImageCount(value.imageCount);
+    const expectedRevision = expectedQueueGroupRevision(value.expectedRevision);
+    const stamp = iso(clock);
+    return transaction(() => {
+      const changed = db
+        .prepare(
+          "UPDATE submission_queue_groups SET image_count=?,revision=revision+1,updated_at=? WHERE queue_group_id=? AND revision=?",
+        )
+        .run(imageCount, stamp, queueGroupId, expectedRevision).changes;
+      if (changed !== 1) {
+        const group = db
+          .prepare(
+            "SELECT 1 FROM submission_queue_groups WHERE queue_group_id=?",
+          )
+          .get(queueGroupId);
+        if (!group) throw fail("OPERATIONAL_QUEUE_GROUP_NOT_FOUND");
+        throw fail("OPERATIONAL_QUEUE_GROUP_REVISION_CONFLICT");
+      }
+      regularQueueFault("after-group-image-count", {
+        queueGroupId,
+        imageCount,
+        expectedRevision,
+      });
       return regularQueueGroupSnapshots({ queueGroupId })[0];
     });
   }
@@ -790,6 +842,7 @@ function createRegularQueueRuntime(context) {
     listSubmissionQueueItems,
     listRegularQueueGroupSnapshots,
     setRegularQueueGroupRunIntent,
+    setRegularQueueGroupImageCount,
     startAllRegularQueueGroups,
     pauseAllRegularQueueGroups,
     pauseRegularQueueGroupsOnStartup,

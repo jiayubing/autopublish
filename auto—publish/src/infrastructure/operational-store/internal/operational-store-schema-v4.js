@@ -62,7 +62,7 @@ function sqlOf(db, name) {
   return row && row.sql ? row.sql : "";
 }
 
-function verifyV4Structure(db, errorCode) {
+function verifyV4Structure(db, errorCode, options) {
   const required = {
     article_active_targets: [
       ["article_id", "TEXT", 1, 1],
@@ -112,10 +112,13 @@ function verifyV4Structure(db, errorCode) {
       ["created_at", "TEXT", 1, 0],
     ],
   };
+  const allowV8ImageCount = options && options.allowV8ImageCount === true;
   const validTables = Object.entries(required).every(([name, expected]) => {
     const actual = columns(db, name);
     return (
-      actual.length === expected.length &&
+      actual.length ===
+        expected.length +
+          (allowV8ImageCount && name === "submission_queue_groups" ? 1 : 0) &&
       expected.every(
         ([column, type, notnull, pk], index) =>
           actual[index] &&

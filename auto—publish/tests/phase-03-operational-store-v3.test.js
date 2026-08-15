@@ -80,14 +80,16 @@ function seedRemoteStartedMediaOrder(databasePath, input) {
       }),
       stamp,
     );
-    database.prepare("INSERT INTO remote_evidence VALUES(?,?,?,?,?,?)").run(
-      `order-evidence-${value.orderId}`,
-      value.attemptId,
-      value.orderId,
-      null,
-      JSON.stringify({ remoteId: value.orderId }),
-      stamp,
-    );
+    database
+      .prepare("INSERT INTO remote_evidence VALUES(?,?,?,?,?,?)")
+      .run(
+        `order-evidence-${value.orderId}`,
+        value.attemptId,
+        value.orderId,
+        null,
+        JSON.stringify({ remoteId: value.orderId }),
+        stamp,
+      );
     database
       .prepare(
         "INSERT INTO order_display_snapshots(attempt_id,title_snapshot,filename,resource_name_snapshot,quoted_price,created_at,media_resource_id,estimated_total,system_submission_code) VALUES(?,?,?,?,?,?,?,?,?)",
@@ -112,8 +114,8 @@ test("schema v2 upgrades through v3 to v4 with the exact order display snapshot 
   const workspaceRoot = workspace();
   const databasePath = downgradeToV2(workspaceRoot);
   const upgraded = createOperationalStore({ workspaceRoot });
-  assert.equal(SCHEMA_VERSION, 7);
-  assert.equal(upgraded.verify().schemaVersion, 7);
+  assert.equal(SCHEMA_VERSION, 8);
+  assert.equal(upgraded.verify().schemaVersion, 8);
   upgraded.close();
 
   const database = new DatabaseSync(databasePath, { readOnly: true });
@@ -146,12 +148,12 @@ test("schema v2 upgrades through v3 to v4 with the exact order display snapshot 
       .prepare("SELECT version FROM schema_migrations ORDER BY version")
       .all()
       .map((row) => row.version),
-    [1, 2, 3, 4, 5, 6, 7],
+    [1, 2, 3, 4, 5, 6, 7, 8],
   );
   database.close();
 
   const reopened = createOperationalStore({ workspaceRoot });
-  assert.equal(reopened.verify().schemaVersion, 7);
+  assert.equal(reopened.verify().schemaVersion, 8);
   reopened.close();
 });
 
@@ -176,7 +178,7 @@ test("every legacy migration fault rolls back and a clean retry reaches v4", () 
     );
     assert.deepEqual(snapshotSchema(databasePath), before);
     const retried = createOperationalStore({ workspaceRoot });
-    assert.equal(retried.verify().schemaVersion, 7);
+    assert.equal(retried.verify().schemaVersion, 8);
     retried.close();
   }
 });
@@ -242,7 +244,7 @@ test("v3 backup and restored temporary workspace preserve the bounded order snap
     quotedPrice: 36.5,
   });
   const backupPath = path.join(workspaceRoot, "operations-v3.backup.sqlite");
-  assert.equal(store.backup(backupPath).schemaVersion, 7);
+  assert.equal(store.backup(backupPath).schemaVersion, 8);
   store.close();
 
   const restoredWorkspace = workspace();

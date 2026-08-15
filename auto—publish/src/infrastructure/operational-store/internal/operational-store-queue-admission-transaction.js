@@ -85,7 +85,7 @@ function createQueueAdmissionTransaction(context) {
     return requiredText(value.itemId, 128, "REGULAR_QUEUE_ITEM_INVALID");
   }
 
-  function regularGroup(input, target, stamp) {
+  function regularQueueConfig(input) {
     const value = input || {};
     const queueConfig =
       value.queueConfig === undefined ? {} : value.queueConfig;
@@ -96,15 +96,29 @@ function createQueueAdmissionTransaction(context) {
     )
       throw fail("REGULAR_QUEUE_CONFIG_INVALID");
     for (const key of Object.keys(queueConfig))
-      if (key !== "queueGroupId") throw fail("REGULAR_QUEUE_CONFIG_INVALID");
-    const requestedId =
-      queueConfig.queueGroupId === undefined
-        ? undefined
-        : requiredText(
-            queueConfig.queueGroupId,
-            128,
-            "OPERATIONAL_QUEUE_GROUP_ID_INVALID",
-          );
+      if (key !== "queueGroupId" && key !== "imageCount")
+        throw fail("REGULAR_QUEUE_CONFIG_INVALID");
+    const imageCount =
+      queueConfig.imageCount === undefined ? 1 : queueConfig.imageCount;
+    if (!Number.isInteger(imageCount) || imageCount < 0 || imageCount > 5)
+      throw fail("OPERATIONAL_QUEUE_GROUP_IMAGE_COUNT_INVALID");
+    return Object.freeze({
+      queueGroupId:
+        queueConfig.queueGroupId === undefined
+          ? undefined
+          : requiredText(
+              queueConfig.queueGroupId,
+              128,
+              "OPERATIONAL_QUEUE_GROUP_ID_INVALID",
+            ),
+      imageCount,
+    });
+  }
+
+  function regularGroup(input, target, stamp) {
+    const value = input || {};
+    const queueConfig = value.queueConfig;
+    const requestedId = queueConfig.queueGroupId;
     const accountProfileId = target.accountProfileId;
     const profile = db
       .prepare(
@@ -127,7 +141,7 @@ function createQueueAdmissionTransaction(context) {
     const queueGroupId = requestedId || `queue-group-${randomUUID()}`;
     try {
       db.prepare(
-        "INSERT INTO submission_queue_groups(queue_group_id,platform_id,account_profile_id,pause_intent,revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
+        "INSERT INTO submission_queue_groups(queue_group_id,platform_id,account_profile_id,pause_intent,revision,created_at,updated_at,image_count) VALUES(?,?,?,?,?,?,?,?)",
       ).run(
         queueGroupId,
         target.platformId,
@@ -136,6 +150,7 @@ function createQueueAdmissionTransaction(context) {
         1,
         stamp,
         stamp,
+        queueConfig.imageCount,
       );
     } catch (error) {
       if (String((error && error.code) || "").startsWith("SQLITE_CONSTRAINT")) {
@@ -206,7 +221,7 @@ function createQueueAdmissionTransaction(context) {
         clientId: value.clientId.trim(),
         articleId,
       },
-      queueConfig: value.queueConfig,
+      queueConfig: regularQueueConfig(value),
       payload:
         value.payload &&
         typeof value.payload === "object" &&

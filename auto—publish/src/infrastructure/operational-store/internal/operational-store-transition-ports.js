@@ -33,6 +33,9 @@ function exposeOperationalStoreTransitionPorts(options, dependencies) {
     renewRegularQueueGroupClaim: queue.renewRegularQueueGroupClaim,
     beginRegularRemoteSubmission: queue.beginRegularRemoteSubmission,
   });
+  holder.regularQueueGroupImageCountTransitions = Object.freeze({
+    setRegularQueueGroupImageCount: queue.setRegularQueueGroupImageCount,
+  });
   holder.regularOutcomeTransitions = Object.freeze({
     confirmRegularAccepted: regularOutcome.confirmRegularAccepted,
     confirmRegularNotAccepted: regularOutcome.confirmRegularNotAccepted,

@@ -107,21 +107,25 @@ function seedRemoteStartedMediaOrder(databasePath, input) {
         "UPDATE article_active_targets SET state='remote_started',updated_at=? WHERE attempt_id=?",
       )
       .run(stamp, value.attemptId);
-    database.prepare("INSERT INTO remote_orders VALUES(?,?,?,?,?)").run(
-      value.orderId,
-      value.attemptId,
-      value.orderId,
-      JSON.stringify({ remoteId: value.orderId }),
-      stamp,
-    );
-    database.prepare("INSERT INTO remote_evidence VALUES(?,?,?,?,?,?)").run(
-      `order-evidence-${value.orderId}`,
-      value.attemptId,
-      value.orderId,
-      null,
-      JSON.stringify({ remoteId: value.orderId }),
-      stamp,
-    );
+    database
+      .prepare("INSERT INTO remote_orders VALUES(?,?,?,?,?)")
+      .run(
+        value.orderId,
+        value.attemptId,
+        value.orderId,
+        JSON.stringify({ remoteId: value.orderId }),
+        stamp,
+      );
+    database
+      .prepare("INSERT INTO remote_evidence VALUES(?,?,?,?,?,?)")
+      .run(
+        `order-evidence-${value.orderId}`,
+        value.attemptId,
+        value.orderId,
+        null,
+        JSON.stringify({ remoteId: value.orderId }),
+        stamp,
+      );
     database
       .prepare(
         "INSERT INTO order_display_snapshots(attempt_id,title_snapshot,filename,resource_name_snapshot,quoted_price,created_at,media_resource_id,estimated_total,system_submission_code) VALUES(?,?,?,?,?,?,?,?,?)",
@@ -168,14 +172,14 @@ test("v3 to v4 migration is atomic, retryable, future-safe, and backup-verifiabl
     );
     assert.deepEqual(schemaSnapshot(databasePath), before);
     store = createOperationalStore({ workspaceRoot: root });
-    assert.equal(store.verify().schemaVersion, 7);
+    assert.equal(store.verify().schemaVersion, 8);
     const backup = path.join(root, `backup-${point}.sqlite`);
-    assert.equal(store.backup(backup).schemaVersion, 7);
+    assert.equal(store.backup(backup).schemaVersion, 8);
     store.close();
-    assert.equal(verifyOperationalDatabase(backup).schemaVersion, 7);
+    assert.equal(verifyOperationalDatabase(backup).schemaVersion, 8);
     fs.rmSync(root, { recursive: true, force: true });
   }
-  assert.equal(SCHEMA_VERSION, 7);
+  assert.equal(SCHEMA_VERSION, 8);
 });
 
 test("v4 order snapshot extension preserves rows from a real v3 database", () => {
@@ -261,13 +265,13 @@ test("v3 migration dry-run is read-only and reports the planned v4 step", () => 
   assert.equal(report.mode, "dry-run");
   assert.equal(report.fromVersion, 3);
   assert.equal(report.toVersion, SCHEMA_VERSION);
-  assert.deepEqual(report.migrations, [4, 5, 6, 7]);
+  assert.deepEqual(report.migrations, [4, 5, 6, 7, 8]);
   assert.deepEqual(schemaSnapshot(databasePath), before);
   assert.equal(fileHash(databasePath), beforeHash);
   store = createOperationalStore({ workspaceRoot: root });
   store.close();
   const current = dryRunOperationalStoreMigration({ workspaceRoot: root });
-  assert.equal(current.fromVersion, 7);
+  assert.equal(current.fromVersion, 8);
   assert.deepEqual(current.migrations, []);
   fs.rmSync(root, { recursive: true, force: true });
 });
@@ -758,7 +762,10 @@ test("batch lifecycle facts use a fixed-query public port and article snapshot c
       getRevision: () => 1,
     });
     const result = await snapshot.get({ clientId: "client-facts" });
-    assert.equal(result.workflowByArticle["facts-article"].stage, "in_submission");
+    assert.equal(
+      result.workflowByArticle["facts-article"].stage,
+      "in_submission",
+    );
   } finally {
     store.close();
     fs.rmSync(root, { recursive: true, force: true });

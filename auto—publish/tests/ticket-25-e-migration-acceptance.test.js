@@ -585,7 +585,7 @@ test("E restores a verified synthetic backup and exercises a bounded import capa
       const restored = verifyOperationalDatabase(
         path.join(restoredOperations, "operations.db"),
       );
-      assert.equal(restored.schemaVersion, 7);
+      assert.equal(restored.schemaVersion, 8);
       const restoredStore = createOperationalStore({
         workspaceRoot: restoredRoot,
       });
