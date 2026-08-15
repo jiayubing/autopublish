@@ -270,6 +270,7 @@ describe("workspace bootstrap service", function() {
       assert.equal(fs.existsSync(path.join(candidate, "logs")), false);
       assert.equal(fs.existsSync(path.join(candidate, "tmp")), false);
       assert.equal(fs.existsSync(path.join(candidate, "work")), false);
+      assert.equal(fs.existsSync(path.resolve("images")), false);
       assert.equal(harness.events.relaunches.length, 1);
     } finally { harness.cleanup(); }
   });
@@ -548,11 +549,6 @@ describe("workspace bootstrap service", function() {
       locationStore: {
         read: function() { return { ok: true, value: null }; },
         write: function() { return { ok: false, error: { code: "WORKSPACE_LOCATION_WRITE_FAILED" } }; }
-      },
-      ensureWorkspaceDirectories: function(paths) {
-        Object.keys(paths).forEach(function(key) {
-          if (key !== "root") fs.mkdirSync(paths[key], { recursive: true });
-        });
       }
     });
     candidate = path.join(harness.root, "candidate");
@@ -707,7 +703,8 @@ describe("workspace bootstrap service", function() {
     try {
       const selected = harness.service.chooseDirectory(firstPath);
       const firstConfirmation = harness.service.confirmSelection({ token: selected.selection.token });
-      while (harness.events.relaunches.length === 0) await Promise.resolve();
+      while (harness.events.relaunches.length === 0)
+        await new Promise(setImmediate);
 
       assertSyncError(function() { harness.service.chooseDirectory(secondPath); }, "WORKSPACE_SWITCH_BUSY");
       assertSyncError(function() { harness.service.cancelSelection(); }, "WORKSPACE_SWITCH_BUSY");
@@ -730,7 +727,8 @@ describe("workspace bootstrap service", function() {
     try {
       const selected = harness.service.chooseDirectory(candidate);
       const confirmation = harness.service.confirmSelection({ token: selected.selection.token });
-      while (harness.service.getBootstrapState().state !== "relaunching") await Promise.resolve();
+      while (harness.service.getBootstrapState().state !== "relaunching")
+        await new Promise(setImmediate);
       assertSyncError(function() { harness.service.bootstrap(); }, "WORKSPACE_SWITCH_BUSY");
       gate.resolve();
       await confirmation;

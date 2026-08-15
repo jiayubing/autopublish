@@ -394,6 +394,7 @@ function createWorkspaceBootstrapService(options) {
     inspectWorkspaceDirectory(root);
 
     Object.keys(paths).forEach(function(key) {
+      if (key === "clientImageDirectoryName") return;
       const target = paths[key];
       if (typeof target !== "string") throwStable("WORKSPACE_PATH_INVALID");
       const resolvedTarget = path.resolve(target);
@@ -418,7 +419,7 @@ function createWorkspaceBootstrapService(options) {
 
   function secureEnsureWorkspaceDirectories(paths) {
     const targets = Object.keys(paths)
-      .filter(function(key) { return key !== "root"; })
+      .filter(function(key) { return key !== "root" && key !== "clientImageDirectoryName"; })
       .map(function(key) { return path.resolve(paths[key]); })
       .filter(function(target, index, all) { return all.indexOf(target) === index; })
       .sort(function(first, second) { return first.length - second.length; });
