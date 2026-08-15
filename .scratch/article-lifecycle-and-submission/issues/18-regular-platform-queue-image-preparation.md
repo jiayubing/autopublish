@@ -4,7 +4,7 @@
 
 **Blocked by:** 08 — 普通平台独立队列组执行；09 — 普通平台结果分类与人工收口；10 — 精简普通平台投稿队列界面；17 — 客户本地图片库深模块
 
-**Status:** `READY` umbrella；Ticket 26 的 26-I 本地 closure 已闭合，可按 `18-0 → 18-A → 18-B → 18-C → 18-D → 18-E` 严格串行调度；当前尚未启动 `18-0`。
+**Status:** `PARTIAL` umbrella；18-0 已在 integration HEAD `55ecc3f0f81d7b3fd7c17853ff486e48ea0f55b6` 完成合同/owner map 冻结与定向回归，evidence 见 `handoffs/18-0-image-contract-owner-map.md`。Ticket 26 的 26-I 本地 closure 已闭合；后续只能按 `18-A → 18-B → 18-C → 18-D → 18-E` 严格串行调度，当前尚未启动 `18-A`。
 
 **Scheduling gate:** 08、09、10、17 已完成；Ticket 26 的 26-I 本地 closure、combined audit、bounded re-audit 和 package/smoke gate 已闭合。按 Wave Plan 的 Wave 12 本地 closure 调度例外，不等待 Ticket 25/26 的真实外部验收；该例外不继承任何真实操作授权。Ticket 17 是已完成只读依赖，不重新调度。18 完成前不宣称任何具体平台已具备真实图片上传能力；19–21 仍需各平台独立探索、实现和真实验收授权。
 
