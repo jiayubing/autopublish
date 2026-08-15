@@ -169,7 +169,14 @@ function createLiejuHttpSession(options) {
       } catch (_) {
         diagnose("LIEJU_HTTP_STATE_LEASE_RELEASE_FAILED", "storage", "lease");
       }
-      if (error && error.code === "LIEJU_HTTP_STATE_MISSING") throw error;
+      if (
+        error &&
+        [
+          "LIEJU_HTTP_STATE_MISSING",
+          "BROWSER_SESSION_STATE_LEASE_UNAVAILABLE",
+        ].includes(error.code)
+      )
+        throw error;
       throw sessionError(
         "LIEJU_HTTP_STATE_INVALID",
         "Lieju HTTP session state is invalid",

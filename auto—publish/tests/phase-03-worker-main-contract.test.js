@@ -34,7 +34,11 @@ test("worker publisher executor returns an adapter outcome without a state write
         parseArticleFiles: async () => [{ title: "title", body: "body" }],
         publishArticle: async () => {
           published += 1;
-          return { status: "accepted", remoteId: "remote-1", remoteUrl: "https://example.test/article/1" };
+          return {
+            status: "accepted",
+            remoteId: "remote-1",
+            remoteUrl: "https://example.test/article/1",
+          };
         },
       },
     },
@@ -86,6 +90,39 @@ test("worker publisher executor turns an adapter exception into uncertain", asyn
     status: "uncertain",
     errorCode: "PUBLISHER_EXCEPTION",
   });
+});
+
+test("worker publisher executor blocks a prepared-submission adapter before starting a legacy session", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-03-worker-"));
+  const queue = path.join(root, "queue");
+  fs.mkdirSync(queue);
+  fs.writeFileSync(path.join(queue, "article.md"), "# title\nbody", "utf8");
+  const calls = [];
+  const executor = createWorkerPublisherExecutor({
+    paths: { input: root },
+    adapters: {
+      prepared: {
+        scanDir: "queue",
+        ensureSession: async () => calls.push("session"),
+        ensureLoggedIn: async () => calls.push("login"),
+        preparePlatformSubmission: async () => calls.push("prepare"),
+      },
+    },
+  });
+  const result = await executor.execute({
+    tasks: [
+      {
+        sourcePlatformId: "queue",
+        targetPlatformId: "prepared",
+        filename: "article.md",
+      },
+    ],
+  });
+  assert.deepEqual(result.results[0].outcome, {
+    status: "group_blocked",
+    errorCode: "SUBMISSION_ADAPTER_MISSING",
+  });
+  assert.deepEqual(calls, []);
 });
 
 test("dead main submission service seam is absent", () => {
@@ -233,7 +270,12 @@ test("main worker publisher inspects the sole registered task account before pub
         ok: true,
         data: {
           results: [
-            { outcome: { status: "article_rejected", errorCode: "REMOTE_REJECTED" } },
+            {
+              outcome: {
+                status: "article_rejected",
+                errorCode: "REMOTE_REJECTED",
+              },
+            },
           ],
         },
       }),

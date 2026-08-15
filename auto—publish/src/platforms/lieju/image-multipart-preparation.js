@@ -202,10 +202,15 @@ function prepareImage(candidate, clientId, imageResolver, fsApi) {
 
 function createMultipartCapability(controls, overrides, images) {
   let consumed = false;
+
+  function consumeOnce() {
+    if (consumed) throw fail("LIEJU_MULTIPART_PLAN_CONSUMED");
+    consumed = true;
+  }
+
   const capability = {
     consume: function () {
-      if (consumed) throw fail("LIEJU_MULTIPART_PLAN_CONSUMED");
-      consumed = true;
+      consumeOnce();
       const body = new FormData();
       for (const control of controls) {
         if (control.type === "file") continue;
@@ -227,6 +232,41 @@ function createMultipartCapability(controls, overrides, images) {
         body,
         headers: Object.freeze({ ...body.getHeaders() }),
       });
+    },
+    consumeBrowserForm: function () {
+      consumeOnce();
+      const payload = {
+        values: Object.freeze(
+          Array.from(overrides.entries()).map(function ([name, value]) {
+            return Object.freeze({ name, value });
+          }),
+        ),
+        files: Object.freeze(
+          images.map(function (image) {
+            return Object.freeze({
+              fieldName: image.fieldName,
+              filename: image.filename,
+              mimeType: image.mimeType,
+              bytes: Buffer.from(image.bytes),
+            });
+          }),
+        ),
+      };
+      Object.defineProperties(payload, {
+        toJSON: {
+          enumerable: false,
+          value: function () {
+            throw fail("LIEJU_MULTIPART_SERIALIZATION_FORBIDDEN");
+          },
+        },
+        [INSPECT]: {
+          enumerable: false,
+          value: function () {
+            return "[LiejuBrowserFormPlan]";
+          },
+        },
+      });
+      return Object.freeze(payload);
     },
   };
   Object.defineProperties(capability, {

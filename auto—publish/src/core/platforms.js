@@ -26,9 +26,9 @@ function imagePublishingCapability(adapter) {
   return Object.freeze({
     supported: Boolean(
       declared &&
-        typeof declared === "object" &&
-        !Array.isArray(declared) &&
-        declared.supported === true,
+      typeof declared === "object" &&
+      !Array.isArray(declared) &&
+      declared.supported === true,
     ),
   });
 }
@@ -44,12 +44,7 @@ function validateAdapter(adapter, id) {
     return "[" + id + "] adapter missing scanDir";
   }
 
-  var requiredFunctions = [
-    "ensureSession",
-    "ensureLoggedIn",
-    "publishArticle",
-    "closeSession",
-  ];
+  var requiredFunctions = ["ensureSession", "ensureLoggedIn", "closeSession"];
 
   for (var i = 0; i < requiredFunctions.length; i++) {
     var name = requiredFunctions[i];
@@ -58,13 +53,16 @@ function validateAdapter(adapter, id) {
     }
   }
 
-  if (
+  var usesPreparedPlatformSubmission =
     adapter.contentQueueImport === true &&
     adapter.publicationTarget &&
-    adapter.publicationTarget.kind === "platform" &&
-    typeof adapter.preparePlatformSubmission !== "function"
-  ) {
-    return "[" + id + "] adapter missing function: preparePlatformSubmission";
+    adapter.publicationTarget.kind === "platform";
+  if (usesPreparedPlatformSubmission) {
+    if (typeof adapter.preparePlatformSubmission !== "function") {
+      return "[" + id + "] adapter missing function: preparePlatformSubmission";
+    }
+  } else if (typeof adapter.publishArticle !== "function") {
+    return "[" + id + "] adapter missing function: publishArticle";
   }
 
   var hasOwnScan = typeof adapter.scanArticles === "function";
