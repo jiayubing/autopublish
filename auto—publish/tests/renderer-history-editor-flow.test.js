@@ -133,13 +133,21 @@ function installDesktopFixture(page, fixture) {
         version: 1,
         stage: published ? "published" : "pending_submission",
         label: published ? "已发布" : "待投稿",
-        primaryAction: published ? "view_publication" : "queue",
-        allowedBulkActions: published ? [] : ["queue", "trash"],
+        primaryAction: published ? "view_publication" : "submit",
+        allowedBulkActions: published ? [] : ["submit", "trash"],
         locks: {
           canEdit: !published,
-          canQueue: !published,
+          canSubmit: !published,
           canCancel: false,
           canTrash: !published
+        },
+        operations: {
+          edit: { allowed: !published, reasonCodes: [], safeMetadata: {} },
+          submit: { allowed: !published, reasonCodes: [], safeMetadata: {} },
+          retarget: { allowed: false, reasonCodes: [], safeMetadata: {} },
+          trash: { allowed: !published, reasonCodes: [], safeMetadata: {} },
+          restore: { allowed: false, reasonCodes: [], safeMetadata: {} },
+          purge: { allowed: false, reasonCodes: [], safeMetadata: {} }
         },
         publicationSummary: published
           ? { status: "published", label: "已发布", records: 1, published: 1, uncertain: false }
@@ -173,6 +181,32 @@ function installDesktopFixture(page, fixture) {
       listPaidMediaBatches: () => ok({ items: [] }),
       startPaidMediaBatch: () => ok({}),
       pausePaidMediaBatch: () => ok({}),
+      previewPaidMediaPreflight: ({ articleRefs, mediaResourceId }) => ok({
+        version: 1,
+        status: "ready",
+        canConfirm: true,
+        confirmationToken: "paid-confirmation-token",
+        confirmationFingerprint: "paid-fingerprint",
+        articleRefs,
+        articleCount: articleRefs.length,
+        articles: articleRefs.map((articleRef) => ({ articleRef, articleId: articleRef.articleId, title: "待确认付费文章", contentFingerprint: "content-fingerprint", status: "ready", reasonCodes: [], riskCodes: [] })),
+        mediaResourceId,
+        mediaName: "测试付费媒体",
+        mediaRemarks: "合成测试报价",
+        resourceFingerprint: "resource-fingerprint",
+        resourceAvailable: true,
+        quotedPrice: 12,
+        estimatedTotal: articleRefs.length * 12,
+        systemSubmissionCode: "fixture-submission-code",
+        blockers: [],
+        risks: [],
+        createdAt: "2026-07-18T00:00:00.000Z",
+        expiresAt: "2026-07-18T01:00:00.000Z"
+      }),
+      confirmPaidMediaBatch: ({ confirmationToken }) => {
+        state.calls.submission.push(confirmationToken);
+        return ok({ batchId: "paid-batch-fixture", targetKey: "media:fixture-resource", mediaResourceId: "fixture-resource", status: "queued", articleCount: 1, idempotent: false, items: [], articleRefs: [{ clientId: "history-editor-fixture", articleId: "selected-article-09" }], confirmationFingerprint: "paid-fingerprint", quotedPrice: 12, estimatedTotal: 12 });
+      },
       previewArticleRemovalImpact: (input) => ok({ articleCount: input.selections.length, blockedItems: [], canCommit: true, selections: input.selections }),
       applyArticleRemovalImpact: (input) => {
         const transaction = { transactionId: "removal-fixture-1", status: "needs_repair", phase: "needs_repair", errorCode: "PUBLICATION_ATTEMPT_MISMATCH", reasonCode: "PUBLICATION_ATTEMPT_MISMATCH", updatedAt: "2026-07-18T00:30:00.000Z" };
@@ -204,7 +238,7 @@ function installDesktopFixture(page, fixture) {
     };
     const runtime = { get: () => ok({ ok: true, buildInfo: { version: "1.0.1", commit: "history-editor-flow", dirty: false }, browserChannel: { channel: "chromium", configured: true, state: "ready", probed: true, source: "fixture", errorCode: null, lastCheckedAt: null }, capabilities: { playwrightNode: { state: "ready", source: "fixture", errorCode: null, lastCheckedAt: null }, playwrightCli: { state: "ready", source: "fixture", errorCode: null, lastCheckedAt: null }, browserChannel: { state: "ready", source: "fixture", errorCode: null, lastCheckedAt: null }, docx: { state: "ready", source: "fixture", errorCode: null, lastCheckedAt: null }, hepan: { state: "optional_unconfigured", source: "fixture", errorCode: "HEPAN_PYTHON_UNAVAILABLE", lastCheckedAt: null } }, errors: [], warnings: [] }), browserSmoke: () => ok({ ok: true, browserChannel: "chromium", session: "fixture" }) };
     const workspace = { getBootstrapState: () => ok({ state: "ready", workspacePath: "fixture", envOverride: false }), getCurrent: () => ok({ workspacePath: "fixture", envOverride: false, validation: { ok: true, errors: [], warnings: [] } }), openCurrent: () => ok(undefined), requestSwitch: () => ok({ state: "ready", workspacePath: "fixture", envOverride: false }), chooseDirectory: () => ok({ state: "ready", workspacePath: "fixture", envOverride: false }), confirmSelection: () => ok({ state: "ready" }), cancelSelection: () => ok({ state: "ready", workspacePath: "fixture", envOverride: false }) };
-    const media = { scanArticles: () => ok([]), getResourcePage: () => ok({ items: [], total: 0, page: 1, pageSize: 100 }), getPool: () => ok([]), getBalance: () => ok({ balance: "0" }) };
+    const media = { scanArticles: () => ok([]), getResourcePage: () => ok({ items: [{ resourceId: "fixture-resource", name: "测试付费媒体", price: 12, type: "image", createdAt: "2026-07-18T00:00:00.000Z" }, { resourceId: "unquoted-resource", name: "未报价媒体", price: null, type: "image", createdAt: "2026-07-18T00:00:00.000Z" }], total: 2, page: 1, pageSize: 100 }), getPool: () => ok([]), getBalance: () => ok({ balance: "0" }) };
     const orders = { getOrders: () => ok([]) };
     const aiProvider = { getStatus: () => ok({ configured: false, source: "application", apiKeyMask: "", lastTest: null }), save: () => ok({}), testConnection: () => ok({}), clear: () => ok({ cleared: true }) };
     const platformSettings = { getStatus: () => ok({ configured: false, source: "application", baseUrl: "", timeoutMs: 30000, allowInsecure: false, transport: "未配置", apiKeyMask: "", lastTest: null }), save: () => ok({}), test: () => ok({ testedAt: "", ok: true, code: "OK" }), clear: () => ok({ cleared: true }) };
@@ -234,15 +268,14 @@ async function openHistory(width = 1128, height = 527, fixtureOptions) {
   const fixture = createFixture(fixtureOptions);
   await installDesktopFixture(page, fixture);
   await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
-  await page.locator("#nav-item-content").waitFor();
-  await page.locator("#nav-item-content").click();
-  await page.getByRole("button", { name: "历史文章" }).click();
-  await page.getByRole("heading", { name: "历史文章" }).waitFor();
+  await page.locator("#nav-item-article-library").waitFor();
+  await page.locator("#nav-item-article-library").click();
+  await page.getByRole("heading", { name: "文章库" }).waitFor();
   return { page, fixture };
 }
 
 function historyPane(page) {
-  return page.locator("div.h-full.overflow-y-auto").filter({ has: page.getByRole("heading", { name: "历史文章" }) }).first();
+  return page.locator("div.h-full.overflow-y-auto").filter({ has: page.getByRole("heading", { name: "文章库" }) }).first();
 }
 
 describe("renderer history editor flow", { concurrency: false }, () => {
@@ -255,7 +288,7 @@ describe("renderer history editor flow", { concurrency: false }, () => {
     const { page, fixture } = await openHistory();
     try {
       const pane = historyPane(page);
-      const filter = page.getByRole("textbox", { name: "筛选历史文章" });
+      const filter = page.getByRole("textbox", { name: "筛选文章库" });
       await filter.fill("编辑上下文");
       const group = page.getByRole("button", { name: /fixture-platform.*历史文章超长模板名称/ });
       await group.click();
@@ -271,7 +304,7 @@ describe("renderer history editor flow", { concurrency: false }, () => {
       await sourceTitle.click();
 
        await page.getByLabel("文章标题", { exact: true }).waitFor();
-      assert.equal(await page.getByRole("heading", { name: "历史文章" }).isVisible(), true);
+      assert.equal(await page.getByRole("heading", { name: "文章库" }).isVisible(), true);
       assert.equal(await filter.inputValue(), "编辑上下文");
       assert.equal(await checkbox.isChecked(), true);
       assert.equal(await sourceTitle.isVisible(), true);
@@ -279,7 +312,7 @@ describe("renderer history editor flow", { concurrency: false }, () => {
        assert.equal(await page.getByLabel("文章标题", { exact: true }).evaluate((element) => document.activeElement === element), true, "editor title receives focus");
 
       await page.getByRole("button", { name: "关闭文章编辑器" }).click();
-      assert.equal(await page.getByRole("heading", { name: "历史文章" }).isVisible(), true);
+      assert.equal(await page.getByRole("heading", { name: "文章库" }).isVisible(), true);
       assert.equal(await filter.inputValue(), "编辑上下文");
       assert.equal(await checkbox.isChecked(), true);
       assert.equal(await sourceButton.evaluate((element) => document.activeElement === element), true, "closing restores focus to the source row");
@@ -292,7 +325,7 @@ describe("renderer history editor flow", { concurrency: false }, () => {
   it("fails closed when the authoritative workflow entry is missing", async () => {
     const { page, fixture } = await openHistory(1128, 527, { missingWorkflowArticleId: selectedArticleId });
     try {
-      await page.getByRole("textbox", { name: "筛选历史文章" }).fill("编辑上下文");
+      await page.getByRole("textbox", { name: "筛选文章库" }).fill("编辑上下文");
       await page.getByRole("button", { name: /fixture-platform.*历史文章超长模板名称/ }).click();
       const sourceTitle = page.getByText(fixture.selectedArticle.title, { exact: true });
       const sourceButton = sourceTitle.locator("..");
@@ -310,10 +343,34 @@ describe("renderer history editor flow", { concurrency: false }, () => {
     }
   });
 
+  it("confirms paid media only from the article-library intake after preflight", async () => {
+    const { page, fixture } = await openHistory();
+    try {
+      await page.getByRole("textbox", { name: "筛选文章库" }).fill("编辑上下文");
+      await page.getByRole("button", { name: /fixture-platform.*历史文章超长模板名称/ }).click();
+      await page.getByRole("checkbox", { name: `选择 ${fixture.selectedArticle.title}` }).check();
+      await page.getByRole("button", { name: /发起投稿 \(1\)/ }).click();
+      const intake = page.getByRole("dialog", { name: "发起投稿" });
+      await intake.getByRole("tab", { name: "付费媒体" }).click();
+      assert.equal(await intake.getByLabel("付费媒体资源").locator("option").count(), 2);
+      assert.equal(await intake.getByLabel("付费媒体资源").locator("option").filter({ hasText: "未报价媒体" }).count(), 0);
+      await intake.getByLabel("付费媒体资源").selectOption("fixture-resource");
+      await intake.getByRole("button", { name: "检查费用与文章" }).click();
+      const preflight = page.getByRole("dialog", { name: "付费媒体费用确认" });
+      await preflight.waitFor();
+      assert.equal(await preflight.getByText("¥12.00 / ¥12.00", { exact: true }).count(), 1);
+      await preflight.getByRole("button", { name: "确认付费投稿" }).click();
+      await page.getByRole("status").filter({ hasText: "已确认 1 篇文章进入付费投稿批次" }).waitFor();
+      assert.deepEqual(await page.evaluate(() => window.__historyEditorFlow.calls.submission), ["paid-confirmation-token"]);
+    } finally {
+      await page.close();
+    }
+  });
+
   it("guards unsaved edits and keeps published articles read-only", async () => {
     const { page, fixture } = await openHistory();
     try {
-      const filter = page.getByRole("textbox", { name: "筛选历史文章" });
+      const filter = page.getByRole("textbox", { name: "筛选文章库" });
       await filter.fill("编辑上下文");
       await page.getByRole("button", { name: /fixture-platform.*历史文章超长模板名称/ }).click();
       await page.getByText(fixture.selectedArticle.title, { exact: true }).click();

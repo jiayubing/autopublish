@@ -93,7 +93,6 @@ function renderArticleManagement() {
                 removal: { transactionId: null, transaction: null, query: { loading: false } },
                 watchRemovalTransaction: noop,
                 onArticleSelect() {},
-                onOpenSubmissionCenter() {},
               }),
             ),
           );
@@ -107,12 +106,11 @@ function renderArticleManagement() {
 
 test("article management presents the current customer's Lieju profile", () => {
   const rendered = renderArticleManagement().markup;
-  assert.match(rendered, /文章管理/);
+  assert.match(rendered, /文章库/);
   assert.match(rendered, /列举网投递档案/);
   assert.match(rendered, /当前客户：客户 A/);
   assert.match(rendered, /value="上海"/);
   assert.match(rendered, /value="张三"/);
   assert.match(rendered, /value="13800138000"/);
   assert.match(rendered, /保存到客户档案，不会修改任何文章标题或正文/);
-  assert.match(rendered, /查看投稿中心/);
 });

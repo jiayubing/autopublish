@@ -208,7 +208,7 @@ describe('renderer platform queue lifecycle', { concurrency: false }, () => {
     await page.waitForTimeout(500);
     assert.equal(await page.evaluate(() => window.__platformQueueLifecycle.getGroupCalls()), initialCalls, 'initial idle does not trigger another group query');
 
-    await page.locator('#nav-item-platforms').click();
+    await page.locator('#nav-item-submission-center').click();
     await page.getByRole('heading', { name: '普通平台队列' }).waitFor();
     await page.waitForTimeout(500);
     assert.equal(await page.evaluate(() => window.__platformQueueLifecycle.getGroupCalls()), initialCalls, 'mounting the page does not refresh again');
@@ -224,7 +224,7 @@ describe('renderer platform queue lifecycle', { concurrency: false }, () => {
     await installDesktopFixture(page);
     await page.goto(rendererUrl, { waitUntil: 'domcontentloaded' });
     await page.getByText('数据已就绪').waitFor();
-    await page.locator('#nav-item-platforms').click();
+    await page.locator('#nav-item-submission-center').click();
     await page.getByRole('heading', { name: '普通平台队列' }).waitFor();
 
     const beforeSwitch = await page.evaluate(() => window.__platformQueueLifecycle.getQueueCalls());

@@ -90,7 +90,7 @@ suite(
           throw new Error("native dialog opened: " + dialog.message());
         });
         await page.waitForSelector("#nav-item-settings");
-        await page.getByRole("button", { name: "配置中心" }).click();
+        await page.getByRole("button", { name: "设置" }).click();
         await page
           .getByRole("button", { name: "蓝色河畔", exact: true })
           .click();

@@ -96,7 +96,7 @@ interface ArticleAttentionPanelProps {
   onPreviewAction: AttentionFeature["previewAction"];
   onExecutePreview: AttentionFeature["executePreview"];
   onOpenPublication: (item: ArticleAttentionItem) => void;
-  onOpenSubmissionCenter?: () => void;
+  onOpenArticleLibrary?: (item: ArticleAttentionItem) => void;
   onInspect: (item: ArticleAttentionItem) => void;
   onOpenArticle: (item: ArticleAttentionItem) => void;
   onAttentionAction?: (item: ArticleAttentionItem, action: string) => void;
@@ -114,7 +114,7 @@ export default function ArticleAttentionPanel({
   onPreviewAction,
   onExecutePreview,
   onOpenPublication,
-  onOpenSubmissionCenter,
+  onOpenArticleLibrary,
   onInspect,
   onOpenArticle,
   onAttentionAction,
@@ -151,7 +151,7 @@ export default function ArticleAttentionPanel({
       return;
     }
     if (action === "open-submission") {
-      onOpenSubmissionCenter?.();
+      onOpenArticleLibrary?.(item);
       return;
     }
     if (action === "inspect") {

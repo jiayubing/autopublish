@@ -285,7 +285,7 @@ function SettingsViewContent() {
   return (
     <div className="min-w-0 max-w-6xl space-y-5">
       <div>
-        <h2 className="text-xl font-bold text-slate-800">配置中心</h2>
+        <h2 className="text-xl font-bold text-slate-800">设置</h2>
         <p className="mt-1 text-sm text-slate-500">
           管理服务账号、工作区和运行环境。账号配置与内容工作区相互独立。
         </p>

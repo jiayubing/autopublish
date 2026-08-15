@@ -14,7 +14,7 @@ const ITEMS: Array<{ id: SettingsSection; label: string; group?: string }> = [
 
 export default function SettingsNavigation({ active, onChange }: { active: SettingsSection; onChange: (section: SettingsSection) => void }) {
   let lastGroup = '';
-  return <nav aria-label="配置中心分区" className="min-w-0 rounded-lg border border-slate-200 bg-white p-2 lg:sticky lg:top-0 lg:self-start">
+  return <nav aria-label="设置分区" className="min-w-0 rounded-lg border border-slate-200 bg-white p-2 lg:sticky lg:top-0 lg:self-start">
     {ITEMS.map((item) => {
       const showGroup = item.group && item.group !== lastGroup;
       if (item.group) lastGroup = item.group;

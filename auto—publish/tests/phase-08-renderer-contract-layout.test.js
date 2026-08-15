@@ -50,9 +50,6 @@ const domainTypeSymbols = {
     "MediaResource",
     "Article",
     "Draft",
-    "OrderStatus",
-    "OrderPlatform",
-    "SubmissionOrder",
     "RealOrder",
   ],
   "types/platform.ts": [
@@ -164,7 +161,7 @@ const domainTypeSymbols = {
     "WorkspaceDataInvalidatedEvent",
     "WorkspaceRuntimeIdentity",
   ],
-  "types/view.ts": ["ViewMode", "Order"],
+  "types/view.ts": ["ViewMode"],
 };
 
 const typeAliasSymbols = new Set([
@@ -178,8 +175,6 @@ const typeAliasSymbols = new Set([
   "GenerationTaskStatus",
   "IpcResponse",
   "MediaType",
-  "Order",
-  "OrderStatus",
   "PlatformProviderSource",
   "PlatformProviderStatus",
   "PublicationHistorySummaryStatus",
@@ -231,7 +226,7 @@ test("renderer shared types have one domain owner and no legacy barrel", () => {
     }
   }
 
-  assert.equal(expectedOwners.size, 145);
+  assert.equal(expectedOwners.size, 141);
 
   const actualDeclarations = new Map();
   const expectedOwnerFiles = Object.keys(domainTypeSymbols)
@@ -263,7 +258,7 @@ test("renderer shared types have one domain owner and no legacy barrel", () => {
     }
   }
 
-  assert.equal(actualDeclarations.size, 145);
+  assert.equal(actualDeclarations.size, 141);
   assert.deepEqual(
     [...actualDeclarations.keys()].sort(),
     [...expectedOwners.keys()].sort(),

@@ -385,8 +385,8 @@ async function openPlatformPage(scenario) {
   page.setDefaultTimeout(5000);
   await installDesktopFixture(page, scenario);
   await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
-  await page.locator("#nav-item-platforms").waitFor();
-  await page.locator("#nav-item-platforms").click();
+  await page.locator("#nav-item-submission-center").waitFor();
+  await page.locator("#nav-item-submission-center").click();
   await page.getByRole("heading", { name: "普通平台队列" }).waitFor();
   await page
     .getByRole("button", { name: "检查残留" })

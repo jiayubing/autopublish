@@ -688,14 +688,12 @@ export interface ArticleManagementSnapshot {
       locks: {
         canEdit: boolean;
         canSubmit: boolean;
-        canQueue: boolean;
         canCancel: boolean;
         canTrash: boolean;
       };
       operations?: {
         edit: ArticleOperation;
         submit: ArticleOperation;
-        queue: ArticleOperation;
         retarget: ArticleOperation;
         trash: ArticleOperation;
         restore: ArticleOperation;

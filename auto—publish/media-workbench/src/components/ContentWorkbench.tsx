@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { LoaderCircle, RefreshCw } from "lucide-react";
 import type { ContentClient, ContentTemplateCatalog, LiejuPublicationProfile } from "../types/content";
+import type { MediaResource } from "../types/media";
 import type { GeneratedContentArticle } from "../types/generation";
 import type { ArticleEditorSnapshot } from "../bridge/content";
 import ArticleGenerationView from "./content/ArticleGenerationView";
@@ -8,7 +9,7 @@ import GeneratedArticleEditorPanel from "./content/GeneratedArticleEditorPanel";
 import GeneratedArticlesView from "./content/GeneratedArticlesView";
 import QuestionCollectionView from "./content/QuestionCollectionView";
 import { type ArticleWorkflowFilter } from "../article-workflow";
-import ArticleStageTabs from "./content/ArticleStageTabs";
+import ArticleLibraryFilters from "./content/ArticleLibraryFilters";
 import { useConfirmation, useConfirmationScope } from "../confirmation";
 import type { ContentWorkbenchFeature } from "../features/content/use-content-workbench-feature";
 import { reportRuntimeDiagnostic } from "../features/workspace/runtime-diagnostic-sink";
@@ -17,18 +18,30 @@ type RefreshState = "idle" | "refreshing" | "success" | "error";
 
 interface ContentWorkbenchProps {
   content: ContentWorkbenchFeature;
-  attentionIntent?: { attentionId?: string; clientId?: string } | null;
-  onAttentionIntentConsumed?: () => void;
+  mode?: "production" | "library";
+  articleIntent?: {
+    articleId?: string;
+    generationBatchId?: string;
+    clientId?: string;
+  } | null;
+  onArticleIntentConsumed?: () => void;
+  onOpenArticleLibrary?: (intent?: {
+    articleId?: string;
+    generationBatchId?: string;
+    clientId?: string;
+  }) => void;
+  mediaResources?: MediaResource[];
   onOpenOrders?: () => void;
-  onOpenSubmissionCenter?: () => void;
 }
 
 export default function ContentWorkbench({
   content,
-  attentionIntent,
-  onAttentionIntentConsumed,
+  mode = "production",
+  articleIntent,
+  onArticleIntentConsumed,
+  onOpenArticleLibrary,
+  mediaResources = [],
   onOpenOrders,
-  onOpenSubmissionCenter,
 }: ContentWorkbenchProps) {
   const { confirm } = useConfirmation();
   const {
@@ -61,7 +74,7 @@ export default function ContentWorkbench({
     string | null
   >(null);
   const [tab, setTab] = useState<"questions" | "generate" | "history">(
-    "questions",
+    mode === "library" ? "history" : "questions",
   );
   const [articleStageFilter, setArticleStageFilter] = useState<
     ArticleWorkflowFilter
@@ -69,6 +82,7 @@ export default function ContentWorkbench({
   const [generationBatchFilter, setGenerationBatchFilter] = useState<
     string | null
   >(null);
+  const [articleIntentId, setArticleIntentId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const historyDirtyRef = useRef(false);
   const [historyDirtyArticleId, setHistoryDirtyArticleId] = useState<
@@ -93,14 +107,18 @@ export default function ContentWorkbench({
   }
 
   useEffect(() => {
-    if (!attentionIntent) return;
+    setTab(mode === "library" ? "history" : "questions");
+  }, [mode]);
+
+  useEffect(() => {
+    if (!articleIntent) return;
     setTab("history");
-    setArticleStageFilter("attention");
-    setGenerationBatchFilter(null);
-    if (attentionIntent.clientId)
-      content.selectClient(attentionIntent.clientId);
-    onAttentionIntentConsumed?.();
-  }, [attentionIntent, content, onAttentionIntentConsumed]);
+    setArticleStageFilter("all");
+    setGenerationBatchFilter(articleIntent.generationBatchId || null);
+    setArticleIntentId(articleIntent.articleId || null);
+    if (articleIntent.clientId) content.selectClient(articleIntent.clientId);
+    onArticleIntentConsumed?.();
+  }, [articleIntent, content, onArticleIntentConsumed]);
 
   useEffect(() => {
     function guardWindowClose(event: BeforeUnloadEvent) {
@@ -121,7 +139,7 @@ export default function ContentWorkbench({
       if (
         await confirm({
           title: "放弃未保存修改？",
-          message: "历史文章有未保存修改，确认离开并放弃这些修改吗？",
+          message: "文章库有未保存修改，确认离开并放弃这些修改吗？",
           confirmLabel: "放弃修改",
           tone: "warning",
         })
@@ -200,9 +218,7 @@ export default function ContentWorkbench({
       content.selectClient(nextClientId);
       setError("");
       setGenerationBatchFilter(null);
-      // A client switch starts a new workbench session.  Land on the actionable
-      // queue rather than retaining the previous client's broad history filter.
-      setArticleStageFilter("pending_submission");
+      setArticleStageFilter("all");
     });
   }
 
@@ -216,6 +232,13 @@ export default function ContentWorkbench({
 
   function openGenerationBatchArticles(batchId: string, targetClientId?: string) {
     if (!batchId) return;
+    if (onOpenArticleLibrary) {
+      onOpenArticleLibrary({
+        generationBatchId: batchId,
+        clientId: targetClientId || clientId || undefined,
+      });
+      return;
+    }
     requestHistoryLeave(() => {
       closeHistoryEditor(true);
       setTab("history");
@@ -236,6 +259,9 @@ export default function ContentWorkbench({
         ? "success"
         : "idle";
   const visibleError = error || query.error?.userMessage || "";
+  const tabs = mode === "production"
+    ? (["questions", "generate"] as const)
+    : ([] as const);
   if (loading)
     return (
       <div className="flex h-full items-center justify-center text-slate-500">
@@ -245,13 +271,13 @@ export default function ContentWorkbench({
     );
   return (
     <div className="content-workbench relative flex h-full min-h-0 flex-col overflow-hidden">
-      <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-4 py-3">
-        {(["questions", "generate", "history"] as const).map((id) => (
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-4 py-3">
+        {tabs.map((id) => (
           <button
             id={id}
             type="button"
             key={id}
-            aria-label={id === "history" ? "历史文章" : undefined}
+            aria-label={id === "questions" ? "问题与采集" : "文章生成"}
             onClick={() => changeTab(id)}
             className={`rounded-md px-3 py-2 text-xs font-semibold ${tab === id ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-100"}`}
           >
@@ -259,15 +285,15 @@ export default function ContentWorkbench({
               ? "问题与采集"
               : id === "generate"
                 ? "文章生成"
-                : "文章管理"}
+              : "文章生成"}
           </button>
         ))}
         <div className="ml-auto flex items-center gap-2">
           <label className="text-xs text-slate-500">
-            当前客户（单篇/问题/历史）
+            当前客户
           </label>
           <select
-            aria-label="当前客户（单篇/问题/历史）"
+            aria-label="当前客户"
             value={clientId}
             onChange={(event) => handleClientChange(event.target.value)}
             className="h-9 min-w-32 rounded-md border border-slate-300 bg-white px-2 text-sm"
@@ -344,13 +370,12 @@ export default function ContentWorkbench({
             onViewBatchArticles={openGenerationBatchArticles}
           />
         )}
-        {tab === "history" && (
+        {mode === "library" && tab === "history" && (
           <div className="flex h-full min-w-0 min-h-0 flex-col gap-3 p-3">
-            <ArticleStageTabs
+            <ArticleLibraryFilters
               value={articleStageFilter}
               onChange={setArticleStageFilter}
               counts={management.lifecycleCounts}
-              attentionCount={management.attention.counts.total}
             />
             <div className="relative flex min-h-0 min-w-0 flex-1 flex-col gap-3 lg:flex-row">
               <div className="min-h-0 min-w-0 flex-1">
@@ -367,12 +392,13 @@ export default function ContentWorkbench({
                   stageFilter={articleStageFilter}
                   generationBatchId={generationBatchFilter}
                   onClearGenerationBatchFilter={() => setGenerationBatchFilter(null)}
+                  onGenerationBatchFilterChange={setGenerationBatchFilter}
                   dirtyArticleId={historyDirtyArticleId}
-                  selectedAttentionId={attentionIntent?.attentionId}
+                  articleId={articleIntentId}
+                  mediaResources={mediaResources}
                   onArticleSelect={openHistoryEditor}
                   onStageFilterChange={setArticleStageFilter}
                   onOpenOrders={onOpenOrders}
-                  onOpenSubmissionCenter={onOpenSubmissionCenter}
                 />
               </div>
               {historyEditingArticle && (

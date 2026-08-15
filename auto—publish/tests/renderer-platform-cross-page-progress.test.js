@@ -10,7 +10,7 @@ describe("renderer platform cross-page progress contract", function() {
   it("mounts one platform feature provider at App root and shares its run snapshot", function() {
     assert.match(read("App.tsx"), /PlatformFeatureProvider/);
     assert.match(read("components/PlatformWorkbench.tsx"), /usePlatformFeature/);
-    assert.match(read("components/Sidebar.tsx"), /usePlatformFeature/);
+    assert.match(read("App.tsx"), /usePlatformFeature/);
     assert.doesNotMatch(read("App.tsx"), /PlatformTaskProvider|WorkspaceDataProvider/);
     assert.doesNotMatch(read("components/PlatformWorkbench.tsx"), /usePlatformTask|usePlatformQueue/);
     assert.doesNotMatch(read("components/Sidebar.tsx"), /usePlatformTask|usePlatformQueue/);

@@ -35,27 +35,6 @@ export interface Draft {
   selectedResources: MediaResource[];
 }
 
-export type OrderStatus = "success" | "pending" | "failed" | "partial";
-
-export interface OrderPlatform {
-  name: string;
-  status: "success" | "failed" | "pending";
-  error?: string;
-}
-
-// SubmissionOrder: used for preflight/UI flow (legacy mock shape)
-export interface SubmissionOrder {
-  id: string;
-  articleTitle: string;
-  filename: string;
-  platforms: OrderPlatform[];
-  totalFee: number;
-  mediaCount: number;
-  createdAt: string;
-  status: OrderStatus;
-  logs: string[];
-}
-
 // RealOrder: matches the real order view shape from media-order-service.js
 export interface RealOrder {
   title: string;

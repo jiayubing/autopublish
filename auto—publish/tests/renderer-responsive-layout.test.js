@@ -466,10 +466,9 @@ async function openRenderer(width, height) {
   );
   await installDesktopFixture(page);
   await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
-  await page.locator("#nav-item-content").waitFor();
-  await page.locator("#nav-item-content").click();
-  await page.getByRole("button", { name: "历史文章" }).click();
-  await page.getByRole("heading", { name: "历史文章" }).waitFor();
+  await page.locator("#nav-item-article-library").waitFor();
+  await page.locator("#nav-item-article-library").click();
+  await page.getByRole("heading", { name: "文章库" }).waitFor();
   return page;
 }
 
@@ -539,7 +538,7 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
   });
   after(closeRenderer);
 
-  it("loads and replaces the reusable paid-media third-party identity without submitting", async () => {
+  it("keeps content production free of paid-media submission controls", async () => {
     const page = await browser.newPage({
       viewport: { width: 1280, height: 720 },
     });
@@ -547,16 +546,8 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
       page.setDefaultTimeout(5000);
       await installDesktopFixture(page);
       await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
-      const input = page.getByLabel("第三方标识");
-      await input.waitFor();
-      assert.equal(await input.inputValue(), "长期标识-A");
-      await input.fill("长期标识-B");
-      await page.getByRole("button", { name: "保存标识" }).click();
-      await page.waitForFunction(
-        () => window.__mediaSubmissionState.thirdPartyIdSaves === 1,
-      );
-      const state = await page.evaluate(() => window.__mediaSubmissionState);
-      assert.equal(state.thirdPartyId, "长期标识-B");
+      assert.equal(await page.getByLabel("第三方标识").count(), 0);
+      assert.equal(await page.getByRole("button", { name: "内容生产" }).count(), 1);
       assert.equal(
         await page.evaluate(
           () => typeof window.desktopConsole.media.submitSelected,
@@ -565,17 +556,12 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
       );
       for (const width of [900, 1180, 1280]) {
         await page.setViewportSize({ width, height: 720 });
-        const layout = await page
-          .locator("[data-third-party-id-setting='true']")
-          .evaluate((element) => {
-            const rect = element.getBoundingClientRect();
-            return {
-              left: rect.left,
-              right: rect.right,
-              viewportWidth: window.innerWidth,
-              documentWidth: document.documentElement.scrollWidth,
-            };
-          });
+        const layout = await page.evaluate(() => ({
+          left: 0,
+          right: document.documentElement.scrollWidth,
+          viewportWidth: window.innerWidth,
+          documentWidth: document.documentElement.scrollWidth,
+        }));
         assert.ok(
           layout.left >= 0,
           `third-party identity starts outside ${width}px viewport`,
@@ -672,7 +658,7 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
       assert.match(measured.text, /工作区/);
       assert.match(measured.text, /运行环境/);
       assert.match(measured.text, /存储与清理/);
-      for (const label of ["付费媒体投稿", "投稿中心", "投稿订单记录"])
+      for (const label of ["内容生产", "文章库", "投稿中心", "订单", "媒体资源", "设置"])
         assert.match(measured.text, new RegExp(label));
 
       await page.getByRole("button", { name: "工作区", exact: true }).click();
@@ -805,12 +791,11 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
         await page.waitForFunction(
           () =>
             document.querySelector(
-              "select[aria-label='当前客户（单篇/问题/历史）']",
+              "select[aria-label='当前客户']",
             )?.value === "layout-smoke",
         );
-        await page.getByRole("button", { name: "文章生成" }).click();
-        await page.getByRole("button", { name: "历史文章" }).click();
-        await page.getByRole("heading", { name: "历史文章" }).waitFor();
+        await page.locator("#nav-item-article-library").click();
+        await page.getByRole("heading", { name: "文章库" }).waitFor();
         assert.match(
           await page.locator("body").innerText(),
           /超长模板名称用于响应式历史列表边界回归/,

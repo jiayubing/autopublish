@@ -54,19 +54,17 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
           version: 1,
           stage: "pending_submission",
           label: "待投稿",
-          primaryAction: "queue",
-          allowedBulkActions: ["queue"],
+          primaryAction: "submit",
+          allowedBulkActions: ["submit"],
           locks: {
             canEdit: true,
             canSubmit: true,
-            canQueue: true,
             canCancel: false,
             canTrash: true,
           },
           operations: {
             edit: { allowed: true, reasonCodes: [] },
             submit: { allowed: true, reasonCodes: [] },
-            queue: { allowed: true, reasonCodes: [] },
             retarget: { allowed: false, reasonCodes: [] },
             trash: { allowed: true, reasonCodes: [] },
             restore: { allowed: false, reasonCodes: [] },
@@ -277,7 +275,21 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
     });
     try {
       await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
-      await page.locator("#nav-item-content").click();
+      assert.deepEqual(
+        await page.locator("#app-sidebar nav > button").evaluateAll((buttons) => buttons.map((button) => button.id)),
+        [
+          "nav-item-content-production",
+          "nav-item-article-library",
+          "nav-item-submission-center",
+          "nav-item-orders",
+          "nav-item-resources",
+          "nav-item-settings",
+        ],
+      );
+      assert.equal(await page.locator("#nav-item-article-library .sidebar-badge").innerText(), "1");
+      assert.equal(await page.locator("#nav-item-platforms").count(), 0);
+      assert.equal(await page.locator("#nav-item-workbench").count(), 0);
+      await page.locator("#nav-item-content-production").click();
       await page.getByRole("button", { name: "文章生成" }).click();
       await page.getByRole("tab", { name: "批量生成" }).click();
       await page.getByRole("button", { name: "查看本批次文章" }).click();
@@ -298,6 +310,7 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
       await page.getByRole("button", { name: "清除批次筛选" }).click();
       assert.equal(await page.getByTestId("generation-batch-filter").count(), 0);
 
+      await page.locator("#nav-item-content-production").click();
       await page.getByRole("button", { name: "文章生成" }).click();
       await page.getByRole("tab", { name: "批量生成" }).click();
       await page.getByRole("button", { name: "查看本批次文章" }).click();

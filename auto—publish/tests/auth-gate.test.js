@@ -28,7 +28,7 @@ describe("renderer auth gate", { concurrency: false }, function() {
     });
     await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
     await page.getByRole("textbox", { name: "登录名" }).waitFor();
-    assert.equal(await page.locator("#nav-item-content").count(), 0);
+    assert.equal(await page.locator("#nav-item-content-production").count(), 0);
     assert.equal(await page.getByText("登录后才能使用工作区和投稿功能").count(), 1);
     await page.close();
   });

@@ -105,7 +105,7 @@ export default function ResourceLibrary({
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <FolderOpen className="w-4 h-4 text-blue-500" />
-            <h2 className="text-sm font-bold text-slate-800">公共媒体资源池</h2>
+            <h2 className="text-sm font-bold text-slate-800">媒体资源</h2>
           </div>
           
           <div className="flex items-center space-x-1.5">

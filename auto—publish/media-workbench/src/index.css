@@ -31,6 +31,18 @@ body { background-color: #f6f7f4; }
 .manual-research-editor-panel { position: relative; z-index: 20; display: flex; width: min(42%, 34rem); min-width: 320px; flex: 0 0 min(42%, 34rem); flex-direction: column; overflow: hidden; border-left: 1px solid #cbd5e1; background: #fff; box-shadow: -8px 0 24px rgba(15, 23, 42, .08); }
 .manual-research-editor-backdrop { display: none; }
 @media (max-width: 767px) {
+  #app-sidebar { width: 4.25rem; }
+  #app-sidebar nav { padding: .75rem .5rem; }
+  #app-sidebar nav > .sidebar-label { display: none; }
+  #app-sidebar nav > button { justify-content: center; padding-left: .5rem; padding-right: .5rem; }
+  #app-sidebar nav > button > div { justify-content: center; }
+  #app-sidebar .sidebar-label, #app-sidebar .sidebar-badge { display: none; }
+  #app-sidebar > div:first-child { justify-content: center; padding: .75rem .5rem; }
+  #app-sidebar > div:last-child { padding: .5rem; }
+  #app-sidebar > div:last-child > div { padding: .5rem; }
+  #app-sidebar #checkBalanceBtn { margin-left: auto; }
+}
+@media (max-width: 767px) {
   .manual-research-editor-backdrop { position: fixed; inset: 0; z-index: 30; display: block; border: 0; background: rgba(15, 23, 42, .35); }
   .manual-research-editor-panel { position: fixed; inset: 0; z-index: 31; width: 100%; min-width: 0; flex: none; border: 0; box-shadow: none; }
 }

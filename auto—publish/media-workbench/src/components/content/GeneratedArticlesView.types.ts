@@ -1,5 +1,4 @@
 import type {
-  ArticleAttentionItem,
   ArticleRemovalTransaction,
   ArticleTrashRecord,
   ContentSubmissionBatchRecord,
@@ -10,6 +9,7 @@ import type {
   PublicationArchiveEntry,
 } from "../../types/publication";
 import type { GeneratedContentArticle } from "../../types/generation";
+import type { MediaResource } from "../../types/media";
 import type {
   ContentClient,
   ContentCommandStaleResult,
@@ -36,14 +36,12 @@ export type ArticleManagementReadModel = {
       locks: {
         canEdit: boolean;
         canSubmit: boolean;
-        canQueue: boolean;
         canCancel: boolean;
         canTrash: boolean;
       };
       operations?: {
         edit: ArticleOperation;
         submit: ArticleOperation;
-        queue: ArticleOperation;
         retarget: ArticleOperation;
         trash: ArticleOperation;
         restore: ArticleOperation;
@@ -59,10 +57,20 @@ export type ArticleManagementReadModel = {
     }
   >;
   submissionPlatforms: ContentSubmissionPlatform[];
+  lifecycleCounts?: {
+    pending_submission: number;
+    needs_completion: number;
+    in_submission: number;
+    published: number;
+    trash: number;
+    total: number;
+  };
 };
 
 export type GeneratedArticlesCommandName =
   | "admitRegularQueueItems"
+  | "previewPaidMediaPreflight"
+  | "confirmPaidMediaBatch"
   | "prepareBindPaidOrderNumber"
   | "bindPaidOrderNumber"
   | "prepareConfirmPaidOrderAbsent"
@@ -106,9 +114,11 @@ export interface GeneratedArticlesViewProps {
   watchRemovalTransaction: (transactionId: string) => Promise<unknown>;
   stageFilter?: ArticleWorkflowFilter;
   generationBatchId?: string | null;
+  articleId?: string | null;
   onClearGenerationBatchFilter?: () => void;
+  onGenerationBatchFilterChange?: (batchId: string | null) => void;
   dirtyArticleId?: string | null;
-  selectedAttentionId?: string;
+  mediaResources?: MediaResource[];
   onArticleSelect: (
     article: GeneratedContentArticle,
     source?: HTMLElement | null,
@@ -116,5 +126,4 @@ export interface GeneratedArticlesViewProps {
   ) => void;
   onStageFilterChange?: (stage: ArticleWorkflowFilter) => void;
   onOpenOrders?: () => void;
-  onOpenSubmissionCenter?: () => void;
 }

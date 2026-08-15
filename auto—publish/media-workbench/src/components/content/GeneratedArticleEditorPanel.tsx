@@ -21,7 +21,7 @@ interface GeneratedArticleEditorPanelProps {
   sourceLabel?: string;
 }
 
-export default function GeneratedArticleEditorPanel({ article, published = false, editable = true, editFingerprint, onSaved, onEditFingerprintChange, onClose, onDirtyChange, onConflict, onSaveArticle, saving = false, footer, embedded = false, sourceLabel = '历史文章' }: GeneratedArticleEditorPanelProps) {
+export default function GeneratedArticleEditorPanel({ article, published = false, editable = true, editFingerprint, onSaved, onEditFingerprintChange, onClose, onDirtyChange, onConflict, onSaveArticle, saving = false, footer, embedded = false, sourceLabel = '文章库' }: GeneratedArticleEditorPanelProps) {
   const { confirm } = useConfirmation();
   const [draft, setDraft] = useState(article);
   const [base, setBase] = useState(article);

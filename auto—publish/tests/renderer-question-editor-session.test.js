@@ -307,7 +307,7 @@ describe(
       );
       await installQuestionFixture(page);
       await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
-      await page.locator("#nav-item-content").click();
+      await page.locator("#nav-item-content-production").click();
       await page.getByRole("heading", { name: "问题与采集" }).waitFor();
       const sourceOne = page.getByRole("button", { name: "人工回答：问题一" });
       await sourceOne.click();
@@ -348,14 +348,14 @@ describe(
         "引用二",
       );
       await page
-        .getByLabel("当前客户（单篇/问题/历史）")
+        .getByLabel("当前客户")
         .selectOption("client-b");
       await page
         .getByRole("dialog", { name: /人工编辑回答/ })
         .waitFor({ state: "detached" });
-      await page.getByLabel("当前客户（单篇/问题/历史）").click();
+      await page.getByLabel("当前客户").click();
       assert.equal(
-        await page.getByLabel("当前客户（单篇/问题/历史）").inputValue(),
+        await page.getByLabel("当前客户").inputValue(),
         "client-b",
       );
       assert.deepEqual(nativeDialogs, []);
@@ -371,7 +371,7 @@ describe(
         page.on("dialog", (dialog) => dialog.accept());
         await installQuestionFixture(page);
         await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
-        await page.locator("#nav-item-content").click();
+        await page.locator("#nav-item-content-production").click();
         await page.getByRole("heading", { name: "问题与采集" }).waitFor();
         await page.getByRole("button", { name: "人工回答：问题一" }).click();
         const panel = page.getByRole("dialog", { name: /人工编辑回答/ });
@@ -412,7 +412,7 @@ describe(
       page.on("pageerror", (error) => pageErrors.push(error.message));
       await installQuestionFixture(page, { previewBatchFailure: true });
       await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
-      await page.locator("#nav-item-content").click();
+      await page.locator("#nav-item-content-production").click();
       await page.getByRole("heading", { name: "问题与采集" }).waitFor();
       const recollect = page.getByRole("button", { name: "重新采集选中客户" });
       await recollect.click();
@@ -440,7 +440,7 @@ describe(
       });
       await installQuestionFixture(page);
       await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
-      await page.locator("#nav-item-content").click();
+      await page.locator("#nav-item-content-production").click();
       await page.getByRole("heading", { name: "问题与采集" }).waitFor();
       await page.getByRole("button", { name: "重新采集选中客户" }).click();
       const confirmation = page.getByRole("dialog", {
@@ -472,7 +472,7 @@ describe(
       page.setDefaultTimeout(8000);
       await installQuestionFixture(page, { previewBatchPending: true });
       await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
-      await page.locator("#nav-item-content").click();
+      await page.locator("#nav-item-content-production").click();
       await page.getByRole("heading", { name: "问题与采集" }).waitFor();
       const recollect = page.getByRole("button", { name: "重新采集选中客户" });
       await recollect.click();
@@ -511,7 +511,7 @@ describe(
       page.on("pageerror", (error) => pageErrors.push(error.message));
       await installQuestionFixture(page, { previewBatchPending: true });
       await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
-      await page.locator("#nav-item-content").click();
+      await page.locator("#nav-item-content-production").click();
       await page.getByRole("heading", { name: "问题与采集" }).waitFor();
       await page.getByRole("button", { name: "重新采集选中客户" }).click();
       await page.waitForFunction(
@@ -519,7 +519,7 @@ describe(
       );
 
       await page.locator("#nav-item-settings").click();
-      await page.getByRole("heading", { name: "配置中心" }).waitFor();
+      await page.getByRole("heading", { name: "设置" }).waitFor();
       await page.evaluate(() => window.__questionFixture.resolvePreview());
       await page.waitForTimeout(100);
 

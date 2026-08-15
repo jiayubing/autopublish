@@ -69,11 +69,10 @@ test('article attention actions produce visible publication/detail results', asy
               allowedBulkActions: ['submit'],
               reasonCodes: ['PUBLICATION_FAILED', 'ARTICLE_ATTENTION'],
               reasonMessage: '投稿明确失败，需要处理。',
-              locks: { canEdit: true, canSubmit: true, canQueue: true, canCancel: false, canTrash: true },
+              locks: { canEdit: true, canSubmit: true, canCancel: false, canTrash: true },
               operations: {
                 edit: { allowed: true, reasonCodes: [], safeMetadata: {} },
                 submit: { allowed: true, reasonCodes: [], safeMetadata: {} },
-                queue: { allowed: true, reasonCodes: [], safeMetadata: {} },
                 retarget: { allowed: false, reasonCodes: ['ARTICLE_RETARGET_NO_TARGET'], safeMetadata: {} },
                 trash: { allowed: true, reasonCodes: [], safeMetadata: {} },
                 restore: { allowed: false, reasonCodes: ['ARTICLE_NOT_IN_TRASH'], safeMetadata: {} },
@@ -107,27 +106,30 @@ test('article attention actions produce visible publication/detail results', asy
       window.__attentionActionCalls = calls;
     });
      await page.goto(rendererUrl, { waitUntil: 'domcontentloaded' });
-    await page.getByRole('button', { name: 'AI内容生成' }).click();
-    await page.getByRole('button', { name: '历史文章' }).click();
-     await page.getByRole('tab', { name: '需处理' }).click();
+    await page.getByRole('button', { name: '投稿中心' }).click();
+    await page.getByRole('tab', { name: /需处理事项/ }).click();
     await page.getByText('失败后可打开统一投稿入口', { exact: true }).waitFor({ state: 'visible' });
     assert.equal(await page.getByText('失败后可打开统一投稿入口', { exact: true }).count(), 1);
     const attentionRegion = page.getByRole('region', { name: '需处理页面' });
     assert.equal(await attentionRegion.getByText('测试客户', { exact: true }).count(), 2);
     assert.ok(await attentionRegion.getByText('蓝色河畔 / account-1', { exact: true }).isVisible());
-    assert.equal(await attentionRegion.getByRole('button', { name: /打开文章/ }).count(), 1);
-    assert.equal(await attentionRegion.getByRole('button', { name: /移入回收站/ }).count(), 1);
+    assert.equal(await attentionRegion.getByRole('button', { name: /打开发起投稿/ }).count(), 1);
+    assert.equal(await attentionRegion.getByRole('button', { name: /打开发布详情/ }).count(), 1);
+    assert.equal(await attentionRegion.getByRole('button', { name: /移入回收站/ }).count(), 0);
     assert.equal(await attentionRegion.getByRole('button', { name: /重试本地归档/ }).count(), 0);
     assert.ok((await page.getByText('问题类型', { exact: true }).count()) > 0);
     assert.ok((await page.getByText('问题说明', { exact: true }).count()) > 0);
     assert.ok((await page.getByText('最近一次执行', { exact: true }).count()) > 0);
     assert.ok(await page.getByText('2026-07-19 08:00:00', { exact: true }).isVisible());
     assert.equal(await page.getByRole('button', { name: '全选当前结果' }).count(), 0);
-    assert.equal(await page.getByRole('button', { name: '加入投稿队列' }).count(), 0);
-    await page.getByRole('button', { name: '打开发布详情' }).first().click();
+    assert.equal(await page.getByRole('button', { name: '发起投稿', exact: true }).count(), 0);
+    await attentionRegion.getByRole('button', { name: '打开发布详情' }).click();
+    await page.getByRole('heading', { name: '文章库' }).waitFor({ state: 'visible' });
     await page.getByRole('dialog', { name: '文章 失败后可打开统一投稿入口 的发布详情' }).waitFor({ state: 'visible' });
     assert.deepEqual(await page.evaluate(() => window.__attentionActionCalls), []);
     await page.getByRole('button', { name: '关闭发布详情' }).first().click();
+    await page.getByRole('button', { name: '投稿中心' }).click();
+    await page.getByRole('tab', { name: /需处理事项/ }).click();
     await page.setViewportSize({ width: 375, height: 800 });
     await page.getByRole('button', { name: '补录订单号' }).click();
     const paidDrawer = page.getByRole('dialog', { name: '需处理详情' });

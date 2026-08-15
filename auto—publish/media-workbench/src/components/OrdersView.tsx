@@ -174,10 +174,10 @@ export default function OrdersView({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-lg font-bold text-slate-800">
-            分发队列与订单追踪
+            订单
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            查看付费媒体订单状态、投稿报价与发布结果
+            这里只处理已经形成的真实订单及其状态核对。
           </p>
         </div>
         <button
@@ -254,9 +254,9 @@ export default function OrdersView({
         {filteredOrders.length === 0 && (
           <div className="bg-white border border-slate-200/80 rounded-2xl p-12 text-center">
             <ClipboardList className="w-8 h-8 text-slate-300 mx-auto mb-3" />
-            <p className="text-sm font-medium text-slate-500">暂无订单记录</p>
+            <p className="text-sm font-medium text-slate-500">暂无真实订单</p>
             <p className="text-[11px] text-slate-400 mt-1">
-              提交分发任务后，订单将自动出现在这里。
+              只有确认投稿后形成的真实订单会出现在这里。
             </p>
           </div>
         )}

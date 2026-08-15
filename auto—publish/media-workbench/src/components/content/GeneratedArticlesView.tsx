@@ -11,15 +11,16 @@ import {
   selectableArticles,
 } from "../../article-history-logic";
 import type {
-  ArticleAttentionItem,
   ArticleRemovalTransaction,
   ArticleTrashImpactItem,
   ArticleTrashPreview,
   ArticleTrashRecord,
   PublicationArchiveEntry,
   PublicationHistoryRecord,
+  PaidMediaPreflight,
 } from "../../types/publication";
 import type { GeneratedContentArticle } from "../../types/generation";
+import type { MediaResource } from "../../types/media";
 import { type ArticleWorkflowFilter } from "../../article-workflow";
 import type {
   ArticleManagementReadModel,
@@ -27,13 +28,11 @@ import type {
 } from "./GeneratedArticlesView.types";
 import { formatBeijingTime } from "../../time-format";
 import PublicationHistoryDrawer from "./PublicationHistoryDrawer";
-import ArticleAttentionPanel from "./ArticleAttentionPanel";
-import ArticleAttentionDetailDrawer from "./ArticleAttentionDetailDrawer";
 import AccountProfileSelector from "./AccountProfileSelector";
 import GeneratedArticlesList from "./GeneratedArticlesList";
 import ArticleTrashPanel from "./ArticleTrashPanel";
 import ClientLiejuPublicationProfileEditor from "./ClientLiejuPublicationProfileEditor";
-import { useAttentionFeature } from "../../features/attention/use-attention-feature";
+import PaidMediaPreflightDialog from "./PaidMediaPreflightDialog";
 import { useConfirmation } from "../../confirmation";
 import { isContentCommandStaleResult } from "../../content-command-result";
 
@@ -82,13 +81,14 @@ export default function GeneratedArticlesView({
   watchRemovalTransaction,
   stageFilter = "all",
   generationBatchId,
+  articleId,
   onClearGenerationBatchFilter,
+  onGenerationBatchFilterChange,
   dirtyArticleId,
-  selectedAttentionId,
+  mediaResources = [],
   onArticleSelect,
   onStageFilterChange,
   onOpenOrders,
-  onOpenSubmissionCenter,
 }: GeneratedArticlesViewProps) {
   const { confirm } = useConfirmation();
   const {
@@ -101,6 +101,8 @@ export default function GeneratedArticlesView({
   } = management;
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [filter, setFilter] = useState("");
+  const [createdFrom, setCreatedFrom] = useState("");
+  const [createdTo, setCreatedTo] = useState("");
   const [selectedStage, setSelectedStage] = useState<
     ArticleWorkflowFilter
   >(stageFilter);
@@ -109,26 +111,28 @@ export default function GeneratedArticlesView({
       allSubmissionPlatforms.filter((platform) => platform.contentQueueImport),
     [allSubmissionPlatforms],
   );
+  const quotedMediaResources = useMemo(
+    () => mediaResources.filter((resource) => typeof resource.price === "number"),
+    [mediaResources],
+  );
   const [platformId, setPlatformId] = useState("");
   const [accountProfileId, setAccountProfileId] = useState("");
   const [drawerArticle, setDrawerArticle] =
     useState<GeneratedContentArticle | null>(null);
-  const [attentionDetail, setAttentionDetail] =
-    useState<ArticleAttentionItem | null>(null);
-  const [paidResolutionError, setPaidResolutionError] = useState("");
+  const [intakeOpen, setIntakeOpen] = useState(false);
+  const [intakeMode, setIntakeMode] = useState<"regular" | "paid">("regular");
+  const [mediaResourceId, setMediaResourceId] = useState("");
+  const [paidPreflight, setPaidPreflight] =
+    useState<PaidMediaPreflight | null>(null);
+  const [intakeError, setIntakeError] = useState("");
   const clientIdRef = useRef(clientId);
   const mountedRef = useRef(true);
   const lastNonTrashStageRef = useRef<ArticleWorkflowFilter>(
-    stageFilter === "trash" || stageFilter === "attention" ? "all" : stageFilter,
+    stageFilter === "trash" ? "all" : stageFilter,
   );
-  const { snapshot: attentionSnapshot, feature: attentionFeature } =
-    useAttentionFeature(clientId);
   const [selected, setSelected] = useState<string[]>([]);
   const [error, setError] = useState("");
-  const visibleError = error || query.error?.userMessage || "";
-  // Attention is an independent read model. It is no longer an article-library
-  // category; the submission-center work package owns its dedicated surface.
-  const isAttentionStage = selectedStage === "attention";
+  const visibleError = error || intakeError || query.error?.userMessage || "";
   const [batchFeedback, setBatchFeedback] = useState<{
     kind: "status" | "error";
     text: string;
@@ -156,13 +160,19 @@ export default function GeneratedArticlesView({
 
   useEffect(() => {
     setSelectedStage(stageFilter);
-    if (stageFilter !== "trash" && stageFilter !== "attention")
+    if (stageFilter !== "trash")
       lastNonTrashStageRef.current = stageFilter;
   }, [stageFilter]);
 
   useEffect(() => {
     setSelected([]);
   }, [generationBatchId]);
+
+  useEffect(() => {
+    if (!articleId) return;
+    const target = articles.find((article) => article.id === articleId);
+    if (target) setDrawerArticle(target);
+  }, [articleId, articles]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -177,7 +187,9 @@ export default function GeneratedArticlesView({
     setTrashFeedback(null);
     setTrashPreview(null);
     setDrawerArticle(null);
-    setAttentionDetail(null);
+    setPaidPreflight(null);
+    setIntakeOpen(false);
+    setIntakeError("");
   }, []);
 
   const updateSelected = useCallback((next: React.SetStateAction<string[]>) => {
@@ -212,10 +224,6 @@ export default function GeneratedArticlesView({
     });
     return grouped;
   }, [publishedArchives]);
-  const publicationRecordById = useMemo(
-    () => new Map(publicationRecords.map((record) => [record.publicationId, record])),
-    [publicationRecords],
-  );
   const workflowByArticle = useMemo(
     () =>
       new Map(
@@ -226,34 +234,21 @@ export default function GeneratedArticlesView({
       ),
     [articles, snapshotWorkflowByArticle],
   );
+  const generationBatches = useMemo(
+    () =>
+      [...new Set(articles.map((article) => article.generationBatchId).filter(Boolean))].sort(),
+    [articles],
+  );
 
   function workflowForArticle(article: GeneratedContentArticle) {
     return workflowByArticle.get(article.id);
   }
 
-  function attentionTargetLabel(item: ArticleAttentionItem): string {
-    const publication = item.publicationId
-      ? publicationRecordById.get(item.publicationId)
-      : undefined;
-    const platform =
-      item.displayName ||
-      publication?.displayName ||
-      item.platformId ||
-      publication?.platformId ||
-      "未指定平台";
-    const account = /(?:^|:)account:(.+)$/.exec(
-      publication?.targetKey || "",
-    )?.[1];
-    return `${platform} / ${account || "账号未记录"}`;
-  }
-
-  function canQueueArticle(article: GeneratedContentArticle): boolean {
+  function canSubmitArticle(article: GeneratedContentArticle): boolean {
     const workflow = workflowForArticle(article);
     const allowed =
       workflow?.operations?.submit?.allowed ??
-      workflow?.locks.canSubmit ??
-      workflow?.operations?.queue?.allowed ??
-      workflow?.locks.canQueue;
+      workflow?.locks.canSubmit;
     return (
       allowed === true && !(dirtyArticleId && article.id === dirtyArticleId)
     );
@@ -266,43 +261,10 @@ export default function GeneratedArticlesView({
     return allowed === true && !isPublishedArticle(article);
   }
 
-  function attentionArticleFor(item: ArticleAttentionItem) {
-    if (!item.articleId) return null;
-    return (
-      articles.find(
-        (article) =>
-          article.id === item.articleId &&
-          (!item.clientId || article.clientId === item.clientId),
-      ) || null
-    );
-  }
-
-  function attentionAdditionalActions(item: ArticleAttentionItem): string[] {
-    if (item.kind !== "regular_platform_failed") return [];
-    const article = attentionArticleFor(item);
-    if (!article) return [];
-    const workflow = workflowForArticle(article);
-    const actions: string[] = [];
-    const editable =
-      workflow?.operations?.edit?.allowed ?? workflow?.locks.canEdit;
-    if (editable === true) actions.push("open-article");
-    if (!removalSubmitDisabled && canTrashArticle(article))
-      actions.push("trash-article");
-    return actions;
-  }
-
-  function trashAttentionArticle(item: ArticleAttentionItem) {
-    const article = attentionArticleFor(item);
-    if (!article || !canTrashArticle(article) || removalSubmitDisabled) return;
-    void previewTrashSelections([
-      { clientId: article.clientId, articleId: article.id },
-    ]);
-  }
-
   function isArticleSelectable(article: GeneratedContentArticle): boolean {
     return (
       selectableArticles([article], clientId).length > 0 &&
-      (canQueueArticle(article) || canTrashArticle(article))
+      (canSubmitArticle(article) || canTrashArticle(article))
     );
   }
 
@@ -319,14 +281,17 @@ export default function GeneratedArticlesView({
         workflowByArticle.get(article.id)?.stage === selectedStage;
       const batchMatches =
         !generationBatchId || article.generationBatchId === generationBatchId;
+      const createdDate = article.createdAt.slice(0, 10);
+      const createdFromMatches = !createdFrom || createdDate >= createdFrom;
+      const createdToMatches = !createdTo || createdDate <= createdTo;
       const textMatches =
         !query ||
         `${article.title} ${article.content} ${article.platform} ${article.templateId} ${article.templateSnapshot?.name || ""} ${article.templateSnapshot?.scenario || ""} ${article.templateSnapshot?.body || ""}`
           .toLowerCase()
           .includes(query);
-      return stageMatches && batchMatches && textMatches;
+      return stageMatches && batchMatches && textMatches && createdFromMatches && createdToMatches;
     });
-  }, [articles, filter, generationBatchId, selectedStage, workflowByArticle]);
+  }, [articles, createdFrom, createdTo, filter, generationBatchId, selectedStage, workflowByArticle]);
   const groups = useMemo(() => groupArticlesByTemplate(filtered), [filtered]);
   const operable = useMemo(
     () => selectableArticles(filtered, clientId).filter(isArticleSelectable),
@@ -339,9 +304,9 @@ export default function GeneratedArticlesView({
   const selectedDirtyArticle = selectedArticles.find((article) =>
     Boolean(dirtyArticleId && article.id === dirtyArticleId),
   );
-  const selectedQueueableArticles = selectedDirtyArticle
+  const selectedSubmittableArticles = selectedDirtyArticle
     ? []
-    : selectedArticles.filter(canQueueArticle);
+    : selectedArticles.filter(canSubmitArticle);
   const selectedTrashableArticles = selectedArticles.filter(canTrashArticle);
   const removalStatus = transactionStatusOf(removalTransaction);
   const removalTransactionOpen =
@@ -381,7 +346,7 @@ export default function GeneratedArticlesView({
     );
   }
 
-  async function queueSelected() {
+  async function submitRegularSelection() {
     const requestedClientId = clientId;
     if (
       commandBusy(
@@ -390,8 +355,8 @@ export default function GeneratedArticlesView({
       )
     )
       return;
-    const selectedQueueable = selectedQueueableArticles;
-    if (!selectedQueueable.length || !platformId || !accountProfileId) return;
+    const selectedSubmittable = selectedSubmittableArticles;
+    if (!selectedSubmittable.length || !platformId || !accountProfileId) return;
     setError("");
     try {
       if (
@@ -399,7 +364,7 @@ export default function GeneratedArticlesView({
         typeof commands.admitRegularQueueItems === "function"
       ) {
         const regularInput = {
-          articleRefs: selectedQueueable.map((article) => ({
+          articleRefs: selectedSubmittable.map((article) => ({
             clientId: requestedClientId,
             articleId: article.id,
           })),
@@ -408,14 +373,18 @@ export default function GeneratedArticlesView({
         };
         const preview =
           await commands.previewRegularQueueAdmission(regularInput);
-        if (!isCurrentClient(requestedClientId)) return;
+        if (
+          isContentCommandStaleResult(preview) ||
+          !isCurrentClient(requestedClientId)
+        )
+          return;
         if (!preview.queueableCount && !preview.idempotentCount)
           throw new Error("没有符合普通平台队列规则的文章");
         if (
           !(await confirm({
-            title: "确认加入普通平台队列",
-            message: `新增 ${preview.queueableCount} 项，已存在跳过 ${preview.idempotentCount} 项，缺失 ${preview.missingCount} 项，冲突 ${preview.conflictCount} 项。`,
-            confirmLabel: "确认加入普通平台队列",
+            title: "确认发起普通平台投稿",
+            message: `将新增 ${preview.queueableCount} 项普通平台投稿，已存在跳过 ${preview.idempotentCount} 项，缺失 ${preview.missingCount} 项，冲突 ${preview.conflictCount} 项。`,
+            confirmLabel: "确认发起投稿",
           }))
         )
           return;
@@ -428,14 +397,80 @@ export default function GeneratedArticlesView({
         updateSelected([]);
         setBatchFeedback({
           kind: "status",
-          text: `已加入 ${result.admittedCount || 0} 项普通平台队列。`,
+          text: `已发起 ${result.admittedCount || 0} 项普通平台投稿。`,
         });
         return;
       }
       throw new Error("请选择一个已配置账号的普通平台");
     } catch (value) {
       if (isCurrentClient(requestedClientId))
-        setError(value instanceof Error ? value.message : "批量入队失败");
+        setError(value instanceof Error ? value.message : "发起普通平台投稿失败");
+    }
+  }
+
+  function openSubmissionIntake() {
+    if (!selectedSubmittableArticles.length || selectedDirtyArticle) return;
+    setIntakeError("");
+    setPaidPreflight(null);
+    setIntakeMode("regular");
+    setIntakeOpen(true);
+  }
+
+  async function previewPaidSelection() {
+    const requestedClientId = clientId;
+    if (
+      !selectedSubmittableArticles.length ||
+      !mediaResourceId ||
+      commandBusy("previewPaidMediaPreflight")
+    )
+      return;
+    setIntakeError("");
+    try {
+      const result = await commands.previewPaidMediaPreflight({
+        articleRefs: selectedSubmittableArticles.map((article) => ({
+          clientId: requestedClientId,
+          articleId: article.id,
+        })),
+        mediaResourceId,
+      });
+      if (
+        isContentCommandStaleResult(result) ||
+        !isCurrentClient(requestedClientId)
+      )
+        return;
+      setPaidPreflight(result as PaidMediaPreflight);
+    } catch (value) {
+      if (isCurrentClient(requestedClientId))
+        setIntakeError(
+          value instanceof Error ? value.message : "付费媒体预检失败",
+        );
+    }
+  }
+
+  async function confirmPaidSelection() {
+    const requestedClientId = clientId;
+    const confirmationToken = paidPreflight?.confirmationToken;
+    if (!confirmationToken || commandBusy("confirmPaidMediaBatch")) return;
+    setIntakeError("");
+    try {
+      const result = await commands.confirmPaidMediaBatch({ confirmationToken });
+      if (
+        isContentCommandStaleResult(result) ||
+        !isCurrentClient(requestedClientId)
+      )
+        return;
+      updateSelected([]);
+      setPaidPreflight(null);
+      setIntakeOpen(false);
+      setBatchFeedback({
+        kind: "status",
+        text: `已确认 ${result.articleCount || selectedSubmittableArticles.length} 篇文章进入付费投稿批次。`,
+      });
+    } catch (value) {
+      if (isCurrentClient(requestedClientId))
+        setIntakeError(
+          value instanceof Error ? value.message : "确认付费投稿失败",
+        );
     }
   }
 
@@ -446,29 +481,6 @@ export default function GeneratedArticlesView({
     const workflow = workflowForArticle(article);
     if (!workflow) return;
     onArticleSelect(article, source, workflow.stage === "published");
-  }
-
-  async function resolveRegularUncertain(
-    record: PublicationHistoryRecord,
-    status: "published" | "failed",
-  ) {
-    const item = attentionSnapshot.items.find(
-      (candidate) =>
-        candidate.kind === "regular_platform_uncertain" &&
-        candidate.clientId === clientId &&
-        candidate.publicationId === record.publicationId &&
-        candidate.attemptId === record.attemptId,
-    );
-    if (!item) {
-      setError("需处理项已变化，请刷新后重新核对。");
-      return;
-    }
-    await resolveAttentionAction(
-      item,
-      status === "published"
-        ? "confirm-regular-accepted"
-        : "confirm-regular-not-accepted",
-    );
   }
 
   async function previewTrashSelections(
@@ -743,87 +755,18 @@ export default function GeneratedArticlesView({
       />
     );
 
-  async function resolveAttentionAction(
-    item: ArticleAttentionItem,
-    action: string,
-    orderId?: string,
-  ) {
-    setPaidResolutionError("");
-    try {
-      const preview = await attentionFeature.previewAction({
-        attentionId: item.attentionId,
-        action,
-        resolutionInput: orderId ? { orderId } : undefined,
-      });
-      if (!preview) return;
-      const copy: Record<string, { title: string; confirmLabel: string }> = {
-        "confirm-regular-accepted": {
-          title: "确认远端已接受",
-          confirmLabel: "确认已接受",
-        },
-        "confirm-regular-not-accepted": {
-          title: "确认远端未接受",
-          confirmLabel: "确认未接受",
-        },
-        "bind-paid-order-number": {
-          title: "确认补录订单号",
-          confirmLabel: "确认补录",
-        },
-        "confirm-paid-order-absent": {
-          title: "确认服务商没有订单",
-          confirmLabel: "确认没有订单",
-        },
-      };
-      const actionCopy = copy[action] || {
-        title: "确认处理需处理项",
-        confirmLabel: action,
-      };
-      if (
-        preview.requiresConfirmation &&
-        !(await confirm({
-          title: actionCopy.title,
-          message:
-            action === "confirm-paid-order-absent"
-              ? "仅在已人工核对服务商且确认没有生成订单时继续。"
-              : preview.message,
-          confirmLabel: actionCopy.confirmLabel,
-          tone: "warning",
-        }))
-      )
-        return;
-      await attentionFeature.executePreview(preview, { confirmed: true });
-      setAttentionDetail(null);
-    } catch (value) {
-      setPaidResolutionError(
-        value instanceof Error ? value.message : "处理需处理项失败。",
-      );
-    }
-  }
-
   return (
     <div className="relative h-full w-full min-w-0 overflow-y-auto p-4">
       <div className="mb-4 grid min-w-0 gap-3">
         <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-          <h2
-            aria-label="历史文章"
-            className="text-base font-semibold text-slate-800"
-          >
-            文章管理
+          <h2 aria-label="文章库" className="text-base font-semibold text-slate-800">
+            文章库
           </h2>
           <p className="mt-1 max-w-prose text-xs leading-5 text-slate-500">
-            按文章当前阶段组织下一步操作；发布记录和队列状态仍分别保留。
+            按文章当前阶段、生成批次和关键词筛选；编辑、发起投稿、进度与发布档案均从这里进入。
           </p>
           </div>
-          {onOpenSubmissionCenter && (
-            <button
-              type="button"
-              onClick={onOpenSubmissionCenter}
-              className="rounded border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700"
-            >
-              查看投稿中心
-            </button>
-          )}
         </div>
 
         <ClientLiejuPublicationProfileEditor
@@ -831,14 +774,51 @@ export default function GeneratedArticlesView({
           saveProfile={saveClientLiejuPublicationProfile}
         />
 
-        <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)]">
+        <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)_auto_auto]">
           <input
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
             placeholder="筛选标题、平台或模板"
-            aria-label="筛选历史文章"
+            aria-label="筛选文章库"
             className="h-9 min-w-0 w-full rounded-md border border-slate-300 px-2 text-xs"
           />
+          <select
+            aria-label="生成批次筛选"
+            value={generationBatchId || ""}
+            onChange={(event) =>
+              onGenerationBatchFilterChange?.(event.target.value || null)
+            }
+            disabled={!generationBatches.length && !generationBatchId}
+            className="h-9 min-w-0 rounded-md border border-slate-300 bg-white px-2 text-xs disabled:opacity-50"
+          >
+            <option value="">全部生成批次</option>
+            {generationBatchId && !generationBatches.includes(generationBatchId) && (
+              <option value={generationBatchId}>{generationBatchId}</option>
+            )}
+            {generationBatches.map((batchId) => (
+              <option key={batchId} value={batchId}>{batchId}</option>
+            ))}
+          </select>
+          <label className="flex h-9 items-center gap-1 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-500">
+            起始日期
+            <input
+              type="date"
+              aria-label="文章创建起始日期"
+              value={createdFrom}
+              onChange={(event) => setCreatedFrom(event.target.value)}
+              className="min-w-0 bg-transparent text-slate-700 outline-none"
+            />
+          </label>
+          <label className="flex h-9 items-center gap-1 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-500">
+            结束日期
+            <input
+              type="date"
+              aria-label="文章创建结束日期"
+              value={createdTo}
+              onChange={(event) => setCreatedTo(event.target.value)}
+              className="min-w-0 bg-transparent text-slate-700 outline-none"
+            />
+          </label>
           {generationBatchId && (
             <div
               role="status"
@@ -859,8 +839,16 @@ export default function GeneratedArticlesView({
           )}
         </div>
 
-        {!isAttentionStage && (
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={openSubmissionIntake}
+            disabled={!selectedSubmittableArticles.length || Boolean(selectedDirtyArticle)}
+            title={selectedDirtyArticle ? "当前编辑文章有未保存修改，请先保存后投稿。" : undefined}
+            className="rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
+          >
+            发起投稿 ({selectedSubmittableArticles.length})
+          </button>
           <button
             type="button"
             onClick={toggleAll}
@@ -884,8 +872,7 @@ export default function GeneratedArticlesView({
           >
             移入回收站 ({selectedTrashableArticles.length})
           </button>
-          </div>
-        )}
+        </div>
         {batchFeedback && (
           <div
             role={batchFeedback.kind === "error" ? "alert" : "status"}
@@ -905,7 +892,7 @@ export default function GeneratedArticlesView({
             {trashFeedback.text}
           </div>
         )}
-        {removalTransaction && !isAttentionStage && (
+        {removalTransaction && (
           <div
             role={removalStatus === "needs_repair" ? "alert" : "status"}
             aria-live={
@@ -940,58 +927,9 @@ export default function GeneratedArticlesView({
           </div>
         )}
 
-        {!isAttentionStage && (
-          <div className="flex min-w-0 flex-wrap items-start gap-2 rounded-md border border-slate-200 bg-slate-50 p-2">
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-            <span className="shrink-0 text-xs font-medium text-slate-500">
-              投稿平台
-            </span>
-            <select
-              aria-label="普通平台投稿目标"
-              value={platformId}
-              onChange={(event) => {
-                setPlatformId(event.target.value);
-                setAccountProfileId("");
-              }}
-              className="h-8 min-w-40 rounded border border-slate-300 px-2 text-xs"
-            >
-              <option value="">请选择一个平台</option>
-              {submissionPlatforms.map((platform) => (
-                <option key={platform.id} value={platform.id}>
-                  {platform.displayName || platform.id}
-                </option>
-              ))}
-            </select>
-          </div>
-          <button
-            type="button"
-            onClick={() => void queueSelected()}
-            title={
-              selectedDirtyArticle
-                ? "当前编辑文章有未保存修改，请先保存后投稿。"
-                : undefined
-            }
-            disabled={
-              !selectedQueueableArticles.length ||
-              !platformId ||
-              !accountProfileId ||
-              commandBusy(
-                "previewRegularQueueAdmission",
-                "admitRegularQueueItems",
-              )
-            }
-            className="shrink-0 rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
-          >
-            加入投稿队列
-          </button>
-          <AccountProfileSelector
-            platforms={submissionPlatforms}
-            platformId={platformId}
-            value={accountProfileId}
-            onChange={setAccountProfileId}
-          />
-          </div>
-        )}
+        <div className="rounded-md border border-slate-200 bg-slate-50 p-2 text-xs text-slate-500">
+          选择文章后点击“发起投稿”，在确认面板中选择普通平台目标或已报价的媒体资源。
+        </div>
       </div>
       {visibleError && (
         <div
@@ -1001,58 +939,7 @@ export default function GeneratedArticlesView({
           {visibleError}
         </div>
       )}
-      {isAttentionStage ? (
-        <ArticleAttentionPanel
-          snapshot={attentionSnapshot}
-          onRefresh={attentionFeature.refresh}
-          onPreviewAction={attentionFeature.previewAction}
-          onExecutePreview={attentionFeature.executePreview}
-          selectedAttentionId={selectedAttentionId}
-          getTargetLabel={attentionTargetLabel}
-          clientLabel={client?.name || clientId || "当前客户"}
-          getAdditionalActions={attentionAdditionalActions}
-          onTrashArticle={trashAttentionArticle}
-          extraActionBusy={
-            commandBusy("previewContentArticleRemoval", "trashContentArticles")
-          }
-          onOpenPublication={(item) => {
-            // Paid-order resolution is a dedicated attention workflow. Open
-            // its detail drawer so the typed media commands remain reachable
-            // without routing them through the generic attention resolver.
-            if (
-              item.kind === "paid_order_creation_uncertain" ||
-              item.kind === "order_status_anomaly"
-            ) {
-              setAttentionDetail(item);
-              return;
-            }
-            const article = articles.find(
-              (candidate) => candidate.id === item.articleId,
-            );
-            if (article) setDrawerArticle(article);
-            else setAttentionDetail(item);
-          }}
-          onOpenSubmissionCenter={onOpenSubmissionCenter}
-          onAttentionAction={(item, action) => {
-            if (
-              item.kind === "paid_order_creation_uncertain" &&
-              ["bind-paid-order-number", "confirm-paid-order-absent"].includes(
-                action,
-              )
-            )
-              setAttentionDetail(item);
-          }}
-          onInspect={(item) => setAttentionDetail(item)}
-          onOpenArticle={(item) => {
-            const article = articles.find(
-              (candidate) => candidate.id === item.articleId,
-            );
-            if (article) openArticle(article);
-            else setAttentionDetail(item);
-          }}
-        />
-      ) : (
-        <GeneratedArticlesList
+      <GeneratedArticlesList
           groups={groups}
           visibleError={visibleError}
           clientId={clientId}
@@ -1060,7 +947,7 @@ export default function GeneratedArticlesView({
           selected={selected}
           workflowByArticle={workflowByArticle}
           isArticleSelectable={isArticleSelectable}
-          isArticleQueueable={canQueueArticle}
+          isArticleSubmittable={canSubmitArticle}
           removalSubmitDisabled={removalSubmitDisabled}
           commandBusy={commandBusy}
           onToggleCollapsed={(key) =>
@@ -1075,7 +962,6 @@ export default function GeneratedArticlesView({
           onOpenPublication={(article) => setDrawerArticle(article)}
           onOpenOrder={onOpenOrders}
         />
-      )}
       {trashPreview && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/30 p-4"
@@ -1182,24 +1068,156 @@ export default function GeneratedArticlesView({
             : undefined
         }
         onClose={() => setDrawerArticle(null)}
-        onReconcile={(record, status) =>
-          void resolveRegularUncertain(record, status)
-        }
-        busy={
-          attentionSnapshot.commands.preview.busy ||
-          attentionSnapshot.commands.execute.busy
-        }
       />
-      <ArticleAttentionDetailDrawer
-        item={attentionDetail}
-        onClose={() => setAttentionDetail(null)}
-        onResolveAttentionAction={resolveAttentionAction}
-        resolutionBusy={
-          attentionSnapshot.commands.preview.busy ||
-          attentionSnapshot.commands.execute.busy
-        }
-        resolutionError={paidResolutionError}
-      />
+      {intakeOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/30 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="发起投稿"
+        >
+          <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-lg bg-white p-5 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-base font-semibold text-slate-800">发起投稿</h3>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  当前选择 {selectedSubmittableArticles.length} 篇文章；确认前不会创建投稿批次或订单。
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="关闭发起投稿"
+                onClick={() => {
+                  setIntakeOpen(false);
+                  setPaidPreflight(null);
+                  setIntakeError("");
+                }}
+                disabled={commandBusy("previewPaidMediaPreflight", "confirmPaidMediaBatch")}
+                className="rounded p-1 text-slate-400 hover:bg-slate-100 disabled:opacity-40"
+              >
+                ×
+              </button>
+            </div>
+            <div className="mt-4 flex gap-2" role="tablist" aria-label="投稿类型">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={intakeMode === "regular"}
+                onClick={() => {
+                  setIntakeMode("regular");
+                  setPaidPreflight(null);
+                  setIntakeError("");
+                }}
+                className={`rounded px-3 py-2 text-xs font-semibold ${intakeMode === "regular" ? "bg-slate-900 text-white" : "border border-slate-300 text-slate-600"}`}
+              >
+                普通平台
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={intakeMode === "paid"}
+                onClick={() => {
+                  setIntakeMode("paid");
+                  setPaidPreflight(null);
+                  setIntakeError("");
+                }}
+                className={`rounded px-3 py-2 text-xs font-semibold ${intakeMode === "paid" ? "bg-slate-900 text-white" : "border border-slate-300 text-slate-600"}`}
+              >
+                付费媒体
+              </button>
+            </div>
+            {intakeMode === "regular" ? (
+              <div className="mt-4 grid gap-3">
+                <label className="grid gap-1 text-xs text-slate-600">
+                  普通平台投稿目标
+                  <select
+                    aria-label="普通平台投稿目标"
+                    value={platformId}
+                    onChange={(event) => {
+                      setPlatformId(event.target.value);
+                      setAccountProfileId("");
+                    }}
+                    className="h-9 rounded border border-slate-300 px-2 text-sm"
+                  >
+                    <option value="">请选择一个平台</option>
+                    {submissionPlatforms.map((platform) => (
+                      <option key={platform.id} value={platform.id}>
+                        {platform.displayName || platform.id}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <AccountProfileSelector
+                  platforms={submissionPlatforms}
+                  platformId={platformId}
+                  value={accountProfileId}
+                  onChange={setAccountProfileId}
+                />
+                <button
+                  type="button"
+                  onClick={() => void submitRegularSelection()}
+                  disabled={
+                    !selectedSubmittableArticles.length ||
+                    !platformId ||
+                    !accountProfileId ||
+                    commandBusy("previewRegularQueueAdmission", "admitRegularQueueItems")
+                  }
+                  className="justify-self-end rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
+                >
+                  {commandBusy("previewRegularQueueAdmission", "admitRegularQueueItems") ? "检查中…" : "确认发起投稿"}
+                </button>
+              </div>
+            ) : (
+              <div className="mt-4 grid gap-3">
+                <label className="grid gap-1 text-xs text-slate-600">
+                  媒体资源
+                  <select
+                    aria-label="付费媒体资源"
+                    value={mediaResourceId}
+                    disabled={!quotedMediaResources.length}
+                    onChange={(event) => {
+                      setMediaResourceId(event.target.value);
+                      setPaidPreflight(null);
+                    }}
+                    className="h-9 rounded border border-slate-300 px-2 text-sm"
+                  >
+                    <option value="">
+                      {quotedMediaResources.length
+                        ? "请选择已报价媒体资源"
+                        : "暂无已报价媒体资源"}
+                    </option>
+                    {quotedMediaResources.map((resource: MediaResource) => (
+                      <option key={resource.resourceId} value={resource.resourceId}>
+                        {resource.name} {resource.price === null ? "" : `· ¥${resource.price.toFixed(2)}`}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {!paidPreflight && (
+                  <button
+                    type="button"
+                    onClick={() => void previewPaidSelection()}
+                    disabled={!mediaResourceId || commandBusy("previewPaidMediaPreflight")}
+                    className="justify-self-end rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
+                  >
+                    {commandBusy("previewPaidMediaPreflight") ? "检查中…" : "检查费用与文章"}
+                  </button>
+                )}
+              </div>
+            )}
+            {intakeError && <p role="alert" className="mt-3 rounded border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{intakeError}</p>}
+          </div>
+        </div>
+      )}
+      {paidPreflight && (
+        <PaidMediaPreflightDialog
+          model={paidPreflight}
+          busy={commandBusy("confirmPaidMediaBatch")}
+          error={intakeError}
+          onClose={() => setPaidPreflight(null)}
+          onConfirm={confirmPaidSelection}
+        />
+      )}
     </div>
   );
 }

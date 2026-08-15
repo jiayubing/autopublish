@@ -1,9 +1,8 @@
 import type { PublicationHistorySummary } from './types/publication';
 
 export type ArticleWorkflowStage = 'pending_submission' | 'needs_completion' | 'in_submission' | 'published' | 'trash';
-/** Library categories plus the independent attention read-model filter. */
-export type ArticleWorkflowFilter = ArticleWorkflowStage | 'all' | 'attention';
-export type ArticleWorkflowAction = 'submit' | 'edit' | 'view_submission' | 'queue' | 'view_progress' | 'view_order' | 'open_attention' | 'view_publication' | 'trash' | 'restore' | 'purge';
+export type ArticleWorkflowFilter = ArticleWorkflowStage | 'all';
+export type ArticleWorkflowAction = 'submit' | 'edit' | 'view_submission' | 'view_progress' | 'view_order' | 'open_attention' | 'view_publication' | 'trash' | 'restore' | 'purge';
 
 export interface ArticleWorkflowAttention {
   articleId?: string | null;
@@ -16,8 +15,6 @@ export interface ArticleWorkflowAttention {
 export interface ArticleWorkflowLocks {
   canEdit: boolean;
   canSubmit: boolean;
-  /** Temporary derived field for pre-26-H direct consumers. */
-  canQueue: boolean;
   canCancel: boolean;
   canTrash: boolean;
 }
@@ -57,8 +54,6 @@ export interface ArticleWorkflow {
   operations?: {
     edit: ArticleOperation;
     submit: ArticleOperation;
-    /** Temporary migration seam; derived from submit by the main-process owner. */
-    queue: ArticleOperation;
     retarget: ArticleOperation;
     trash: ArticleOperation;
     restore: ArticleOperation;

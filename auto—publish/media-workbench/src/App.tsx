@@ -1,33 +1,23 @@
-import React, { lazy, Suspense, useEffect, useState } from "react";
+import React, { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import type { ViewMode } from "./types/view";
 import Sidebar from "./components/Sidebar";
 import { useWorkspaceRuntimeIdentity } from "./features/workspace/workspace-coordinator-context";
 import { PlatformFeatureProvider } from "./features/platform/platform-feature-context";
 import ConfirmationHost from "./components/ConfirmationHost";
 import {
-  Database,
-  HelpCircle,
   RefreshCw,
-  Layout,
-  ChevronRight,
-  FileText,
-  AlertCircle,
-  Plus,
-  Compass,
-  ListFilter,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useMediaFeature } from "./features/media/use-media-feature";
 import { useContentWorkbenchFeature } from "./features/content/use-content-workbench-feature";
+import { usePlatformFeature } from "./features/platform/platform-feature-context";
 import { SettingsFeatureProvider } from "./features/settings/settings-context";
-import MediaThirdPartyIdControl from "./components/MediaThirdPartyIdControl";
 
 const ResourceLibrary = lazy(() => import("./components/ResourceLibrary"));
 const OrdersView = lazy(() => import("./components/OrdersView"));
 const SettingsView = lazy(() => import("./components/SettingsView"));
 const PlatformWorkbench = lazy(() => import("./components/PlatformWorkbench"));
 const ContentWorkbench = lazy(() => import("./components/ContentWorkbench"));
-const PaidMediaWorkbench = lazy(() => import("./components/PaidMediaWorkbench"));
 export default function App() {
   return (
     <PlatformFeatureProvider>
@@ -50,14 +40,15 @@ export function WorkspaceScopedConfirmationHost({
 }
 
 function AppContent() {
-  const [currentView, setCurrentView] = useState<ViewMode>("workbench");
-  const [articleAttentionIntent, setArticleAttentionIntent] = useState<{
-    attentionId?: string;
+  const [currentView, setCurrentView] = useState<ViewMode>("content-production");
+  const [articleLibraryIntent, setArticleLibraryIntent] = useState<{
+    articleId?: string;
+    generationBatchId?: string;
     clientId?: string;
   } | null>(null);
   const { snapshot: mediaSnapshot, feature: mediaFeature } = useMediaFeature();
+  const { snapshot: platformSnapshot } = usePlatformFeature();
   const content = useContentWorkbenchFeature();
-  const articles = mediaSnapshot.articles.items;
   const resources = mediaSnapshot.resources.items;
   const orders = mediaSnapshot.orders.items;
   const balance = mediaSnapshot.balance.value;
@@ -73,7 +64,9 @@ function AppContent() {
       mediaSnapshot.pool.query,
       mediaSnapshot.balance.query,
       mediaSnapshot.orders.query,
-    ].every((query) => !query.loading);
+    ].every((query) => !query.loading) &&
+    !content.snapshot.query.loading &&
+    !content.snapshot.managementQuery.loading;
   const isCheckingBalance = mediaSnapshot.commands.checkBalance.busy;
   const mediaRefreshResult = mediaSnapshot.commands.refreshResources.result as {
     truncated?: boolean;
@@ -84,6 +77,47 @@ function AppContent() {
       ? `资源刷新达到安全上限，已加载 ${mediaRefreshResult.resourceCount || 0} 项，结果已截断。`
       : `资源库已刷新，共 ${mediaRefreshResult.resourceCount || 0} 项。`
     : null;
+
+  const navigationBadges = useMemo(() => {
+    const lifecycleCount = content.snapshot.management.lifecycleCounts?.total;
+    const articleLibrary =
+      typeof lifecycleCount === "number"
+        ? lifecycleCount
+        : content.snapshot.management.articles.length +
+          content.snapshot.management.trash.length;
+    const regularQueue = platformSnapshot.regularQueueGroupViews.reduce(
+      (
+        total: number,
+        group: { current?: unknown; remaining?: unknown[] },
+      ) =>
+        total + (group.current ? 1 : 0) + (group.remaining || []).length,
+      0,
+    );
+    const paidBatches = (content.snapshot.paidMediaExecution.items || []).filter(
+      (batch) =>
+        batch.status === "needs_attention" ||
+        batch.actions?.canStart === true ||
+        batch.actions?.canPause === true ||
+        batch.actions?.canCancelRemaining === true,
+    ).length;
+    const attention = content.snapshot.management.attention.counts.total;
+    return {
+      articleLibrary,
+      submissionCenter: regularQueue + paidBatches + attention,
+      orders: orders.length,
+    };
+  }, [content.snapshot, orders.length, platformSnapshot.regularQueueGroupViews]);
+
+  function openArticleLibrary(intent?: {
+    articleId?: string;
+    generationBatchId?: string;
+    clientId?: string;
+  }) {
+    setArticleLibraryIntent(intent || null);
+    setCurrentView("article-library");
+  }
+
+  const consumeArticleLibraryIntent = () => setArticleLibraryIntent(null);
 
   return (
     <div className="flex h-full w-full overflow-hidden bg-slate-50">
@@ -96,9 +130,7 @@ function AppContent() {
           void mediaFeature.checkBalance();
         }}
         isCheckingBalance={isCheckingBalance}
-        totalArticles={articles.length}
-        totalResources={mediaSnapshot.resources.total}
-        totalOrders={orders.length}
+        badges={navigationBadges}
       />
 
       {/* 2. Main Content Viewport */}
@@ -119,15 +151,10 @@ function AppContent() {
                 </div>
               )}
             </div>
-            {currentView === "workbench" && (
-              <div className="flex min-w-0 items-center gap-3">
-                <MediaThirdPartyIdControl />
-              </div>
-            )}
           </div>
         </header>
         {/* Scrollable Main Viewport */}
-        <main className="flex-1 overflow-y-auto p-6 min-h-0 relative select-none">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-6 min-h-0 relative select-none">
           <Suspense
             fallback={
               <div className="flex h-full items-center justify-center text-sm text-slate-500">
@@ -136,18 +163,21 @@ function AppContent() {
             }
           >
             <AnimatePresence mode="wait">
-              {/* View 1: Paid media submission workbench */}
-              {currentView === "workbench" && (
+              {currentView === "content-production" && (
                 <motion.div
-                  key="workbench-view"
+                  key="content-production-view"
                   initial={{ opacity: 0, y: 5 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -5 }}
                   transition={{ duration: 0.15 }}
                   className="h-full"
                 >
-                  <PaidMediaWorkbench
+                  <ContentWorkbench
                     content={content}
+                    mode="production"
+                    mediaResources={resources}
+                    onOpenArticleLibrary={openArticleLibrary}
+                    onOpenOrders={() => setCurrentView("orders")}
                   />
                 </motion.div>
               )}
@@ -201,10 +231,9 @@ function AppContent() {
                 </motion.div>
               )}
 
-              {/* View 2.5: Platforms View */}
-              {currentView === "content" && (
+              {currentView === "article-library" && (
                 <motion.div
-                  key="content-view"
+                  key="article-library-view"
                   initial={{ opacity: 0, y: 5 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -5 }}
@@ -213,26 +242,30 @@ function AppContent() {
                 >
                   <ContentWorkbench
                     content={content}
-                    attentionIntent={articleAttentionIntent}
-                    onAttentionIntentConsumed={() =>
-                      setArticleAttentionIntent(null)
-                    }
+                    mode="library"
+                    mediaResources={resources}
+                    articleIntent={articleLibraryIntent}
+                    onArticleIntentConsumed={consumeArticleLibraryIntent}
+                    onOpenArticleLibrary={openArticleLibrary}
                     onOpenOrders={() => setCurrentView("orders")}
-                    onOpenSubmissionCenter={() => setCurrentView("platforms")}
                   />
                 </motion.div>
               )}
 
-              {currentView === "platforms" && (
+              {currentView === "submission-center" && (
                 <motion.div
-                  key="platforms-view"
+                  key="submission-center-view"
                   initial={{ opacity: 0, y: 5 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -5 }}
                   transition={{ duration: 0.15 }}
                   className="h-full"
                 >
-                  <PlatformWorkbench />
+                  <PlatformWorkbench
+                    content={content}
+                    onOpenArticleLibrary={openArticleLibrary}
+                    onOpenOrders={() => setCurrentView("orders")}
+                  />
                 </motion.div>
               )}
 
@@ -244,7 +277,7 @@ function AppContent() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -5 }}
                   transition={{ duration: 0.15 }}
-                  className="max-w-4xl mx-auto h-full"
+                    className="max-w-5xl mx-auto h-full"
                 >
                   <OrdersView
                     orders={orders}

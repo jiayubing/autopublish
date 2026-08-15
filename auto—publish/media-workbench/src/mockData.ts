@@ -1,5 +1,4 @@
 import type { Article, MediaResource } from './types/media';
-import type { Order } from './types/view';
 
 type MockArticle = Omit<Article, 'autoTitle' | 'remark' | 'hasImages' | 'imageCount' | 'ignoreImages'>;
 
@@ -138,53 +137,6 @@ export const INITIAL_ARTICLES: MockArticle[] = [
     tags: ["科普", "自然科学", "探险"],
     selectedResources: [],
     lastModified: "2026-06-25 14:20"
-  }
-];
-
-export const INITIAL_ORDERS: Order[] = [
-  {
-    id: "ORD-2026062501",
-    articleTitle: "智能自媒体运营全套高效爆款指南",
-    filename: "media_guide_2026.md",
-    platforms: [
-      { name: "今日头条", status: "success" },
-      { name: "微信公众号", status: "success" },
-      { name: "百家号", status: "success" }
-    ],
-    totalFee: 32.00,
-    mediaCount: 2,
-    createdAt: "2026-06-25 16:45:12",
-    status: "success",
-    logs: [
-      "2026-06-25 16:45:12 - [系统] 开始投稿队列处理...",
-      "2026-06-25 16:45:13 - [系统] 正在打包文章 media_guide_2026.md 与已绑定的 2 个媒体资源",
-      "2026-06-25 16:45:14 - [今日头条] API 握手成功，发布成功，内容ID: TOUTIAO_89432",
-      "2026-06-25 16:45:16 - [微信公众号] 开始上传媒体素材...",
-      "2026-06-25 16:45:18 - [微信公众号] 文章同步发表成功，群发队列提交完成",
-      "2026-06-25 16:45:19 - [百家号] 账号状态正常，同步发布成功",
-      "2026-06-25 16:45:20 - [系统] 扣减账户余额 ¥32.00 成功，全部平台分发完毕！"
-    ]
-  },
-  {
-    id: "ORD-2026062702",
-    articleTitle: "未来五年绿色新能源发展与低碳转型研报",
-    filename: "green_energy_future.pdf",
-    platforms: [
-      { name: "今日头条", status: "success" },
-      { name: "知乎专栏", status: "failed", error: "安全校验失败：内容包含外部链接过多" },
-      { name: "企鹅号", status: "success" }
-    ],
-    totalFee: 50.00,
-    mediaCount: 1,
-    createdAt: "2026-06-27 10:22:45",
-    status: "partial",
-    logs: [
-      "2026-06-27 10:22:45 - [系统] 开始发布 [未来五年绿色新能源发展与低碳转型研报]",
-      "2026-06-27 10:22:46 - [今日头条] 同步发布成功",
-      "2026-06-27 10:22:48 - [知乎专栏] 网络发布被驳回：[403] 外部链接数量超出平台政策限制",
-      "2026-06-27 10:22:49 - [企鹅号] 媒体上传顺利，发布成功",
-      "2026-06-27 10:22:50 - [系统] 任务局部完成，结算今日头条与企鹅号成功，知乎失败。已扣除 ¥50.00，退回失败费用 ¥25.00。"
-    ]
   }
 ];
 
