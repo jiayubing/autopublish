@@ -18,6 +18,7 @@ const {
 const {
   createBrowserSessionLifecycle,
 } = require("../shared/browser-session-lifecycle");
+const httpFormParser = require("./http-form-parser");
 
 var DEFAULT_CITY = "北京";
 var LOGIN_WAIT_TIMEOUT_MS = 5 * 60 * 1000;
@@ -853,4 +854,5 @@ function createLiejuAdapter(runtimeContext) {
 
 module.exports = Object.assign(createLiejuAdapter(), {
   createPlatformAdapter: createLiejuAdapter,
+  httpFormParser,
 });
