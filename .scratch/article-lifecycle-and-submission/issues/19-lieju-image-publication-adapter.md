@@ -8,6 +8,8 @@
 
 **Scheduling gate:** Wave 12 `COMPLETE` 后，必须由用户对列举网单独明确授权真实能力探索并得到 `SUPPORTED`。`UNSUPPORTED` / `INCONCLUSIVE` 不创建实施线程且图片入口保持关闭。探索授权不等于实施期真实发布授权；adapter 合并后的真实带图验收需再次单独授权。
 
+**内部串行顺序:** `19-0 → 19-A → 19-B → 19-C → 19-D → 19-E → 19-F → 19-G`。每个包必须从上一包已验证的 clean integration HEAD 开始，不得并行修改共享 adapter / session owner。
+
 ## 已冻结探索事实（2026-08-15）
 
 1. 用户已对列举网本次真实图文能力探索和一次真实发布明确授权。真实文章以图文形式发布成功，返回明确“发布成功”和可解析的详情 URL / remote ID；详细 evidence 见 `handoffs/thread-6-lieju-http-transport-exploration-20260814.md`。
@@ -47,15 +49,14 @@
 
 ## 执行过程
 
-1. `19-0` 冻结本文探索证据，并盘点当前列举网 runtime、storageState owner、表单解析依赖、打包合同和直接消费方。不写生产 POST。
-2. `19-A` 在列举网 adapter 私有边界实现 GBK-aware HTML 解码、真实 form parser 和城市 / 区域决策。必须使用可靠 HTML parser 或等价的结构化 DOM 解析，不得用整页 regex 把 `<script>` 内 `local_file'+totalnum+'` 等模板伪造为真实 form control。
-3. `19-B` 实现独立 HTTP Session、登录 GET probe、state 单 writer / 原子回写和脱敏诊断；使用项目显式声明且通过打包验证的 HTTP runtime 依赖，不依赖偶然存在的 transitive package。
-4. `19-C` 实现列举网平台正文 renderer，在不修改文章库的情况下产出并冻结实际提交的 title/body/fingerprint。
-5. `19-D` 建立图片交付深模块，消费 18 的安全 image plan；通过 Ticket 17 resolver 在准备期临时取得文件路径并再次验证客户边界。每张图片独立 best-effort，0 张成功时继续纯文本。
-6. `19-E` 实现冻结 multipart payload、一次 HTTP POST、明确成功 / 明确拒绝 / 登录失效 / 风控 / uncertain 分类和 remote URL / ID 提取。访问图片、Cookie、联系方式和隐藏 token 不得进入日志。
-7. `19-F` 在同一已冻结准备结果上接入提交边界前 Playwright 保底和平台级 `playwright_only` 紧急开关；不建立第二城市 owner、第二正文 renderer 或第二结果状态机。
-8. `19-G` 使用假 HTTP / 假 Playwright / 假文件 resolver 覆盖城市、GBK、HTML 污染、0–5 图、N>M、图片失败、Session 失效、提交边界前后故障、重启和 state 并发矩阵；完成一次 combined audit、blocking remediation 和 bounded re-audit。
-9. 输出真实列举网独立 HTTP 带图验收清单；ticket 线程不得自行登录或发布，真实 POST 需用户对当次操作再次明确授权。
+1. [`19-0-lieju-http-contract-and-owner-map.md`](19-0-lieju-http-contract-and-owner-map.md)：无 production diff 的实时 inventory、合同 / owner map 冻结。
+2. [`19-A-lieju-gbk-form-and-city-resolution.md`](19-A-lieju-gbk-form-and-city-resolution.md)：GBK / HTML form / 城市与区域纯解析 owner。
+3. [`19-B-lieju-browserless-http-session.md`](19-B-lieju-browserless-http-session.md)：无浏览器 HTTP Session、storageState 单 writer 与打包能力。
+4. [`19-C-lieju-plain-text-prepared-evidence.md`](19-C-lieju-plain-text-prepared-evidence.md)：不回写文章库的平台纯文本和实际 evidence/fingerprint。
+5. [`19-D-lieju-image-multipart-preparation.md`](19-D-lieju-image-multipart-preparation.md)：Ticket 17/18 seam 上的 0–4 图 best-effort 交付与冻结 multipart 准备。
+6. [`19-E-lieju-http-submit-and-outcome.md`](19-E-lieju-http-submit-and-outcome.md)：唯一 HTTP POST 副作边界与既有 outcome 分类。
+7. [`19-F-lieju-playwright-fallback-and-mode-policy.md`](19-F-lieju-playwright-fallback-and-mode-policy.md)：提交前 Playwright 保底与平台级 mode policy。
+8. [`19-G-lieju-integration-audit-and-closure.md`](19-G-lieju-integration-audit-and-closure.md)：combined audit、blocking remediation、bounded re-audit、final gate 和真实验收清单。
 
 ## 职责边界
 

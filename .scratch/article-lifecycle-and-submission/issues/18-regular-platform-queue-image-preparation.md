@@ -4,9 +4,20 @@
 
 **Blocked by:** 08 — 普通平台独立队列组执行；09 — 普通平台结果分类与人工收口；10 — 精简普通平台投稿队列界面；17 — 客户本地图片库深模块
 
-**Status:** `PENDING` umbrella；Wave 11 `COMPLETE` 后才可按 `18-0 → 18-A → 18-B → 18-C → 18-D → 18-E` 严格串行调度。
+**Status:** `READY` umbrella；Ticket 26 的 26-I 本地 closure 已闭合，可按 `18-0 → 18-A → 18-B → 18-C → 18-D → 18-E` 严格串行调度；当前尚未启动 `18-0`。
 
-**Scheduling gate:** Wave 11 `COMPLETE`。Ticket 17 是已完成只读依赖，不重新调度。18 完成前不宣称任何具体平台已具备真实图片上传能力；19–21 仍需各平台独立探索、实现和真实验收授权。
+**Scheduling gate:** 08、09、10、17 已完成；Ticket 26 的 26-I 本地 closure、combined audit、bounded re-audit 和 package/smoke gate 已闭合。按 Wave Plan 的 Wave 12 本地 closure 调度例外，不等待 Ticket 25/26 的真实外部验收；该例外不继承任何真实操作授权。Ticket 17 是已完成只读依赖，不重新调度。18 完成前不宣称任何具体平台已具备真实图片上传能力；19–21 仍需各平台独立探索、实现和真实验收授权。
+
+## 瘦身与低耦合执行决定
+
+1. **只增加一个持久业务事实。** Wave 12 只在 queue group owner 增加 `imageCount`；选中图片、绝对路径、上传结果和平台布局均不进入 queue schema、IPC 或 Renderer。
+2. **复用而不包裹 Ticket 17。** 图片发现、缓存、稳定引用、随机选择和安全解析继续由 Ticket 17 唯一拥有。18-C 只组合 `clientId + imageCount`、可恢复失败降级和安全计划；若实时 owner map 证明现有 preparation owner 可以直接承载该职责，不得为了文件数量另建纯透传 service/manager。
+3. **只有一个跨 owner seam。** 通用队列链只向 adapter prepare 传递一个仅进程内、无绝对路径的窄 `imagePlan`。Wave 12 不认识 platformId 分支、DOM、HTTP、Python、multipart、布局或平台图片上限。
+4. **Capability 复用现有平台目录。** 18-B 只能在现有 platform catalog/capability 投影中增加 fail-closed 图片能力，不得新增独立 registry、manager、Renderer 白名单或第二份平台支持事实。
+5. **不扩公开 evidence 合同。** 继续复用既有 `PreparedSubmission`、`preparedSubmissionEvidenceV1` 和 `publicationEvidenceV1`；Wave 12 不新增 V2、generic image DTO 或 compatibility layer。
+6. **首尾工作包保持有界。** 18-0 只输出当前 HEAD 的 owner/file map、最小测试清单和停止条件；18-E 只审计 18-A–D 的组合不变量并完成一次 bounded closure，不重新审计历史 Wave 或平台 adapter。
+
+该拆分会让 `imageCount` 按正常 transport 映射穿过 store/application/IPC/UI，但不会让任何一层拥有第二份事实；平台变化只影响 Wave 13 adapter，客户图片规则变化只影响 Ticket 17/18-C，因此不建立反向依赖或平台耦合。
 
 ## 已确认产品语义
 
@@ -25,7 +36,7 @@
 | `18-0` | 冻结瘦身合同和真实 owner map | 文档、公开合同/测试只读 | 可执行 contract inventory；不得写 production |
 | `18-A` | 持久化队列组 `imageCount` | OperationalStore queue group schema/runtime/transition | 旧组=0、新组=1、0–5 校验、重启稳定 |
 | `18-B` | 接通 application / IPC / Renderer 配置面 | regular queue application、typed IPC/bridge/types、queue UI | 配置 API + capability-gated UI；不触碰图片库和上传实现 |
-| `18-C` | 接通客户图片计划 | Ticket 17 library、new application service、composition | claim 时产生安全随机 image plan；失败自动变空计划 |
+| `18-C` | 接通客户图片计划 | Ticket 17 library、claim/preparation owner、composition | claim 时产生安全随机 image plan；失败自动变空计划；不强制新增纯透传层 |
 | `18-D` | 接通 prepare seam 与 evidence 约束 | regular preparation port/executor contracts/tests | 把 image plan 交给 adapter；文字路径不因图片失败被阻断 |
 | `18-E` | 组合审计与 closure | 只修复 18-A–D 暴露的直接问题 | combined evidence、bounded remediation、final gate |
 
