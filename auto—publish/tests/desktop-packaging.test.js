@@ -390,7 +390,7 @@ describe("source assembly and packaging contract", function() {
       "!**/submission-records/**",
       "!**/publications/**",
       "!**/research/**",
-      "!**/generated/**",
+      "!generated/**",
       "!**/browser/**",
       "!**/doubao-diagnostics/**",
       "!**/tests/fixtures/**"
@@ -402,6 +402,15 @@ describe("source assembly and packaging contract", function() {
     assert.match(config, /- media-workbench\/dist\/\*\*\//);
     assert.match(read("scripts/verify-alpha-package.js"), /auth\.db/);
     assert.match(read("scripts/verify-alpha-package.js"), /device-identity\.json/);
+  });
+
+  it("does not exclude dependency runtime generated files from the production app", function() {
+    const config = read("electron-builder.alpha.yml");
+    assert.match(config, /^\s*-\s+[\"']?!generated\/\*\*[\"']?\s*$/m);
+    assert.doesNotMatch(
+      config,
+      /^\s*-\s+[\"']?!\*\*\/generated\/\*\*[\"']?\s*$/m,
+    );
   });
 
   it("does not package the one-shot content library migration tool", function() {

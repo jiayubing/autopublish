@@ -73,7 +73,6 @@ files:
   - "!**/research/**"
   - "!clients/**"
   - "!generated/**"
-  - "!**/generated/**"
   # Runtime tool metadata is a build input; only the staged copy in extraResources is shipped.
   - "!config/runtime-tools-manifest.json"
   - "!build/runtime-tools-manifest.json"
