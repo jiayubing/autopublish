@@ -212,6 +212,29 @@ describe("regular image plan service", function () {
         programmingFailure.createPlan({ clientId: "client-a", imageCount: 1 }),
       /unexpected programming failure/,
     );
+    const unsafeReference = createRegularImagePlanService({
+      imageLibrary: {
+        selectImages() {
+          return {
+            images: [
+              {
+                id: "client-image:QzpcXHNlY3JldC5wbmc",
+                name: "secret.png",
+                extension: ".png",
+                mimeType: "image/png",
+                width: 1,
+                height: 1,
+                size: 1,
+              },
+            ],
+          };
+        },
+      },
+    });
+    assert.throws(
+      () => unsafeReference.createPlan({ clientId: "client-a", imageCount: 1 }),
+      { code: "REGULAR_IMAGE_PLAN_LIBRARY_RESULT_INVALID" },
+    );
   });
 
   it("composes the unique image library with the workspace path policy directory", async function () {

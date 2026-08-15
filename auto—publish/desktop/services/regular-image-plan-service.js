@@ -6,6 +6,9 @@ const {
 const {
   normalizeImageCount,
 } = require("../../src/content/client-image-selector");
+const {
+  relativePathForImageId,
+} = require("../../src/content/client-image-reference");
 
 const RECOVERABLE_IMAGE_LIBRARY_CODES = new Set([
   "EACCES",
@@ -51,7 +54,7 @@ function safeImage(image) {
   if (
     !image ||
     typeof image.id !== "string" ||
-    !image.id.startsWith("client-image:") ||
+    !relativePathForImageId(image.id) ||
     typeof image.name !== "string" ||
     !image.name ||
     /[\\/\0]/.test(image.name) ||
