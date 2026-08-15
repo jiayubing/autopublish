@@ -4,9 +4,9 @@
 
 **Blocked by:** 18 — 普通平台随机配图准备
 
-**Status:** deferred-until-core-complete；当前不可调度
+**Status:** deferred；已移出当前 Wave 13，当前无探索或实施调度
 
-**Scheduling gate:** Wave 12 `COMPLETE` 后，必须由用户对蓝色河畔单独明确授权真实能力探索并得到 `SUPPORTED`。`UNSUPPORTED` / `INCONCLUSIVE` 不创建实施线程。若 19/20 中有已调度前序项，等待最后一个完成复核/集成后从新 HEAD 调度。本 adapter 合并后的真实带图验收必须再次独立授权。
+**Scheduling gate:** 本文仅保留为未来独立计划的候选范围，不属于当前 Wave 13。不得因 Wave 13 或 Ticket 19 完成而自动探索、实施或验收；只有用户未来建立独立计划、重新核对当前 Git/平台事实并对蓝色河畔单独明确授权真实能力探索后，才可重新定义调度 gate。
 
 ## 启动约定
 
