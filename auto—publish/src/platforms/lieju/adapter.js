@@ -21,6 +21,7 @@ const {
 } = require("../shared/browser-session-lifecycle");
 const httpFormParser = require("./http-form-parser");
 const { createLiejuHttpSession } = require("./http-session");
+const { renderLiejuPlainText } = require("./plain-text-renderer");
 
 var DEFAULT_CITY = "北京";
 var LOGIN_WAIT_TIMEOUT_MS = 5 * 60 * 1000;
@@ -753,7 +754,17 @@ async function publishArticle(runtime, article, options) {
 }
 
 async function preparePlatformSubmission(runtime, claim, imagePlan) {
-  const evidence = domain.createTextOnlyPreparedSubmissionEvidenceV1(claim);
+  const sourceEvidence =
+    domain.createTextOnlyPreparedSubmissionEvidenceV1(claim);
+  const body = renderLiejuPlainText(sourceEvidence.body);
+  const evidence = domain.parsePreparedSubmissionEvidenceV1({
+    ...sourceEvidence,
+    body,
+    contentFingerprint: domain.preparedContentFingerprint({
+      title: sourceEvidence.title,
+      body,
+    }),
+  });
   const profile = requireLiejuPublicationProfile(claim);
   const preparedArticle = Object.freeze({
     title: evidence.title,
