@@ -79,4 +79,36 @@ describe("platform settings service", () => {
     const service = createPlatformSettingsService({ adapters: [adapter(store)] });
     assert.deepStrictEqual(service.getRuntimeConfig("fixture"), { apiKey: "stored-secret", label: "Stored" });
   });
+
+  it("projects declared worker runtime contributions without platform branching", () => {
+    const store = createStore({ apiKey: "stored-secret", label: "Stored" });
+    let cleaned = 0;
+    const service = createPlatformSettingsService({
+      adapters: [adapter(store, {
+        prepareWorkerRuntime(input) {
+          assert.equal(input.plan.tasks[0].targetPlatformId, "fixture");
+          assert.deepStrictEqual(input.getConfig(), { apiKey: "stored-secret", label: "Stored" });
+          return {
+            platformId: "fixture",
+            runtimeContext: { fixtureRuntime: { configured: true } },
+            intervalMs: 1200,
+            timeoutMs: 91000,
+            cleanup: () => { cleaned += 1; },
+          };
+        },
+      })],
+    });
+    const prepared = service.prepareWorkerRuntime({
+      plan: { tasks: [{ targetPlatformId: "fixture" }] },
+      tempRoot: "C:\\synthetic-tmp",
+    });
+    assert.deepStrictEqual(prepared.runtimeContext, {
+      fixtureRuntime: { configured: true },
+    });
+    assert.deepStrictEqual(prepared.intervalByTargetMs, { fixture: 1200 });
+    assert.equal(prepared.timeoutMs, 91000);
+    prepared.cleanup();
+    prepared.cleanup();
+    assert.equal(cleaned, 1);
+  });
 });

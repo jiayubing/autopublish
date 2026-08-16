@@ -146,6 +146,7 @@ async function createWorkspaceRuntimeComposition(deps) {
     const paths = runtime.paths;
     const injectedPaths = paths && paths.installation ? paths : undefined;
     const workspaceRoot = runtime.workspaceRoot;
+    let platformSettingsService = null;
     const clientImageLibrary =
       require("../../src/content/client-image-library").createClientImageLibrary(
         {
@@ -162,6 +163,9 @@ async function createWorkspaceRuntimeComposition(deps) {
       imageResolver: Object.freeze({
         resolveImage: clientImageLibrary.resolveImage,
       }),
+      getPlatformSettingsService: function () {
+        return platformSettingsService;
+      },
     });
     const loadedPlatforms = loadPlatforms({ runtimeContext: platformRuntimeContext });
     const directoryEntries = Object.freeze(
@@ -204,6 +208,55 @@ async function createWorkspaceRuntimeComposition(deps) {
         .filter(function (platform) { return Boolean(platform.legacyQueue); })
         .map(function (platform) {
           return Object.freeze({ id: platform.definition.id, port: platform.legacyQueue });
+        }),
+    );
+    const settingsAdapters = Object.freeze(
+      loadedPlatforms
+        .filter(function (platform) {
+          return Boolean(platform.settingsContribution);
+        })
+        .map(function (platform) {
+          return platform.settingsContribution.createSettingsAdapter({
+            localStateRoot: paths && paths.localState,
+          });
+        }),
+    );
+    platformSettingsService = ownService(
+      require("../services/platform-settings-service").createPlatformSettingsService(
+        {
+          userDataPath: options.userDataPath,
+          safeStorage: options.safeStorage,
+          env: process.env,
+          localStateRoot: paths && paths.localState,
+          adapters: settingsAdapters,
+          getTaskState: taskState,
+        },
+      ),
+    );
+    const contentProfilePort = Object.freeze({
+      read: function (input) {
+        const value = input || {};
+        return require("../../src/content/client-knowledge").getClientPublicationProfile(
+          workspaceRoot,
+          value.clientId,
+          value.profileKey,
+        );
+      },
+    });
+    const clientProfileReaders = Object.freeze(
+      loadedPlatforms
+        .filter(function (platform) {
+          return Boolean(platform.clientProfileContribution);
+        })
+        .map(function (platform) {
+          return Object.freeze({
+            id: platform.definition.id,
+            requirement: platform.clientProfileContribution.requirement,
+            reader:
+              platform.clientProfileContribution.createProfileReader(
+                contentProfilePort,
+              ),
+          });
         }),
     );
     const submissionPlatformDirectory =
@@ -286,29 +339,6 @@ async function createWorkspaceRuntimeComposition(deps) {
           platforms: regularDirectoryEntries,
         },
       );
-    const createPlatformSettingsService =
-      require("../services/platform-settings-service").createPlatformSettingsService;
-    const {
-      createMediaSettingsAdapter,
-    } = require("../services/platform-settings/media-settings-adapter");
-    const {
-      createHepanSettingsAdapter,
-    } = require("../services/platform-settings/hepan-settings-adapter");
-    const platformSettingsService = ownService(
-      createPlatformSettingsService({
-        userDataPath: options.userDataPath,
-        safeStorage: options.safeStorage,
-        env: process.env,
-        localStateRoot: paths && paths.localState,
-        adapters: [
-          createMediaSettingsAdapter(),
-          createHepanSettingsAdapter({
-            localStateRoot: paths && paths.localState,
-          }),
-        ],
-        getTaskState: taskState,
-      }),
-    );
     const createDesktopTaskService =
       require("../services/desktop-task-service").createDesktopTaskService;
     const taskService = ownService(
@@ -477,10 +507,11 @@ async function createWorkspaceRuntimeComposition(deps) {
     accountInspector =
       require("../services/platform-account-inspector").createPlatformAccountInspector(
         {
-          adapters:
-            require("../services/platform-account-runtime").createPlatformAccountRuntimeAdapters(
-              { accountInspectionPorts, platformSettingsService },
-            ),
+          adapters: Object.fromEntries(
+            accountInspectionPorts.map(function (platform) {
+              return [platform.id, platform.port];
+            }),
+          ),
           operationalStore: publicationRecoveryComposition.operationalStore,
           bindingStore:
             require("../services/platform-account-binding-store").createPlatformAccountBindingStore(
@@ -611,16 +642,6 @@ async function createWorkspaceRuntimeComposition(deps) {
     legacyQueuePorts.forEach(function (platform) {
       adapters[platform.id] = platform.port;
     });
-    const effectiveRegularSubmissionPorts = regularSubmissionPorts.map(function (platform) {
-      if (platform.id !== "hepan") return platform;
-      const hepan = require("../services/hepan-regular-preparation-adapter").createHepanRegularPreparationAdapter(
-        { platformSettingsService, paths: injectedPaths },
-      );
-      return Object.freeze({
-        id: platform.id,
-        preparePlatformSubmission: hepan.preparePlatformSubmission,
-      });
-    });
     const regularImagePlanService =
       require("../services/regular-image-plan-service").createRegularImagePlanService(
         { imageLibrary: clientImageLibrary },
@@ -628,16 +649,10 @@ async function createWorkspaceRuntimeComposition(deps) {
     const platformSubmissionExecutor =
       require("../services/regular-platform-preparation-port").createRegularPlatformPreparationPort(
         {
-          regularSubmissionPorts: effectiveRegularSubmissionPorts,
+          regularSubmissionPorts,
           accountInspector,
           regularImagePlanService,
-          resolveClientPublicationProfile: function(input) {
-            if (!input || input.platformId !== "lieju") return undefined;
-            return require("../../src/content/client-knowledge").getLiejuPublicationProfile(
-              workspaceRoot,
-              input.clientId,
-            );
-          },
+          clientProfileReaders,
         },
       );
     const regularPlatformOutcomeService =

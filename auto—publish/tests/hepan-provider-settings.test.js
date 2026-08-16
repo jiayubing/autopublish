@@ -235,4 +235,42 @@ describe("Hepan provider settings", () => {
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
 
+  it("materializes and cleans a temporary worker credential only for its own tasks", () => {
+    const root = tempDirectory();
+    try {
+      const adapter = createHepanSettingsAdapter({ localStateRoot: root });
+      let configReads = 0;
+      const getConfig = () => {
+        configReads += 1;
+        return {
+          pythonPath: "C:\\python.exe",
+          cookie: "sessionid=synthetic",
+          categoryId: 121,
+          vendorDir: "",
+          publishIntervalSeconds: 17,
+        };
+      };
+      assert.equal(adapter.prepareWorkerRuntime({
+        plan: { tasks: [{ targetPlatformId: "toutiao" }] },
+        tempRoot: path.join(root, "tmp"),
+        getConfig,
+      }), null);
+      assert.equal(configReads, 0);
+
+      const prepared = adapter.prepareWorkerRuntime({
+        plan: { tasks: [{ targetPlatformId: "hepan" }] },
+        tempRoot: path.join(root, "tmp"),
+        getConfig,
+      });
+      const cookiePath = prepared.runtimeContext.hepanRuntime.cookiePath;
+      assert.equal(configReads, 1);
+      assert.equal(prepared.intervalMs, 17000);
+      assert.equal(prepared.timeoutMs, 120000);
+      assert.equal(fs.readFileSync(cookiePath, "utf8"), "sessionid=synthetic");
+      prepared.cleanup();
+      prepared.cleanup();
+      assert.equal(fs.existsSync(cookiePath), false);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
 });

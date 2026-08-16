@@ -14,12 +14,12 @@ function createPlatform(runtimeContext) {
     },
     accountInspection: { prepare: adapter.ensureAccountInspectionReady, inspect: adapter.inspectAccount },
     clientProfileContribution: {
-      requirement: Object.freeze({ profileKey: "liejuPublicationProfile", requiredFields: Object.freeze(["city", "contact", "phone"]) }),
+      requirement: Object.freeze({ profileKey: "lieju", requiredFields: Object.freeze(["city", "contact", "phone"]) }),
       createProfileReader: function (contentProfilePort) {
         if (!contentProfilePort || typeof contentProfilePort.read !== "function") {
           const error = new Error("CONTENT_PROFILE_PORT_REQUIRED"); error.code = "CONTENT_PROFILE_PORT_REQUIRED"; throw error;
         }
-        return Object.freeze({ read: function (input) { return contentProfilePort.read(Object.assign({}, input, { profileKey: "liejuPublicationProfile" })); } });
+        return Object.freeze({ read: function (input) { return contentProfilePort.read(Object.assign({}, input, { profileKey: "lieju" })); } });
       },
     },
   };

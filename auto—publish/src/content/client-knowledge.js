@@ -320,9 +320,18 @@ function getClient(workspaceRoot, clientId) {
 }
 
 function getLiejuPublicationProfile(workspaceRoot, clientId) {
+  return getClientPublicationProfile(workspaceRoot, clientId, "lieju");
+}
+
+function getClientPublicationProfile(workspaceRoot, clientId, profileKey) {
+  if (typeof profileKey !== "string" || !/^[A-Za-z][A-Za-z0-9-]{0,63}$/.test(profileKey))
+    throw contentError("CLIENT_PROFILE_INPUT_INVALID", "Client publication profile key is invalid");
   const identity = resolveClientIdentity(workspaceRoot, clientId);
   const boundary = assertClientDirectory(identity.directory, workspaceRoot);
-  return readClientMetadata(boundary).publicationProfiles.lieju;
+  const profiles = readClientMetadata(boundary).publicationProfiles;
+  if (!Object.prototype.hasOwnProperty.call(profiles, profileKey))
+    throw contentError("CLIENT_PROFILE_NOT_FOUND", "Client publication profile was not found");
+  return profiles[profileKey];
 }
 
 // Identity lookup intentionally reads only directory and client.json metadata.
@@ -398,6 +407,7 @@ function listClients(workspaceRoot) {
 module.exports = {
   listClients,
   getClient,
+  getClientPublicationProfile,
   getLiejuPublicationProfile,
   resolveClientIdentity,
   listClientIdentities,

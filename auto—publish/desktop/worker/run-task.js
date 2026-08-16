@@ -18,15 +18,15 @@ var activeRunId = null;
 var activeAbortController = null;
 var resultDisconnectScheduled = false;
 var platformRuntimeContext = null;
-var hepanRuntimeConfig = null;
+var workerPlatformRuntimeContext = null;
 var activeWorkerPlatforms = null;
 const WORKER_SCHEMA_VERSION = 1;
 
 function loadWorkerPlatforms() {
   const { loadPlatforms } = require("../../src/core/platforms");
   return loadPlatforms(
-    platformRuntimeContext
-      ? { runtimeContext: Object.assign({}, platformRuntimeContext, { hepanRuntime: hepanRuntimeConfig }) }
+    platformRuntimeContext || workerPlatformRuntimeContext
+      ? { runtimeContext: Object.assign({}, platformRuntimeContext || {}, workerPlatformRuntimeContext || {}) }
       : undefined,
   );
 }
@@ -267,7 +267,7 @@ process.on("message", function (message) {
           { taskKind: "platform-submit", taskCount: plan.tasks.length },
         );
 
-        hepanRuntimeConfig = options.hepanRuntime || null;
+        workerPlatformRuntimeContext = options.platformRuntimeContext || null;
         const loadedPlatforms = loadWorkerPlatforms();
         activeWorkerPlatforms = loadedPlatforms;
         const adapters = {};
@@ -342,7 +342,7 @@ process.on("message", function (message) {
           );
         } finally {
           activeWorkerPlatforms = null;
-          hepanRuntimeConfig = null;
+          workerPlatformRuntimeContext = null;
         }
       }
       return;

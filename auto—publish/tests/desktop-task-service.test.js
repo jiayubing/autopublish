@@ -153,10 +153,14 @@ it("snapshots the Hepan interval once when a platform batch starts", async funct
     paths,
     fork: fakeFork,
     platformSettingsService: {
-      getAdapterForRuntime: function() {
+      prepareWorkerRuntime: function() {
         return {
-          config: { pythonPath: "C:\\python.exe", categoryId: 121, vendorDir: "", publishIntervalSeconds: 17 },
-          adapter: { createTemporaryCookie: function() { return { cookiePath: "C:\\cookie.tmp", cleanup: function() { cleaned = true; } }; } }
+          runtimeContext: {
+            hepanRuntime: { pythonPath: "C:\\python.exe", categoryId: 121, vendorDir: "", publishIntervalSeconds: 17, cookiePath: "C:\\cookie.tmp" },
+          },
+          intervalByTargetMs: { hepan: 17000 },
+          timeoutMs: 120000,
+          cleanup: function() { cleaned = true; },
         };
       }
     }
@@ -164,7 +168,7 @@ it("snapshots the Hepan interval once when a platform batch starts", async funct
 
   await service.startPlatformSubmit({ tasks: [{ sourcePlatformId: "source", filename: "article.txt", targetPlatformId: "hepan" }] });
   const payload = JSON.parse(calls[0].args[1]);
-  assert.equal(payload.hepanRuntime.publishIntervalSeconds, 17);
+  assert.equal(payload.platformRuntimeContext.hepanRuntime.publishIntervalSeconds, 17);
   assert.equal(payload.submitOptions.intervalByTargetMs.hepan, 17000);
   assert.equal(cleaned, true);
 });

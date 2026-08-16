@@ -20,7 +20,6 @@ function requestedImageCount(claim) {
 function createRegularPlatformPreparationPort(options) {
   const value = options || {};
   const inspector = value.accountInspector;
-  const resolveClientPublicationProfile = value.resolveClientPublicationProfile;
   const imagePlanService = value.regularImagePlanService;
   if (!inspector || typeof inspector.inspect !== "function")
     throw fail("REGULAR_ACCOUNT_INSPECTOR_REQUIRED");
@@ -34,6 +33,19 @@ function createRegularPlatformPreparationPort(options) {
       typeof platform.preparePlatformSubmission === "function"
     )
       adapters.set(platform.id, platform);
+  const profileReaders = new Map();
+  for (const platform of value.clientProfileReaders || []) {
+    if (
+      !platform ||
+      typeof platform.id !== "string" ||
+      !platform.reader ||
+      typeof platform.reader.read !== "function" ||
+      !platform.requirement ||
+      !Array.isArray(platform.requirement.requiredFields)
+    )
+      throw fail("REGULAR_CLIENT_PROFILE_READER_INVALID");
+    profileReaders.set(platform.id, platform);
+  }
 
   return Object.freeze({
     async preparePlatformSubmission(claim) {
@@ -66,12 +78,25 @@ function createRegularPlatformPreparationPort(options) {
         if (!isRecoverableImageLibraryFailure(error)) throw error;
         imagePlan = unavailablePlan(imageCount);
       }
-      const publicationProfile = typeof resolveClientPublicationProfile === "function"
-        ? await resolveClientPublicationProfile({
+      const profileContribution = profileReaders.get(input.platformId);
+      const publicationProfile = profileContribution
+        ? await profileContribution.reader.read({
           clientId: input.articleIdentityV1 && input.articleIdentityV1.clientId,
-          platformId: input.platformId,
         })
         : undefined;
+      if (
+        profileContribution &&
+        (!publicationProfile ||
+          typeof publicationProfile !== "object" ||
+          Array.isArray(publicationProfile) ||
+          profileContribution.requirement.requiredFields.some(function (field) {
+            return (
+              typeof publicationProfile[field] !== "string" ||
+              !publicationProfile[field].trim()
+            );
+          }))
+      )
+        throw fail("REGULAR_CLIENT_PROFILE_INCOMPLETE");
       const adapterInput = publicationProfile === undefined
         ? input
         : Object.assign({}, input, { publicationProfile: publicationProfile });

@@ -694,12 +694,19 @@ test("preparation resolves the Lieju profile by the claimed article client and p
     regularImagePlanService: {
       createPlan: async (request) => imagePlan(request.imageCount),
     },
-    resolveClientPublicationProfile: async (input) => {
-      profileRequests.push(input);
-      return input.clientId === "client-b"
-        ? { city: "北京", contact: "李四", phone: "010-12345678" }
-        : { city: "上海", contact: "张三", phone: "13800138000" };
-    },
+    clientProfileReaders: [{
+      id: "lieju",
+      requirement: {
+        profileKey: "lieju",
+        requiredFields: ["city", "contact", "phone"],
+      },
+      reader: { read: async (input) => {
+        profileRequests.push(input);
+        return input.clientId === "client-b"
+          ? { city: "北京", contact: "李四", phone: "010-12345678" }
+          : { city: "上海", contact: "张三", phone: "13800138000" };
+      } },
+    }],
     regularSubmissionPorts: [{
       id: "lieju",
       preparePlatformSubmission: async (input) => {
@@ -713,7 +720,7 @@ test("preparation resolves the Lieju profile by the claimed article client and p
   });
 
   await port.preparePlatformSubmission(claim);
-  assert.deepStrictEqual(profileRequests, [{ clientId: "client-b", platformId: "lieju" }]);
+  assert.deepStrictEqual(profileRequests, [{ clientId: "client-b" }]);
   assert.deepStrictEqual(claims[0].publicationProfile, {
     city: "北京", contact: "李四", phone: "010-12345678",
   });
@@ -1797,14 +1804,15 @@ test("public queue execution preserves an uncertain remote failure without repla
 
 test("Hepan production preparation owns temporary credential cleanup", async () => {
   const {
-    createHepanRegularPreparationAdapter,
-  } = require("../desktop/services/hepan-regular-preparation-adapter");
+    createHepanSettingsBackedRuntime,
+  } = require("../src/platforms/hepan/settings-backed-runtime");
   let cookieCleanups = 0;
   let cookieCreations = 0;
   let expiredCleanups = 0;
-  let preparedRuntime = null;
+  let readPreparedRuntime = null;
   let receivedImagePlan = null;
   let rejectSubmission = false;
+  let rejectCleanup = false;
   const claim = {
     platformId: "hepan",
     regularPublicationAttemptId: "attempt-hepan-runtime",
@@ -1823,9 +1831,9 @@ test("Hepan production preparation owns temporary credential cleanup", async () 
   };
   const preparedEvidence =
     domain.createTextOnlyPreparedSubmissionEvidenceV1(claim);
-  const adapter = createHepanRegularPreparationAdapter({
+  const adapter = createHepanSettingsBackedRuntime({
     paths: { tmp: "C:\\synthetic-tmp" },
-    platformSettingsService: {
+    getPlatformSettingsService: () => ({
       getAdapterForRuntime: () => ({
         config: {
           pythonPath: "C:\\python.exe",
@@ -1842,17 +1850,19 @@ test("Hepan production preparation owns temporary credential cleanup", async () 
               cookiePath: "C:\\synthetic-cookie.tmp",
               cleanup: () => {
                 cookieCleanups += 1;
+                if (rejectCleanup)
+                  throw new Error("synthetic credential cleanup failure");
               },
             };
           },
         },
       }),
-    },
+    }),
     cleanupExpiredHepanPayloads: () => {
       expiredCleanups += 1;
     },
     createHepanAdapter: (options) => {
-      preparedRuntime = options.runtime;
+      readPreparedRuntime = options.getRuntime;
       return {
         preparePlatformSubmission: async (preparedClaim, imagePlanInput) => {
           assert.strictEqual(preparedClaim, claim);
@@ -1860,6 +1870,10 @@ test("Hepan production preparation owns temporary credential cleanup", async () 
           return domain.createPreparedSubmission({
             preparedSubmissionEvidenceV1: preparedEvidence,
             submitPreparedPublication: async () => {
+              assert.equal(
+                readPreparedRuntime().cookiePath,
+                "C:\\synthetic-cookie.tmp",
+              );
               if (rejectSubmission) throw new Error("synthetic submit failure");
               return { status: "accepted" };
             },
@@ -1869,7 +1883,7 @@ test("Hepan production preparation owns temporary credential cleanup", async () 
     },
   });
   const selectedPlan = imagePlan(1);
-  const prepared = await adapter.preparePlatformSubmission(claim, selectedPlan);
+  const prepared = await adapter.regularSubmission.preparePlatformSubmission(claim, selectedPlan);
   assert.strictEqual(receivedImagePlan, selectedPlan);
   assert.deepEqual(
     {
@@ -1882,26 +1896,38 @@ test("Hepan production preparation owns temporary credential cleanup", async () 
   assert.equal(expiredCleanups, 2);
   assert.equal(cookieCreations, 0);
   assert.equal(cookieCleanups, 0);
-  assert.equal(preparedRuntime.cookiePath, "");
+  assert.equal(readPreparedRuntime().cookiePath, "");
   assert.deepEqual(await prepared.submitPreparedPublication(), {
     status: "accepted",
   });
   assert.equal(cookieCreations, 1);
   assert.equal(cookieCleanups, 1);
+  assert.equal(readPreparedRuntime().cookiePath, "");
 
   rejectSubmission = true;
-  const rejected = await adapter.preparePlatformSubmission(claim);
+  const rejected = await adapter.regularSubmission.preparePlatformSubmission(claim);
   await assert.rejects(rejected.submitPreparedPublication(), {
     message: "synthetic submit failure",
   });
   assert.equal(cookieCreations, 2);
   assert.equal(cookieCleanups, 2);
+
+  rejectSubmission = false;
+  rejectCleanup = true;
+  const cleanupRejected =
+    await adapter.regularSubmission.preparePlatformSubmission(claim);
+  assert.deepEqual(await cleanupRejected.submitPreparedPublication(), {
+    status: "accepted",
+  });
+  assert.equal(cookieCreations, 3);
+  assert.equal(cookieCleanups, 3);
+  assert.equal(readPreparedRuntime().cookiePath, "");
 });
 
 test("Hepan does not materialize a temporary credential when submission-start fails", async () => {
   const {
-    createHepanRegularPreparationAdapter,
-  } = require("../desktop/services/hepan-regular-preparation-adapter");
+    createHepanSettingsBackedRuntime,
+  } = require("../src/platforms/hepan/settings-backed-runtime");
   const current = fixture({
     fault(point) {
       if (point === "after-evidence-freeze") {
@@ -1919,9 +1945,9 @@ test("Hepan does not materialize a temporary credential when submission-start fa
       platformId: "hepan",
       accountProfileId: profile.accountProfileId,
     });
-    const adapter = createHepanRegularPreparationAdapter({
+    const adapter = createHepanSettingsBackedRuntime({
       paths: { tmp: "C:\\synthetic-tmp" },
-      platformSettingsService: {
+      getPlatformSettingsService: () => ({
         getAdapterForRuntime: () => ({
           config: {
             pythonPath: "C:\\python.exe",
@@ -1939,7 +1965,7 @@ test("Hepan does not materialize a temporary credential when submission-start fa
             },
           },
         }),
-      },
+      }),
       cleanupExpiredHepanPayloads: () => {},
       createHepanAdapter: () => ({
         preparePlatformSubmission: async (claim) =>
@@ -1952,7 +1978,7 @@ test("Hepan does not materialize a temporary credential when submission-start fa
     const orchestrator = createRegularQueueGroupOrchestrator({
       regularQueueGroupTransitions: current.transitions,
       platformSubmissionExecutor: executorFor((claim) =>
-        adapter.preparePlatformSubmission(claim),
+        adapter.regularSubmission.preparePlatformSubmission(claim),
       ),
     });
 

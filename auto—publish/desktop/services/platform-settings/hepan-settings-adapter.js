@@ -5,6 +5,7 @@ const crypto = require("node:crypto");
 const { spawn } = require("node:child_process");
 const { createPlatformProviderConfigStore } = require("../../platform-provider-config-store");
 const { HEPAN_SITE_ORIGIN, resolveHepanScriptPath, resolveHepanVendorDir, withHepanVendorEnvironment, normalizeHepanCookie } = require("../../../src/platforms/hepan/runtime-paths");
+const { cleanupExpiredHepanPayloads } = require("../../../src/platforms/hepan/adapter");
 const { reportDiagnostic } = require("../../../src/diagnostics/diagnostic-producer");
 
 const HEPAN_SELF_TEST_PAYLOAD = JSON.stringify({
@@ -270,6 +271,50 @@ function createHepanSettingsAdapter(options) {
     withTemporaryCookie: (config, callback) => withTemporaryCookie(config, callback, io, path, localStateRoot),
     createTemporaryCookie: (config) => createTemporaryCookie(config, io, path, localStateRoot),
     cleanupExpiredTemporaryFiles: (cleanupOptions) => cleanupExpiredHepanTemporaryFiles(Object.assign({}, cleanupOptions || {}, { fs: io, path, localStateRoot })),
+    prepareWorkerRuntime(input) {
+      const value = input || {};
+      const plan = value.plan || {};
+      const tasks = Array.isArray(plan.tasks) ? plan.tasks : [];
+      if (!tasks.some((task) => task && task.targetPlatformId === adapter.id))
+        return null;
+      const config =
+        typeof value.getConfig === "function" ? value.getConfig() : null;
+      const tempRoot = value.tempRoot;
+      if (!config || typeof tempRoot !== "string")
+        throw adapterError("HEPAN_CONFIG_NOT_SET", "Hepan publishing is not configured");
+      try { adapter.cleanupExpiredTemporaryFiles(); } catch (_) {
+        diagnose("HEPAN_TEMPORARY_CLEANUP_FAILED", "temporary-cleanup");
+      }
+      try { cleanupExpiredHepanPayloads({ tempDir: path.join(tempRoot, adapter.id) }); } catch (_) {
+        diagnose("HEPAN_PAYLOAD_CLEANUP_FAILED", "payload-cleanup");
+      }
+      const temporaryCookie = adapter.createTemporaryCookie(config);
+      return Object.freeze({
+        platformId: adapter.id,
+        runtimeContext: Object.freeze({
+          hepanRuntime: Object.freeze({
+            pythonPath: config.pythonPath,
+            categoryId: config.categoryId,
+            vendorDir: config.vendorDir || "",
+            publishIntervalSeconds:
+              Number.isInteger(config.publishIntervalSeconds) &&
+              config.publishIntervalSeconds >= 0 &&
+              config.publishIntervalSeconds <= 3600
+                ? config.publishIntervalSeconds
+                : 30,
+            cookiePath: temporaryCookie.cookiePath,
+          }),
+        }),
+        intervalMs:
+          (Number.isInteger(config.publishIntervalSeconds) &&
+          config.publishIntervalSeconds >= 0 &&
+          config.publishIntervalSeconds <= 3600
+            ? config.publishIntervalSeconds
+            : 30) * 1000,
+        timeoutMs: 120000,
+        cleanup: temporaryCookie.cleanup,
+      });
+    },
     siteOrigin: HEPAN_SITE_ORIGIN
   };
   const bundledVendorDir = resolveHepanVendorDir({ fs: io, path, scriptPath, explicit: values.bundledVendorDir });

@@ -3,19 +3,14 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const {
-  createPlatformAccountRuntimeAdapters,
-} = require("../desktop/services/platform-account-runtime");
+  createPlatform,
+} = require("../src/platforms/hepan/platform");
 
 test("Hepan account inspection uses the configured settings test result", async () => {
   let calls = 0;
-  const adapters = createPlatformAccountRuntimeAdapters({
-    accountInspectionPorts: [
-      {
-        id: "hepan",
-        port: { prepare: async () => undefined, inspect: async () => ({ verified: false }) },
-      },
-    ],
-    platformSettingsService: {
+  const platform = createPlatform({
+    workspacePaths: { tmp: "C:\\synthetic-tmp" },
+    getPlatformSettingsService: () => ({
       test: async (platformId, input) => {
         calls += 1;
         assert.equal(platformId, "hepan");
@@ -25,10 +20,10 @@ test("Hepan account inspection uses the configured settings test result", async 
           account: { uid: "12345", displayName: "fixture-hepan" },
         };
       },
-    },
+    }),
   });
 
-  assert.deepEqual(await adapters.hepan.inspect(), {
+  assert.deepEqual(await platform.accountInspection.inspect(), {
     verified: true,
     remoteAccountId: "12345",
     displayName: "fixture-hepan",
@@ -37,14 +32,14 @@ test("Hepan account inspection uses the configured settings test result", async 
 });
 
 test("Hepan account inspection fails closed for an unsafe settings result", async () => {
-  const adapters = createPlatformAccountRuntimeAdapters({
-    accountInspectionPorts: [{ id: "hepan", port: { prepare: async () => undefined, inspect: async () => ({ verified: false }) } }],
-    platformSettingsService: {
+  const platform = createPlatform({
+    workspacePaths: { tmp: "C:\\synthetic-tmp" },
+    getPlatformSettingsService: () => ({
       test: async () => ({
         ok: true,
         account: { uid: "not-a-number", displayName: "fixture" },
       }),
-    },
+    }),
   });
-  assert.deepEqual(await adapters.hepan.inspect(), { verified: false });
+  assert.deepEqual(await platform.accountInspection.inspect(), { verified: false });
 });

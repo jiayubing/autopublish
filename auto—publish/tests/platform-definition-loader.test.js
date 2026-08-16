@@ -143,6 +143,53 @@ test("built-in projections and enabled filtering match the frozen four-platform 
   assert.equal(Array.isArray(loadPlatforms({ platformIds: ["toutiao"] })[0].legacyQueue.scan()), true);
 });
 
+test("built-in optional contributions stay platform-owned and exact", async () => {
+  const loaded = loadPlatforms({
+    runtimeContext: {
+      workspacePaths: { tmp: path.join(os.tmpdir(), "platform-contribution-runtime") },
+      getPlatformSettingsService: () => ({
+        test: async () => ({ ok: false }),
+        getAdapterForRuntime: () => { throw Object.assign(new Error("not configured"), { code: "PLATFORM_CONFIG_NOT_SET" }); },
+      }),
+    },
+  });
+  const byId = Object.fromEntries(loaded.map((platform) => [platform.definition.id, platform]));
+  assert.equal(byId.hepan.settingsContribution.createSettingsAdapter({}).id, "hepan");
+  assert.equal(byId.media.settingsContribution.createSettingsAdapter({}).id, "media");
+  assert.equal(byId.media.regularSubmission, undefined);
+
+  const reads = [];
+  const reader = byId.lieju.clientProfileContribution.createProfileReader({
+    read(input) {
+      reads.push(input);
+      return { city: "北京", contact: "合成联系人", phone: "010-12345678" };
+    },
+  });
+  assert.deepEqual(reader.read({ clientId: "client-a" }), {
+    city: "北京",
+    contact: "合成联系人",
+    phone: "010-12345678",
+  });
+  assert.deepEqual(reads, [{ clientId: "client-a", profileKey: "lieju" }]);
+  assert.deepEqual(byId.lieju.clientProfileContribution.requirement, {
+    profileKey: "lieju",
+    requiredFields: ["city", "contact", "phone"],
+  });
+});
+
+test("shared composition and worker boundaries contain no special-platform branch", () => {
+  [
+    "desktop/composition/workspace-runtime-composition.js",
+    "desktop/services/desktop-task-service.js",
+    "desktop/worker/run-task.js",
+  ].forEach(function (filename) {
+    const source = fs.readFileSync(path.join(__dirname, "..", filename), "utf8");
+    assert.equal(/(?:^|[^A-Za-z0-9_-])(hepan|lieju)(?:$|[^A-Za-z0-9_-])/iu.test(source), false, filename);
+  });
+  assert.equal(fs.existsSync(path.join(__dirname, "..", "desktop/services/platform-account-runtime.js")), false);
+  assert.equal(fs.existsSync(path.join(__dirname, "..", "desktop/services/hepan-regular-preparation-adapter.js")), false);
+});
+
 test("enabled code-owned definitions drive runtime discovery and required package entries", () => {
   const ids = readEnabledPlatformIds();
   const definitions = loadEnabledPlatformDefinitions();

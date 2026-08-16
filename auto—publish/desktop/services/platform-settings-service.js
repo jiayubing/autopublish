@@ -1,9 +1,20 @@
 const { createPlatformProviderConfigStore } = require("../platform-provider-config-store");
+const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
 function settingsError(code, message) {
   const error = new Error(message);
   error.code = code;
   return error;
+}
+
+function reportWorkerRuntimeCleanupFailure() {
+  reportDiagnostic({
+    code: "PLATFORM_WORKER_RUNTIME_CLEANUP_FAILED",
+    module: "platform-settings-service",
+    category: "storage",
+    operationId: "platform-worker-runtime",
+    metadata: { action: "cleanup" },
+  });
 }
 
 function isObject(value) {
@@ -253,7 +264,61 @@ function createPlatformSettingsService(options) {
     return { adapter, config };
   }
 
-  return { getStatus, getApplicationConfig, save, test, clear, getRuntimeConfig, getAdapterForRuntime };
+  function prepareWorkerRuntime(input) {
+    const runtimeContext = {};
+    const intervalByTargetMs = {};
+    const cleanups = [];
+    let timeoutMs = 90000;
+    try {
+      adapters.forEach(function (adapter) {
+        if (typeof adapter.prepareWorkerRuntime !== "function") return;
+        const prepared = adapter.prepareWorkerRuntime({
+          plan: input && input.plan,
+          tempRoot: input && input.tempRoot,
+          getConfig: function () { return getRuntimeConfig(adapter.id); },
+        });
+        if (!prepared) return;
+        if (
+          prepared.platformId !== adapter.id ||
+          !isObject(prepared.runtimeContext) ||
+          typeof prepared.cleanup !== "function" ||
+          !Number.isInteger(prepared.intervalMs) ||
+          prepared.intervalMs < 0 ||
+          !Number.isInteger(prepared.timeoutMs) ||
+          prepared.timeoutMs < 1
+        )
+          throw settingsError("PLATFORM_WORKER_RUNTIME_INVALID", "Platform worker runtime is invalid");
+        Object.keys(prepared.runtimeContext).forEach(function (key) {
+          if (Object.prototype.hasOwnProperty.call(runtimeContext, key))
+            throw settingsError("PLATFORM_WORKER_RUNTIME_INVALID", "Platform worker runtime is invalid");
+          runtimeContext[key] = prepared.runtimeContext[key];
+        });
+        intervalByTargetMs[adapter.id] = prepared.intervalMs;
+        timeoutMs = Math.max(timeoutMs, prepared.timeoutMs);
+        cleanups.push(prepared.cleanup);
+      });
+    } catch (error) {
+      cleanups.reverse().forEach(function (cleanup) {
+        try { cleanup(); } catch (_) { reportWorkerRuntimeCleanupFailure(); }
+      });
+      throw error;
+    }
+    let cleaned = false;
+    return Object.freeze({
+      runtimeContext: Object.freeze(runtimeContext),
+      intervalByTargetMs: Object.freeze(intervalByTargetMs),
+      timeoutMs,
+      cleanup: function () {
+        if (cleaned) return;
+        cleaned = true;
+        cleanups.reverse().forEach(function (cleanup) {
+          try { cleanup(); } catch (_) { reportWorkerRuntimeCleanupFailure(); }
+        });
+      },
+    });
+  }
+
+  return { getStatus, getApplicationConfig, save, test, clear, getRuntimeConfig, getAdapterForRuntime, prepareWorkerRuntime };
 }
 
 module.exports = { createPlatformSettingsService, mergePatch };

@@ -1,25 +1,34 @@
 "use strict";
 const definition = require("./definition");
 const { createPlatformAdapter } = require("./adapter");
+const {
+  createHepanSettingsBackedRuntime,
+} = require("./settings-backed-runtime");
 
 function createPlatform(runtimeContext) {
+  const context = runtimeContext || {};
   const adapter = createPlatformAdapter(
-    Object.assign({}, runtimeContext || {}, { scanDir: definition.scanDir }),
+    Object.assign({}, context, { scanDir: definition.scanDir }),
   );
-  if (runtimeContext && runtimeContext.hepanRuntime) adapter.setRuntimeConfig(runtimeContext.hepanRuntime);
+  if (context.hepanRuntime) adapter.setRuntimeConfig(context.hepanRuntime);
+  const settingsRuntime = createHepanSettingsBackedRuntime({
+    getPlatformSettingsService: context.getPlatformSettingsService,
+    paths: context.workspacePaths,
+  });
   return {
-    regularSubmission: { preparePlatformSubmission: adapter.preparePlatformSubmission },
+    regularSubmission: settingsRuntime.regularSubmission,
     legacyQueue: {
       scan: adapter.scanArticles,
       parse: adapter.parseArticleFiles,
       publish: async function (article, options) { await adapter.ensureSession(); await adapter.ensureLoggedIn(options || {}); return adapter.publishArticle(article, options || {}); },
       close: function () { try { return adapter.closeSession(); } finally { adapter.clearRuntimeConfig(); } },
     },
-    accountInspection: { prepare: adapter.ensureSession, inspect: adapter.inspectAccount },
+    accountInspection: settingsRuntime.accountInspection,
     settingsContribution: {
       createSettingsAdapter: function (context) {
-        if (!context || typeof context.createSettingsAdapter !== "function") { const error = new Error("PLATFORM_SETTINGS_FACTORY_REQUIRED"); error.code = "PLATFORM_SETTINGS_FACTORY_REQUIRED"; throw error; }
-        return context.createSettingsAdapter();
+        return require("../../../desktop/services/platform-settings/hepan-settings-adapter").createHepanSettingsAdapter(
+          context || {},
+        );
       },
     },
     runtimeArtifactContribution: {

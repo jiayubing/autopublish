@@ -3,7 +3,6 @@ const { fork } = require("child_process");
 const { createPlatformTaskStateStore, createRunId } = require("./platform-task-state-store");
 const { createPlatformRun, WORKER_SCHEMA_VERSION } = require("./platform-run");
 const { requestStopSignal, clearStopSignal } = require("../../src/core/stop-signal");
-const { cleanupExpiredHepanPayloads } = require("../../src/platforms/hepan/adapter");
 const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
 function sanitizePlatformPlan(plan) {
@@ -188,63 +187,40 @@ function createDesktopTaskService(opts) {
     var workerPlan = sanitizePlatformPlan(plan);
     stopRequested = false;
 
-    var hepanRuntime = null;
-    var hepanCleanup = null;
-    var hasHepanTask = Boolean(workerPlan.tasks.some(function(task) { return task && task.targetPlatformId === "hepan"; }));
-    if (hasHepanTask) {
-      if (!platformSettingsService) {
-        var missingSettings = new Error("蓝色河畔配置未设置");
-        missingSettings.code = "HEPAN_CONFIG_NOT_SET";
-        throw missingSettings;
-      }
-      var runtime = platformSettingsService.getAdapterForRuntime("hepan");
-      if (!runtime.adapter || typeof runtime.adapter.createTemporaryCookie !== "function") {
-        var missingCookie = new Error("蓝色河畔配置未设置");
-        missingCookie.code = "HEPAN_CONFIG_NOT_SET";
-        throw missingCookie;
-      }
-      if (typeof runtime.adapter.cleanupExpiredTemporaryFiles === "function") {
-        try { runtime.adapter.cleanupExpiredTemporaryFiles(); } catch (_) {
-          diagnose("HEPAN_TEMPORARY_CLEANUP_FAILED", "storage", "hepan-cleanup");
-        }
-      }
-      try { cleanupExpiredHepanPayloads({ tempDir: path.join(stopSignalDirectory(), "hepan") }); } catch (_) {
-        diagnose("HEPAN_PAYLOAD_CLEANUP_FAILED", "storage", "hepan-payload-cleanup");
-      }
-      var temporaryCookie = runtime.adapter.createTemporaryCookie(runtime.config);
-      hepanCleanup = temporaryCookie.cleanup;
-      activeRuntimeCleanup = hepanCleanup;
-      hepanRuntime = {
-        pythonPath: runtime.config.pythonPath,
-        categoryId: runtime.config.categoryId,
-        vendorDir: runtime.config.vendorDir || "",
-        publishIntervalSeconds: Number.isInteger(runtime.config.publishIntervalSeconds) && runtime.config.publishIntervalSeconds >= 0 && runtime.config.publishIntervalSeconds <= 3600
-          ? runtime.config.publishIntervalSeconds
-          : 30,
-        cookiePath: temporaryCookie.cookiePath
-      };
-    }
+    var preparedWorkerRuntime =
+      platformSettingsService &&
+      typeof platformSettingsService.prepareWorkerRuntime === "function"
+        ? platformSettingsService.prepareWorkerRuntime({
+          plan: workerPlan,
+          tempRoot: stopSignalDirectory(),
+        })
+        : {
+          runtimeContext: {},
+          intervalByTargetMs: {},
+          timeoutMs: 90000,
+          cleanup: function () {},
+        };
+    var workerRuntimeCleanup = preparedWorkerRuntime.cleanup;
+    activeRuntimeCleanup = workerRuntimeCleanup;
 
     try {
       clearStopSignal(stopSignalDirectory());
     } catch (error) {
-      if (hepanCleanup) {
-        try { hepanCleanup(); } catch (_) {
+      if (activeRuntimeCleanup) {
+        try { activeRuntimeCleanup(); } catch (_) {
           diagnose("PLATFORM_RUNTIME_CLEANUP_FAILED", "storage", "runtime-cleanup-after-signal-failure");
         }
-        if (activeRuntimeCleanup === hepanCleanup) activeRuntimeCleanup = null;
+        activeRuntimeCleanup = null;
       }
       throw error;
     }
 
     var result = null;
     try {
-      // Hepan performs up to two HTTP requests, each allowed to take 180s.
-      // Keep the worker watchdog beyond that bounded window so an in-flight
-      // request is not killed before it can return a safe outcome.
-      var submitOptions = { autoSubmit: true, interactive: false, closeAfterEach: false, timeoutMs: hepanRuntime ? 120000 : 90000 };
-      if (hepanRuntime) submitOptions.intervalByTargetMs = { hepan: hepanRuntime.publishIntervalSeconds * 1000 };
-      var payload = { plan: workerPlan, hepanRuntime: hepanRuntime, submitOptions: submitOptions };
+      var submitOptions = { autoSubmit: true, interactive: false, closeAfterEach: false, timeoutMs: preparedWorkerRuntime.timeoutMs };
+      if (Object.keys(preparedWorkerRuntime.intervalByTargetMs).length)
+        submitOptions.intervalByTargetMs = preparedWorkerRuntime.intervalByTargetMs;
+      var payload = { plan: workerPlan, platformRuntimeContext: preparedWorkerRuntime.runtimeContext, submitOptions: submitOptions };
       var watchdogMs = Number.isInteger(hooks && hooks.platformWatchdogMs) && hooks.platformWatchdogMs > 0
         ? hooks.platformWatchdogMs
         : (Number.isInteger(options.platformWatchdogMs) && options.platformWatchdogMs > 0
@@ -274,7 +250,7 @@ function createDesktopTaskService(opts) {
         target: distinctTargetIds.length === 1 ? distinctTargetIds[0] : "mixed",
         accountProfileId: accountProfileIds.length === 1 ? accountProfileIds[0] : "",
         tasks: workerPlan.tasks,
-        cleanup: hepanCleanup,
+        cleanup: workerRuntimeCleanup,
         onMessage: function(message) {
           if (!message || message.type !== "state") return;
           var snapshot = platformTaskStateStore.applyWorkerState(Object.assign({}, message.payload || {}, { runId: message.runId }));
@@ -285,7 +261,7 @@ function createDesktopTaskService(opts) {
 
       return result;
     } finally {
-      if (activeRuntimeCleanup === hepanCleanup) activeRuntimeCleanup = null;
+      if (activeRuntimeCleanup === workerRuntimeCleanup) activeRuntimeCleanup = null;
       var terminalPhase = result && result.errorCode === "STOP_REQUESTED" ? "stopped"
         : result && result.ok && result.data && Number(result.data.fail || 0) === 0 && Number(result.data.uncertain || 0) === 0 ? "completed"
         : "failed";

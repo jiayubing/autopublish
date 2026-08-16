@@ -4,7 +4,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
-const { listClients, getClient, loadClientKnowledge, readSearchQuery, saveLiejuPublicationProfile } = require("../src/content/client-knowledge");
+const { listClients, getClient, getClientPublicationProfile, loadClientKnowledge, readSearchQuery, saveLiejuPublicationProfile } = require("../src/content/client-knowledge");
 
 const LINK_UNAVAILABLE_CODES = new Set(["EPERM", "EACCES", "ENOTSUP", "EOPNOTSUPP", "EINVAL", "ENOSYS"]);
 
@@ -76,6 +76,12 @@ describe("client knowledge", function() {
       city: "上海", contact: "张三", phone: "13800138000",
     });
     assert.deepStrictEqual(reloaded.get("client-2").publicationProfiles.lieju, {
+      city: "北京", contact: "李四", phone: "010-12345678",
+    });
+    assert.deepStrictEqual(getClientPublicationProfile(root, "client-1", "lieju"), {
+      city: "上海", contact: "张三", phone: "13800138000",
+    });
+    assert.deepStrictEqual(getClientPublicationProfile(root, "client-2", "lieju"), {
       city: "北京", contact: "李四", phone: "010-12345678",
     });
     const secondDocument = JSON.parse(fs.readFileSync(path.join(secondDirectory, "client.json"), "utf8"));
