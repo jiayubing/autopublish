@@ -2,7 +2,7 @@
 
 **Status:** `RUNNING`
 
-**当前 gate：**`E2 COMMIT READY`
+**当前 gate：**`E3 READY`
 
 **职责：**在已完成 `POST-WAVE-SUBMISSION-ARCHITECTURE-CLOSEOUT-PLAN.md` 的基础上，降低新增普通发布平台的通用接入成本，并把客户图片库稳定为高内聚、窄接口、应用内模块。本文是独立的后续实施计划，不重开已完成的 Wave/Ticket/Maintenance，不回填既有 closeout，不代表已授权执行真实登录、发布、上传、付费或生产迁移。
 
@@ -410,11 +410,11 @@ loader 只向调用者暴露其需要的角色，不暴露完整实现对象：
 ## 12. Closure record（实施时填写）
 
 - **Execution status:** `RUNNING`
-- **Current gate:** `E2 COMMIT READY`
-- **Implementation source state:** HEAD `c2f11e43b5e44ea7c90d17f7b189eda8cbe7d4b7` + 当前 E2 production/test/doc dirty diff；E1 implementation commit `6c1641ea89acfacd3c9877b6f92bfffb28d54763` 为其祖先
-- **Completed packages:** `E0, E1`
-- **Commands and results:** E2 bounded re-audit 最终直接合同与回归 `139 passed / 0 failed`；packaging contracts `49 passed / 0 failed`；main/bridge/Renderer typecheck、Renderer build、finding-scoped ESLint、`git diff --check` 与实际 alpha directory package smoke 全部 PASS。实施前的 E0 baseline `101 passed / 0 failed` 与 Phase 06/08 组合 gate `74 passed / 0 failed` 仍绑定未被 remediation 影响的直接边界。详细命令见 `handoffs/post-wave-platform-extensibility-e2-implementation-20260816.md` 与 `handoffs/post-wave-platform-extensibility-e2-primary-audit-20260816.md`
+- **Current gate:** `E3 READY`
+- **Implementation source state:** `0a0e37c9373ed8d5a873862b63755fdac892e8d7`（E2 implementation/remediation/tests/audit commit）
+- **Completed packages:** `E0, E1, E2`
+- **Commands and results:** clean implementation HEAD 上 E0 扩展 baseline `102 passed / 0 failed`；E2 直接矩阵 `139 passed / 0 failed`；Phase 06/08 组合 gate `75 passed / 0 failed`；packaging contracts `49 passed / 0 failed`；main/bridge/Renderer typecheck、Renderer build、定向 ESLint、`git diff/show --check` 与实际 alpha directory package smoke 全部 PASS。详细命令见 `handoffs/post-wave-platform-extensibility-e2-audit-closure-20260816.md`
 - **Audit findings and disposition:** E0 Primary Audit F1–F3、E1 Primary Audit F1–F5 均已关闭；E2 Primary Audit F1 artifact-side package inventory、F2 Hepan definition-owned scanDir 均已最小修复，bounded re-audit PASS，无 deferred finding
 - **Unrun acceptance and reasons:** full `npm test` 留给 E6 最终组合 gate；真实登录/发布/上传/付费/迁移未授权且本工作包禁止执行
-- **Remaining risks:** E2 尚待授权 commit 与 clean-HEAD closure evidence；共享 composition 中的 Hepan preparation override 与 Lieju client-profile resolver 属于 E3 显式范围，未在 E2 提前迁移
-- **Final Git status:** HEAD `c2f11e43b5e44ea7c90d17f7b189eda8cbe7d4b7`；E2 implementation/remediation/test/doc 为未提交工作树改动；Primary Audit/bounded re-audit PASS，未 commit/merge/push，未进入 E3
+- **Remaining risks:** E2 无 blocking/deferred finding；共享 composition 中的 Hepan preparation override 与 Lieju client-profile resolver 属于 E3 显式范围，未在 E2 提前迁移
+- **Final Git status:** E2 implementation/remediation/tests/audit 已进入本地 commit `0a0e37c9373ed8d5a873862b63755fdac892e8d7`；closure record 由独立 provenance docs commit 固化；未 merge/push，未进入 E3

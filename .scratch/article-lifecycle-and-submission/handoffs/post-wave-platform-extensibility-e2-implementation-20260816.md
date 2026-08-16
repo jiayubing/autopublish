@@ -45,4 +45,3 @@
 - HEAD：`c2f11e43b5e44ea7c90d17f7b189eda8cbe7d4b7`。
 - 工作树包含 E2 production/test diff、本 handoff 与计划 gate 更新；本地 build/package 生成物不纳入源代码交接。
 - 下一 gate：`E2 PRIMARY AUDIT READY`。
-
