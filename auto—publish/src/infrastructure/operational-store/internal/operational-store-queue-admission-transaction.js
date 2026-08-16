@@ -748,7 +748,12 @@ function createQueueAdmissionTransaction(context) {
         oldPublication.attempt_id &&
         oldPublication.finished_at &&
         cancellationResolutionFromIntent(oldPublication.intent_payload);
-      if (oldPublication && !cancelledPublication)
+      const failedPublication =
+        oldPublication &&
+        oldPublication.status === "failed" &&
+        oldPublication.attempt_id &&
+        oldPublication.finished_at;
+      if (oldPublication && !cancelledPublication && !failedPublication)
         throw fail(
           oldPublication.status === "uncertain"
             ? "PUBLICATION_UNCERTAIN"

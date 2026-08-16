@@ -806,7 +806,7 @@ test("cancelled regular admission can re-enter the same target with a new attemp
   }
 });
 
-test("attention selects only the latest failed attempt after same-clock cancellation and re-entry", () => {
+test("attention selects only the latest failed attempt and a new admission can re-enter the same target", () => {
   const fixture = makeFixture();
   try {
     fixture.add(article("article-a"));
@@ -843,6 +843,24 @@ test("attention selects only the latest failed attempt after same-clock cancella
     assert.deepEqual(
       history[0].attempts.map((attempt) => attempt.status),
       ["cancelled", "failed"],
+    );
+
+    const preview = fixture.application.previewRegularQueueAdmission(
+      admissionInput(fixture, [ref("article-a")]),
+    );
+    assert.equal(preview.items[0].status, "queueable");
+    const third = fixture.application.admitRegularQueueItems(
+      admissionInput(fixture, [ref("article-a")]),
+    );
+    assert.equal(third.admittedCount, 1);
+    assert.equal(third.items[0].publicationId, second.items[0].publicationId);
+    assert.notEqual(third.items[0].attemptId, second.items[0].attemptId);
+    assert.deepEqual(fixture.store.listPublicationAttention(), []);
+    assert.deepEqual(
+      fixture.store
+        .listPublicationRecords({ articleIds: ["article-a"] })[0]
+        .attempts.map((attempt) => attempt.status),
+      ["cancelled", "failed", "queued"],
     );
   } finally {
     fixture.close();

@@ -11,6 +11,9 @@ const {
   createRegularPlatformOutcomeService,
 } = require("../desktop/services/regular-platform-outcome-service");
 const {
+  createArticleAttentionQuery,
+} = require("../desktop/services/article-attention-query");
+const {
   createRegularQueueApplication,
 } = require("../desktop/services/regular-queue-application");
 const {
@@ -836,6 +839,47 @@ test("25-C uncertain freezes the article, forbids replay, and exposes only the t
       fixture.coordinator.readArticleForEdit(ref("uncertain-not-accepted"))
         .article.id,
       "uncertain-not-accepted",
+    );
+    const resolvedAttention = createArticleAttentionQuery({
+      operationalStore: fixture.store,
+      regularPlatformOutcomeService: runtime.outcomeService,
+      readers: {
+        getArticle: (clientId, articleId) =>
+          fixture.contentStore.getArticle(clientId, articleId),
+      },
+    }).list({ clientId: "client-a" });
+    const readmissionPreview = fixture.application.previewRegularQueueAdmission(
+      {
+        articleRefs: [ref("uncertain-not-accepted")],
+        platformId: "toutiao",
+        accountProfileId: fixture.profiles.toutiaoPrimary.accountProfileId,
+      },
+    );
+    const readmitted = admission(
+      fixture,
+      ["uncertain-not-accepted"],
+      "toutiao",
+      fixture.profiles.toutiaoPrimary.accountProfileId,
+    );
+    assert.deepEqual(
+      {
+        attentionCount: resolvedAttention.items.length,
+        previewStatus: readmissionPreview.items[0].status,
+        admittedCount: readmitted.admittedCount,
+        admissionStatus: readmitted.items[0].status,
+        admissionReasonCode: readmitted.items[0].reasonCode || null,
+      },
+      {
+        attentionCount: 0,
+        previewStatus: "queueable",
+        admittedCount: 1,
+        admissionStatus: "queued",
+        admissionReasonCode: null,
+      },
+    );
+    assert.notEqual(
+      readmitted.items[0].attemptId,
+      notAccepted.items[0].attemptId,
     );
     assert.throws(
       () =>

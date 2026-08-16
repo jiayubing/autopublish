@@ -364,6 +364,13 @@ function createRecoveryAggregate(context, activeTarget) {
         .all()
         .map((row) => {
           const intent = fromText(row.intent_payload) || {};
+          const resolution = intent.detail && intent.detail.resolution;
+          if (
+            row.status === "failed" &&
+            resolution &&
+            resolution.decision === "not_accepted"
+          )
+            return null;
           const resolutionAttention =
             projectPaidOrderResolutionAttention(intent);
           return Object.freeze({
@@ -381,7 +388,8 @@ function createRecoveryAggregate(context, activeTarget) {
               /^platform:[^:]+:account:(.+)$/.exec(row.target_key)?.[1] || null,
             ...resolutionAttention,
           });
-        }),
+        })
+        .filter(Boolean),
     );
   }
 
