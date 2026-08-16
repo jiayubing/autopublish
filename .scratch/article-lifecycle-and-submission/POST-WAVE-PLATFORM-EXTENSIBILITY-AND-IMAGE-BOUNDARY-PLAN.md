@@ -2,7 +2,7 @@
 
 **Status:** `RUNNING`
 
-**当前 gate：**`E3 COMMIT READY`
+**当前 gate：**`E4 READY`
 
 **职责：**在已完成 `POST-WAVE-SUBMISSION-ARCHITECTURE-CLOSEOUT-PLAN.md` 的基础上，降低新增普通发布平台的通用接入成本，并把客户图片库稳定为高内聚、窄接口、应用内模块。本文是独立的后续实施计划，不重开已完成的 Wave/Ticket/Maintenance，不回填既有 closeout，不代表已授权执行真实登录、发布、上传、付费或生产迁移。
 
@@ -410,11 +410,11 @@ loader 只向调用者暴露其需要的角色，不暴露完整实现对象：
 ## 12. Closure record（实施时填写）
 
 - **Execution status:** `RUNNING`
-- **Current gate:** `E3 COMMIT READY`
-- **Implementation source state:** `5a31857550feecad50991b223961038a5e79305c + E3 working-tree diff`（implementation 尚未 commit）
-- **Completed packages:** `E0, E1, E2`
-- **Commands and results:** E3 直接矩阵 `202 passed / 0 failed`；计划 §1 baseline `103 passed / 0 failed`；packaging contracts `49 passed / 0 failed`；main typecheck、定向 ESLint 与 `git diff --check` PASS。详细命令见 `handoffs/post-wave-platform-extensibility-e3-implementation-20260816.md`
+- **Current gate:** `E4 READY`
+- **Implementation source state:** `faee4fa3527f33d030f90fca6e56fc340ac38332`（E3 implementation/remediation/tests/audit clean HEAD）
+- **Completed packages:** `E0, E1, E2, E3`
+- **Commands and results:** E3 final clean-HEAD 直接矩阵 `231 passed / 0 failed`；计划 §1 baseline `103 passed / 0 failed`；packaging contracts `49 passed / 0 failed`；main typecheck、定向 ESLint 与 `git diff --check` PASS。详细 evidence 见 `handoffs/post-wave-platform-extensibility-e3-audit-closure-20260816.md`
 - **Audit findings and disposition:** E0～E2 findings 均已关闭；E3 Primary Audit F1 动态 runtime 快照导致临时 Cookie 不可见、F2 cleanup failure 覆盖远端结果均已最小修复，bounded re-audit PASS，无 deferred finding
 - **Unrun acceptance and reasons:** full `npm test`、bridge/Renderer gate 与实际 package smoke 留给 E6 最终组合 gate；真实登录/发布/上传/付费/迁移未授权且本工作包禁止执行
-- **Remaining risks:** E3 尚待 commit 与 final clean-HEAD closure；E4 图片 port/asset reader 边界未提前实施
-- **Final Git status:** E3 production/test/docs 为未提交 working-tree diff；未 commit/merge/push，未进入 E4
+- **Remaining risks:** E4 图片 port/asset reader 边界尚未实施；full suite、bridge/Renderer/build 与实际 package smoke 留给 E6 combined closure
+- **Final Git status:** E3 implementation commit 为 `faee4fa3527f33d030f90fca6e56fc340ac38332`；closure docs 另行 provenance commit；未 merge/push，未进入 E4
