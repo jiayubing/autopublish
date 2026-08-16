@@ -38,7 +38,7 @@ function createSubmissionMaintenanceService(options) {
       path.join(workspaceRoot, ".autopublish", "input"),
   );
   const targetCatalog = createSubmissionTargetCatalog({
-    platforms: value.platforms,
+    directoryEntries: value.directoryEntries,
   });
 
   function queuePaths(payload) {

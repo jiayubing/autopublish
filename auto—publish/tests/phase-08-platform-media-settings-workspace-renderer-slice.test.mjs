@@ -235,8 +235,13 @@ describe("Phase 08 platform/media/settings/workspace renderer slice", () => {
     let startAllCalls = 0;
     let removedItems = null;
     const feature = createPlatformFeature({
-      platformDisplayName: (platformId) =>
-        platformId === "toutiao" ? "头条" : platformId,
+      loadQueue: async () => ({
+        revision: 1,
+        platforms: [
+          { id: "toutiao", displayName: "头条", loginAvailable: true },
+        ],
+        queue: [],
+      }),
       listRegularQueueGroups: async () => listedGroups,
       listAccountProfiles: async () => [
         {
@@ -263,6 +268,7 @@ describe("Phase 08 platform/media/settings/workspace renderer slice", () => {
       },
     });
     feature.setScope({ workspaceRuntimeId: "platform-queue-groups" });
+    await feature.refreshQueue();
     await feature.refreshAccountProfiles();
     await feature.refreshRegularQueueGroups();
     assert.equal(

@@ -179,6 +179,9 @@ export function createPlatformFeature(bridge = {}) {
   let snapshot;
 
   const publish = () => {
+    const displayNameFor = (platformId) =>
+      queue.platforms.find((platform) => platform.id === platformId)?.displayName ||
+      platformId;
     snapshot = Object.freeze({
       scope,
       queue,
@@ -190,7 +193,7 @@ export function createPlatformFeature(bridge = {}) {
       regularQueueGroupViews: regularQueueGroupViews(
         regularQueueGroups.items,
         accountProfiles.items,
-        bridge.platformDisplayName,
+        displayNameFor,
       ),
       error,
       terminalRevision,

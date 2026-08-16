@@ -54,6 +54,10 @@ describe("workspace paths", function() {
       assert.equal(paths.templates, path.join(root, "templates"));
       assert.equal(paths.autopublish, path.join(root, ".autopublish"));
       assert.equal(paths.generationBatches, path.join(paths.autopublish, "batches"));
+      assert.equal(paths.input, path.join(paths.autopublish, "input"));
+      assert.equal(Object.hasOwn(paths, "liejuInput"), false);
+      assert.equal(Object.hasOwn(paths, "toutiaoInput"), false);
+      assert.equal(Object.hasOwn(paths, "hepanInput"), false);
       assert.equal(fs.existsSync(path.join(root, "logs")), false);
       assert.equal(fs.existsSync(path.join(root, "browser")), false);
       assert.equal(fs.existsSync(path.join(root, "tmp")), false);

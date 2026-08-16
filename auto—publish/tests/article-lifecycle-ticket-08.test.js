@@ -510,7 +510,7 @@ test("production preparation port verifies the account profile before adapter pr
     regularImagePlanService: {
       createPlan: async (request) => imagePlan(request.imageCount),
     },
-    adapters: [
+    regularSubmissionPorts: [
       {
         id: "toutiao",
         preparePlatformSubmission: async () => {
@@ -575,7 +575,7 @@ test("prepared browser submission rejects account drift before the remote bounda
     regularImagePlanService: {
       createPlan: async (request) => imagePlan(request.imageCount),
     },
-    adapters: [
+    regularSubmissionPorts: [
       {
         id: "toutiao",
         preparePlatformSubmission: async () =>
@@ -636,7 +636,7 @@ test("queue execution does not begin remote submission when final account verifi
       regularImagePlanService: {
         createPlan: async (request) => imagePlan(request.imageCount),
       },
-      adapters: [
+      regularSubmissionPorts: [
         {
           id: "toutiao",
           preparePlatformSubmission: async (claim) =>
@@ -700,7 +700,7 @@ test("preparation resolves the Lieju profile by the claimed article client and p
         ? { city: "北京", contact: "李四", phone: "010-12345678" }
         : { city: "上海", contact: "张三", phone: "13800138000" };
     },
-    adapters: [{
+    regularSubmissionPorts: [{
       id: "lieju",
       preparePlatformSubmission: async (input) => {
         claims.push(input);
@@ -757,7 +757,7 @@ test("preparation obtains one image plan after account verification and passes i
         return imagePlan(request.imageCount);
       },
     },
-    adapters,
+    regularSubmissionPorts: adapters,
   });
 
   for (const platformId of ["lieju", "toutiao", "hepan"]) {
@@ -858,7 +858,7 @@ test("recoverable image-plan faults downgrade to text-only before the submission
           throw error;
         },
       },
-      adapters: [
+      regularSubmissionPorts: [
         {
           id: "toutiao",
           async preparePlatformSubmission(claim, plan) {
@@ -959,7 +959,7 @@ test("adapter image preparation may retain only actual successful images or cont
         regularImagePlanService: {
           createPlan: async (request) => imagePlan(request.imageCount),
         },
-        adapters: [
+        regularSubmissionPorts: [
           {
             id: "toutiao",
             async preparePlatformSubmission(claim, plan) {
@@ -1044,7 +1044,7 @@ test("unexpected image-plan faults end preparation before the remote boundary", 
           throw error;
         },
       },
-      adapters: [
+      regularSubmissionPorts: [
         {
           id: "toutiao",
           async preparePlatformSubmission() {
@@ -1112,7 +1112,7 @@ test("post-boundary submission faults stay uncertain without reselecting images 
           return imagePlan(request.imageCount);
         },
       },
-      adapters: [
+      regularSubmissionPorts: [
         {
           id: "toutiao",
           async preparePlatformSubmission(claim) {

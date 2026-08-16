@@ -72,7 +72,7 @@ it("derives worker directories from explicit environment paths", function() {
   });
 });
 
-it("closes every platform session with the resolved bundled Node and CLI", async function() {
+it("closes every loaded login session and isolates one cleanup failure", async function() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "autopublish-task-runtime-"));
   const node = path.join(root, "tools", "node.exe");
   const cli = path.join(root, "playwright-cli.js");
@@ -96,26 +96,39 @@ it("closes every platform session with the resolved bundled Node and CLI", async
     worker.kill = function() { worker.emit("exit", 0); };
     return worker;
   }
-  function fakeExecFile(file, args, options, callback) {
-    calls.push({ file, args, options });
-    callback(null, "", "");
-  }
   try {
-    const service = createDesktopTaskService({ cwd: paths.contentLibrary, paths, fork: fakeFork, execFile: fakeExecFile });
+    const service = createDesktopTaskService({
+      cwd: paths.contentLibrary,
+      paths,
+      fork: fakeFork,
+      loginSessionPorts: [
+        { id: "lieju", port: { close: async () => { calls.push("lieju"); throw new Error("fixture"); } } },
+        { id: "toutiao", port: { close: async () => { calls.push("toutiao"); } } },
+      ],
+    });
     const pending = service.startPlatformSubmit({ tasks: [{ id: "task-1" }] });
     await new Promise((resolve) => setImmediate(resolve));
     service.pausePlatformSubmit();
     await pending;
-    assert.equal(calls.length, 3);
-    calls.forEach(function(call) {
-      assert.equal(call.file, node);
-      assert.deepEqual(call.args.slice(0, 2), [cli, "-s=" + call.args[1].slice(3)]);
-      assert.equal(call.args[2], "close");
-      assert.match(call.options.env.PLAYWRIGHT_DAEMON_SESSION_DIR, /sessions[\\/]((lieju|toutiao|hepan))$/);
-    });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(calls.sort(), ["lieju", "toutiao"]);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+it("closes every loaded login session during workspace shutdown", async function () {
+  const calls = [];
+  const service = createDesktopTaskService({
+    cwd: "C:\\portable-content",
+    paths: { contentLibrary: "C:\\portable-content" },
+    loginSessionPorts: [
+      { id: "first", port: { close: async () => { calls.push("first"); } } },
+      { id: "second", port: { close: async () => { calls.push("second"); } } },
+    ],
+  });
+  await service.dispose();
+  assert.deepEqual(calls, ["first", "second"]);
 });
 
 it("snapshots the Hepan interval once when a platform batch starts", async function() {

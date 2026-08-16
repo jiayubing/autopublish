@@ -1,13 +1,10 @@
 ﻿const path = require("path");
-const { fork, execFile } = require("child_process");
+const { fork } = require("child_process");
 const { createPlatformTaskStateStore, createRunId } = require("./platform-task-state-store");
 const { createPlatformRun, WORKER_SCHEMA_VERSION } = require("./platform-run");
 const { requestStopSignal, clearStopSignal } = require("../../src/core/stop-signal");
 const { cleanupExpiredHepanPayloads } = require("../../src/platforms/hepan/adapter");
-const { resolvePlaywrightRuntime } = require("../../src/infrastructure/runtime/playwright-runtime-resolver");
 const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
-
-var PLATFORM_SESSIONS = ["lieju", "toutiao", "hepan"];
 
 function sanitizePlatformPlan(plan) {
   var tasks = plan && Array.isArray(plan.tasks) ? plan.tasks : [];
@@ -31,7 +28,9 @@ function createDesktopTaskService(opts) {
   var invalidateData = options.invalidateData || function() {};
   var storagePaths = options.paths || {};
   var forkProcess = options.fork || fork;
-  var execFileProcess = options.execFile || execFile;
+  var loginSessionPorts = Array.isArray(options.loginSessionPorts)
+    ? options.loginSessionPorts.slice()
+    : [];
   var platformSettingsService = options.platformSettingsService || null;
   var workspaceRuntimeId = typeof options.workspaceRuntimeId === "string" && /^[A-Za-z0-9._:-]{1,256}$/.test(options.workspaceRuntimeId)
     ? options.workspaceRuntimeId
@@ -166,42 +165,18 @@ function createDesktopTaskService(opts) {
     return { child: child, promise: promise };
   }
 
-function closeBrowserSessions() {
-    var resolved;
-    try {
-      resolved = resolvePlaywrightRuntime({
-        appRoot: storagePaths.installation || process.env.AUTO_PUBLISH_APP_ROOT || cwd,
-        paths: storagePaths,
-        applicationTools: {
-          nodeExecPath: storagePaths.playwrightNodeExecPath,
-          playwrightCliJs: storagePaths.playwrightCliJs
-        },
-        env: process.env,
-        packaged: process.env.AUTO_PUBLISH_PACKAGED === "1"
-      });
-    } catch (_) {
-      diagnose("PLATFORM_BROWSER_RUNTIME_RESOLUTION_FAILED", "transport", "browser-runtime");
-      return;
-    }
-    var nodeExe = resolved.playwrightNode.command;
-    var cliJs = resolved.playwrightCli.command;
-    if (!nodeExe || !cliJs) {
-      diagnose("PLATFORM_BROWSER_RUNTIME_UNAVAILABLE", "transport", "browser-runtime");
-      return;
-    }
-    var workDir = storagePaths.browser || path.join(cwd, "work", "playwright-cli");
-
-    PLATFORM_SESSIONS.forEach(function(session) {
-      var sessionDir = path.join(workDir, "sessions", session);
-      var env = Object.assign({}, process.env, { PLAYWRIGHT_DAEMON_SESSION_DIR: sessionDir });
-      try {
-        execFileProcess(nodeExe, [cliJs, "-s=" + session, "close"], { timeout: 5000, windowsHide: true, env: env }, function(error) {
-          if (error) diagnose("PLATFORM_BROWSER_SESSION_CLOSE_FAILED", "transport", "browser-close");
-        });
-      } catch (_) {
-        diagnose("PLATFORM_BROWSER_SESSION_CLOSE_FAILED", "transport", "browser-close");
-      }
-    });
+  async function closeBrowserSessions() {
+    await Promise.all(
+      loginSessionPorts.map(async function (entry) {
+        try {
+          if (!entry || !entry.port || typeof entry.port.close !== "function")
+            throw new Error("PLATFORM_LOGIN_PORT_INVALID");
+          await entry.port.close();
+        } catch (_) {
+          diagnose("PLATFORM_BROWSER_SESSION_CLOSE_FAILED", "transport", "browser-close");
+        }
+      }),
+    );
 }
 
   async function startPlatformSubmit(plan, hooks) {
@@ -335,9 +310,7 @@ function closeBrowserSessions() {
     if (!platformRun || !platformRun.snapshot()) return { ok: true };
 
     stopRequested = true;
-    try { closeBrowserSessions(); } catch (_) {
-      diagnose("PLATFORM_BROWSER_SESSION_CLOSE_FAILED", "transport", "browser-close");
-    }
+    void closeBrowserSessions();
     var signalError = null;
     try {
       requestStopSignal("operator_pause", stopSignalDirectory());
@@ -375,7 +348,7 @@ function closeBrowserSessions() {
     return function() { stateListeners.delete(listener); };
   }
 
-  function dispose() {
+  async function dispose() {
     if (activeRuntimeCleanup) {
       try { activeRuntimeCleanup(); } catch (_) {
         diagnose("PLATFORM_RUNTIME_CLEANUP_FAILED", "storage", "runtime-cleanup");
@@ -383,6 +356,7 @@ function closeBrowserSessions() {
       activeRuntimeCleanup = null;
     }
     if (platformRun && platformRun.snapshot()) { platformTaskStateStore.markInterrupted(); platformRun.stop(null, "dispose"); }
+    await closeBrowserSessions();
     stateListeners.clear();
   }
 

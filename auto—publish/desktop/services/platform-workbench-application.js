@@ -1,6 +1,5 @@
 const fs = require("node:fs");
 const mammoth = require("mammoth");
-const { loadPlatforms } = require("../../src/core/platforms");
 const { assertPlaywrightAvailable } = require("./playwright-capability");
 const { createPlatformSessionService } = require("./platform-session-service");
 const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
@@ -20,10 +19,12 @@ function diagnose(code, action) {
 
 function createPlatformWorkbenchApplication(options) {
   const values = options || {};
-  const loadedPlatforms = values.loadedPlatforms || loadPlatforms();
+  const directoryEntries = Array.isArray(values.directoryEntries)
+    ? values.directoryEntries
+    : [];
   const adapters = {};
-  loadedPlatforms.forEach((platform) => {
-    if (platform.loginSession) adapters[platform.definition.id] = platform.loginSession;
+  (values.loginSessionPorts || []).forEach((platform) => {
+    if (platform && platform.port) adapters[platform.id] = platform.port;
   });
   const ensurePlaywright = typeof values.assertPlaywrightAvailable === "function"
     ? values.assertPlaywrightAvailable
@@ -36,7 +37,7 @@ function createPlatformWorkbenchApplication(options) {
   if (!workbenchService) throw new Error("Platform application requires the workspace ContentStore service");
 
   async function getQueue() {
-    const nonMedia = loadedPlatforms.filter((platform) => platform.definition.publicationTargetKind === "platform");
+    const ordinaryPlatforms = directoryEntries.filter((platform) => platform.publicationTargetKind === "platform");
     const grouped = workbenchService.scanQueue();
     const queue = [];
     for (const group of grouped) {
@@ -70,9 +71,10 @@ function createPlatformWorkbenchApplication(options) {
       }
     }
     return projectPlatformQueue({
-      platforms: nonMedia.map((platform) => ({
-        id: platform.definition.id,
-        loginAvailable: platformSessionService.supports(platform.definition.id),
+      platforms: ordinaryPlatforms.map((platform) => ({
+        id: platform.id,
+        displayName: platform.displayName,
+        loginAvailable: platformSessionService.supports(platform.id),
       })),
       queue,
     });

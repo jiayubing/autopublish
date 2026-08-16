@@ -104,6 +104,7 @@ function projectPlatformQueue(value) {
     platforms: (Array.isArray(input.platforms) ? input.platforms : []).map(
       (platform) => ({
         id: String((platform && platform.id) || ""),
+        displayName: String((platform && platform.displayName) || ""),
         loginAvailable: platform && platform.loginAvailable === true,
       }),
     ),

@@ -116,15 +116,13 @@ function makeFixture(options) {
       },
       platforms: [
         {
-          definition: { id: "toutiao", publicationTargetKind: "platform", capabilities: { imagePublishing: false } },
-          regularSubmission: {},
+          id: "toutiao", publicationTargetKind: "platform", imagePublishing: false,
         },
         {
-          definition: { id: "hepan", publicationTargetKind: "platform", capabilities: { imagePublishing: false } },
-          regularSubmission: {},
+          id: "hepan", publicationTargetKind: "platform", imagePublishing: false,
         },
         {
-          definition: { id: "media", publicationTargetKind: "resource", capabilities: { imagePublishing: false } },
+          id: "media", publicationTargetKind: "resource", imagePublishing: false,
         },
       ],
     });

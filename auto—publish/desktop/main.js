@@ -13,6 +13,7 @@ const {
   safeStorage,
 } = require("electron");
 const { isAllowedRendererNavigation } = require("./security/navigation");
+const { createExternalLinkPolicy } = require("./security/external-links");
 const {
   configureApplicationIdentity,
   DISPLAY_NAME_ZH,
@@ -50,23 +51,11 @@ let startupStatus = "starting";
 let isQuitting = false;
 const PACKAGED_SMOKE = process.argv.includes("--offline-packaging-smoke");
 let packagedSmokeFinished = false;
-const EXTERNAL_LINK_HOSTS = new Set([
-  "www.toutiao.com",
-  "mp.weixin.qq.com",
-  "www.lieju.com",
-]);
+const externalLinkPolicy = createExternalLinkPolicy();
 const WORKSPACE_OPEN_FAILED_MESSAGE = "Could not open the current workspace";
 
 function isAllowedExternalUrl(value) {
-  try {
-    var url = new URL(value);
-    return (
-      (url.protocol === "https:" || url.protocol === "http:") &&
-      EXTERNAL_LINK_HOSTS.has(url.hostname)
-    );
-  } catch (_) {
-    return false;
-  }
+  return externalLinkPolicy.isAllowed(value);
 }
 
 function sendToRenderer(channel, payload) {

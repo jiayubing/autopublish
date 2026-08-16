@@ -6,7 +6,10 @@ const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 const asar = require("@electron/asar");
-const { verifyPackage } = require("../scripts/verify-alpha-package");
+const {
+  requiredArchiveFiles,
+  verifyPackage,
+} = require("../scripts/verify-alpha-package");
 
 const C3_RUNTIME_FILES = Object.freeze([
   "desktop/services/submission-maintenance-service.js",
@@ -30,6 +33,9 @@ const C3_RETIRED_FILES = Object.freeze([
   "src/application/publication-workflow/errors.js",
   "src/application/publication-workflow/post-processing.js",
 ]);
+const SOURCE_PLATFORM_CONFIG = JSON.parse(
+  fs.readFileSync(path.resolve(__dirname, "../config/platforms.json"), "utf8"),
+);
 
 function inventory(source, name) {
   const match = new RegExp(
@@ -56,10 +62,20 @@ async function packageFixture(verifierSource, options) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "c3-package-verifier-"));
   const appRoot = path.join(root, "app");
   const resources = path.join(root, "resources");
-  for (const relative of inventory(verifierSource, "ARCHIVE_FILES")) {
+  for (const relative of requiredArchiveFiles()) {
     if (!omitted.has(relative))
-      writeFile(appRoot, relative, relative === "package.json" ? "{}" : null);
+      writeFile(
+        appRoot,
+        relative,
+        relative === "package.json"
+          ? "{}"
+          : relative === "config/platforms.json"
+            ? JSON.stringify(SOURCE_PLATFORM_CONFIG)
+            : null,
+      );
   }
+  for (const [relative, content] of Object.entries(value.contents || {}))
+    writeFile(appRoot, relative, content);
   for (const relative of value.added || []) writeFile(appRoot, relative);
   for (const relative of inventory(verifierSource, "UNPACKED_FILES"))
     writeFile(path.join(resources, "app.asar.unpacked"), relative);
@@ -113,6 +129,82 @@ test("C3 package verifier requires named runtime files and rejects every retired
         retired.details.includes("RETIRED_ARCHIVE_FILE_PRESENT: " + relative),
         relative,
       );
+  } finally {
+    fixtures.reverse().forEach((fixture) => fixture.dispose());
+  }
+});
+
+test("package verifier derives enabled platform runtime requirements from the packaged config", async () => {
+  const projectRoot = path.resolve(__dirname, "..");
+  const verifierSource = fs.readFileSync(
+    path.join(projectRoot, "scripts", "verify-alpha-package.js"),
+    "utf8",
+  );
+  const fixtures = [];
+  try {
+    const enabled = SOURCE_PLATFORM_CONFIG.enabled;
+    const disabledFiles = enabled.slice(1).flatMap((id) => [
+      `src/platforms/${id}/definition.js`,
+      `src/platforms/${id}/platform.js`,
+    ]);
+    const packagedSubset = await packageFixture(verifierSource, {
+      omitted: disabledFiles,
+      contents: {
+        "config/platforms.json": JSON.stringify({ enabled: [enabled[0]] }),
+      },
+    });
+    fixtures.push(packagedSubset);
+    assert.doesNotThrow(() => verifyPackage(packagedSubset.resources));
+
+    const missingSyntheticRuntime = await packageFixture(verifierSource, {
+      contents: {
+        "config/platforms.json": JSON.stringify({
+          enabled: enabled.concat("reference-standard"),
+        }),
+      },
+    });
+    fixtures.push(missingSyntheticRuntime);
+    const missing = packageError(missingSyntheticRuntime.resources);
+    assert.equal(missing.code, "ALPHA_PACKAGE_CONTENT_INVALID");
+    assert.ok(
+      missing.details.includes(
+        "ARCHIVE_FILE_MISSING: src/platforms/reference-standard/definition.js",
+      ),
+    );
+    assert.ok(
+      missing.details.includes(
+        "ARCHIVE_FILE_MISSING: src/platforms/reference-standard/platform.js",
+      ),
+    );
+
+    const invalidConfig = await packageFixture(verifierSource, {
+      contents: {
+        "config/platforms.json": JSON.stringify({
+          enabled,
+          workspaceExtension: true,
+        }),
+      },
+    });
+    fixtures.push(invalidConfig);
+    const invalid = packageError(invalidConfig.resources);
+    assert.equal(invalid.code, "ALPHA_PACKAGE_CONTENT_INVALID");
+    assert.ok(
+      invalid.details.includes(
+        "ENABLED_PLATFORM_INVENTORY_INVALID: config/platforms.json",
+      ),
+    );
+
+    const missingPolicy = await packageFixture(verifierSource, {
+      omitted: ["desktop/security/external-links.js"],
+    });
+    fixtures.push(missingPolicy);
+    const policy = packageError(missingPolicy.resources);
+    assert.equal(policy.code, "ALPHA_PACKAGE_CONTENT_INVALID");
+    assert.ok(
+      policy.details.includes(
+        "ARCHIVE_FILE_MISSING: desktop/security/external-links.js",
+      ),
+    );
   } finally {
     fixtures.reverse().forEach((fixture) => fixture.dispose());
   }

@@ -22,9 +22,6 @@ const CONTENT_DIRECTORY_KEYS = Object.freeze([
   "failed",
   "operations",
   "mediaInput",
-  "liejuInput",
-  "toutiaoInput",
-  "hepanInput",
 ]);
 
 function createWorkspacePaths(root, storage) {

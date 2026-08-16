@@ -97,7 +97,7 @@ function configureRuntime(runtimeContext) {
   });
   SESSION_OPTS = { session: SESSION };
   BROWSER_CHANNEL = browserRuntime.browserChannel || PW.browserChannel;
-  INPUT_ROOT = workspacePaths.input || (workspacePaths.toutiaoInput ? path.dirname(workspacePaths.toutiaoInput) : DIRS.inputDir);
+  INPUT_ROOT = workspacePaths.input || DIRS.inputDir;
   SESSION_LIFECYCLE = createSessionLifecycle();
 }
 function daemonAlive() {

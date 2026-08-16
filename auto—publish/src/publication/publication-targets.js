@@ -1,11 +1,16 @@
 const PATH_CHARACTERS = /[<>:"/\\|?*\x00-\x1f]/;
+const { loadEnabledPlatformDefinitions } = require("../core/platforms");
 
-const DECLARED_PLATFORMS = Object.freeze({
-  lieju: Object.freeze({ kind: "platform" }),
-  toutiao: Object.freeze({ kind: "platform" }),
-  hepan: Object.freeze({ kind: "platform" }),
-  media: Object.freeze({ kind: "resource" })
-});
+const DECLARED_PLATFORMS = Object.freeze(
+  Object.fromEntries(
+    loadEnabledPlatformDefinitions().map(function (definition) {
+      return [
+        definition.id,
+        Object.freeze({ kind: definition.publicationTargetKind }),
+      ];
+    }),
+  ),
+);
 
 function targetError(code, message) {
   const error = new Error(message);
@@ -55,7 +60,7 @@ function resolvePublicationTarget(input) {
   if (!validIdentifier(mediaResourceId)) {
     throw targetError("PUBLICATION_MEDIA_RESOURCE_ID_INVALID", "Media resource id is invalid");
   }
-  if (DECLARED_PLATFORMS.media.kind !== "resource") {
+  if (!DECLARED_PLATFORMS.media || DECLARED_PLATFORMS.media.kind !== "resource") {
     throw targetError("PUBLICATION_PLATFORM_UNDECLARED", "Publication platform is not declared");
   }
   return {

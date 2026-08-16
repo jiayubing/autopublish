@@ -20,7 +20,7 @@ function registerArticleManagementIpc(deps) {
     getRevision: values.getWorkspaceDataRevision,
     aiContentService: values.aiContentService,
     submissionPlatformDirectory: values.submissionPlatformDirectory || createSubmissionTargetCatalog({
-      platforms: values.loadedPlatforms,
+      directoryEntries: values.directoryEntries,
     }),
     operationalStore: values.operationalStore,
     publishedArchiveQueries: values.publishedArchiveQueries,

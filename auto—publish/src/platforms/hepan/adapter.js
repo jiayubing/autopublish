@@ -794,8 +794,15 @@ function createHepanAdapter(options) {
 function createPlatformAdapter(runtimeContext) {
   const context = runtimeContext || {};
   const workspacePaths = context.workspacePaths || {};
+  const scanDir =
+    typeof context.scanDir === "string" &&
+    /^[a-z][a-z0-9-]{0,63}$/.test(context.scanDir)
+      ? context.scanDir
+      : null;
   return createHepanAdapter({
-    inputDir: workspacePaths.hepanInput,
+    inputDir: workspacePaths.input && scanDir
+      ? path.join(workspacePaths.input, scanDir)
+      : undefined,
     tempDir: workspacePaths.tmp
       ? path.join(workspacePaths.tmp, "hepan")
       : undefined,

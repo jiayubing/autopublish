@@ -9,10 +9,10 @@ const {
 test("Hepan account inspection uses the configured settings test result", async () => {
   let calls = 0;
   const adapters = createPlatformAccountRuntimeAdapters({
-    loadedPlatforms: [
+    accountInspectionPorts: [
       {
-        definition: { id: "hepan" },
-        accountInspection: { prepare: async () => undefined, inspect: async () => ({ verified: false }) },
+        id: "hepan",
+        port: { prepare: async () => undefined, inspect: async () => ({ verified: false }) },
       },
     ],
     platformSettingsService: {
@@ -38,7 +38,7 @@ test("Hepan account inspection uses the configured settings test result", async 
 
 test("Hepan account inspection fails closed for an unsafe settings result", async () => {
   const adapters = createPlatformAccountRuntimeAdapters({
-    loadedPlatforms: [{ definition: { id: "hepan" }, accountInspection: { prepare: async () => undefined, inspect: async () => ({ verified: false }) } }],
+    accountInspectionPorts: [{ id: "hepan", port: { prepare: async () => undefined, inspect: async () => ({ verified: false }) } }],
     platformSettingsService: {
       test: async () => ({
         ok: true,

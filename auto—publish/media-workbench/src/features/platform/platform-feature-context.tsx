@@ -2,7 +2,6 @@ import { createContext, useContext, useRef, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
 import {
   checkPlatformLogin,
-  getPlatformDisplayName,
   getPlatformQueue,
   openPlatformLogin,
 } from '../../bridge/platform';
@@ -30,7 +29,6 @@ const PlatformFeatureContext = createContext<PlatformFeature | null>(null);
 
 function createProductionPlatformFeature(): PlatformFeature {
   return createPlatformFeature({
-    platformDisplayName: getPlatformDisplayName,
     loadQueue: (_reason: string) => getPlatformQueue(),
     previewResidue: previewTrashedArticleQueueResidue,
     cleanupResidue: cleanupTrashedArticleQueueResidue,

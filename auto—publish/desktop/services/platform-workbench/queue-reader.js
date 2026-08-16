@@ -299,7 +299,7 @@ function createPlatformQueueReader(options) {
 
   function scanQueue() {
     return platforms
-      .filter((platform) => platform.id !== "media")
+      .filter((platform) => platform.publicationTargetKind === "platform")
       .map((platform) => {
         const platformId = platform.id;
         const scanDir = platform.scanDir || platform.id;

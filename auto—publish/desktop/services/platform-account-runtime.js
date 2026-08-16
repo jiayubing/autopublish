@@ -2,14 +2,14 @@
 
 function createPlatformAccountRuntimeAdapters(options) {
   const value = options || {};
-  const loadedPlatforms = Array.isArray(value.loadedPlatforms)
-    ? value.loadedPlatforms
+  const inspectionPorts = Array.isArray(value.accountInspectionPorts)
+    ? value.accountInspectionPorts
     : [];
   const settingsService = value.platformSettingsService;
   const adapters = {};
-  loadedPlatforms.forEach((platform) => {
-    if (platform && platform.definition && platform.accountInspection)
-      adapters[platform.definition.id] = platform.accountInspection;
+  inspectionPorts.forEach((platform) => {
+    if (platform && typeof platform.id === "string" && platform.port)
+      adapters[platform.id] = platform.port;
   });
 
   const hepan = adapters.hepan;

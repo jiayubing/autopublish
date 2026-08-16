@@ -3,7 +3,9 @@ const definition = require("./definition");
 const { createPlatformAdapter } = require("./adapter");
 
 function createPlatform(runtimeContext) {
-  const adapter = createPlatformAdapter(runtimeContext);
+  const adapter = createPlatformAdapter(
+    Object.assign({}, runtimeContext || {}, { scanDir: definition.scanDir }),
+  );
   if (runtimeContext && runtimeContext.hepanRuntime) adapter.setRuntimeConfig(runtimeContext.hepanRuntime);
   return {
     regularSubmission: { preparePlatformSubmission: adapter.preparePlatformSubmission },

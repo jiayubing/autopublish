@@ -7,6 +7,34 @@ function configPath() {
   return path.resolve(__dirname, "../../config/platforms.json");
 }
 
+function readEnabledPlatformIds(options) {
+  const values = options || {};
+  let source;
+  if (Array.isArray(values.enabledIds)) source = values.enabledIds;
+  else {
+    const configured = JSON.parse(
+      fs.readFileSync(values.configPath || configPath(), "utf8"),
+    );
+    if (
+      !configured ||
+      typeof configured !== "object" ||
+      Array.isArray(configured) ||
+      Object.keys(configured).length !== 1 ||
+      !Object.hasOwn(configured, "enabled")
+    )
+      throw platformError("PLATFORM_MODULE_LOAD_FAILED");
+    source = configured.enabled;
+  }
+  if (
+    !Array.isArray(source) ||
+    source.length === 0 ||
+    source.some((id) => typeof id !== "string" || !/^[a-z][a-z0-9-]{0,63}$/.test(id)) ||
+    new Set(source).size !== source.length
+  )
+    throw platformError("PLATFORM_MODULE_LOAD_FAILED");
+  return Object.freeze(source.slice());
+}
+
 const PORT_SPECS = Object.freeze({
   regularSubmission: Object.freeze(["preparePlatformSubmission"]),
   legacyQueue: Object.freeze(["scan", "parse", "publish", "close"]),
@@ -91,14 +119,33 @@ function normalizePlatformModule(moduleValue, definition, runtimeContext) {
   return Object.freeze(loaded);
 }
 
-function builtinPlatformModules() {
-  return ["lieju", "toutiao", "hepan", "media"].map((id) => require(path.resolve(__dirname, "../platforms", id, "platform")));
+function builtinPlatformModules(enabledIds) {
+  return enabledIds.map((id) => require(path.resolve(__dirname, "../platforms", id, "platform")));
+}
+
+function loadEnabledPlatformDefinitions(options) {
+  const enabledIds = readEnabledPlatformIds(options);
+  const definitions = [];
+  enabledIds.forEach(function (platformId) {
+    try {
+      definitions.push(
+        parsePlatformDefinitionV1(
+          require(path.resolve(__dirname, "../platforms", platformId, "definition")),
+        ),
+      );
+    } catch (error) {
+      safeDiagnostic(error, platformId, "definition-load");
+    }
+  });
+  if (definitions.length === 0) throw platformError("PLATFORM_MODULE_LOAD_FAILED");
+  return Object.freeze(definitions);
 }
 
 function loadPlatformModules(options) {
   var opts = options || {};
-  const modules = Array.isArray(opts.platformModules) ? opts.platformModules.slice() : builtinPlatformModules();
-  const enabled = new Set(Array.isArray(opts.enabledIds) ? opts.enabledIds : (JSON.parse(fs.readFileSync(configPath(), "utf8")).enabled || []));
+  const enabledIds = readEnabledPlatformIds(opts);
+  const modules = Array.isArray(opts.platformModules) ? opts.platformModules.slice() : builtinPlatformModules(enabledIds);
+  const enabled = new Set(enabledIds);
   const selected = Array.isArray(opts.platformIds) ? new Set(opts.platformIds) : null;
   const definitions = [];
   const seen = new Set();
@@ -135,4 +182,11 @@ function loadPlatformModules(options) {
 
 function loadPlatforms(options) { return loadPlatformModules(options); }
 
-module.exports = { loadPlatforms, loadPlatformModules, normalizePlatformModule, imagePublishingCapability };
+module.exports = {
+  loadPlatforms,
+  loadPlatformModules,
+  loadEnabledPlatformDefinitions,
+  readEnabledPlatformIds,
+  normalizePlatformModule,
+  imagePublishingCapability,
+};

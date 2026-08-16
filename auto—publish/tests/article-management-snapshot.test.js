@@ -182,12 +182,8 @@ describe("article management snapshot", function () {
           throw new Error("generic platform reader must not be used");
         },
       },
-      loadedPlatforms: [
-        {
-          definition: { id: "toutiao", publicationTargetKind: "platform", capabilities: { imagePublishing: false } },
-          submissionDirectoryEntry: { id: "toutiao", displayName: "头条", publicationTargetKind: "platform", scanDir: "toutiao", imagePublishing: false },
-          regularSubmission: {},
-        },
+      directoryEntries: [
+        { id: "toutiao", displayName: "头条", publicationTargetKind: "platform", scanDir: "toutiao", imagePublishing: false },
       ],
       operationalStore: {
         listArticleLifecycleFacts: () => ({

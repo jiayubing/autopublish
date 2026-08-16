@@ -13,6 +13,24 @@ describe("Electron security boundary", function() {
     assert.equal(isAllowedRendererNavigation(new URL("file://" + entry.replace(/\\/g, "/")).href, entry), true);
   });
 
+  it("builds the external-link allowlist only from application and code-owned platform definitions", function () {
+    const { createExternalLinkPolicy } = require("../desktop/security/external-links");
+    const policy = createExternalLinkPolicy({
+      definitions: [
+        { externalHosts: ["platform.example"] },
+        { externalHosts: [] },
+      ],
+    });
+    assert.deepEqual(policy.hosts, ["mp.weixin.qq.com", "platform.example"]);
+    assert.equal(policy.isAllowed("https://platform.example/article/1"), true);
+    assert.equal(policy.isAllowed("http://mp.weixin.qq.com/resource"), true);
+    assert.equal(policy.isAllowed("https://sub.platform.example/article/1"), false);
+    assert.equal(policy.isAllowed("https://platform.example:8443/article/1"), false);
+    assert.equal(policy.isAllowed("https://user@platform.example/article/1"), false);
+    assert.equal(policy.isAllowed("file:///platform.example/article/1"), false);
+    assert.equal(policy.isAllowed("https://workspace.example/article/1"), false);
+  });
+
   it("uses a sandboxed, isolated renderer and prevents renderer-created windows", function() {
     const main = read("desktop/main.js");
     assert.match(main, /sandbox:\s*true/);

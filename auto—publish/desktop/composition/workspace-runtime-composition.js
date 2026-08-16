@@ -164,9 +164,51 @@ async function createWorkspaceRuntimeComposition(deps) {
       }),
     });
     const loadedPlatforms = loadPlatforms({ runtimeContext: platformRuntimeContext });
+    const directoryEntries = Object.freeze(
+      loadedPlatforms.map(function (platform) {
+        return platform.submissionDirectoryEntry;
+      }),
+    );
+    const regularDirectoryEntries = Object.freeze(
+      loadedPlatforms
+        .filter(function (platform) { return Boolean(platform.regularSubmission); })
+        .map(function (platform) { return platform.submissionDirectoryEntry; }),
+    );
+    const regularSubmissionPorts = Object.freeze(
+      loadedPlatforms
+        .filter(function (platform) { return Boolean(platform.regularSubmission); })
+        .map(function (platform) {
+          return Object.freeze({
+            id: platform.definition.id,
+            preparePlatformSubmission:
+              platform.regularSubmission.preparePlatformSubmission,
+          });
+        }),
+    );
+    const accountInspectionPorts = Object.freeze(
+      loadedPlatforms
+        .filter(function (platform) { return Boolean(platform.accountInspection); })
+        .map(function (platform) {
+          return Object.freeze({ id: platform.definition.id, port: platform.accountInspection });
+        }),
+    );
+    const loginSessionPorts = Object.freeze(
+      loadedPlatforms
+        .filter(function (platform) { return Boolean(platform.loginSession); })
+        .map(function (platform) {
+          return Object.freeze({ id: platform.definition.id, port: platform.loginSession });
+        }),
+    );
+    const legacyQueuePorts = Object.freeze(
+      loadedPlatforms
+        .filter(function (platform) { return Boolean(platform.legacyQueue); })
+        .map(function (platform) {
+          return Object.freeze({ id: platform.definition.id, port: platform.legacyQueue });
+        }),
+    );
     const submissionPlatformDirectory =
       require("../services/submission-target-catalog").createSubmissionTargetCatalog({
-        platforms: loadedPlatforms,
+        directoryEntries: regularDirectoryEntries,
       });
     const operationalStoreTransitionPorts = {};
     let contentStore = null;
@@ -241,7 +283,7 @@ async function createWorkspaceRuntimeComposition(deps) {
               displayName: client.name || clientId,
             };
           },
-          platforms: loadedPlatforms,
+          platforms: regularDirectoryEntries,
         },
       );
     const createPlatformSettingsService =
@@ -276,6 +318,7 @@ async function createWorkspaceRuntimeComposition(deps) {
         invalidateData: invalidation.invalidate,
         workspaceRuntimeId: invalidation.getWorkspaceRuntimeId(),
         platformSettingsService,
+        loginSessionPorts,
       }),
     );
     let accountInspector = null;
@@ -422,9 +465,7 @@ async function createWorkspaceRuntimeComposition(deps) {
               {
                 workspaceRoot,
                 paths: injectedPaths,
-                platforms: loadedPlatforms.map(function (platform) {
-                  return { id: platform.definition.id, scanDir: platform.definition.scanDir };
-                }),
+                platforms: directoryEntries,
                 operationalStore,
                 autoTrashArticle,
               },
@@ -438,7 +479,7 @@ async function createWorkspaceRuntimeComposition(deps) {
         {
           adapters:
             require("../services/platform-account-runtime").createPlatformAccountRuntimeAdapters(
-              { loadedPlatforms, platformSettingsService },
+              { accountInspectionPorts, platformSettingsService },
             ),
           operationalStore: publicationRecoveryComposition.operationalStore,
           bindingStore:
@@ -487,7 +528,7 @@ async function createWorkspaceRuntimeComposition(deps) {
           paths: injectedPaths,
           contentStore,
           operationalStore: publicationRecoveryComposition.operationalStore,
-          platforms: loadedPlatforms,
+          directoryEntries: regularDirectoryEntries,
           onDataInvalidated: invalidation.invalidate,
         },
       ),
@@ -567,17 +608,18 @@ async function createWorkspaceRuntimeComposition(deps) {
       ),
     );
     const adapters = {};
-    loadedPlatforms.forEach(function (platform) {
-      if (platform.legacyQueue) adapters[platform.definition.id] = platform.legacyQueue;
+    legacyQueuePorts.forEach(function (platform) {
+      adapters[platform.id] = platform.port;
     });
-    const regularPlatformAdapters = loadedPlatforms.map(function (platform) {
-      if (platform.definition.id !== "hepan") return platform;
+    const effectiveRegularSubmissionPorts = regularSubmissionPorts.map(function (platform) {
+      if (platform.id !== "hepan") return platform;
       const hepan = require("../services/hepan-regular-preparation-adapter").createHepanRegularPreparationAdapter(
         { platformSettingsService, paths: injectedPaths },
       );
-      return Object.freeze(Object.assign({}, platform, {
-        regularSubmission: Object.freeze({ preparePlatformSubmission: hepan.preparePlatformSubmission }),
-      }));
+      return Object.freeze({
+        id: platform.id,
+        preparePlatformSubmission: hepan.preparePlatformSubmission,
+      });
     });
     const regularImagePlanService =
       require("../services/regular-image-plan-service").createRegularImagePlanService(
@@ -586,7 +628,7 @@ async function createWorkspaceRuntimeComposition(deps) {
     const platformSubmissionExecutor =
       require("../services/regular-platform-preparation-port").createRegularPlatformPreparationPort(
         {
-          adapters: regularPlatformAdapters,
+          regularSubmissionPorts: effectiveRegularSubmissionPorts,
           accountInspector,
           regularImagePlanService,
           resolveClientPublicationProfile: function(input) {
@@ -634,9 +676,7 @@ async function createWorkspaceRuntimeComposition(deps) {
           rootDir: workspaceRoot,
           paths: injectedPaths,
           contentStore,
-          platforms: loadedPlatforms.map(function (platform) {
-            return platform.submissionDirectoryEntry;
-          }),
+          platforms: directoryEntries,
           adapters,
         },
       ),
@@ -644,7 +684,7 @@ async function createWorkspaceRuntimeComposition(deps) {
     const platformSessionService =
       require("../services/platform-session-service").createPlatformSessionService(
         {
-          adapters: Object.fromEntries(loadedPlatforms.filter(function (platform) { return platform.loginSession; }).map(function (platform) { return [platform.definition.id, platform.loginSession]; })),
+          adapters: Object.fromEntries(loginSessionPorts.map(function (platform) { return [platform.id, platform.port]; })),
           assertPlaywrightAvailable: function () {
             return require("../services/playwright-capability").assertPlaywrightAvailable(
               runtime.diagnosticsService,
@@ -655,7 +695,8 @@ async function createWorkspaceRuntimeComposition(deps) {
     const platformApplication =
       require("../services/platform-workbench-application").createPlatformWorkbenchApplication(
         {
-          loadedPlatforms,
+          directoryEntries,
+          loginSessionPorts,
           platformSessionService,
           platformWorkbenchService,
           taskService,
@@ -820,7 +861,7 @@ async function createWorkspaceRuntimeComposition(deps) {
       pause: mediaApplication.pausePaidMediaBatch,
       cancelRemaining: mediaApplication.cancelRemainingPaidMediaBatchItems,
     }),
-      loadedPlatforms,
+      directoryEntries,
       submissionPlatformDirectory,
       platformSessionService,
       regularPlatformOutcomeService,

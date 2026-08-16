@@ -7,9 +7,41 @@ const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 const asar = require("@electron/asar");
 
+function parseEnabledPlatformIds(configured) {
+  if (
+    !configured ||
+    typeof configured !== "object" ||
+    Array.isArray(configured) ||
+    Object.keys(configured).length !== 1 ||
+    !Object.hasOwn(configured, "enabled") ||
+    !Array.isArray(configured.enabled) ||
+    configured.enabled.length === 0 ||
+    configured.enabled.some((id) => typeof id !== "string" || !/^[a-z][a-z0-9-]{0,63}$/.test(id)) ||
+    new Set(configured.enabled).size !== configured.enabled.length
+  )
+    throw new Error("Enabled platform definition inventory is invalid");
+  return configured.enabled.slice();
+}
+
+function sourceEnabledPlatformIds() {
+  return parseEnabledPlatformIds(
+    JSON.parse(
+      fs.readFileSync(path.resolve(__dirname, "../config/platforms.json"), "utf8"),
+    ),
+  );
+}
+
+function enabledPlatformArchiveFiles(enabledIds) {
+  return enabledIds.flatMap((id) => [
+    `src/platforms/${id}/definition.js`,
+    `src/platforms/${id}/platform.js`,
+  ]);
+}
+
 const ARCHIVE_FILES = [
   "package.json",
   "desktop/main.js",
+  "desktop/security/external-links.js",
   "desktop/preload.js",
   "desktop/device-identity-store.js",
   "desktop/ipc/auth-ipc.js",
@@ -46,6 +78,8 @@ const ARCHIVE_FILES = [
   "src/diagnostics/diagnostic-directory-policy.js",
   "src/diagnostics/diagnostic-projection.js",
   "src/core/docx-text-extractor.js",
+  "src/core/platform-definition.js",
+  "src/core/platforms.js",
   "src/content/client-material-store.js",
   "src/content/generation-batch-store.js",
   "src/content/generation-batch-runner.js",
@@ -237,7 +271,18 @@ function verifyPackage(resourcesDir) {
   }
 
   const archiveEntries = new Set(normalizedEntries(archive));
-  ARCHIVE_FILES.forEach((file) => {
+  let enabledArchiveFiles = [];
+  try {
+    const packagedConfig = JSON.parse(
+      asar.extractFile(archive, "config/platforms.json").toString("utf8"),
+    );
+    enabledArchiveFiles = enabledPlatformArchiveFiles(
+      parseEnabledPlatformIds(packagedConfig),
+    );
+  } catch (_) {
+    failures.push("ENABLED_PLATFORM_INVENTORY_INVALID: config/platforms.json");
+  }
+  ARCHIVE_FILES.concat(enabledArchiveFiles).forEach((file) => {
     if (!archiveEntries.has(file))
       failures.push("ARCHIVE_FILE_MISSING: " + file);
   });
@@ -380,12 +425,7 @@ function verifyRuntimeSmoke(appDir, resourcesPath) {
     const workspacePaths = paths.ensureWorkspaceDirectories(
       paths.createWorkspacePaths(workspace),
     );
-    [
-      workspacePaths.mediaInput,
-      workspacePaths.liejuInput,
-      workspacePaths.toutiaoInput,
-      workspacePaths.hepanInput,
-    ].forEach((dir) => {
+    [workspacePaths.input, workspacePaths.mediaInput].forEach((dir) => {
       if (!fs.existsSync(dir))
         throw new Error("Runtime workspace initialization failed");
     });
@@ -462,6 +502,11 @@ if (require.main === module) {
 }
 
 module.exports = {
+  requiredArchiveFiles: function () {
+    return ARCHIVE_FILES.concat(
+      enabledPlatformArchiveFiles(sourceEnabledPlatformIds()),
+    );
+  },
   verifyPackage,
   verifyHepanSmoke,
   verifyPackagedPlaywright,

@@ -43,10 +43,10 @@ describe("platform-workbench-service", function () {
     service = createPlatformWorkbenchService({
       rootDir: root,
       platforms: [
-        { id: "lieju", scanDir: "lieju" },
-        { id: "toutiao", scanDir: "toutiao" },
-        { id: "hepan", scanDir: "hepan" },
-        { id: "media", scanDir: "media" },
+        { id: "lieju", scanDir: "lieju", publicationTargetKind: "platform" },
+        { id: "toutiao", scanDir: "toutiao", publicationTargetKind: "platform" },
+        { id: "hepan", scanDir: "hepan", publicationTargetKind: "platform" },
+        { id: "media", scanDir: "media", publicationTargetKind: "resource" },
       ],
     });
   });
@@ -217,7 +217,7 @@ describe("platform-workbench-service", function () {
     const portableService = createPlatformWorkbenchService({
       rootDir: root,
       paths: { input: portableInput },
-      platforms: [{ id: "lieju", scanDir: "lieju" }],
+      platforms: [{ id: "lieju", scanDir: "lieju", publicationTargetKind: "platform" }],
     });
 
     const queue = portableService.scanQueue();
@@ -270,7 +270,7 @@ describe("platform-workbench-service", function () {
   it("prepares an account-bound workflow command without writing publication state", async function () {
     const commandService = createPlatformWorkbenchService({
       rootDir: root,
-      platforms: [{ id: "lieju", scanDir: "lieju" }],
+      platforms: [{ id: "lieju", scanDir: "lieju", publicationTargetKind: "platform" }],
       adapters: {
         lieju: {
           id: "lieju",
@@ -299,7 +299,7 @@ describe("platform-workbench-service", function () {
   it("keeps source-file body when an adapter omits its body field", async function () {
     const commandService = createPlatformWorkbenchService({
       rootDir: root,
-      platforms: [{ id: "lieju", scanDir: "lieju" }],
+      platforms: [{ id: "lieju", scanDir: "lieju", publicationTargetKind: "platform" }],
       adapters: {
         lieju: {
           id: "lieju",
@@ -337,7 +337,7 @@ describe("platform-workbench-service", function () {
     fs.writeFileSync(sidecarPath, JSON.stringify(sidecar), "utf-8");
     const commandService = createPlatformWorkbenchService({
       rootDir: root,
-      platforms: [{ id: "lieju", scanDir: "lieju" }],
+      platforms: [{ id: "lieju", scanDir: "lieju", publicationTargetKind: "platform" }],
       adapters: {
         lieju: {
           id: "lieju",

@@ -7,7 +7,6 @@ const {
 } = require("../../src/content/article-ref");
 const { deriveArticleLifecycle } = require("../../src/content/article-lifecycle-projection");
 const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
-const { imagePublishingCapability } = require("../../src/core/platforms");
 
 function fail(code, message) {
   const error = new Error(message || code);
@@ -84,8 +83,7 @@ function createRegularQueueApplication(options) {
 
   function platformList() {
     return (configuredPlatforms || []).filter(function (platform) {
-      return platform && platform.regularSubmission &&
-        platform.definition.publicationTargetKind === "platform";
+      return platform && platform.publicationTargetKind === "platform";
     });
   }
 
@@ -102,7 +100,7 @@ function createRegularQueueApplication(options) {
     if (typeof request.accountProfileId !== "string" || !request.accountProfileId.trim())
       throw fail("ACCOUNT_PROFILE_REQUIRED");
     const platformId = request.platformId.trim();
-    const platform = platformList().find(function (candidate) { return candidate.definition.id === platformId; });
+    const platform = platformList().find(function (candidate) { return candidate.id === platformId; });
     if (!platform) throw fail("REGULAR_QUEUE_PLATFORM_UNSUPPORTED");
     let target;
     try {
@@ -193,9 +191,9 @@ function createRegularQueueApplication(options) {
 
   function groupImagePublishingSupported(platformId) {
     const platform = platformList().find(function (candidate) {
-      return candidate.definition.id === platformId;
+      return candidate.id === platformId;
     });
-    return imagePublishingCapability(platform).supported;
+    return Boolean(platform && platform.imagePublishing);
   }
 
   function factsFor(refs) {

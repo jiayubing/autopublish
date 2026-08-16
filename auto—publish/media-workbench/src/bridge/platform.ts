@@ -21,29 +21,24 @@ type PlatformApi = {
 
 const platformApi = () => requirePlatformsApi<PlatformApi>();
 
-const PLATFORM_DISPLAY_NAMES: Record<string, string> = {
-  lieju: "列举网",
-  toutiao: "头条",
-  hepan: "蓝色河畔",
-};
-
-export function getPlatformDisplayName(id: string): string {
-  return PLATFORM_DISPLAY_NAMES[id] || id;
-}
 export async function getPlatformQueue(): Promise<PlatformQueueData> {
   const result = await requireBridgeMethod(platformApi().getQueue)();
   if (!result.ok) throw ipcError(result.error, "getPlatformQueue failed");
   if (!result.data) throw ipcError(undefined, "getPlatformQueue failed");
   const data = result.data as {
     revision?: number;
-    platforms: Array<{ id: string; loginAvailable?: boolean }>;
+    platforms: Array<{
+      id: string;
+      displayName: string;
+      loginAvailable?: boolean;
+    }>;
     queue: PlatformArticle[];
   };
   return {
     revision: typeof data.revision === "number" ? data.revision : undefined,
     platforms: data.platforms.map((platform) => ({
       id: platform.id,
-      displayName: getPlatformDisplayName(platform.id),
+      displayName: platform.displayName,
       loginAvailable: platform.loginAvailable,
     })),
     queue: data.queue,

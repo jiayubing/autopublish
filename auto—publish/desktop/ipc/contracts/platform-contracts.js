@@ -154,7 +154,11 @@ const platformContracts = [
     success: exactObject({
       revision: optionalField(integerField({ min: 0 })),
       platforms: arrayField(
-        exactObject({ id: identifier, loginAvailable: "boolean" }),
+        exactObject({
+          id: identifier,
+          displayName: safeText(160, 1),
+          loginAvailable: "boolean",
+        }),
         { max: 32 },
       ),
       queue: arrayField(

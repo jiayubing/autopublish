@@ -112,7 +112,7 @@ test("authenticated platform and account registrars return path-free typed proje
   );
   registerPlatformIpc({
     ipcMain,
-    loadedPlatforms: [{ definition: { id: "toutiao", publicationTargetKind: "platform" } }],
+    directoryEntries: [{ id: "toutiao", displayName: "头条", publicationTargetKind: "platform" }],
     platformSessionService: { supports: () => true },
     platformWorkbenchService: {
       scanQueue: () => [
@@ -157,7 +157,7 @@ test("authenticated platform and account registrars return path-free typed proje
   );
   assert.equal(queue.ok, true, JSON.stringify(queue));
   assert.deepEqual(queue.data.platforms, [
-    { id: "toutiao", loginAvailable: true },
+    { id: "toutiao", displayName: "头条", loginAvailable: true },
   ]);
   assert.equal(queue.data.queue[0].archiveErrorCode, "ARCHIVE_FAILED");
   assert.equal("filePath" in queue.data.queue[0], false);

@@ -1,41 +1,44 @@
 "use strict";
 
-const {
-  loadPlatforms,
-  imagePublishingCapability,
-} = require("../../src/core/platforms");
+const { loadPlatforms } = require("../../src/core/platforms");
 
-function queueTarget(platform) {
-  const entry = platform.submissionDirectoryEntry;
+function queueTarget(entry) {
   return {
     id: entry.id,
     displayName: entry.displayName,
     scanDir: entry.scanDir,
-    contentQueueImport: Boolean(platform.regularSubmission),
+    contentQueueImport: true,
     publicationTarget: { kind: entry.publicationTargetKind },
-    imagePublishingCapability: imagePublishingCapability(platform),
+    imagePublishingCapability: Object.freeze({ supported: entry.imagePublishing === true }),
   };
 }
 
 function createSubmissionTargetCatalog(options) {
   const configured =
-    options && Array.isArray(options.platforms) ? options.platforms : null;
+    options && Array.isArray(options.directoryEntries)
+      ? options.directoryEntries
+      : null;
 
   function all() {
-    return (configured || loadPlatforms()).slice();
+    return (
+      configured ||
+      loadPlatforms()
+        .filter((platform) => Boolean(platform.regularSubmission))
+        .map((platform) => platform.submissionDirectoryEntry)
+    ).slice();
   }
 
   function queueTargets() {
     return all()
       .filter(
         (platform) =>
-          platform.submissionDirectoryEntry.publicationTargetKind === "platform",
+          platform.publicationTargetKind === "platform",
       )
       .map(queueTarget);
   }
 
   function find(id) {
-    return all().find((platform) => platform && platform.definition.id === id) || null;
+    return all().find((platform) => platform && platform.id === id) || null;
   }
 
   function list() {

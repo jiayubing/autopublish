@@ -61,9 +61,7 @@ test("production platform IPC omits the retired direct-submit command", () => {
 
 test("browser platform login commands open and persist a verified session", async () => {
   const calls = [];
-  const adapter = {
-    definition: { id: "toutiao", publicationTargetKind: "platform" },
-    loginSession: {
+  const loginSession = {
       open: async () => calls.push("open"),
       check: async () => {
         calls.push("check");
@@ -71,9 +69,11 @@ test("browser platform login commands open and persist a verified session", asyn
       },
       save: async () => calls.push("save"),
       close: async () => undefined,
-    },
   };
-  const value = register({}, { loadedPlatforms: [adapter] });
+  const value = register({}, {
+    directoryEntries: [{ id: "toutiao", displayName: "头条", publicationTargetKind: "platform" }],
+    loginSessionPorts: [{ id: "toutiao", port: loginSession }],
+  });
 
   const opened = await value.handlers.get("platforms:open-login")(null, {
     platformId: "toutiao",
@@ -95,7 +95,7 @@ test("browser platform login commands open and persist a verified session", asyn
 
 test("platform login commands fail closed for platforms without browser login", async () => {
   const value = register({}, {
-    loadedPlatforms: [{ definition: { id: "hepan", publicationTargetKind: "platform" } }],
+    directoryEntries: [{ id: "hepan", displayName: "蓝色河畔", publicationTargetKind: "platform" }],
   });
 
   const result = await value.handlers.get("platforms:open-login")(null, {

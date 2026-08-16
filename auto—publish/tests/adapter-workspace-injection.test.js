@@ -32,19 +32,46 @@ it("Hepan workspace config overrides inherited global configuration", function()
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
+it("Hepan adapter resolves workspace input from the definition-owned scan directory", function() {
+  const { createPlatformAdapter } = require("../src/platforms/hepan/adapter");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hepan-scan-dir-"));
+  try {
+    const input = path.join(root, "input");
+    const configured = path.join(input, "definition-owned");
+    const legacy = path.join(input, "hepan");
+    fs.mkdirSync(configured, { recursive: true });
+    fs.mkdirSync(legacy, { recursive: true });
+    fs.writeFileSync(path.join(configured, "configured.txt"), "configured");
+    fs.writeFileSync(path.join(legacy, "legacy.txt"), "legacy");
+    const adapter = createPlatformAdapter({
+      workspacePaths: { input },
+      scanDir: "definition-owned",
+    });
+    assert.deepStrictEqual(
+      adapter.scanArticles().map((item) => item.filename),
+      ["configured.txt"],
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 it("platform loader constructs adapters from explicit workspace and browser runtime dependencies", function() {
   const one = fs.mkdtempSync(path.join(os.tmpdir(), "platform-runtime-one-"));
   const two = fs.mkdtempSync(path.join(os.tmpdir(), "platform-runtime-two-"));
   try {
     const onePaths = createWorkspacePaths(one);
     const twoPaths = createWorkspacePaths(two);
-    fs.mkdirSync(onePaths.hepanInput, { recursive: true });
-    fs.mkdirSync(onePaths.toutiaoInput, { recursive: true });
-    fs.mkdirSync(twoPaths.toutiaoInput, { recursive: true });
+    const oneHepanInput = path.join(onePaths.input, "hepan");
+    const oneToutiaoInput = path.join(onePaths.input, "toutiao");
+    const twoToutiaoInput = path.join(twoPaths.input, "toutiao");
+    fs.mkdirSync(oneHepanInput, { recursive: true });
+    fs.mkdirSync(oneToutiaoInput, { recursive: true });
+    fs.mkdirSync(twoToutiaoInput, { recursive: true });
     fs.mkdirSync(twoPaths.mediaInput, { recursive: true });
-    fs.writeFileSync(path.join(onePaths.hepanInput, "one.txt"), "one");
-    fs.writeFileSync(path.join(onePaths.toutiaoInput, "one.md"), "# one");
-    fs.writeFileSync(path.join(twoPaths.toutiaoInput, "two.md"), "# two");
+    fs.writeFileSync(path.join(oneHepanInput, "one.txt"), "one");
+    fs.writeFileSync(path.join(oneToutiaoInput, "one.md"), "# one");
+    fs.writeFileSync(path.join(twoToutiaoInput, "two.md"), "# two");
     fs.writeFileSync(path.join(twoPaths.mediaInput, "two.txt"), "two");
 
     const oneContext = createPlatformRuntimeContext({

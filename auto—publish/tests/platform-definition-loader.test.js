@@ -1,12 +1,20 @@
 "use strict";
 
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
 const test = require("node:test");
 const {
   parsePlatformDefinitionV1,
   parsePlatformDefinitionsV1,
 } = require("../src/core/platform-definition");
-const { loadPlatformModules, loadPlatforms } = require("../src/core/platforms");
+const {
+  loadEnabledPlatformDefinitions,
+  loadPlatformModules,
+  loadPlatforms,
+  readEnabledPlatformIds,
+} = require("../src/core/platforms");
 const { setDiagnosticReporter } = require("../src/diagnostics/diagnostic-producer");
 
 function definition(id, overrides) {
@@ -133,6 +141,25 @@ test("built-in projections and enabled filtering match the frozen four-platform 
   });
   assert.deepEqual(loadPlatforms({ platformIds: ["lieju"] }).map((platform) => platform.definition.id), ["lieju"]);
   assert.equal(Array.isArray(loadPlatforms({ platformIds: ["toutiao"] })[0].legacyQueue.scan()), true);
+});
+
+test("enabled code-owned definitions drive runtime discovery and required package entries", () => {
+  const ids = readEnabledPlatformIds();
+  const definitions = loadEnabledPlatformDefinitions();
+  assert.deepEqual(definitions.map((item) => item.id), ids);
+  ids.forEach(function (id) {
+    assert.equal(fs.existsSync(path.join(__dirname, "..", "src", "platforms", id, "definition.js")), true);
+    assert.equal(fs.existsSync(path.join(__dirname, "..", "src", "platforms", id, "platform.js")), true);
+  });
+
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "platform-config-"));
+  try {
+    const configPath = path.join(root, "platforms.json");
+    fs.writeFileSync(configPath, JSON.stringify({ enabled: ["../unsafe"] }), "utf8");
+    assert.throws(() => readEnabledPlatformIds({ configPath }), { code: "PLATFORM_MODULE_LOAD_FAILED" });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("disabled modules are packaged as code but never executed", () => {
