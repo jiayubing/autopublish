@@ -112,15 +112,9 @@ function contentManagementFixture() {
     revision: 1,
     articles: [],
     trash: [],
-    submissionBatches: [],
-    cancellationPlans: [],
     publicationRecords: [],
-    attention: { revision: 1, items: [], counts: { total: 0, actionable: 0 } },
     submissionPlatforms: [],
     workflowItems: [],
-    publicationSummaryItems: [],
-    attentionCountItems: [],
-    orderSummaryItems: [],
   };
 }
 

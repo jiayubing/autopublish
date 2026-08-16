@@ -54,10 +54,7 @@ test('article attention actions produce visible publication/detail results', asy
           revision: 1,
           articles: [article],
           trash: [],
-          submissionBatches: [],
-          cancellationPlans: [],
           publicationRecords: [publication],
-          attention: { revision: 1, items: [attention, paidResolution, repair], counts: { total: 3, actionable: 3 } },
           submissionPlatforms: [{ id: 'hepan', displayName: '蓝色河畔', contentQueueImport: true }],
           workflowItems: [{
             articleId: article.id,
@@ -73,7 +70,6 @@ test('article attention actions produce visible publication/detail results', asy
               operations: {
                 edit: { allowed: true, reasonCodes: [], safeMetadata: {} },
                 submit: { allowed: true, reasonCodes: [], safeMetadata: {} },
-                retarget: { allowed: false, reasonCodes: ['ARTICLE_RETARGET_NO_TARGET'], safeMetadata: {} },
                 trash: { allowed: true, reasonCodes: [], safeMetadata: {} },
                 restore: { allowed: false, reasonCodes: ['ARTICLE_NOT_IN_TRASH'], safeMetadata: {} },
                 purge: { allowed: false, reasonCodes: ['ARTICLE_NOT_IN_TRASH'], safeMetadata: {} },
@@ -84,9 +80,6 @@ test('article attention actions produce visible publication/detail results', asy
               targetFacts: [],
             },
           }],
-          publicationSummaryItems: [{ articleId: article.id, summary: { status: 'failed', label: '失败', records: 1, published: 0, uncertain: false } }],
-          attentionCountItems: [{ articleId: article.id, count: 2 }],
-          orderSummaryItems: [{ articleId: article.id, summary: { status: 'none', label: '无订单', records: 0, active: 0, published: 0, attention: 0 } }],
         }),
         getSubmissionCenterSnapshot: () => ok({
           schemaVersion: 1,

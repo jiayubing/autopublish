@@ -344,15 +344,15 @@ C4 不是默认因文件较长而强制拆分。C3 完成后先运行 gate：
 ## 11. Closure record（实施时填写）
 
 - **Execution status:** `PARTIAL`
-- **Current gate:** `C1 COMPLETE / C2 READY`
+- **Current gate:** `C2 COMPLETE / C3 READY`
 - **Base HEAD:** `dff3d1b898570c1784c90aef065f9cd64f7aef68`
-- **Final source state (`HEAD + diff/status`):** C1 基于 `dff3d1b898570c1784c90aef065f9cd64f7aef68`（`codex/jiagou`）实施；用户已明确授权提交，C1 closure commit 在交接时成为当前 HEAD，详见 §13.5。
-- **Implemented scope:** C0 合同冻结完成；C1 已实现 client-scoped、revisioned、bounded-retry 的投稿中心只读模型、exact typed IPC/preload/bridge、唯一 Renderer submission-center feature、同 snapshot badge/regular/paid/attention 消费与 workspace invalidation；既有 ordinary/paid/attention command owner 未迁移。
-- **Commands and results:** C0 evidence 见 §12.8；C1 最终定向测试、115-capability matrix、三项 typecheck 与 Renderer build 均 PASS，见 §13.4。
-- **Audit findings and disposition:** C0、C1 Primary Audit 与各自 bounded re-audit 均 PASS；C1 的四项 blocking P2 已完成根因修复，另收敛一项直接错误映射，详见 §13.6。
-- **Unrun acceptance and reasons:** 未运行完整 `npm test`、production package smoke、真实账号/投稿/付费/订单操作；前两项留给后续 combined gate，真实外部操作未获授权且 C1 snapshot 要求 0 external transport。C2～C5 尚未开始。
-- **Remaining risks:** C2～C5 的 article-management wire 收窄、generic facade/orchestrator 退役、可选 intake session gate 与 combined audit 仍待执行；完整仓库与 package smoke 尚未证明当前 working tree。普通队列显示标签仍由既有 platform presentation owner 映射，但组/项/动作/count/revision 均来自同一 submission-center snapshot。
-- **Final Git status:** C1 production、tests、contracts、Renderer 与本计划进入同一个 closure commit；未写 Wave Plan、Ticket、Maintenance 或独立 handoff，未 push、未进入 C2。最终 commit/status 以交接命令输出为准。
+- **Final source state (`HEAD + diff/status`):** C2 基于 C1 closure HEAD `38a6c9e46cbb1322ba754170f232b4f09bffece0`（`codex/jiagou`）实施；当前为该 HEAD 加本计划 §14 所列 production/test/document working-tree diff，未提交。
+- **Implemented scope:** C0/C1 已完成；C2 已将文章库 wire 收窄为文章/回收站、唯一 lifecycle workflow、发布详情/档案、具名投稿入口目录、scope/revision/counts，并同步删除 batch/cancellation/完整 attention/平行 summaries 与 Renderer legacy workflow aliases；内部 lifecycle facts、attention、orders、removal transactions 仍由唯一 projection owner 批量读取。
+- **Commands and results:** C0 evidence 见 §12.8；C1 见 §13.4；C2 最终 163-test 定向矩阵、115-capability matrix、三项 typecheck、Renderer build 与 diff check 均 PASS，见 §14.4。
+- **Audit findings and disposition:** C0/C1 见既有记录；C2 Primary Audit 与 bounded re-audit PASS。C2 关闭一项 `EXPOSED_PREEXISTING` blocking P2：submission-center application service 对 IPC contracts 的反向依赖，详见 §14.5。
+- **Unrun acceptance and reasons:** 未运行完整 `npm test`、production package smoke、真实账号/投稿/付费/订单操作；前两项留给 C5 combined gate，真实外部操作未获授权且 C2 为本地只读模型收窄。C3～C5 尚未开始。
+- **Remaining risks:** C3 的 generic facade/orchestrator 退役、C4 intake session gate 与 C5 combined audit 仍待执行；完整仓库与 package smoke尚未证明当前 working tree。
+- **Final Git status:** C2 production、tests、contracts、Renderer 与本计划均为未提交 working-tree change；未写 Wave Plan、Ticket、Maintenance 或独立 handoff，未 push、未进入 C3。详见 §14.6。
 
 ## 12. C0 record — 实时消费者清单与合同冻结
 
@@ -624,3 +624,59 @@ exit 1 because the user-supplied plan remains untracked; no whitespace-error out
 - **Additional direct remediation：**`validateClient` 只把 `CLIENT_NOT_FOUND` 映射为 `SUBMISSION_CENTER_CLIENT_INVALID`；其他 client-store/boundary 故障映射为 `SUBMISSION_CENTER_QUERY_FAILED`，避免把存储故障伪装成用户输入错误。
 - **Bounded re-audit：**仅复核上述修复 diff、直接调用方与受影响不变量；scope/client race、late query fencing、batch invocation budget/client isolation、旧/新 exact contract、composition/IPC/Renderer consumer 均 PASS。没有公开合同、schema、writer、事务/副作用边界变化，未触发 escalation 或 fresh full review。
 - **Conclusion：**`PASS`；P0/P1 为 0，直接阻塞 C1 的 P2 全部关闭，无 deferred blocker。C1 `COMPLETE`，C2 `READY`。
+
+## 14. C2 record — 收窄文章库 read-model interface
+
+### 14.1 Source state 与实施边界
+
+- **Base HEAD：**`38a6c9e46cbb1322ba754170f232b4f09bffece0`（`codex/jiagou`），开始时 clean。
+- **执行模式：**Manual Dispatch；实施 C2、Primary Audit、finding remediation、bounded re-audit、定向验证和本记录。未 commit、push 或进入 C3。
+- **Owner 边界：**`article-management-snapshot` 内部继续读取 active/trash、OperationalStore lifecycle facts、attention、removal transactions 与 published archive，并只由 `projectArticleLifecycle` 计算 stage/locks/operations/reasons/counts；未新增 writer、schema、状态机或 mutation capability。
+- **外部副作用：**测试只使用合成数据、临时 workspace、fake transport/headless Renderer；未执行真实登录、投稿、付费、取消或生产数据操作。
+
+### 14.2 实施结果
+
+1. `article-management-snapshot` public snapshot 删除 `submissionBatches`、`cancellationPlans`、完整 `attention`、内部 `orders` 及 `publicationSummaries/attentionCounts/orderSummaries`；这些事实只保留为 lifecycle projection 的内部输入。
+2. exact IPC contract/projector、bridge、Renderer types/default、View props 与 fixtures 同步收窄；workflow wire 删除 `locks.canQueue`、`operations.queue`、`operations.retarget`，`submit` 仍可在主进程 projector 内从内部稳定 `queue` operation fallback，但 alias 不跨 wire。
+3. `publicationRecords` 删除文章库不读取的 `version/articleKey/titleSnapshot`；保留发布详情实际使用的 target、状态、attempt、远端安全 identity/URL 与错误/核对码。`publishedArchives` 保留实际投稿正文、目标、结果、时间和图片摘要，因为文章库发布详情真实展示这些只读档案。
+4. workspace composition 用 `loadedPlatforms` 构造现有 `submission-target-catalog` 并作为具名 `submissionPlatformDirectory` 注入；文章库不再通过 18-operation generic facade 读取 `listPlatforms/listBatches`。production lifecycle facts 存在时不调用 generic batch reader。
+5. 删除仅验证无 production View consumer 的 `renderer-content-submission-batch-actions.test.js`；其余 fixture 改为新 exact shape。benchmark 改为对 10/100/1000 篇文章和 0/10/100 个 submission items 验证恒定 6 个 batch reads 与 retired wire absence。
+6. C1 的 submission-center read model 移除对 `desktop/ipc/contracts/*` 的反向依赖，改为在 read-model owner 内投影自己的 paid/attention 安全 DTO；未改变 C1 public contract、revision、cache、count 或 command owner。
+
+### 14.3 公开合同与不变量证据
+
+- exact-object gate 证明旧顶层 submission/attention/summary 字段不再输出；嵌套 `canQueue/queue/retarget` 会被 contract 拒绝。
+- 五类文章状态、发布后只读、attention/order 与分类独立、trash 冲突 fail-closed、客户切换/迟到 query fencing、生成批次筛选、发布详情/档案、回收站 restore/purge 均通过公开行为测试。
+- 具名投稿入口目录测试给 generic facade 的 `listPlatforms/listBatches` 注入 throwing stub，查询仍通过 OperationalStore lifecycle facts 与 target catalog 成功。
+- benchmark 的每组 fixture 均为 `1 IPC + 6 batch reads`；调用数不随文章或 submission item 数量增长，未执行 external transport。
+
+### 14.4 最终命令与结果
+
+```text
+node --test tests/article-management-snapshot.test.js tests/article-management-snapshot-benchmark.test.js tests/architecture-seams.test.js tests/phase-03-composition.test.js tests/phase-03-six-stage-article-lifecycle.test.js tests/phase-06-content-core-typed-ipc.test.js tests/phase-06-production-ipc-fixture-matrix.test.js tests/phase-06-content-read-model.test.mjs tests/phase-06-content-workbench-feature.test.mjs tests/phase-08-content-renderer-feature-races.test.mjs tests/phase-08-feature-development-admission.test.mjs tests/article-management-filter-model.test.js tests/renderer-article-management-flow.test.js tests/renderer-article-management-filters.test.js tests/renderer-generation-batch-navigation.test.js tests/renderer-history-editor-flow.test.js tests/renderer-question-editor-session.test.js tests/renderer-responsive-layout.test.js tests/renderer-residue-cleanup-flow.test.js tests/renderer-lieju-publication-profile.test.js tests/renderer-article-attention-actions.test.js tests/article-lifecycle-ticket-22.test.js tests/ticket-25-b-lifecycle-acceptance.test.js tests/production-preload-sandbox.electron.test.js tests/submission-center-snapshot.test.js
+163 passed / 0 failed; 115/115 production capabilities and 25/25 lifecycle queries closed
+
+npm run typecheck:renderer
+npm run typecheck:bridge
+npm run typecheck:main
+npm run build:renderer
+all PASS; Vite only reported the existing >500 kB chunk warning
+
+git diff --check
+exit 0; only Git LF→CRLF working-copy warnings, no whitespace error
+```
+
+未运行完整 `npm test`、production package smoke 或真实外部账号操作；前两项按计划留给 C5 combined closure，真实操作不属于 C2 且未获授权。
+
+### 14.5 Primary Audit、remediation 与 bounded re-audit
+
+- **Scope：**C2 production/test diff；article-management internal facts → lifecycle projection → exact IPC → bridge/type/default/View；具名 target directory；publication detail/archive；revision/cache/batch-read budget；直接 Renderer/fixture consumer。
+- **Checked invariants：**文章库没有获得普通/付费 submission runtime facts、attention 原始列表或 cancellation plan；生命周期权限仍来自唯一 owner；发布事实/档案未删除；投稿入口不依赖 generic facade；无第二 writer、schema 或远端副作用。
+- **Finding 1 — `P2 / EXPOSED_PREEXISTING`（blocking architecture gate）：**C1 `submission-center-snapshot.js` 直接 import attention/paid IPC contract projector，违反 application service 不依赖 transport contract 的边界。修复为 read-model owner 自行投影其独立安全 DTO；C1 snapshot exact-contract、scope/cache/revision/budget 回归和 `architecture-seams.test.js` 均 PASS。
+- **Bounded re-audit：**只复核 finding 修复 diff、submission-center direct callers、exact contract、C2 nested legacy absence、workspace composition 与最终状态矩阵；163-test 最终矩阵、三项 typecheck、Renderer build 和 diff check PASS。未改变 schema、writer、事务或外部副作用边界，不触发 escalation/fresh full review。
+- **Conclusion：**`PASS`；P0/P1 为 0，blocking P2 已关闭，无 deferred C2 blocker。C2 `COMPLETE`，C3 `READY`。
+
+### 14.6 Git / closure 状态
+
+- 当前 HEAD 仍为 `38a6c9e46cbb1322ba754170f232b4f09bffece0`；C2 production、tests 与本计划是同一未提交 working-tree source state。
+- 未 stage/commit/merge/push，未更新 Wave Plan、Ticket/Maintenance 或独立 handoff，未进入 C3。

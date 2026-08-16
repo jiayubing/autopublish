@@ -144,7 +144,6 @@ function installDesktopFixture(page, fixture) {
         operations: {
           edit: { allowed: !published, reasonCodes: [], safeMetadata: {} },
           submit: { allowed: !published, reasonCodes: [], safeMetadata: {} },
-          retarget: { allowed: false, reasonCodes: [], safeMetadata: {} },
           trash: { allowed: !published, reasonCodes: [], safeMetadata: {} },
           restore: { allowed: false, reasonCodes: [], safeMetadata: {} },
           purge: { allowed: false, reasonCodes: [], safeMetadata: {} }
@@ -157,7 +156,7 @@ function installDesktopFixture(page, fixture) {
     const content = {
       listClients: () => ok({ clients: [client] }),
       listGeneratedArticles: () => ok({ articles: state.articles }),
-      getArticleManagementSnapshot: () => ok({ clientId: client.id, revision: 1, articles: state.articles, trash: [], submissionBatches: [], cancellationPlans: [], publicationRecords: state.publicationRecords, attention: { revision: 1, items: [], counts: { total: 0, actionable: 0 } }, submissionPlatforms: [{ id: "fixture-platform", displayName: "测试投稿平台", contentQueueImport: true }], workflowItems: state.articles.reduce((items, article) => { const workflow = workflowFor(article); if (workflow) items.push({ articleId: article.id, workflow }); return items; }, []), publicationSummaryItems: [] }),
+      getArticleManagementSnapshot: () => ok({ clientId: client.id, revision: 1, articles: state.articles, trash: [], publicationRecords: state.publicationRecords, submissionPlatforms: [{ id: "fixture-platform", displayName: "测试投稿平台", contentQueueImport: true }], workflowItems: state.articles.reduce((items, article) => { const workflow = workflowFor(article); if (workflow) items.push({ articleId: article.id, workflow }); return items; }, []) }),
       listSubmissionBatches: () => ok({ batches: [] }),
       listArticleTrash: () => ok({ trash: [] }),
       listResearch: () => ok({ research: [] }),

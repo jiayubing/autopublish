@@ -1,12 +1,5 @@
 "use strict";
 
-const {
-  projectArticleAttentionItem,
-} = require("../ipc/contracts/article-attention-contracts");
-const {
-  projectPaidMediaBatchList,
-} = require("../ipc/contracts/submission-paid-media-contracts");
-
 function fail(code) {
   const error = new Error(code);
   error.code = code;
@@ -49,6 +42,83 @@ function targetLabel(item) {
     account = match ? match[1] : null;
   }
   return `${platform} / ${account || "账号未记录"}`;
+}
+
+function pick(value, fields) {
+  const source = value && typeof value === "object" ? value : {};
+  return Object.fromEntries(
+    fields
+      .filter(function (field) {
+        return Object.prototype.hasOwnProperty.call(source, field);
+      })
+      .map(function (field) {
+        return [field, source[field]];
+      }),
+  );
+}
+
+function projectAttentionItem(value) {
+  return pick(value, [
+    "attentionId", "kind", "owner", "freeze", "resolutionPriority",
+    "safeFacts", "articleId", "titleSnapshot", "clientId", "platformId",
+    "displayName", "batchId", "publicationId", "attemptId",
+    "orderCreationAttemptId", "orderId", "accountProfileId", "targetKey",
+    "jobId", "remoteId", "remoteUrl", "transactionId", "status",
+    "reasonCode", "pairState", "recommendedAction", "allowedActions",
+    "updatedAt", "message",
+  ]);
+}
+
+function projectPaidItem(value) {
+  const source = value && typeof value === "object" ? value : {};
+  const article = source.articleIdentityV1 || source.articleRef || {};
+  const result = {
+    itemId: source.itemId,
+    articleRef: {
+      clientId: article.clientId,
+      articleId: article.articleId,
+    },
+    status: source.status,
+    phase: source.phase,
+  };
+  if (typeof source.title === "string") result.title = source.title;
+  return result;
+}
+
+function projectPaidBatch(value) {
+  const source = value && typeof value === "object" ? value : {};
+  const actions = source.actions || {};
+  const result = {
+    batchId: source.batchId,
+    mediaResourceId: source.mediaResourceId,
+    status: source.status,
+    pauseIntent: source.pauseIntent,
+    runState: source.runState,
+    actions: {
+      canStart: actions.canStart === true,
+      canPause: actions.canPause === true,
+      ...(Object.prototype.hasOwnProperty.call(actions, "canCancelRemaining")
+        ? { canCancelRemaining: actions.canCancelRemaining === true }
+        : {}),
+    },
+    articleCount: source.articleCount,
+    quotedPrice: source.quotedPrice,
+    estimatedTotal: source.estimatedTotal,
+    createdAt: source.createdAt,
+    updatedAt: source.updatedAt,
+    items: Array.isArray(source.items) ? source.items.map(projectPaidItem) : [],
+  };
+  if (typeof source.mediaName === "string") result.mediaName = source.mediaName;
+  if (Number.isInteger(source.createdOrderCount))
+    result.createdOrderCount = source.createdOrderCount;
+  if (Number.isInteger(source.remainingCount))
+    result.remainingCount = source.remainingCount;
+  if (source.currentItem !== undefined)
+    result.currentItem = source.currentItem
+      ? projectPaidItem(source.currentItem)
+      : null;
+  if (source.pauseReason !== undefined) result.pauseReason = source.pauseReason;
+  return result;
 }
 
 function projectRegular(groups, clientId) {
@@ -96,8 +166,9 @@ function projectRegular(groups, clientId) {
 }
 
 function projectPaid(raw, clientId) {
-  const projected = projectPaidMediaBatchList(raw && raw.items ? raw : { items: raw || [] });
-  return projected.items.map(function (batch) {
+  const values = raw && Array.isArray(raw.items) ? raw.items : raw;
+  if (!Array.isArray(values)) throw fail("SUBMISSION_CENTER_SNAPSHOT_INVALID");
+  return values.map(projectPaidBatch).map(function (batch) {
     const items = [batch.currentItem].concat(batch.items || []).filter(Boolean);
     if (items.some(function (item) {
       return !item.articleRef || item.articleRef.clientId !== clientId;
@@ -143,7 +214,7 @@ function projectAttention(raw, clientId) {
   return raw.items.map(function (item) {
     if (item.clientId !== clientId)
       throw fail("SUBMISSION_CENTER_SNAPSHOT_INVALID");
-    return Object.assign(projectArticleAttentionItem(item), {
+    return Object.assign(projectAttentionItem(item), {
       targetLabel: targetLabel(item),
     });
   });

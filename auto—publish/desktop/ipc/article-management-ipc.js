@@ -1,5 +1,6 @@
 const { wrap } = require("../services/ipc-response");
 const { createArticleManagementSnapshot } = require("../services/article-management-snapshot");
+const { createSubmissionTargetCatalog } = require("../services/submission-target-catalog");
 const { projectManagementSnapshot } = require("./contracts/article-management-contracts");
 
 function validateInput(input) {
@@ -18,7 +19,9 @@ function registerArticleManagementIpc(deps) {
     workspaceIdentity: values.paths && (values.paths.contentLibrary || values.paths.workspaceRoot) || values.rootDir,
     getRevision: values.getWorkspaceDataRevision,
     aiContentService: values.aiContentService,
-    contentSubmissionService: values.contentSubmissionService,
+    submissionPlatformDirectory: values.submissionPlatformDirectory || createSubmissionTargetCatalog({
+      platforms: values.loadedPlatforms,
+    }),
     operationalStore: values.operationalStore,
     publishedArchiveQueries: values.publishedArchiveQueries,
     articleAttentionQuery: values.articleAttentionQuery

@@ -57,8 +57,6 @@ function renderArticleManagement() {
           const management = {
             articles: [],
             trash: [],
-            submissionBatches: [],
-            cancellationPlans: [],
             publicationRecords: [],
             workflowByArticle: {},
             submissionPlatforms: [],

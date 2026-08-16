@@ -8,18 +8,8 @@ const EMPTY_MANAGEMENT = Object.freeze({
   revision: 0,
   articles: Object.freeze([]),
   trash: Object.freeze([]),
-  submissionBatches: Object.freeze([]),
-  cancellationPlans: Object.freeze([]),
   publicationRecords: Object.freeze([]),
   workflowByArticle: Object.freeze({}),
-  publicationSummaries: Object.freeze({}),
-  attentionCounts: Object.freeze({}),
-  orderSummaries: Object.freeze({}),
-  attention: Object.freeze({
-    revision: 0,
-    items: Object.freeze([]),
-    counts: { total: 0, actionable: 0 },
-  }),
   submissionPlatforms: Object.freeze([]),
 });
 

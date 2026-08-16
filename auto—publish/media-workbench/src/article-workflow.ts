@@ -54,7 +54,6 @@ export interface ArticleWorkflow {
   operations?: {
     edit: ArticleOperation;
     submit: ArticleOperation;
-    retarget: ArticleOperation;
     trash: ArticleOperation;
     restore: ArticleOperation;
     purge: ArticleOperation;

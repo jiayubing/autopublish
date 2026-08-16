@@ -34,16 +34,13 @@ export interface PublicationHistoryAttempt {
   reasonCode: string | null;
 }
 export interface PublicationHistoryRecord {
-  version?: number;
   publicationId: string;
   clientId: string | null;
   articleId: string | null;
-  articleKey: string;
   targetKey: string;
   platformId: string | null;
   mediaResourceId: string | null;
   displayName: string | null;
-  titleSnapshot?: string | null;
   status: PublicationRecordStatus;
   createdAt: string;
   updatedAt: string;
@@ -678,11 +675,8 @@ export interface ArticleManagementSnapshot {
   revision: number;
   articles: GeneratedContentArticle[];
   trash: ArticleTrashRecord[];
-  submissionBatches: ContentSubmissionBatchRecord[];
-  cancellationPlans: ContentSubmissionCancellationPreview[];
   publicationRecords: PublicationHistoryRecord[];
   publishedArchives?: PublicationArchiveEntry[];
-  attention: ArticleAttentionList;
   submissionPlatforms: ContentSubmissionPlatform[];
   workflowByArticle: Record<
     string,
@@ -716,7 +710,6 @@ export interface ArticleManagementSnapshot {
       operations?: {
         edit: ArticleOperation;
         submit: ArticleOperation;
-        retarget: ArticleOperation;
         trash: ArticleOperation;
         restore: ArticleOperation;
         purge: ArticleOperation;
@@ -726,9 +719,6 @@ export interface ArticleManagementSnapshot {
       publicationSummary: PublicationHistorySummary;
     }
   >;
-  publicationSummaries: Record<string, PublicationHistorySummary>;
-  attentionCounts: Record<string, number>;
-  orderSummaries: Record<string, ArticleOrderSummary>;
   lifecycleVersion?: number;
   lifecycleCounts?: {
     pending_submission: number;

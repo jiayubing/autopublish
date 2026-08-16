@@ -83,8 +83,6 @@ function sandboxManagementSnapshot() {
       },
     ],
     trash: [],
-    submissionBatches: [],
-    cancellationPlans: [],
     publicationRecords: [],
     publishedArchives: [
       {
@@ -138,7 +136,6 @@ function sandboxManagementSnapshot() {
         },
       },
     ],
-    attention: { revision: 1, items: [], counts: { total: 0, actionable: 0 } },
     submissionPlatforms: [],
     workflowByArticle: {
       "article-published": {
@@ -148,7 +145,6 @@ function sandboxManagementSnapshot() {
         locks: {
           canEdit: false,
           canSubmit: false,
-          canQueue: false,
           canCancel: false,
           canTrash: false,
         },
@@ -161,7 +157,6 @@ function sandboxManagementSnapshot() {
         },
       },
     },
-    publicationSummaries: {},
   };
 }
 

@@ -642,16 +642,10 @@ test("typed article-management archive field delegates V1 validation and rejects
     revision: 1,
     articles: [],
     trash: [],
-    submissionBatches: [],
-    cancellationPlans: [],
     publicationRecords: [],
     publishedArchives: [archive],
-    attention: { revision: 1, items: [], counts: { total: 0, actionable: 0 } },
     submissionPlatforms: [],
     workflowItems: [],
-    publicationSummaryItems: [],
-    attentionCountItems: [],
-    orderSummaryItems: [],
   };
   const encoded = registry.success(contract, data);
   assert.equal(encoded.data.publishedArchives[0].publicationEvidenceV1.body, "实际投稿正文");

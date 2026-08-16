@@ -164,6 +164,10 @@ async function createWorkspaceRuntimeComposition(deps) {
       }),
     });
     const loadedPlatforms = loadPlatforms({ runtimeContext: platformRuntimeContext });
+    const submissionPlatformDirectory =
+      require("../services/submission-target-catalog").createSubmissionTargetCatalog({
+        platforms: loadedPlatforms,
+      });
     const operationalStoreTransitionPorts = {};
     let contentStore = null;
     const operationalStore =
@@ -843,6 +847,7 @@ async function createWorkspaceRuntimeComposition(deps) {
       cancelRemaining: mediaApplication.cancelRemainingPaidMediaBatchItems,
     }),
       loadedPlatforms,
+      submissionPlatformDirectory,
       platformSessionService,
       regularPlatformOutcomeService,
       operationalStore: publicationComposition.operationalStore,

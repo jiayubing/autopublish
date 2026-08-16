@@ -84,7 +84,9 @@ function createFixture() {
         counts: { total: clientId === "client-a" ? 0 : 1, actionable: 0 },
       };
     },
-    listPlatforms: () => [{ id: "toutiao", contentQueueImport: true }],
+    submissionPlatformDirectory: {
+      list: () => [{ id: "toutiao", contentQueueImport: true }],
+    },
   });
   return {
     service,
@@ -105,7 +107,17 @@ describe("article management snapshot", function () {
     assert.equal(fixture.calls.batches, 1);
     assert.equal(fixture.calls.publications, 1);
     assert.equal(fixture.calls.attention, 1);
-    assert.equal(first.cancellationPlans.length, 1);
+    assert.deepEqual(first.submissionPlatforms, [
+      { id: "toutiao", contentQueueImport: true },
+    ]);
+    for (const retired of [
+      "submissionBatches",
+      "cancellationPlans",
+      "attention",
+      "publicationSummaries",
+      "attentionCounts",
+      "orderSummaries",
+    ]) assert.equal(retired in first, false, retired);
     assert.equal(first.workflowByArticle["article-a"].stage, "published");
     assert.equal(first.workflowByArticle["article-a"].locks.canTrash, false);
     assert.equal(first.lifecycleCounts.published, 1);
@@ -150,6 +162,51 @@ describe("article management snapshot", function () {
     assert.equal(invalid.error.code, "ARTICLE_MANAGEMENT_CLIENT_INVALID");
   });
 
+  it("uses lifecycle facts and the named submission directory without the generic facade", async function () {
+    const handlers = new Map();
+    registerArticleManagementIpc({
+      ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
+      getWorkspaceDataRevision: () => 3,
+      aiContentService: {
+        listGeneratedArticles: () => [
+          { id: "article-a", clientId: "client-a", title: "A", status: "saved" },
+        ],
+        listTrashedArticles: () => [],
+        listArticleRemovalTransactions: () => [],
+      },
+      contentSubmissionService: {
+        listBatches() {
+          throw new Error("generic batch reader must not be used");
+        },
+        listPlatforms() {
+          throw new Error("generic platform reader must not be used");
+        },
+      },
+      loadedPlatforms: [
+        { id: "toutiao", displayName: "头条", contentQueueImport: true },
+      ],
+      operationalStore: {
+        listArticleLifecycleFacts: () => ({
+          publications: [],
+          submissionItems: [],
+          orders: [],
+        }),
+      },
+      articleAttentionQuery: {
+        list: () => ({ revision: 3, items: [], counts: { total: 0, actionable: 0 } }),
+      },
+    });
+
+    const response = await handlers.get(
+      "content:get-article-management-snapshot",
+    )({}, { clientId: "client-a" });
+    assert.equal(response.ok, true, JSON.stringify(response));
+    assert.deepEqual(response.data.submissionPlatforms, [
+      { id: "toutiao", displayName: "头条", contentQueueImport: true },
+    ]);
+    assert.equal(response.data.workflowItems[0].workflow.stage, "needs_completion");
+  });
+
   it("keeps published history in the snapshot when the ledger supplies the same article record", async function () {
     const fixture = createFixture();
     const snapshot = await fixture.service.get({ clientId: "client-a" });
@@ -182,7 +239,7 @@ describe("article management snapshot", function () {
         items: [],
         counts: { total: 0, actionable: 0 },
       }),
-      listPlatforms: () => [],
+      submissionPlatformDirectory: { list: () => [] },
       operationalStore: {
         listOrderDisplayViews() {
           legacyReads += 1;
@@ -193,7 +250,7 @@ describe("article management snapshot", function () {
 
     const snapshot = await service.get({ clientId: "client-a" });
     assert.equal(legacyReads, 0);
-    assert.deepEqual(snapshot.orders, []);
+    assert.equal("orders" in snapshot, false);
   });
 
   it("loads publication facts for trash records before projecting lifecycle conflicts", async function () {
@@ -223,7 +280,7 @@ describe("article management snapshot", function () {
         items: [],
         counts: { total: 0, actionable: 0 },
       }),
-      listPlatforms: () => [],
+      submissionPlatformDirectory: { list: () => [] },
     });
 
     const snapshot = await service.get({ clientId: "client-a" });

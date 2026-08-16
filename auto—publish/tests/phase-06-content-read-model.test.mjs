@@ -19,8 +19,6 @@ function adapters(overrides = {}) {
       revision: 4,
       articles: [{ id: `article-${clientId}`, clientId }],
       trash: [{ articleId: `trash-${clientId}`, clientId }],
-      submissionBatches: [{ id: `batch-${clientId}`, clientId }],
-      cancellationPlans: [],
       publicationRecords: [],
       workflowByArticle: {},
       submissionPlatforms: [{ id: "platform-a", displayName: "Platform A", contentQueueImport: true }],
@@ -45,7 +43,7 @@ test("content read model owns client questions, research, and article-management
   assert.deepEqual(snapshot.researchByClient["client-b"].map((item) => item.id), ["research-client-b"]);
   assert.deepEqual(snapshot.management.articles.map((item) => item.id), ["article-client-a"]);
   assert.deepEqual(snapshot.management.trash.map((item) => item.articleId), ["trash-client-a"]);
-  assert.deepEqual(snapshot.management.submissionBatches.map((item) => item.id), ["batch-client-a"]);
+  assert.deepEqual(snapshot.management.submissionPlatforms.map((item) => item.id), ["platform-a"]);
   assert.equal(snapshot.clientQuery.loading, false);
   assert.equal(snapshot.managementQuery.loading, false);
 });
@@ -108,7 +106,7 @@ test("content ordinary mutations have independent command owners and refresh the
   let managementReads = 0;
   const feature = createContentWorkbenchFeature(adapters({
     listQuestions: async () => { questionReads += 1; return []; },
-    loadManagement: async () => { managementReads += 1; return { articles: [], trash: [], submissionBatches: [] }; },
+    loadManagement: async () => { managementReads += 1; return { articles: [], trash: [], publicationRecords: [], workflowByArticle: {}, submissionPlatforms: [] }; },
     createQuestion: async (input) => ({ id: "question-new", ...input }),
     saveArticle: () => new Promise((resolve) => { resolveSave = resolve; }),
   }));

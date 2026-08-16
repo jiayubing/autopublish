@@ -65,7 +65,6 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
           operations: {
             edit: { allowed: true, reasonCodes: [] },
             submit: { allowed: true, reasonCodes: [] },
-            retarget: { allowed: false, reasonCodes: [] },
             trash: { allowed: true, reasonCodes: [] },
             restore: { allowed: false, reasonCodes: [] },
             purge: { allowed: false, reasonCodes: [] },
@@ -121,10 +120,7 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
           revision: state.managementReads,
           articles: [article],
           trash: [],
-          submissionBatches: [],
-          cancellationPlans: [],
           publicationRecords: [],
-          attention: { revision: 1, items: [], counts: { total: 0, actionable: 0 } },
           submissionPlatforms: [
             {
               id: "fixture-platform",
@@ -133,11 +129,6 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
             },
           ],
           workflowItems: [workflow],
-          publicationSummaryItems: [
-            { articleId: article.id, summary: workflow.workflow.publicationSummary },
-          ],
-          attentionCountItems: [{ articleId: article.id, count: 0 }],
-          orderSummaryItems: [{ articleId: article.id, summary: workflow.workflow.orderSummary }],
         });
       };
       const content = {

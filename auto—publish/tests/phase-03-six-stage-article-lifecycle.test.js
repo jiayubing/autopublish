@@ -7,8 +7,12 @@ const {
   projectArticleLifecycle,
 } = require("../src/content/article-lifecycle-projection");
 const {
+  articleManagementContracts,
   projectManagementSnapshot,
 } = require("../desktop/ipc/contracts/article-management-contracts");
+const {
+  createContractRegistry,
+} = require("../desktop/ipc/contracts/registry");
 
 function article(overrides) {
   return {
@@ -314,16 +318,13 @@ test("published success remains immutable even when a later unknown observation 
   assert.equal(workflow.reasonCodes.includes("ORDER_STATUS_UNKNOWN"), true);
 });
 
-test("IPC projection carries the five-stage counts and independent summaries", () => {
+test("IPC projection carries five-stage counts and embeds lifecycle summaries only in workflow items", () => {
   const snapshot = projectManagementSnapshot({
     clientId: "client-1",
     revision: 1,
     articles: [],
     trash: [],
-    submissionBatches: [],
-    cancellationPlans: [],
     publicationRecords: [],
-    attention: { revision: 1, items: [], counts: { total: 0, actionable: 0 } },
     submissionPlatforms: [],
     workflowByArticle: {
       "article-1": {
@@ -369,18 +370,6 @@ test("IPC projection carries the five-stage counts and independent summaries", (
         targetFacts: {},
       },
     },
-    attentionCounts: { "article-1": 1 },
-    orderSummaries: {
-      "article-1": {
-        status: "processing",
-        label: "付费处理中",
-        records: 1,
-        active: 1,
-        published: 0,
-        attention: 0,
-      },
-    },
-    publicationSummaries: {},
     lifecycleVersion: 2,
     lifecycleCounts: {
       pending_submission: 0,
@@ -394,8 +383,18 @@ test("IPC projection carries the five-stage counts and independent summaries", (
 
   assert.equal(snapshot.workflowItems[0].workflow.stage, "in_submission");
   assert.equal(snapshot.workflowItems[0].workflow.attentionCount, 1);
-  assert.deepEqual(snapshot.attentionCountItems, [{ articleId: "article-1", count: 1 }]);
-  assert.equal(snapshot.orderSummaryItems[0].summary.status, "processing");
+  assert.equal(snapshot.workflowItems[0].workflow.orderSummary.status, "processing");
+  for (const retired of [
+    "submissionBatches",
+    "cancellationPlans",
+    "attention",
+    "publicationSummaryItems",
+    "attentionCountItems",
+    "orderSummaryItems",
+  ]) assert.equal(retired in snapshot, false, retired);
+  assert.equal("canQueue" in snapshot.workflowItems[0].workflow.locks, false);
+  assert.equal("queue" in snapshot.workflowItems[0].workflow.operations, false);
+  assert.equal("retarget" in snapshot.workflowItems[0].workflow.operations, false);
   assert.deepEqual(snapshot.lifecycleCounts, {
     pending_submission: 0,
     needs_completion: 0,
@@ -404,4 +403,19 @@ test("IPC projection carries the five-stage counts and independent summaries", (
     trash: 0,
     total: 1,
   });
+  const registry = createContractRegistry(articleManagementContracts);
+  const contract = registry.byChannel("content:get-article-management-snapshot");
+  assert.equal(registry.success(contract, snapshot).ok, true);
+  for (const retired of ["canQueue", "queue", "retarget"]) {
+    const legacy = structuredClone(snapshot);
+    if (retired === "canQueue")
+      legacy.workflowItems[0].workflow.locks.canQueue = false;
+    else
+      legacy.workflowItems[0].workflow.operations[retired] = {
+        allowed: false,
+        reasonCodes: [],
+        safeMetadata: {},
+      };
+    assert.throws(() => registry.success(contract, legacy), undefined, retired);
+  }
 });

@@ -554,7 +554,7 @@ test("content source queries preserve path-free Unicode business identities", as
   assert.equal(catalog.data.templates[0].id, "新闻稿");
 });
 
-test("article management accepts status-free cancellation action-plan items", async function () {
+test("article management exposes the narrow article-library wire contract", async function () {
   const handlers = new Map();
   const ipcMain = createAuthenticatedIpcMain(
     {
@@ -592,51 +592,13 @@ test("article management accepts status-free cancellation action-plan items", as
           revision: 2,
           articles: [article],
           trash: [],
-          submissionBatches: [{
-            id: "batch-1",
-            clientId: "畅途",
-            status: "queued",
-            items: [{
-              articleId: "article-1",
-              targetPlatformId: "toutiao",
-              status: "queued",
-              publicationId: null,
-              attemptId: null,
-            }],
-          }],
-          cancellationPlans: [{
-            batchId: "batch-1",
-            clientId: "畅途",
-            action: "cancel",
-            planId: "plan-1",
-            fingerprint: "fingerprint-1",
-            allowedCount: 1,
-            blockedCount: 0,
-            items: [{
-              articleId: "article-1",
-              targetPlatformId: "toutiao",
-              publicationId: null,
-              attemptId: null,
-              action: "cancel",
-              allowed: true,
-              reasonCode: null,
-              reasonMessage: null,
-              fingerprint: "item-fingerprint-1",
-            }],
-          }],
           publicationRecords: [],
-          attention: {
-            revision: 2,
-            items: [],
-            counts: { total: 0, actionable: 0 },
-          },
           submissionPlatforms: [{
             id: "toutiao",
             displayName: "头条",
             contentQueueImport: true,
           }],
           workflowByArticle: {},
-          publicationSummaries: {},
         };
       },
     },
@@ -653,17 +615,14 @@ test("article management accepts status-free cancellation action-plan items", as
   assert.equal(result.ok, true, JSON.stringify(result));
   assert.equal(result.data.articles.length, 1);
   assert.equal(result.data.submissionPlatforms.length, 1);
-  assert.deepEqual(result.data.cancellationPlans[0].items[0], {
-    articleId: "article-1",
-    targetPlatformId: "toutiao",
-    publicationId: null,
-    attemptId: null,
-    action: "cancel",
-    allowed: true,
-    reasonCode: null,
-    reasonMessage: null,
-    fingerprint: "item-fingerprint-1",
-  });
+  for (const retired of [
+    "submissionBatches",
+    "cancellationPlans",
+    "attention",
+    "publicationSummaryItems",
+    "attentionCountItems",
+    "orderSummaryItems",
+  ]) assert.equal(retired in result.data, false, retired);
 });
 
 test("article management preserves a saved article when a legacy publication lacks enriched identity fields", async function () {
@@ -691,8 +650,6 @@ test("article management preserves a saved article when a legacy publication lac
       createdAt: "2026-07-27T00:00:00.000Z",
     }],
     trash: [],
-    submissionBatches: [],
-    cancellationPlans: [],
     publicationRecords: [{
       publicationId: "publication-legacy",
       clientId: "中文客户",
@@ -700,18 +657,12 @@ test("article management preserves a saved article when a legacy publication lac
       status: "published",
       attempts: [],
     }],
-    attention: {
-      revision: 3,
-      items: [],
-      counts: { total: 0, actionable: 0 },
-    },
     submissionPlatforms: [{
       id: "media",
       displayName: "付费媒体",
       contentQueueImport: true,
     }],
     workflowByArticle: {},
-    publicationSummaries: {},
   });
 
   const response = registry.success(contract, projected);
@@ -765,17 +716,9 @@ test("article management safely bounds a generated article reference accepted by
       createdAt: "2026-07-27T00:00:00.000Z",
     }],
     trash: [],
-    submissionBatches: [],
-    cancellationPlans: [],
     publicationRecords: [],
-    attention: {
-      revision: 4,
-      items: [],
-      counts: { total: 0, actionable: 0 },
-    },
     submissionPlatforms: [],
     workflowByArticle: {},
-    publicationSummaries: {},
   });
 
   const response = registry.success(contract, projected);

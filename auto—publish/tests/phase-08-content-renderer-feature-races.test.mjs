@@ -42,8 +42,6 @@ function adapters(overrides = {}) {
     loadManagement: async () => ({
       articles: [],
       trash: [],
-      submissionBatches: [],
-      cancellationPlans: [],
       publicationRecords: [],
       workflowByArticle: {},
       submissionPlatforms: [],

@@ -1,11 +1,9 @@
 const {
   arrayField,
   customField,
-  literalField,
   exactObject,
   enumField,
   integerField,
-  multilineStringField,
   nullableField,
   optionalField,
 } = require("./registry");
@@ -15,10 +13,6 @@ const {
 const {
   parseTerminalTargetV1,
 } = require("../../../src/domain/article-lifecycle-terminal-contract");
-const {
-  articleAttentionList,
-  projectArticleAttentionList,
-} = require("./article-attention-contracts");
 const {
   generatedArticle,
   projectArticle,
@@ -39,53 +33,6 @@ const {
   timestamp,
 } = require("./content-core-contract-shared");
 
-const submissionItem = exactObject({
-  id: optionalField(id),
-  itemId: optionalField(id),
-  articleId: id,
-  targetPlatformId: optionalField(id),
-  platformId: optionalField(id),
-  status: text(80),
-  contentHash: optionalField(text(256)),
-  filename: optionalField(text(500)),
-  publicationId: optionalNullableText(200),
-  attemptId: optionalNullableText(200),
-  articleKey: optionalField(text(500)),
-  targetKey: optionalField(text(500)),
-  queueGroupId: optionalField(id),
-  position: optionalField(
-    integerField({ min: 1, max: Number.MAX_SAFE_INTEGER }),
-  ),
-  publicationStatus: optionalNullableText(80),
-  allowed: optionalField("boolean"),
-});
-const submissionBatch = exactObject({
-  id,
-  clientId: optionalField(id),
-  status: text(80),
-  items: arrayField(submissionItem, { max: 10000 }),
-});
-const cancellationPlanItem = exactObject({
-  articleId: id,
-  targetPlatformId: id,
-  publicationId: optionalNullableText(200),
-  attemptId: optionalNullableText(200),
-  action: literalField("cancel"),
-  allowed: "boolean",
-  reasonCode: optionalNullableText(128),
-  reasonMessage: optionalNullableText(1000),
-  fingerprint: optionalNullableText(256),
-});
-const cancellationPlan = exactObject({
-  batchId: id,
-  clientId: id,
-  action: literalField("cancel"),
-  planId: id,
-  fingerprint: text(256),
-  allowedCount: integerField({ min: 0, max: 10000 }),
-  blockedCount: integerField({ min: 0, max: 10000 }),
-  items: arrayField(cancellationPlanItem, { max: 10000 }),
-});
 const publicationAttempt = exactObject({
   attemptId: nullableField(id),
   status: nullableField(text(80)),
@@ -99,18 +46,13 @@ const publicationAttempt = exactObject({
   reasonCode: nullableField(text(128)),
 });
 const publicationRecord = exactObject({
-  version: optionalField(integerField({ min: 1, max: 1000 })),
   publicationId: id,
   clientId: id,
   articleId: nullableField(id),
-  articleKey: optionalField(text(500)),
   targetKey: optionalField(text(500)),
   platformId: optionalField(nullableField(id)),
   mediaResourceId: optionalField(nullableField(id)),
   displayName: optionalField(nullableField(text(1000))),
-  titleSnapshot: optionalField(
-    nullableField(multilineStringField({ min: 0, max: 1000 })),
-  ),
   status: text(80),
   createdAt: optionalField(timestamp),
   updatedAt: optionalField(timestamp),
@@ -193,15 +135,12 @@ const workflow = exactObject({
   locks: exactObject({
     canEdit: "boolean",
     canSubmit: "boolean",
-    canQueue: "boolean",
     canCancel: "boolean",
     canTrash: "boolean",
   }),
   operations: exactObject({
     edit: operationDecision,
     submit: operationDecision,
-    queue: operationDecision,
-    retarget: operationDecision,
     trash: operationDecision,
     restore: operationDecision,
     purge: operationDecision,
@@ -216,29 +155,14 @@ const managementSnapshot = exactObject({
   revision: integerField({ min: 0 }),
   articles: arrayField(generatedArticle, { max: 10000 }),
   trash: arrayField(trashRecord, { max: 10000 }),
-  submissionBatches: arrayField(submissionBatch, { max: 10000 }),
-  cancellationPlans: arrayField(cancellationPlan, { max: 10000 }),
   publicationRecords: arrayField(publicationRecord, { max: 10000 }),
   publishedArchives: optionalField(
     arrayField(publishedArchive, { max: 10000 }),
   ),
-  attention: articleAttentionList,
   submissionPlatforms: arrayField(submissionPlatform, { max: 1000 }),
   workflowItems: arrayField(exactObject({ articleId: id, workflow }), {
     max: 10000,
   }),
-  publicationSummaryItems: arrayField(
-    exactObject({ articleId: id, summary: publicationSummary }),
-    { max: 10000 },
-  ),
-  attentionCountItems: arrayField(
-    exactObject({ articleId: id, count: integerField({ min: 0, max: 10000 }) }),
-    { max: 10000 },
-  ),
-  orderSummaryItems: arrayField(
-    exactObject({ articleId: id, summary: orderSummary }),
-    { max: 10000 },
-  ),
   lifecycleVersion: optionalField(integerField({ min: 1, max: 100 })),
   lifecycleCounts: optionalField(
     exactObject({
@@ -265,65 +189,6 @@ const articleManagementContracts = Object.freeze([
   }),
 ]);
 
-function projectSubmissionItem(value) {
-  return projectFields(value, [
-    "id",
-    "itemId",
-    "articleId",
-    "targetPlatformId",
-    "platformId",
-    "status",
-    "contentHash",
-    "filename",
-    "publicationId",
-    "attemptId",
-    "articleKey",
-    "targetKey",
-    "queueGroupId",
-    "position",
-    "publicationStatus",
-    "allowed",
-  ]);
-}
-
-function projectSubmissionBatch(value) {
-  return {
-    ...projectFields(value, ["id", "clientId", "status"]),
-    items: Array.isArray(value && value.items)
-      ? value.items.map(projectSubmissionItem)
-      : [],
-  };
-}
-
-function projectCancellationPlan(value) {
-  return {
-    ...projectFields(value, [
-      "batchId",
-      "clientId",
-      "action",
-      "planId",
-      "fingerprint",
-      "allowedCount",
-      "blockedCount",
-    ]),
-    items: Array.isArray(value && value.items)
-      ? value.items.map((item) =>
-          projectFields(item, [
-            "articleId",
-            "targetPlatformId",
-            "publicationId",
-            "attemptId",
-            "action",
-            "allowed",
-            "reasonCode",
-            "reasonMessage",
-            "fingerprint",
-          ]),
-        )
-      : [],
-  };
-}
-
 function projectPublicationSummary(value) {
   return projectFields(value, [
     "status",
@@ -336,16 +201,13 @@ function projectPublicationSummary(value) {
 
 function projectPublicationRecord(value) {
   const output = projectFields(value, [
-    "version",
     "publicationId",
     "clientId",
     "articleId",
-    "articleKey",
     "targetKey",
     "platformId",
     "mediaResourceId",
     "displayName",
-    "titleSnapshot",
     "status",
     "createdAt",
     "updatedAt",
@@ -398,14 +260,11 @@ function projectWorkflow(value) {
   output.locks = projectFields(value && value.locks, [
     "canEdit",
     "canSubmit",
-    "canQueue",
     "canCancel",
     "canTrash",
   ]);
   if (output.locks.canSubmit === undefined)
-    output.locks.canSubmit = output.locks.canQueue === true;
-  if (output.locks.canQueue === undefined)
-    output.locks.canQueue = output.locks.canSubmit === true;
+    output.locks.canSubmit = Boolean(value && value.locks && value.locks.canQueue);
   output.attentionCount = Number.isInteger(value && value.attentionCount)
     ? value.attentionCount
     : 0;
@@ -443,16 +302,6 @@ function projectWorkflow(value) {
         value.operations &&
         (value.operations.submit || value.operations.queue),
       output.locks.canSubmit,
-    ),
-    queue: projectOperation(
-      value &&
-        value.operations &&
-        (value.operations.queue || value.operations.submit),
-      output.locks.canQueue,
-    ),
-    retarget: projectOperation(
-      value && value.operations && value.operations.retarget,
-      false,
     ),
     trash: projectOperation(
       value && value.operations && value.operations.trash,
@@ -522,12 +371,6 @@ function projectManagementSnapshot(value) {
     trash: Array.isArray(snapshot.trash)
       ? snapshot.trash.map(projectTrashRecord)
       : [],
-    submissionBatches: Array.isArray(snapshot.submissionBatches)
-      ? snapshot.submissionBatches.map(projectSubmissionBatch)
-      : [],
-    cancellationPlans: Array.isArray(snapshot.cancellationPlans)
-      ? snapshot.cancellationPlans.map(projectCancellationPlan)
-      : [],
     publicationRecords: Array.isArray(snapshot.publicationRecords)
       ? snapshot.publicationRecords.map(projectPublicationRecord)
       : [],
@@ -538,13 +381,6 @@ function projectManagementSnapshot(value) {
           ),
         }
       : {}),
-    attention: projectArticleAttentionList(
-      snapshot.attention || {
-        revision: snapshot.revision || 0,
-        items: [],
-        counts: { total: 0, actionable: 0 },
-      },
-    ),
     submissionPlatforms: Array.isArray(snapshot.submissionPlatforms)
       ? snapshot.submissionPlatforms.map((item) =>
           projectFields(item, ["id", "displayName", "contentQueueImport"]),
@@ -552,31 +388,6 @@ function projectManagementSnapshot(value) {
       : [],
     workflowItems: Object.entries(snapshot.workflowByArticle || {}).map(
       ([articleId, value]) => ({ articleId, workflow: projectWorkflow(value) }),
-    ),
-    publicationSummaryItems: Object.entries(
-      snapshot.publicationSummaries || {},
-    ).map(([articleId, value]) => ({
-      articleId,
-      summary: projectPublicationSummary(value),
-    })),
-    attentionCountItems: Object.entries(snapshot.attentionCounts || {}).map(
-      ([articleId, count]) => ({
-        articleId,
-        count: Number.isInteger(count) && count >= 0 ? count : 0,
-      }),
-    ),
-    orderSummaryItems: Object.entries(snapshot.orderSummaries || {}).map(
-      ([articleId, value]) => ({
-        articleId,
-        summary: projectFields(value, [
-          "status",
-          "label",
-          "records",
-          "active",
-          "published",
-          "attention",
-        ]),
-      }),
     ),
     ...(snapshot.lifecycleVersion === undefined
       ? {}

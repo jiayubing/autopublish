@@ -154,17 +154,9 @@ function installDesktopFixture(page) {
           revision: 1,
           articles: [],
           trash: [],
-          submissionBatches: [],
-          cancellationPlans: [],
           publicationRecords: [],
-          attention: {
-            revision: 1,
-            items: [],
-            counts: { total: 0, actionable: 0 },
-          },
           submissionPlatforms,
           workflowItems: [],
-          publicationSummaryItems: [],
         }),
       listSubmissionBatches: () => result({ batches: [] }),
       listArticleTrash: () => result({ trash: [] }),
@@ -747,17 +739,9 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
               revision: Date.now(),
               articles: items,
               trash: [],
-              submissionBatches: [],
-              cancellationPlans: [],
               publicationRecords: [],
-              attention: {
-                revision: 1,
-                items: [],
-                counts: { total: 0, actionable: 0 },
-              },
               submissionPlatforms: [],
               workflowItems: [],
-              publicationSummaryItems: [],
             });
           window.desktopConsole.content.listTemplateCatalog = () =>
             response({

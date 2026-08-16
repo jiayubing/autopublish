@@ -64,16 +64,13 @@ function safeRecord(record, scopedClientId) {
     : [];
   const latest = attempts.length ? attempts[attempts.length - 1] : null;
   return {
-    version: value.version,
     publicationId: value.publicationId,
     clientId: scopedClientId,
     articleId: value.articleId === undefined ? null : value.articleId,
-    articleKey: value.articleKey,
     targetKey: value.targetKey,
     platformId: value.platformId || null,
     mediaResourceId: value.mediaResourceId || null,
     displayName: value.displayName || null,
-    titleSnapshot: value.titleSnapshot || null,
     status: value.status,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
@@ -84,22 +81,6 @@ function safeRecord(record, scopedClientId) {
     errorCode: latest && latest.errorCode,
     reasonCode: latest && latest.reasonCode,
   };
-}
-
-function safeBatch(batch) {
-  const value = clone(batch || {});
-  ["filePath", "sidecarPath", "path", "sourceFile"].forEach(function (key) {
-    delete value[key];
-  });
-  if (Array.isArray(value.items))
-    value.items.forEach(function (item) {
-      ["filePath", "sidecarPath", "path", "sourceFile"].forEach(function (key) {
-        delete item[key];
-      });
-      delete item.publicationSnapshot;
-      delete item.articleRef;
-    });
-  return value;
 }
 
 function safeOrder(order) {
@@ -191,7 +172,7 @@ function createArticleManagementSnapshot(options) {
           return 0;
         };
   const ai = opts.aiContentService || {};
-  const submission = opts.contentSubmissionService || {};
+  const submissionPlatformDirectory = opts.submissionPlatformDirectory || null;
   const operationalStore = opts.operationalStore || null;
   const publishedArchiveQueries = opts.publishedArchiveQueries || null;
   const attention = opts.articleAttentionQuery || null;
@@ -237,18 +218,6 @@ function createArticleManagementSnapshot(options) {
           : [];
       },
       clientId,
-    );
-    const batchesRaw = await read(
-      "listBatches",
-      function () {
-        return typeof submission.listBatches === "function"
-          ? submission.listBatches(clientId)
-          : [];
-      },
-      clientId,
-    );
-    const batches = (Array.isArray(batchesRaw) ? batchesRaw : []).map(
-      safeBatch,
     );
     const articleList = Array.isArray(articles) ? clone(articles) : [];
     const trashList = Array.isArray(trash) ? clone(trash) : [];
@@ -296,6 +265,11 @@ function createArticleManagementSnapshot(options) {
       lifecycleFactsRaw && typeof lifecycleFactsRaw === "object"
         ? lifecycleFactsRaw
         : null;
+    const batchesRaw =
+      lifecycleFacts && Array.isArray(lifecycleFacts.submissionItems)
+        ? []
+        : await read("listBatches", [], clientId);
+    const batches = Array.isArray(batchesRaw) ? clone(batchesRaw) : [];
     const recordsRaw =
       lifecycleFacts && Array.isArray(lifecycleFacts.publications)
         ? lifecycleFacts.publications
@@ -354,14 +328,10 @@ function createArticleManagementSnapshot(options) {
     ).filter(function (item) {
       return item && (!item.clientId || item.clientId === clientId);
     });
-    const plans = batches
-      .map(function (batch) {
-        return batch.actionPlan || null;
-      })
-      .filter(Boolean);
     const platforms =
-      typeof submission.listPlatforms === "function"
-        ? clone(submission.listPlatforms())
+      submissionPlatformDirectory &&
+      typeof submissionPlatformDirectory.list === "function"
+        ? clone(submissionPlatformDirectory.list())
         : [];
     const lifecycle = projectArticleLifecycle({
       articles: articleList,
@@ -377,34 +347,15 @@ function createArticleManagementSnapshot(options) {
       removalTransactions: transactions,
     });
     const workflowByArticle = lifecycle.byArticle;
-    const publicationSummaries = Object.fromEntries(
-      Object.entries(workflowByArticle).map(function (entry) {
-        return [entry[0], entry[1].publicationSummary];
-      }),
-    );
     const snapshot = {
       clientId,
       revision,
       articles: articleList,
       trash: trashList,
-      submissionBatches: batches,
-      cancellationPlans: plans,
       publicationRecords,
       publishedArchives,
-      orders,
-      attention: {
-        revision: Number(attentionList && attentionList.revision) || revision,
-        items: attentionItems,
-        counts: (attentionList && attentionList.counts) || {
-          total: attentionItems.length,
-          actionable: 0,
-        },
-      },
       submissionPlatforms: platforms,
       workflowByArticle,
-      publicationSummaries,
-      attentionCounts: lifecycle.attentionCounts,
-      orderSummaries: lifecycle.orderSummaries,
       lifecycleVersion: ARTICLE_LIFECYCLE_PROJECTION_VERSION,
       lifecycleCounts: lifecycle.counts,
     };

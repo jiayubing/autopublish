@@ -1,8 +1,6 @@
 import type {
   ArticleRemovalTransaction,
   ArticleTrashRecord,
-  ContentSubmissionBatchRecord,
-  ContentSubmissionCancellationPreview,
   ContentSubmissionPlatform,
   PublicationHistoryRecord,
   PublicationHistorySummary,
@@ -24,8 +22,6 @@ import type {
 export type ArticleManagementReadModel = {
   articles: GeneratedContentArticle[];
   trash: ArticleTrashRecord[];
-  submissionBatches: ContentSubmissionBatchRecord[];
-  cancellationPlans: ContentSubmissionCancellationPreview[];
   publicationRecords: PublicationHistoryRecord[];
   publishedArchives?: PublicationArchiveEntry[];
   workflowByArticle: Record<
@@ -42,7 +38,6 @@ export type ArticleManagementReadModel = {
       operations?: {
         edit: ArticleOperation;
         submit: ArticleOperation;
-        retarget: ArticleOperation;
         trash: ArticleOperation;
         restore: ArticleOperation;
         purge: ArticleOperation;
