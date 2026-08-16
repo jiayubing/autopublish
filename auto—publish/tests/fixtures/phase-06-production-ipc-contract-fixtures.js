@@ -2733,6 +2733,7 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
           "content.listResearch",
           "content.listTemplateCatalog",
           "content.getArticleManagementSnapshot",
+          "content.getSubmissionCenterSnapshot",
           "content.listPaidMediaBatches",
           "attention.listArticleAttention",
           "generation.getRuntimeSnapshot",

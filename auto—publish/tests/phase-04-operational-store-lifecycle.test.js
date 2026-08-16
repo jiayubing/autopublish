@@ -749,7 +749,7 @@ test("batch lifecycle facts use a fixed-query public port and article snapshot c
         ],
         listTrashedArticles: () => [],
       },
-      contentSubmissionService: {
+      submissionMaintenance: {
         listBatches: () => [],
         listPlatforms: () => [],
       },

@@ -344,15 +344,15 @@ C4 不是默认因文件较长而强制拆分。C3 完成后先运行 gate：
 ## 11. Closure record（实施时填写）
 
 - **Execution status:** `PARTIAL`
-- **Current gate:** `C2 COMPLETE / C3 READY`
-- **Base HEAD:** `dff3d1b898570c1784c90aef065f9cd64f7aef68`
-- **Final source state (`HEAD + diff/status`):** C2 基于 C1 closure HEAD `38a6c9e46cbb1322ba754170f232b4f09bffece0`（`codex/jiagou`）实施；当前为该 HEAD 加本计划 §14 所列 production/test/document working-tree diff，未提交。
-- **Implemented scope:** C0/C1 已完成；C2 已将文章库 wire 收窄为文章/回收站、唯一 lifecycle workflow、发布详情/档案、具名投稿入口目录、scope/revision/counts，并同步删除 batch/cancellation/完整 attention/平行 summaries 与 Renderer legacy workflow aliases；内部 lifecycle facts、attention、orders、removal transactions 仍由唯一 projection owner 批量读取。
-- **Commands and results:** C0 evidence 见 §12.8；C1 见 §13.4；C2 最终 163-test 定向矩阵、115-capability matrix、三项 typecheck、Renderer build 与 diff check 均 PASS，见 §14.4。
-- **Audit findings and disposition:** C0/C1 见既有记录；C2 Primary Audit 与 bounded re-audit PASS。C2 关闭一项 `EXPOSED_PREEXISTING` blocking P2：submission-center application service 对 IPC contracts 的反向依赖，详见 §14.5。
-- **Unrun acceptance and reasons:** 未运行完整 `npm test`、production package smoke、真实账号/投稿/付费/订单操作；前两项留给 C5 combined gate，真实外部操作未获授权且 C2 为本地只读模型收窄。C3～C5 尚未开始。
-- **Remaining risks:** C3 的 generic facade/orchestrator 退役、C4 intake session gate 与 C5 combined audit 仍待执行；完整仓库与 package smoke尚未证明当前 working tree。
-- **Final Git status:** C2 production、tests、contracts、Renderer 与本计划均为未提交 working-tree change；未写 Wave Plan、Ticket、Maintenance 或独立 handoff，未 push、未进入 C3。详见 §14.6。
+- **Current gate:** `C3 COMPLETE / C4 GATE READY`
+- **Base HEAD:** `ed81e6c47e0c12b8d03766268550841e1c4fdc45`
+- **Final source state (`HEAD + diff/status`):** C3 基于 C2 closure commit `ed81e6c47e0c12b8d03766268550841e1c4fdc45`（`codex/jiagou`）实施；当前为该 HEAD 加本计划 §15 所列 production/test/document working-tree diff，未提交。
+- **Implemented scope:** C0～C2 已完成；C3 已把删除影响查询、投稿维护、prepared-batch 本地恢复、startup uncertain recovery 与 post-processing drain 迁入具名 owner，并删除 18-operation facade、generic batch/retry chain、generic publication workflow 与 test-only orchestrator；ordinary/paid writer 与 OperationalStore facts/schema 未改变。
+- **Commands and results:** C0～C2 evidence 见 §12～§14；C3 定向行为矩阵、主进程 typecheck、115-capability matrix、Phase 8 architecture/package gates、cleanup/package contract、remediation ASAR matrix 与 diff check 均 PASS，见 §15.4、§15.6。
+- **Audit findings and disposition:** C0～C2 见既有记录；C3 Primary Audit 发现 1 个 blocking `P2 / PROCESS_EVIDENCE_GAP`，package verifier 会放行缺少 C3 runtime 依赖或混入 3 个遗漏 retired file 的 ASAR；已修复并通过 bounded re-audit，无剩余 blocking finding。
+- **Unrun acceptance and reasons:** 未运行完整 `npm test`、实际重建 ASAR 的 production package smoke 或真实账号/投稿/付费/订单操作；完整仓库与真实产物 gate 留给 C5，真实外部操作未获授权且不属于 C3。
+- **Remaining risks:** C4 intake session gate、C5 combined audit/final clean-HEAD gate 尚未执行；实际重建 ASAR smoke 留在 C5。
+- **Final Git status:** C3 production、tests、package gate、audit remediation 与本计划为未提交 working-tree change；未 stage/commit/merge/push，未更新 Wave Plan、Ticket/Maintenance 或历史 handoff，未执行 C4 gate。详见 §15.5～§15.6。
 
 ## 12. C0 record — 实时消费者清单与合同冻结
 
@@ -680,3 +680,78 @@ exit 0; only Git LF→CRLF working-copy warnings, no whitespace error
 
 - 当前 HEAD 仍为 `38a6c9e46cbb1322ba754170f232b4f09bffece0`；C2 production、tests 与本计划是同一未提交 working-tree source state。
 - 未 stage/commit/merge/push，未更新 Wave Plan、Ticket/Maintenance 或独立 handoff，未进入 C3。
+
+## 15. C3 record — 迁出真实能力并退役 shadow submission chain
+
+### 15.1 Source state 与实施边界
+
+- **Base HEAD：**`ed81e6c47e0c12b8d03766268550841e1c4fdc45`（`codex/jiagou`），开始时 clean；该 commit 已包含 C2 closure。
+- **执行模式：**Manual Dispatch；本轮完成 C3 implementation、定向验证、Primary Audit、blocking finding remediation 与 bounded re-audit，未 commit、push 或执行 C4 gate。
+- **Owner 边界：**删除影响查询只读 OperationalStore lifecycle facts；maintenance 只处理本地 prepared/staging recovery、trash residue 与 archive failure observation；publication recovery 只把 stranded remote-started 标记为 uncertain 并 drain post-processing。未新增 writer、schema、远端 retry 或 transport。
+- **外部副作用：**全部测试使用合成数据、临时 workspace、fake processor/transport 或静态 package fixture；未执行真实登录、投稿、付费、取消、订单核对、生产数据写入或网络请求。
+
+### 15.2 实施结果
+
+1. `article-submission-removal-coordinator` 现在可直接依赖具名 lifecycle-facts port；workspace composition 将该窄 port 注入 `article-removal-service`，AI/content/trash 链不再依赖通用投稿 facade。删除仍只由既有 removal transaction/lifecycle owner 执行，不自行取消或迁移队列。
+2. 新增 `submission-maintenance-service.js`，公开能力仅为 residue preview/cleanup、archive failure observation 与 prepared-batch 本地恢复。原 constructor 中真实存在的 prepared/staging recovery 迁入 `prepared-submission-recovery.js` 并由 startup 显式执行；完整 evidence 提升为 queued，无 evidence 则丢弃 prepared 记录，冲突继续 fail-closed。
+3. 新增 `publication-recovery.js` 与 `publication-recovery-composition.js`；startup recovery 和 post-processing complete/deferred/failed/restart drain 不再构造 publisher、generic publish 或 retry execution。stranded remote-started 只产生 manual-check uncertain，恢复对象没有 `publish/retry` capability。
+4. content submission IPC 删除无 handler 的 preparation/retry namespace；真实 cleanup、regular、paid 与 submission-center handler 继续通过各自具名 owner。attention archive failure reader 改接 maintenance。
+5. 删除 18-operation `content-submission-application`/service、generic batch preview/create/cancel/reconcile/retry 文件、generic publication workflow/execution、phase-01/test-only composition 和 `publication-submission-orchestrator`。保留 OperationalStore batch/order/publication/migration facts 与 regular/paid 状态机。
+6. package verifier 改为要求 recovery/maintenance 真实 runtime 文件存在，并对 retired facade/orchestrator/generic execution/batch files fail-closed；Phase 8 gate 改指向 recovery composition。旧 generic 测试按 disposition 删除或迁到 recovery、maintenance、removal、regular、paid 与 mutation-owner 公开行为测试。
+
+### 15.3 关键不变量证据
+
+- startup stranded claim → uncertain：`publication-recovery.test.js` 验证 `manual-check` 且 recovery surface 没有 `publish/retry`。
+- post-processing：complete、failed、archive-not-eligible deferred 与 restart drain 都通过具名 recovery 测试；既有 OperationalStore post-processing tests 保留。
+- maintenance：failed residue cleanup、source/archive read fail-closed、prepared staging promotion 与 evidence-absent discard 均通过；cleanup 逐项诊断且不会覆盖业务错误或触发远端调用。
+- removal impact：queued/active/published/uncertain/order/open transaction 与并发 claim matrix 通过；queued item 只阻塞删除，队列取消仍由原 owner 完成。
+- regular/paid：admission、idempotency、uncertain、cancel remaining、global execution lock、订单同步失败保真与历史订单均通过直接 owner 回归。
+- retired absence：source/static gate、115-capability TypeChecker matrix、Phase 8 dependency/unique-writer/legacy/package gate 均通过；production composition 不含 generic facade、workflow 或 publisher-router wiring。
+
+### 15.4 实际命令与结果
+
+```text
+node --test（C3 recovery/maintenance/removal/regular/paid/attention/IPC/composition/architecture/workspace/package 定向矩阵）
+最终受影响矩阵均 PASS；其中一次 149-test 组合先暴露 C2 后仍读取 management.orders 的旧断言，改为权威 paid order view 后对应 25/25 paid/regular 回归 PASS；maintenance/workspace 24/24 PASS；其余分组结果见本轮命令日志。
+
+node --test tests/phase-06-capability-specific-inventory.test.js tests/phase-06-production-ipc-fixture-matrix.test.js
+38 passed / 0 failed；115/115 production capabilities 与 25/25 lifecycle queries 通过 TypeChecker symbol identity；补齐 submission-center 显式 consumer evidence。
+
+node scripts/verify-phase-08-gates.js
+PASS；dependency direction、OperationalStore boundary、unique owners/writers、115 capability reachability、legacy absence 与 tracked generated output 全部通过。
+
+node --test tests/alpha-smoke-verifier.test.js tests/production-packaging.test.js tests/packaging-runtime.test.js tests/phase-08-cleanup-gates.test.js
+17 passed / 0 failed；current production tree、package/legacy absence 与 production packaging contract PASS。
+
+npm run typecheck:main
+PASS
+
+node scripts/run-tests.js --list
+PASS；最终发现 263 个 .test.js/.test.mjs 文件，无 deleted-test dangling entry。
+
+node --test tests/test-discovery-contract.test.js tests/test-inventory-contract.test.js
+相关 discovery/inventory tests PASS；未保留其生成的历史 M05 handoff 改写。
+
+npx eslint <C3 changed production/new test files>
+PASS，无输出。
+
+git diff --check
+exit 0；只有 Git LF→CRLF working-copy warning，无 whitespace error。
+```
+
+未运行完整 `npm test`、三项 Renderer/bridge typecheck、Renderer build、实际重新打包后的 ASAR smoke 或真实外部账号操作。C3 没有 Renderer 生产改动，主进程 typecheck 与完整 IPC symbol matrix 已覆盖直接合同；完整仓库、Renderer build 与真实产物 smoke 按计划留给 C5。真实登录、投稿、付费、取消和订单操作未获授权且不属于本地架构退役。
+
+### 15.5 当前 gate / Git 状态
+
+- C3 implementation、Primary Audit、blocking finding remediation 与 bounded re-audit 已完成，C3 标记 `COMPLETE`；C4 gate 变为 `READY`，本轮未执行 C4 gate。
+- 当前 source state 是 `ed81e6c47e0c12b8d03766268550841e1c4fdc45 + working-tree diff`；未 stage/commit/merge/push。
+- 未更新 Wave Plan、Ticket/Maintenance 或历史 handoff；`M05-0-authoritative-test-disposition-ledger.md` 在测试工具生成后保持 HEAD 内容，不属于 C3 diff。
+
+### 15.6 Primary Audit、remediation 与 bounded re-audit
+
+- **Scope：**C3 production/test diff；删除影响窄 query、submission maintenance、prepared-batch recovery、publication recovery/post-processing、IPC/attention/composition、retired source 与 alpha package contract。
+- **Checked invariants：**startup uncertain 不触发远端 retry；post-processing restart/deferred/failed 保真；residue cleanup 与 removal impact 不建立第二 writer；ordinary/paid owner 不变；retired facade/workflow 不进入 source 或 package；C3 runtime 文件在 package 中 fail-closed 校验。
+- **Finding 1 — `P2 / PROCESS_EVIDENCE_GAP`（blocking）：**`verify-alpha-package.js` 的 retired inventory 漏掉 `phase-01-composition.js`、`publication-workflow/errors.js`、`publication-workflow/post-processing.js`，required inventory 也未覆盖 C3 maintenance/recovery 的直接运行依赖。Primary Audit 用合成 ASAR 证明：缺依赖且重新放回 retired file 时 `verifyPackage()` 仍错误成功。
+- **Remediation：**补齐 C3 maintenance/recovery 直接 runtime inventory 与上述 3 个 retired file；新增 `c3-package-verifier.test.js`，用三份独立合成 ASAR 验证 baseline 通过、缺任一列明 runtime file 失败、混入任一遗漏 retired file 失败。
+- **Bounded re-audit：**仅复核 finding 修复 diff、合成 ASAR 行为、package/production packaging、Phase 8 cleanup、test discovery/inventory、eslint 与 diff check；78 tests PASS，test discovery 发现 263 个测试文件且无 dangling entry。修复未改变 schema、writer、事务、公开业务合同或远端副作用边界，不触发 escalation。
+- **Conclusion：**`PASS`；P0/P1 为 0，唯一 blocking P2 已关闭，无 deferred C3 blocker。C3 `COMPLETE`，C4 gate `READY`。

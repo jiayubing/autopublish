@@ -23,7 +23,7 @@ it("returns the complete queue-group snapshot after pausing one group", async fu
   ];
   registerContentSubmissionIpc({
     ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
-    contentSubmissionService: {},
+    submissionMaintenance: {},
     submissionWorkflow: {
       regularQueueGroups: {
         list: () => groups,
@@ -47,7 +47,7 @@ it("does not register the retired submission batch cancellation capability", asy
   const handlers = new Map();
   registerContentSubmissionIpc({
     ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
-    contentSubmissionService: {},
+    submissionMaintenance: {},
   });
   assert.equal(handlers.has("content:cancel-submission-batch"), false);
 });
@@ -56,7 +56,7 @@ it("does not register the retired failed queue-copy cleanup capability", async f
   const handlers = new Map();
   registerContentSubmissionIpc({
     ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
-    contentSubmissionService: {},
+    submissionMaintenance: {},
   });
   assert.equal(
     handlers.has("content:preview-cleanup-failed-submission-items"),
@@ -80,7 +80,7 @@ it("keeps residue cleanup counts and reason codes while stripping filesystem fie
   const handlers = new Map();
   registerContentSubmissionIpc({
     ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
-    contentSubmissionService: {
+    submissionMaintenance: {
       previewTrashedArticleQueueResidue: () => ({
         cleanableCount: 1,
         reportedCount: 0,
@@ -157,7 +157,7 @@ it("awaits async paid-media preflight and admission before projecting a success"
   let admissionCompleted = false;
   registerContentSubmissionIpc({
     ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
-    contentSubmissionService: {},
+    submissionMaintenance: {},
     paidMediaPreflightService: {
       preflight: async (input) => {
         calls.push(["preflight", input]);
@@ -246,7 +246,7 @@ it("awaits async paid-media rejections and never projects an empty success", asy
   let admissionFailureObserved = false;
   registerContentSubmissionIpc({
     ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
-    contentSubmissionService: {},
+    submissionMaintenance: {},
     paidMediaPreflightService: {
       preflight: async () => {
         await preflightGate.promise;
@@ -308,7 +308,7 @@ it("rejects paid-media confirmation without explicit confirmation", async functi
   let called = false;
   registerContentSubmissionIpc({
     ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
-    contentSubmissionService: {},
+    submissionMaintenance: {},
     paidMediaPreflightService: {
       confirm: () => {
         called = true;
@@ -337,7 +337,7 @@ it("awaits paid-media operations before projecting their result", async function
   });
   registerContentSubmissionIpc({
     ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
-    contentSubmissionService: {},
+    submissionMaintenance: {},
     paidMediaPreflightService: {
       preflight: () => preflightPending,
       confirm: () => confirmPending,
@@ -403,7 +403,7 @@ it("waits for paid-media rejection and maps it without an orphaned background ef
   });
   registerContentSubmissionIpc({
     ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
-    contentSubmissionService: {},
+    submissionMaintenance: {},
     paidMediaPreflightService: {
       confirm: async () => {
         started += 1;
@@ -479,7 +479,7 @@ it("exposes paid-media batch snapshot, start, and pause as independent commands"
   };
   registerContentSubmissionIpc({
     ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
-    contentSubmissionService: {},
+    submissionMaintenance: {},
     paidMediaExecutionService: {
       list: async () => ({ items: [batch] }),
       start: async () =>

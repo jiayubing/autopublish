@@ -838,7 +838,7 @@ test("deletion transaction DTO is versioned while completed history remains quer
     workspaceRoot: fixture.root,
     contentStore: fixture.contentStore,
     mutationCoordinator: fixture.coordinator,
-    submissionService: {
+    articleRemovalImpactQuery: {
       previewArticleRemovalImpact: () => ({
         blockedItems: [],
         canCommit: true,

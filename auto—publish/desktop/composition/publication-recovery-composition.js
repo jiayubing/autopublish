@@ -1,10 +1,11 @@
 "use strict";
+
 const {
   createOperationalStore,
 } = require("../../src/infrastructure/operational-store/operational-store");
 const {
-  createPublicationWorkflow,
-} = require("../../src/application/publication-workflow");
+  createPublicationRecovery,
+} = require("../../src/application/publication-recovery");
 const {
   createArticleAttentionQuery,
 } = require("../services/article-attention-query");
@@ -12,12 +13,10 @@ const {
   createArticleAttentionResolver,
 } = require("../services/article-attention-resolver");
 
-function createPublicationWorkflowComposition(options) {
+function createPublicationRecoveryComposition(options) {
   const value = options || {};
-  if (typeof value.workspaceRoot !== "string" || !value.publisher)
-    throw new Error(
-      "Publication workflow composition dependencies are required",
-    );
+  if (typeof value.workspaceRoot !== "string")
+    throw new Error("Publication recovery composition dependencies are required");
   const operationalStore =
     value.operationalStore ||
     createOperationalStore({
@@ -29,14 +28,13 @@ function createPublicationWorkflowComposition(options) {
     typeof value.createPostProcessor === "function"
       ? value.createPostProcessor(operationalStore)
       : value.postProcessor;
-  const publicationWorkflow = createPublicationWorkflow({
+  const publicationRecovery = createPublicationRecovery({
     operationalStore,
     articleMutationCoordinator: value.articleMutationCoordinator,
-    publisher: value.publisher,
     postProcessor,
-    clock: value.clock || (() => new Date()),
   });
   let disposed = false;
+
   function createAttentionPorts(dependencies) {
     const deps = dependencies || {};
     const postProcessingPort = deps.postProcessingPort || {
@@ -45,14 +43,12 @@ function createPublicationWorkflowComposition(options) {
     const attentionQuery = createArticleAttentionQuery(
       Object.assign({}, deps, {
         operationalStore,
-        publicationWorkflow,
         postProcessingPort,
       }),
     );
     const attentionResolver = createArticleAttentionResolver(
       Object.assign({}, deps, {
         query: attentionQuery,
-        publicationWorkflow,
         postProcessingPort,
       }),
     );
@@ -62,14 +58,10 @@ function createPublicationWorkflowComposition(options) {
       postProcessingPort,
     });
   }
+
   return Object.freeze({
     operationalStore,
-    // Generic publish/retry/reconciliation is intentionally not part of the
-    // production capability surface. Regular-platform execution goes through
-    // Ticket 08's queue-group orchestrator and Ticket 09's named outcomes.
-    publicationWorkflow: Object.freeze({
-      recover: publicationWorkflow.recover,
-    }),
+    publicationRecovery,
     postProcessor,
     createAttentionPorts,
     dispose: async function () {
@@ -79,4 +71,5 @@ function createPublicationWorkflowComposition(options) {
     },
   });
 }
-module.exports = { createPublicationWorkflowComposition };
+
+module.exports = { createPublicationRecoveryComposition };

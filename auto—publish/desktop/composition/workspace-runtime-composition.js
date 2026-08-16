@@ -279,35 +279,6 @@ async function createWorkspaceRuntimeComposition(deps) {
       }),
     );
     let accountInspector = null;
-    const workerPublisher =
-      require("../services/worker-publisher").createWorkerPublisher({
-        taskService,
-        inspectAccount: function (task) {
-          return accountInspector
-            ? accountInspector.inspect(task)
-            : { verified: false };
-        },
-      });
-    const mediaPublisher =
-      require("../services/media-publisher").createMediaPublisher({
-        supplierProvider: function () {
-          const {
-            createMediaSupplierAdapter,
-          } = require("../../src/platforms/media/media-supplier-adapter");
-          return createMediaSupplierAdapter({
-            clientProvider: function () {
-              const mediaRuntime =
-                platformSettingsService.getAdapterForRuntime("media");
-              return mediaRuntime.adapter.createClient(mediaRuntime.config);
-            },
-          });
-        },
-        systemSubmissionIdProvider: function () {
-          return (
-            platformSettingsService.getRuntimeConfig("media").thirdPartyId || ""
-          );
-        },
-      });
     const mediaClientProvider = function () {
       const mediaRuntime =
         platformSettingsService.getAdapterForRuntime("media");
@@ -403,10 +374,6 @@ async function createWorkspaceRuntimeComposition(deps) {
         return { reasonCode: "PAID_MEDIA_SYSTEM_SUBMISSION_CODE_CHANGED" };
       return null;
     };
-    const publisher =
-      require("../services/desktop-publisher-router").createDesktopPublisherRouter(
-        { workerPublisher, mediaPublisher },
-      );
     const autoTrashArticle = async function (selection) {
       if (
         contentStore &&
@@ -444,13 +411,12 @@ async function createWorkspaceRuntimeComposition(deps) {
         confirmed: true,
       });
     };
-    const publicationComposition = ownService(
-      require("./publication-workflow-composition").createPublicationWorkflowComposition(
+    const publicationRecoveryComposition = ownService(
+      require("./publication-recovery-composition").createPublicationRecoveryComposition(
         {
           workspaceRoot,
           operationalStore,
           articleMutationCoordinator,
-          publisher,
           createPostProcessor: function (operationalStore) {
             return require("../services/publication-post-processor").createPublicationPostProcessor(
               {
@@ -474,7 +440,7 @@ async function createWorkspaceRuntimeComposition(deps) {
             require("../services/platform-account-runtime").createPlatformAccountRuntimeAdapters(
               { loadedPlatforms, platformSettingsService },
             ),
-          operationalStore: publicationComposition.operationalStore,
+          operationalStore: publicationRecoveryComposition.operationalStore,
           bindingStore:
             require("../services/platform-account-binding-store").createPlatformAccountBindingStore(
               { localStateRoot: paths.localState },
@@ -514,31 +480,37 @@ async function createWorkspaceRuntimeComposition(deps) {
         },
       }),
     );
-    const contentSubmissionService = ownService(
-      require("../services/content-submission-service").createContentSubmissionService(
+    const submissionMaintenance = ownService(
+      require("../services/submission-maintenance-service").createSubmissionMaintenanceService(
         {
           workspaceRoot,
           paths: injectedPaths,
           contentStore,
-          operationalStore: publicationComposition.operationalStore,
+          operationalStore: publicationRecoveryComposition.operationalStore,
           platforms: loadedPlatforms,
           onDataInvalidated: invalidation.invalidate,
-          getDataRevision: invalidation.getRevision,
         },
       ),
     );
+    const articleRemovalImpactQuery =
+      require("../services/article-submission-removal-coordinator").createArticleSubmissionRemovalCoordinator(
+        {
+          lifecycleFacts: publicationRecoveryComposition.operationalStore,
+        },
+      );
+    submissionMaintenance.recoverPreparedBatches();
     const aiContentService = ownService(
       require("../services/ai-content-service").createAiContentService({
         workspaceRoot,
         paths: injectedPaths,
         contentStore,
-        operationalStore: publicationComposition.operationalStore,
+        operationalStore: publicationRecoveryComposition.operationalStore,
         articleMutationCoordinator,
         articleRemovalTransactionStore:
           contentLifecycleComposition.articleRemovalTransactionStore,
         articleRemovalTransitionPort:
           contentLifecycleComposition.articleRemovalTransitionPort,
-        contentSubmissionService,
+        articleRemovalImpactQuery,
         onArticleRemovalTransaction: function (transaction) {
           const eventContract = productionIpcRegistry.byChannel(
             "content:article-removal-transaction",
@@ -559,7 +531,7 @@ async function createWorkspaceRuntimeComposition(deps) {
       }),
     );
     articleLifecycleOwner = aiContentService;
-    await publicationComposition.publicationWorkflow.recover();
+    await publicationRecoveryComposition.publicationRecovery.recover();
     if (aiContentService.recoverPendingArticleRemovals) {
       const removalRecoveryScheduler = ownService(
         require("../../src/content/article-removal-recovery-scheduler").createArticleRemovalRecoveryScheduler(
@@ -743,8 +715,8 @@ async function createWorkspaceRuntimeComposition(deps) {
           invalidateData: invalidation.invalidate,
         },
       );
-    const attentionPorts = publicationComposition.createAttentionPorts({
-      contentSubmissionService,
+    const attentionPorts = publicationRecoveryComposition.createAttentionPorts({
+      submissionMaintenance,
       regularQueueApplication,
       articleRemovalService: aiContentService,
       regularPlatformOutcomeService,
@@ -757,10 +729,10 @@ async function createWorkspaceRuntimeComposition(deps) {
         confirmOrderPublished: mediaApplication.confirmOrderPublished,
         confirmOrderNotPublished: mediaApplication.confirmOrderNotPublished,
       },
-      postProcessingPort: publicationComposition.postProcessor
+      postProcessingPort: publicationRecoveryComposition.postProcessor
         ? {
             retry: function (input) {
-              return publicationComposition.operationalStore.retryPostProcessing(
+              return publicationRecoveryComposition.operationalStore.retryPostProcessing(
                 input,
               );
             },
@@ -797,7 +769,7 @@ async function createWorkspaceRuntimeComposition(deps) {
       doubaoCollectionService,
       aiProviderService,
       contentStore,
-      contentSubmissionService,
+      submissionMaintenance,
       regularQueueApplication,
       regularImagePlanService,
       regularQueueGroupOrchestrator: regularQueueGroupComposition.orchestrator,
@@ -808,7 +780,7 @@ async function createWorkspaceRuntimeComposition(deps) {
       aiContentService,
       contentGenerationBatchService,
       platformWorkbenchService,
-      publicationComposition,
+      publicationRecoveryComposition,
       attentionPorts,
       submissionCenterSnapshot,
       platformApplication,
@@ -829,7 +801,7 @@ async function createWorkspaceRuntimeComposition(deps) {
       legacyProviderSettings,
       contentStore,
       aiContentService,
-      contentSubmissionService,
+      submissionMaintenance,
       regularQueueApplication,
       regularQueueGroupOrchestrator: regularQueueGroupComposition.orchestrator,
       contentGenerationBatchService,
@@ -850,11 +822,10 @@ async function createWorkspaceRuntimeComposition(deps) {
       submissionPlatformDirectory,
       platformSessionService,
       regularPlatformOutcomeService,
-      operationalStore: publicationComposition.operationalStore,
+      operationalStore: publicationRecoveryComposition.operationalStore,
       publishedArchiveQueries:
         operationalStoreTransitionPorts.publishedArchiveQueries,
       articleMutationCoordinator,
-      publicationWorkflow: publicationComposition.publicationWorkflow,
       articleAttentionQuery: attentionPorts.attentionQuery,
       submissionCenterSnapshot,
       articleAttentionResolver: attentionPorts.attentionResolver,

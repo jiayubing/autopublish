@@ -12,7 +12,7 @@ const serviceRequests = Object.freeze({
   task: "../desktop/services/desktop-task-service",
   doubao: "../desktop/services/doubao-collection-service",
   provider: "../desktop/services/ai-provider-service",
-  submission: "../desktop/services/content-submission-service",
+  submission: "../desktop/services/submission-maintenance-service",
   content: "../desktop/services/ai-content-service",
   generation: "../desktop/services/content-generation-batch-service",
 });
@@ -98,22 +98,22 @@ it("workspace invalidation owns reason-to-scope policy and emits safe monotonic 
     schemaVersion: 1,
     workspaceRuntimeId: "runtime-fixture-1",
     revision: 1,
-    scopes: ["articleManagement", "articleAttention", "platformQueue"],
+    scopes: ["articleManagement", "articleAttention", "platformQueue", "submissionCenter"],
     reasonCode: "PUBLICATION_RECONCILED"
   }]);
   assert.equal(sent[1][1].revision, 2);
-  assert.deepEqual(invalidation.scopesForReason("MEDIA_SUBMIT_COMPLETED"), ["articleManagement", "articleAttention", "platformQueue", "orders"]);
+  assert.deepEqual(invalidation.scopesForReason("MEDIA_SUBMIT_COMPLETED"), ["articleManagement", "articleAttention", "platformQueue", "orders", "submissionCenter"]);
   assert.equal(invalidation.invalidate("PAID_ORDER_RESOLUTION_CHANGED"), 3);
   assert.deepEqual(sent[2], ["workspace:data-invalidated", {
     schemaVersion: 1,
     workspaceRuntimeId: "runtime-fixture-1",
     revision: 3,
-    scopes: ["articleManagement", "articleAttention", "orders"],
+    scopes: ["articleManagement", "articleAttention", "orders", "submissionCenter"],
     reasonCode: "PAID_ORDER_RESOLUTION_CHANGED"
   }]);
 });
 it("maps every production workspace mutation reason explicitly without a broad fallback", function() {
-  const submissionScopes = ["articleManagement", "articleAttention", "platformQueue"];
+  const submissionScopes = ["articleManagement", "articleAttention", "platformQueue", "submissionCenter"];
   [
     "SUBMISSION_BATCH_CANCELLED",
     "SUBMISSION_BATCH_CREATED",
@@ -131,9 +131,9 @@ it("maps every production workspace mutation reason explicitly without a broad f
   ].forEach(function(reasonCode) {
     assert.deepEqual(scopesForReason(reasonCode), submissionScopes, reasonCode);
   });
-  assert.deepEqual(scopesForReason("CONTENT_EXPORT_QUEUED"), [...submissionScopes, "mediaWorkbench"]);
-  assert.deepEqual(scopesForReason("MEDIA_SUBMIT_COMPLETED"), [...submissionScopes, "orders"]);
-  assert.deepEqual(scopesForReason("PAID_ORDER_RESOLUTION_CHANGED"), ["articleManagement", "articleAttention", "orders"]);
+  assert.deepEqual(scopesForReason("CONTENT_EXPORT_QUEUED"), ["articleManagement", "articleAttention", "platformQueue", "mediaWorkbench", "submissionCenter"]);
+  assert.deepEqual(scopesForReason("MEDIA_SUBMIT_COMPLETED"), ["articleManagement", "articleAttention", "platformQueue", "orders", "submissionCenter"]);
+  assert.deepEqual(scopesForReason("PAID_ORDER_RESOLUTION_CHANGED"), ["articleManagement", "articleAttention", "orders", "submissionCenter"]);
   [
     "CONTENT_SOURCE_CHANGED",
     "CONTENT_QUESTION_CREATED",
@@ -389,7 +389,7 @@ it("disposes services already created when a middle workspace factory fails", as
     { request: serviceRequests.task, exports: { createDesktopTaskService: function() { return lifecycleService("task", events, { getState: function() { return {}; } }); } } },
     { request: serviceRequests.doubao, exports: { createDoubaoCollectionDesktopService: function() { return lifecycleService("doubao", events, { getQueueState: function() { return {}; }, subscribe: function() { return function() { events.push("collection-unsubscribe"); }; } }); } } },
     { request: serviceRequests.provider, exports: { createAiProviderService: function() { return lifecycleService("provider", events, { createClient: function() {} }); } } },
-    { request: serviceRequests.submission, exports: { createContentSubmissionService: function() { return lifecycleService("submission", events); } } },
+    { request: serviceRequests.submission, exports: { createSubmissionMaintenanceService: function() { return lifecycleService("maintenance", events, { recoverPreparedBatches: function() { return []; } }); } } },
     { request: serviceRequests.content, exports: { createAiContentService: function() { return lifecycleService("content", events); } } },
     { request: serviceRequests.generation, exports: { createContentGenerationBatchService: function() { throw new Error("generation factory failed"); } } }
   ]);
@@ -397,7 +397,7 @@ it("disposes services already created when a middle workspace factory fails", as
     fs.mkdirSync(path.join(root, "workspace"), { recursive: true });
     const runtime = createWorkspaceRuntime(workspaceRuntimeOptions(root));
     await assert.rejects(runtime.start({ workspacePath: path.join(root, "workspace") }), /generation factory failed/);
-    assert.deepEqual(events, ["content", "submission", "provider", "doubao", "task"]);
+    assert.deepEqual(events, ["content", "maintenance", "provider", "doubao", "task"]);
     assert.equal(runtime.getState().phase, "stopped");
     assert.equal(runtime.getState().task, null);
     assert.throws(function() { runtime.registerIpc(); }, /not started/);

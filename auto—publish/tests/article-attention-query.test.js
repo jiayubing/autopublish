@@ -356,7 +356,7 @@ it("fails closed to safe navigation when optional lookups fail and never probes 
     capabilities: {
       regular_platform_failed: { canInspect: false },
     },
-    contentSubmissionService: {
+    submissionMaintenance: {
       previewRetryFailedPublication() {
         genericProbeCalls += 1;
         throw new Error("must not be called");

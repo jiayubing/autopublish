@@ -147,7 +147,7 @@ test("restore changes only content state and never restores a submission task", 
     workspaceRoot: root,
     contentStore,
     mutationCoordinator: coordinator,
-    submissionService: { previewArticleRemovalImpact: () => ({ blockedItems: [] }) },
+    articleRemovalImpactQuery: { previewArticleRemovalImpact: () => ({ blockedItems: [] }) },
   });
   const trash = createArticleTrashService({
     contentStore,

@@ -6,9 +6,6 @@ const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 
-const {
-  createPublicationWorkflow,
-} = require("../src/application/publication-workflow");
 const { createContractRegistry } = require("../desktop/ipc/contracts/registry");
 const {
   articleEditorContracts,
@@ -135,7 +132,7 @@ function removalServiceFor(fixture) {
     workspaceRoot: fixture.root,
     contentStore: fixture.contentStore,
     mutationCoordinator: fixture.coordinator,
-    submissionService: {
+    articleRemovalImpactQuery: {
       previewArticleRemovalImpact() {
         return {
           canCommit: true,
@@ -199,7 +196,6 @@ test("existing article save uses opaque fingerprint CAS and returns the next tok
     fixture.close();
   }
 });
-
 test("save IPC contract requires a fingerprint and accepts only closed typed outcomes", () => {
   const registry = createContractRegistry(articleEditorContracts);
   const contract = registry.byChannel("content:save-article");
@@ -408,7 +404,6 @@ test("regular admission canonicalizes duplicates and maps active or explicit con
     fixture.close();
   }
 });
-
 test("canonical article refs prevent delimiter collisions and reject unsafe identities", () => {
   assert.notEqual(
     canonicalArticleRefKey({ clientId: "ab", articleId: "c" }),
@@ -638,7 +633,7 @@ test("removal release uncertainty becomes repairable and is excluded from automa
       workspaceRoot: fixture.root,
       contentStore: fixture.contentStore,
       mutationCoordinator: coordinator,
-      submissionService: {
+      articleRemovalImpactQuery: {
         previewArticleRemovalImpact() {
           return {
             canCommit: true,
@@ -671,7 +666,7 @@ test("removal release uncertainty becomes repairable and is excluded from automa
   }
 });
 
-test("publication uses the lock-admission snapshot and rejects an edit between inspect and reserve", async () => {
+test("publication reserve rejects an edit after the lock-admission snapshot", () => {
   const fixture = makeFixture();
   try {
     const original = article("article-1");
@@ -681,7 +676,6 @@ test("publication uses the lock-admission snapshot and rejects an edit between i
       platformId: "toutiao",
     };
     let reserved = 0;
-    let published = 0;
     const realCoordinator = fixture.coordinator;
     fixture.operationalStore.assertExecutableAccountProfile = () => profile;
     fixture.operationalStore.reservePublicationTarget = () => {
@@ -703,27 +697,13 @@ test("publication uses the lock-admission snapshot and rejects an edit between i
         return realCoordinator.reservePublicationTarget(input);
       },
     });
-    const workflow = createPublicationWorkflow({
-      clock: () => new Date(),
-      operationalStore: fixture.operationalStore,
-      articleMutationCoordinator: coordinator,
-      publisher: {
-        inspectAccount: async () => ({
-          verified: true,
-          accountProfileId: profile.accountProfileId,
-        }),
-        publish: async () => {
-          published += 1;
-          return { status: "failed", error: { code: "unused" } };
-        },
-      },
-      postProcessor: { process: async () => {} },
+    const admission = coordinator.readArticleForPublication({
+      articleRef: { clientId: "client-a", articleId: "article-1" },
     });
-    await assert.rejects(
+    assert.throws(
       () =>
-        workflow.publish({
-          articleRef: { clientId: "client-a", articleId: "article-1" },
-          articleId: "article-1",
+        coordinator.reservePublicationTarget({
+          articleRef: admission.articleRef,
           publicationId: "publication-1",
           attemptId: "attempt-1",
           target: {
@@ -731,13 +711,12 @@ test("publication uses the lock-admission snapshot and rejects an edit between i
             platformId: "toutiao",
             accountProfileId: profile.accountProfileId,
           },
-          title: "renderer title",
-          body: "renderer body",
+          expectedFingerprint: admission.publicationSnapshot.fingerprint,
+          operation: "queue",
         }),
       { code: "ARTICLE_EDIT_CONFLICT" },
     );
     assert.equal(reserved, 1);
-    assert.equal(published, 0);
   } finally {
     fixture.close();
   }
@@ -875,57 +854,6 @@ test("restore and permanent-delete use coordinator mutation sessions for file wr
       fixture.contentStore.isArticleTrashed("client-a", original.id),
       false,
     );
-  } finally {
-    fixture.close();
-  }
-});
-
-test("publication without a trusted articleRef fails before reserve and publisher", async () => {
-  const fixture = makeFixture();
-  try {
-    const valueArticle = article("article-1");
-    fixture.add(valueArticle);
-    let reserved = 0;
-    let published = 0;
-    const workflow = createPublicationWorkflow({
-      clock: () => new Date(),
-      operationalStore: {
-        reservePublicationTarget: () => {
-          reserved += 1;
-        },
-        listActionableRecovery: () => [],
-      },
-      articleMutationCoordinator: fixture.coordinator,
-      publisher: {
-        inspectAccount: async () => ({
-          verified: true,
-          accountProfileId: "account-1",
-        }),
-        publish: async () => {
-          published += 1;
-          return { status: "failed", error: { code: "unused" } };
-        },
-      },
-      postProcessor: { process: async () => {} },
-    });
-    await assert.rejects(
-      () =>
-        workflow.publish({
-          articleId: valueArticle.id,
-          publicationId: "publication-1",
-          attemptId: "attempt-1",
-          target: {
-            kind: "platform",
-            platformId: "toutiao",
-            accountProfileId: "account-1",
-          },
-          title: valueArticle.title,
-          body: valueArticle.content,
-        }),
-      { code: "ARTICLE_IDENTITY_UNRESOLVED" },
-    );
-    assert.equal(reserved, 0);
-    assert.equal(published, 0);
   } finally {
     fixture.close();
   }

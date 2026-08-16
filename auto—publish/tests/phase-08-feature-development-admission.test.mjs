@@ -9,9 +9,6 @@ import { createArticleManagementFeature } from "../media-workbench/src/features/
 
 const require = createRequire(import.meta.url);
 const {
-  createPublicationWorkflow,
-} = require("../src/application/publication-workflow");
-const {
   createOperationalStore,
 } = require("../src/infrastructure/operational-store/operational-store");
 const {
@@ -139,23 +136,21 @@ test("admission: a fake platform is isolated to a Publisher adapter and registry
       publish: (input) =>
         registry.resolve(input.target.platformId).publish(input),
     });
-    const workflow = createPublicationWorkflow({
-      clock: () => new Date("2026-08-05T00:00:00.000Z"),
+    const result = await publishWithoutWorkflow({
       operationalStore: store,
       publisher,
-    });
-
-    const result = await workflow.publish({
-      articleId: "article-admission-1",
-      publicationId: "publication-admission-1",
-      attemptId: "attempt-admission-1",
-      target: {
-        kind: "platform",
-        platformId: "admission-fake-platform",
-        accountProfileId: profile.accountProfileId,
+      command: {
+        articleId: "article-admission-1",
+        publicationId: "publication-admission-1",
+        attemptId: "attempt-admission-1",
+        target: {
+          kind: "platform",
+          platformId: "admission-fake-platform",
+          accountProfileId: profile.accountProfileId,
+        },
+        title: "Admission fixture",
+        body: "Fixture only",
       },
-      title: "Admission fixture",
-      body: "Fixture only",
     });
 
     assert.equal(result.status, "uncertain");

@@ -312,7 +312,7 @@ test("18-B IPC accepts only the closed image-count command and returns its refre
           handlers.set(channel, handler);
         },
       },
-      contentSubmissionService: {},
+      submissionMaintenance: {},
       regularQueueApplication: fixture.runtime.application,
     });
     const channel = "content:update-regular-queue-group-image-count";

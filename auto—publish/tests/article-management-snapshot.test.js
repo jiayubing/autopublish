@@ -174,7 +174,7 @@ describe("article management snapshot", function () {
         listTrashedArticles: () => [],
         listArticleRemovalTransactions: () => [],
       },
-      contentSubmissionService: {
+      submissionMaintenance: {
         listBatches() {
           throw new Error("generic batch reader must not be used");
         },

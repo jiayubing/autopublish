@@ -29,13 +29,13 @@ function createArticleRemovalService(options) {
       "ARTICLE_REMOVAL_SERVICE_INVALID",
       "Content store is required",
     );
-  if (!opts.submissionService)
+  if (!opts.articleRemovalImpactQuery)
     throw removalError(
       "ARTICLE_REMOVAL_SERVICE_INVALID",
-      "Content submission service is required",
+      "Article removal impact query is required",
     );
   const contentStore = opts.contentStore;
-  const submissionService = opts.submissionService;
+  const articleRemovalImpactQuery = opts.articleRemovalImpactQuery;
   const mutationCoordinator = opts.mutationCoordinator || null;
   const transactionStore =
     opts.transactionStore ||
@@ -369,12 +369,15 @@ function createArticleRemovalService(options) {
   }
 
   function buildImpact(items) {
-    if (typeof submissionService.previewArticleRemovalImpact !== "function")
+    if (
+      typeof articleRemovalImpactQuery.previewArticleRemovalImpact !==
+      "function"
+    )
       throw removalError(
         "ARTICLE_REMOVAL_PREVIEW_UNAVAILABLE",
         "Article removal preview is unavailable",
       );
-    const impact = submissionService.previewArticleRemovalImpact({
+    const impact = articleRemovalImpactQuery.previewArticleRemovalImpact({
       selections: items,
     });
     if (!impact || !Array.isArray(impact.blockedItems))

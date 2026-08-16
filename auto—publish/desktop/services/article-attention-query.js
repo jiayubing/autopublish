@@ -105,10 +105,10 @@ function createArticleAttentionQuery(options) {
   function readArchiveFailures() {
     const value = reader("listArchiveFailures", function () {
       if (
-        opts.contentSubmissionService &&
-        typeof opts.contentSubmissionService.listArchiveFailures === "function"
+        opts.submissionMaintenance &&
+        typeof opts.submissionMaintenance.listArchiveFailures === "function"
       )
-        return opts.contentSubmissionService.listArchiveFailures();
+        return opts.submissionMaintenance.listArchiveFailures();
       return [];
     })();
     return Array.isArray(value) ? value : [];

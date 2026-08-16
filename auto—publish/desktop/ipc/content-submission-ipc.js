@@ -25,21 +25,12 @@ function bind(service, name) {
   return service[name].bind(service);
 }
 
-function createSubmissionInterface(service, regularQueueService, regularQueueGroups) {
-  const regular = regularQueueService || service;
+function createSubmissionInterface(maintenance, regularQueueService, regularQueueGroups) {
+  const regular = regularQueueService;
   return Object.freeze({
-    preparation: {
-      previewBatch: bind(service, "previewBatch"),
-      createBatch: bind(service, "createBatch"),
-      listPlatforms: bind(service, "listPlatforms"),
-    },
     cleanup: {
-      previewResidue: bind(service, "previewTrashedArticleQueueResidue"),
-      cleanupResidue: bind(service, "cleanupTrashedArticleQueueResidue"),
-    },
-    retry: {
-      previewFailedPublication: bind(service, "previewRetryFailedPublication"),
-      failedPublication: bind(service, "retryFailedPublication"),
+      previewResidue: bind(maintenance, "previewTrashedArticleQueueResidue"),
+      cleanupResidue: bind(maintenance, "cleanupTrashedArticleQueueResidue"),
     },
     regularQueue: {
       previewAdmission: bind(regular, "previewRegularQueueAdmission"),
@@ -194,16 +185,16 @@ function regularQueueGroupImageCountInput(input) {
 }
 
 function registerContentSubmissionIpc(deps) {
-  const service = deps.contentSubmissionService;
-  if (!service) {
-    const error = new Error("Content submission service is required");
-    error.code = "CONTENT_SUBMISSION_SERVICE_REQUIRED";
+  const maintenance = deps.submissionMaintenance;
+  if (!maintenance) {
+    const error = new Error("Submission maintenance service is required");
+    error.code = "SUBMISSION_MAINTENANCE_REQUIRED";
     throw error;
   }
   const workflow =
     deps.submissionWorkflow ||
     createSubmissionInterface(
-      service,
+      maintenance,
       deps.regularQueueApplication,
       deps.regularQueueGroupOrchestrator,
     );

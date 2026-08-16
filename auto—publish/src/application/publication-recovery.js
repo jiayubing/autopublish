@@ -2,6 +2,15 @@
 
 const crypto = require("node:crypto");
 
+function uncertainError() {
+  return {
+    code: "PUBLISHER_RESULT_UNCERTAIN",
+    category: "transport",
+    retryability: "manual-check",
+    userMessage: "无法确认远端投稿结果，请人工核对",
+  };
+}
+
 function normalizePostProcessingErrorCode(error) {
   const code = error && error.code;
   return typeof code === "string" && /^[A-Z0-9][A-Z0-9_.:-]{0,127}$/.test(code)
@@ -9,12 +18,12 @@ function normalizePostProcessingErrorCode(error) {
     : "POST_PROCESSING_FAILED";
 }
 
-function createPostProcessingCoordinator(options) {
+function createPublicationRecovery(options) {
   const value = options || {};
   if (!value.operationalStore)
-    throw new Error("Post-processing operational store is required");
+    throw new Error("Publication recovery operational store is required");
 
-  async function drain(options) {
+  async function drainPostProcessing(options) {
     const collectResults = options && options.collectResults === true;
     const results = [];
 
@@ -33,7 +42,7 @@ function createPostProcessingCoordinator(options) {
       };
     }
 
-    function result(job, status, output, error) {
+    function record(job, status, output, error) {
       if (!collectResults) return;
       results.push({
         ...descriptor(job),
@@ -48,12 +57,12 @@ function createPostProcessingCoordinator(options) {
       typeof value.postProcessor.process !== "function"
     )
       return collectResults ? { count: 0, results: [] } : 0;
+
     let count = 0;
     for (;;) {
       const claimToken = `post-${crypto.randomUUID()}`;
       const job = value.operationalStore.claimPostProcessing({ claimToken });
-      if (!job)
-        return collectResults ? { count, results } : count;
+      if (!job) return collectResults ? { count, results } : count;
       try {
         const output = await value.postProcessor.process(job);
         const autoTrash = output && output.autoTrash;
@@ -71,7 +80,7 @@ function createPostProcessingCoordinator(options) {
             success: false,
             output,
           });
-          result(job, "failed", output, error);
+          record(job, "failed", output, error);
         } else {
           value.operationalStore.completePostProcessing({
             jobId: job.jobId,
@@ -79,7 +88,7 @@ function createPostProcessingCoordinator(options) {
             success: true,
             output,
           });
-          result(job, "completed", output);
+          record(job, "completed", output);
         }
       } catch (error) {
         if (error && error.code === "POST_PROCESSING_ARCHIVE_NOT_ELIGIBLE") {
@@ -88,7 +97,7 @@ function createPostProcessingCoordinator(options) {
             claimToken,
             retry: true,
           });
-          result(job, "deferred", undefined, error);
+          record(job, "deferred", undefined, error);
           return collectResults ? { count, results } : count;
         }
         value.operationalStore.completePostProcessing({
@@ -97,13 +106,42 @@ function createPostProcessingCoordinator(options) {
           success: false,
           errorCode: normalizePostProcessingErrorCode(error),
         });
-        result(job, "failed", undefined, error);
+        record(job, "failed", undefined, error);
       }
       count += 1;
     }
   }
 
-  return Object.freeze({ drain });
+  async function recover() {
+    let recoveryCount = 0;
+    let recoveryPage;
+    do {
+      recoveryPage = value.operationalStore.listActionableRecovery({
+        includeManualCheck: false,
+      });
+      for (const item of recoveryPage) {
+        if (item.state === "manual_check") continue;
+        const recovery = {
+          attemptId: item.attemptId,
+          articleId: item.articleId,
+          error: uncertainError(),
+          ...(item.articleRef
+            ? { articleRef: item.articleRef }
+            : item.detail && item.detail.articleRef
+              ? { articleRef: item.detail.articleRef }
+              : {}),
+        };
+        if (value.articleMutationCoordinator)
+          value.articleMutationCoordinator.markRecoveryUncertain(recovery);
+        else value.operationalStore.markRecoveryUncertain(recovery);
+        recoveryCount += 1;
+      }
+    } while (recoveryPage.hasMore === true);
+    const postProcessingCount = await drainPostProcessing();
+    return Object.freeze({ recoveryCount, postProcessingCount });
+  }
+
+  return Object.freeze({ recover, drainPostProcessing });
 }
 
-module.exports = { createPostProcessingCoordinator };
+module.exports = { createPublicationRecovery };

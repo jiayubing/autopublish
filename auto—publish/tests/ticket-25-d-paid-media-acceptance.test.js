@@ -646,8 +646,8 @@ test("paid order views refresh through the application and preserve facts on tra
       "in_submission",
     );
     assert.equal(snapshot.workflowByArticle["refresh-d"].locks.canEdit, false);
-    assert.equal(snapshot.orders[0].quotedPrice, 12.5);
-    assert.equal(snapshot.orders[0].resourceNameSnapshot, "D 媒体");
+    assert.equal(firstOrder(fixture).price, "12.5");
+    assert.equal(firstOrder(fixture).resourceName, "D 媒体");
   } finally {
     fixture.close();
   }

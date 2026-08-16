@@ -47,9 +47,17 @@ function isUnknown(status, known) {
 
 function createArticleSubmissionRemovalCoordinator(options) {
   const value = options || {};
-  if (!value.projection) throw fail("ARTICLE_SUBMISSION_REMOVAL_PORT_REQUIRED");
-  const projection = value.projection;
   const lifecycleFacts = value.lifecycleFacts || value.activeTargetQuery || null;
+  const projection = value.projection || null;
+  if (
+    !projection &&
+    !(
+      lifecycleFacts &&
+      (typeof lifecycleFacts.listArticleLifecycleFacts === "function" ||
+        typeof lifecycleFacts.listActiveTargets === "function")
+    )
+  )
+    throw fail("ARTICLE_SUBMISSION_REMOVAL_PORT_REQUIRED");
 
   function normalizeSelections(input) {
     if (value.policy && typeof value.policy.normalizeSelections === "function")
@@ -206,8 +214,10 @@ function createArticleSubmissionRemovalCoordinator(options) {
   }
 
   function addProjectionFacts(blocked, selections) {
+    if (!projection || typeof projection.allItemViews !== "function")
+      throw fail("ARTICLE_SUBMISSION_REMOVAL_PORT_REQUIRED");
     const selected = new Set(selections.map(selectionKey));
-    const views = typeof projection.allItemViews === "function" ? projection.allItemViews() : [];
+    const views = projection.allItemViews();
     views.forEach((item) => {
       if (!item || !selected.has(selectionKey(item))) return;
       const status = statusOf(item);

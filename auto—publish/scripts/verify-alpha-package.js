@@ -23,13 +23,22 @@ const ARCHIVE_FILES = [
   "desktop/ai-provider-config-store.js",
   "desktop/ipc/content-generation-batch-ipc.js",
   "desktop/ipc/runtime-diagnostics-ipc.js",
-  "desktop/services/publication-submission-orchestrator.js",
+  "desktop/services/submission-maintenance-service.js",
+  "desktop/services/prepared-submission-recovery.js",
+  "desktop/services/submission-target-catalog.js",
+  "desktop/services/submission-item-projection.js",
+  "desktop/services/submission-action-policy.js",
+  "desktop/services/submission-operation-files.js",
+  "desktop/services/submission-operation-staging.js",
+  "desktop/services/submission-action-recovery.js",
+  "desktop/services/submission-cleanup.js",
+  "desktop/composition/publication-recovery-composition.js",
+  "desktop/services/article-attention-query.js",
+  "desktop/services/article-attention-resolver.js",
   "desktop/services/platform-workbench/command-preparer.js",
   "desktop/services/platform-workbench/queue-reader.js",
-  "src/application/publication-workflow/errors.js",
-  "src/application/publication-workflow/execution.js",
-  "src/application/publication-workflow/post-processing.js",
-  "src/application/publication-workflow/recovery.js",
+  "src/application/publication-recovery.js",
+  "src/infrastructure/operational-store/operational-store.js",
   "src/diagnostics/diagnostic-schema.js",
   "src/diagnostics/diagnostic-producer.js",
   "src/diagnostics/diagnostic-memory-sink.js",
@@ -47,6 +56,29 @@ const ARCHIVE_FILES = [
   "media-workbench/dist/index.html",
   "build/preload/preload.cjs",
   "node_modules/mammoth/LICENSE",
+];
+
+const RETIRED_ARCHIVE_FILES = [
+  "desktop/services/content-submission-application.js",
+  "desktop/services/content-submission-service.js",
+  "desktop/services/operational-content-submission-service.js",
+  "desktop/services/publication-submission-orchestrator.js",
+  "desktop/services/submission-batch-persistence.js",
+  "desktop/services/submission-batch-planner.js",
+  "desktop/services/submission-batch-reader.js",
+  "desktop/services/submission-batch-recovery.js",
+  "desktop/services/submission-file-helpers.js",
+  "desktop/services/submission-preflight.js",
+  "desktop/services/submission-queue-removal.js",
+  "desktop/services/submission-result-reconciliation.js",
+  "desktop/services/submission-retry.js",
+  "desktop/composition/phase-01-composition.js",
+  "desktop/composition/publication-workflow-composition.js",
+  "src/application/publication-workflow.js",
+  "src/application/publication-workflow/errors.js",
+  "src/application/publication-workflow/execution.js",
+  "src/application/publication-workflow/post-processing.js",
+  "src/application/publication-workflow/recovery.js",
 ];
 
 const UNPACKED_FILES = [
@@ -208,6 +240,10 @@ function verifyPackage(resourcesDir) {
   ARCHIVE_FILES.forEach((file) => {
     if (!archiveEntries.has(file))
       failures.push("ARCHIVE_FILE_MISSING: " + file);
+  });
+  RETIRED_ARCHIVE_FILES.forEach((file) => {
+    if (archiveEntries.has(file))
+      failures.push("RETIRED_ARCHIVE_FILE_PRESENT: " + file);
   });
   UNPACKED_FILES.forEach((file) => {
     if (!regularFile(path.join(unpacked, file)))

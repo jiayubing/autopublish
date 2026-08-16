@@ -924,7 +924,7 @@ test("article management binds client identity to real OperationalStore publicat
         listTrashedArticles: function () { return []; },
         listArticleRemovalTransactions: function () { return []; },
       },
-      contentSubmissionService: {
+      submissionMaintenance: {
         listBatches: function () { return []; },
         listPlatforms: function () { return []; },
       },

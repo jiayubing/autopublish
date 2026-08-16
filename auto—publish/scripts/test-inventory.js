@@ -157,10 +157,10 @@ const E_DECISION = Object.freeze({
     {
       package: "M05-E3",
       ownerEvidence: [
-        "tests/phase-03-operational-content-submission.test.js",
-        "tests/phase-03-publication-workflow.test.js",
+        "tests/publication-recovery.test.js",
+        "tests/submission-cleanup-recovery.test.js",
         "tests/phase-07-regular-queue.test.js",
-        "tests/phase-08-publication-submission-orchestration.test.js",
+        "tests/ticket-25-d-paid-media-acceptance.test.js",
         "tests/regular-platform-outcome-service.test.js",
       ],
       fixtureBoundary:
@@ -2583,7 +2583,7 @@ function classifyPackage(fileName, testName) {
     return "M05-F";
 
   if (
-    /^tests\/(?:article-removal-transaction-store|phase-02-operational-store|phase-02-runtime-capacity|phase-03-operational-store-v3|phase-04-operational-store-lifecycle|phase-08-operational-store-internals|submission-file-helpers-failure-injection|article-removal-recovery-scheduler)\.test\./.test(
+    /^tests\/(?:article-removal-transaction-store|phase-02-operational-store|phase-02-runtime-capacity|phase-03-operational-store-v3|phase-04-operational-store-lifecycle|phase-08-operational-store-internals|article-removal-recovery-scheduler)\.test\./.test(
       file,
     )
   )
@@ -2597,7 +2597,7 @@ function classifyPackage(fileName, testName) {
     return "M05-E1";
 
   if (
-    /^tests\/(?:article-lifecycle-ticket-(?:08|13|15|16|22)|order-observation-contract|phase-01-domain-contracts|phase-03-content-batch-store|phase-03-media-publication-workflow|phase-03-operational-content-submission|phase-03-post-processing|phase-03-publication-workflow|phase-05-p1-blockers|phase-07-regular-queue|phase-08-publication-submission-orchestration|publication-article-identity|publication-targets|regular-platform-outcome-service|regular-publication-evidence-contract|submission-cleanup-recovery|submission-preparation-lifecycle|ticket-24-c-runtime-outcome-vocabulary)\.test\./.test(
+    /^tests\/(?:article-lifecycle-ticket-(?:08|13|15|16|22)|c3-shadow-submission-absence|order-observation-contract|phase-01-domain-contracts|phase-03-content-batch-store|phase-03-media-publication-workflow|phase-03-post-processing|phase-05-p1-blockers|phase-07-regular-queue|publication-article-identity|publication-recovery|publication-targets|regular-platform-outcome-service|regular-publication-evidence-contract|submission-cleanup-recovery|ticket-24-c-runtime-outcome-vocabulary|ticket-25-d-paid-media-acceptance)\.test\./.test(
       file,
     )
   )

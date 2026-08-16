@@ -95,7 +95,7 @@ const OPERATIONAL_FACADE =
 const MIGRATION_IMPORTER = "scripts/migrate-operational-store-v1.js";
 const RECOVERY_GUARD_IMPORT = `${INTERNAL_PREFIX}/operational-store-recovery-guard`;
 const OPERATIONAL_FACADE_IMPORTERS = new Set([
-  "desktop/composition/publication-workflow-composition.js",
+  "desktop/composition/publication-recovery-composition.js",
   "desktop/composition/workspace-migration-composition.js",
   "desktop/composition/workspace-runtime-composition.js",
   "scripts/migrate-operational-store-v1.js",

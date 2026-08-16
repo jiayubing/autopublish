@@ -90,7 +90,7 @@ function loadMainWithQuitHarness(dispose, harnessOptions) {
     ["./services/platform-settings/hepan-settings-adapter", { createHepanSettingsAdapter: function() { return {}; } }],
     ["./runtime-config", { createLegacyProviderSettingsMigration: function() { return {}; } }],
     ["./services/ai-provider-service", { createAiProviderService: function() { return { createClient: function() { return {}; } }; } }],
-    ["./services/content-submission-service", { createContentSubmissionService: function() { return {}; } }],
+    ["./services/submission-maintenance-service", { createSubmissionMaintenanceService: function() { return {}; } }],
     ["./services/ai-content-service", { createAiContentService: function() { return {}; } }],
     ["./services/content-generation-batch-service", { createContentGenerationBatchService: function() { return { dispose: function() {} }; } }],
     ["./services/doubao-collection-service", {

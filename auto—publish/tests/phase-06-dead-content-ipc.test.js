@@ -29,7 +29,7 @@ test("content IPC registrars omit capabilities with no production Renderer calle
   };
 
   registerAiContentIpc({ ipcMain, aiContentService: {} });
-  registerContentSubmissionIpc({ ipcMain, contentSubmissionService: {} });
+  registerContentSubmissionIpc({ ipcMain, submissionMaintenance: {} });
 
   for (const channel of DEAD_CHANNELS) {
     assert.equal(handlers.has(channel), false, channel);

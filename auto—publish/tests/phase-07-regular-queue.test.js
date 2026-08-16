@@ -8,9 +8,6 @@ const {
   createRegularQueueApplication,
 } = require("../desktop/services/regular-queue-application");
 const {
-  createSubmissionBatchReader,
-} = require("../desktop/services/submission-batch-reader");
-const {
   createWorkspaceDataInvalidation,
 } = require("../desktop/workspace-data-invalidation");
 const {
@@ -349,23 +346,17 @@ test("regular admission creates one FIFO group and atomic facts, hides the immut
       2,
     );
 
-    const publicBatch = createSubmissionBatchReader({
-      operationalStore: fixture.store,
-    }).getBatch(first.batchId);
-    assert.equal(publicBatch.items.length, 2);
+    const publicItems = first.items;
+    assert.equal(publicItems.length, 2);
     assert.equal(
       Object.prototype.hasOwnProperty.call(
-        publicBatch.items[0],
+        publicItems[0],
         "publicationSnapshot",
       ),
       false,
     );
     assert.equal(
-      Object.prototype.hasOwnProperty.call(publicBatch.items[0], "articleRef"),
-      false,
-    );
-    assert.equal(
-      publicBatch.items[0].queueGroupId,
+      publicItems[0].queueGroupId,
       first.items[0].queueGroupId,
     );
 
@@ -421,9 +412,6 @@ test("regular admission invalidation refreshes article management from the new w
   });
   try {
     fixture.add(article("article-a"));
-    const batchReader = createSubmissionBatchReader({
-      operationalStore: fixture.store,
-    });
     managementSnapshot = createArticleManagementSnapshot({
       workspaceRoot: fixture.root,
       getRevision: invalidation.getRevision,
@@ -432,10 +420,6 @@ test("regular admission invalidation refreshes article management from the new w
           fixture.contentStore.listArticles(clientId),
         listTrashedArticles: (clientId) =>
           fixture.contentStore.listTrashedArticles(clientId),
-      },
-      contentSubmissionService: {
-        listBatches: (clientId) => batchReader.listBatches(clientId),
-        listPlatforms: () => [],
       },
       operationalStore: fixture.store,
     });
@@ -478,9 +462,6 @@ test("regular queue removal invalidation refreshes cached article management fro
   });
   try {
     fixture.add(article("article-a"));
-    const batchReader = createSubmissionBatchReader({
-      operationalStore: fixture.store,
-    });
     managementSnapshot = createArticleManagementSnapshot({
       workspaceRoot: fixture.root,
       getRevision: invalidation.getRevision,
@@ -489,10 +470,6 @@ test("regular queue removal invalidation refreshes cached article management fro
           fixture.contentStore.listArticles(clientId),
         listTrashedArticles: (clientId) =>
           fixture.contentStore.listTrashedArticles(clientId),
-      },
-      contentSubmissionService: {
-        listBatches: (clientId) => batchReader.listBatches(clientId),
-        listPlatforms: () => [],
       },
       operationalStore: fixture.store,
     });

@@ -7,7 +7,6 @@ const path = require("node:path");
 const test = require("node:test");
 const { createOperationalStore } = require("../src/infrastructure/operational-store/operational-store");
 const { createContentLifecycleComposition } = require("../desktop/composition/content-lifecycle-composition");
-const { createContentSubmissionService } = require("../desktop/services/content-submission-service");
 const { createArticleRemovalService } = require("../src/content/article-removal-service");
 const { createArticleSubmissionRemovalCoordinator } = require("../desktop/services/article-submission-removal-coordinator");
 
@@ -31,20 +30,23 @@ test("production removal blocks on a queued regular item and leaves queue mutati
     const contentStore = composition.contentStore;
     contentStore.saveArticle(article());
     const profile = operationalStore.createAccountProfile({ platformId: "toutiao", displayName: "fixture" });
-    const input = path.join(root, ".autopublish", "input");
-    const submission = createContentSubmissionService({
-      workspaceRoot: root, paths: { input }, operationalStore, contentStore,
-      platforms: [{ id: "toutiao", scanDir: "toutiao", contentQueueImport: true }]
+    const batch = operationalStore.createSubmissionBatch({
+      batchId: "removal-queued-batch",
+      items: [{
+        articleId: "article-1",
+        target: { kind: "platform", platformId: "toutiao", accountProfileId: profile.accountProfileId },
+        payload: { clientId: "client-1" },
+      }],
     });
-    const batch = submission.createBatch({ clientId: "client-1", articleIds: ["article-1"], platformId: "toutiao", accountProfileId: profile.accountProfileId, confirmed: true });
-    const filePath = path.join(input, "toutiao", batch.items[0].filename);
-    const sidecarPath = filePath + ".submission.json";
+    const impactQuery = createArticleSubmissionRemovalCoordinator({
+      lifecycleFacts: operationalStore,
+    });
     const removal = createArticleRemovalService({
       workspaceRoot: root,
       contentStore,
       mutationCoordinator: composition.articleMutationCoordinator,
       transactionStore: composition.articleRemovalTransactionStore,
-      submissionService: submission,
+      articleRemovalImpactQuery: impactQuery,
       tokenTtlMs: 5000,
     });
     const preview = removal.previewArticleRemovalImpact({ selections: [{ clientId: "client-1", articleId: "article-1" }] });
@@ -54,17 +56,16 @@ test("production removal blocks on a queued regular item and leaves queue mutati
     assert.equal(contentStore.isArticleTrashed("client-1", "article-1"), false);
     assert.equal(operationalStore.getSubmissionBatch(batch.batchId).items[0].status, "queued");
 
-    const cancelPreview = submission.previewCancelBatch({ batchId: batch.batchId });
-    const cancelled = submission.cancelBatch({ batchId: batch.batchId, planId: cancelPreview.planId, confirmed: true });
-    assert.equal(cancelled.cancelledCount, 1);
+    operationalStore.cancelQueuedSubmissionItem({
+      batchId: batch.batchId,
+      itemId: batch.items[0].itemId,
+    });
     const afterCancel = removal.previewArticleRemovalImpact({ selections: [{ clientId: "client-1", articleId: "article-1" }] });
     assert.equal(afterCancel.canCommit, true);
     const result = removal.applyArticleRemovalImpact({ confirmed: true, token: afterCancel.token });
     assert.equal(result.status, "committed");
     assert.equal(contentStore.isArticleTrashed("client-1", "article-1"), true);
     assert.equal(operationalStore.getSubmissionBatch(batch.batchId).items[0].status, "cancelled");
-    assert.equal(fs.existsSync(filePath), false);
-    assert.equal(fs.existsSync(sidecarPath), false);
   } finally {
     operationalStore.close();
     fs.rmSync(root, { recursive: true, force: true });

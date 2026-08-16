@@ -100,7 +100,7 @@ function fixture(options) {
 
   const service = createArticleRemovalService({
     contentStore,
-    submissionService,
+    articleRemovalImpactQuery: submissionService,
     transactionStore: store,
     now: () => time,
     recoveryBackoffMs: 1,
@@ -115,7 +115,7 @@ function fixture(options) {
     service,
     article,
     contentStore,
-    submissionService,
+    articleRemovalImpactQuery: submissionService,
     setNow: (next) => { time = next; },
     setBlocked: (next) => { blockedItems = next || []; },
     setReadError: (next) => { readError = next || null; },
@@ -269,7 +269,7 @@ it("moves only the completed prefix when a later article changes", (t) => {
   });
   const service = createArticleRemovalService({
     contentStore,
-    submissionService: { previewArticleRemovalImpact: () => ({ blockedItems: [] }) },
+    articleRemovalImpactQuery: { previewArticleRemovalImpact: () => ({ blockedItems: [] }) },
     transactionStore: store,
     now: () => "2026-07-25T00:00:00.000Z",
     runnerId: "runner-many",
@@ -412,7 +412,7 @@ it("permits only one runner to execute a claimed transaction", (t) => {
   t.after(f.cleanup);
   const other = createArticleRemovalService({
     contentStore: f.contentStore,
-    submissionService: f.submissionService,
+    articleRemovalImpactQuery: f.articleRemovalImpactQuery,
     transactionStore: f.store,
     now: () => "2026-07-25T00:00:00.000Z",
     runnerId: "runner-b",

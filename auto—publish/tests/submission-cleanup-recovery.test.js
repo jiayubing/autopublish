@@ -4,13 +4,14 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const crypto = require("node:crypto");
 const test = require("node:test");
 const {
   createOperationalStore,
 } = require("../src/infrastructure/operational-store/operational-store");
 const {
-  createContentSubmissionService,
-} = require("../desktop/services/content-submission-service");
+  createSubmissionMaintenanceService,
+} = require("../desktop/services/submission-maintenance-service");
 const {
   createSubmissionCleanup,
 } = require("../desktop/services/submission-cleanup");
@@ -44,8 +45,42 @@ function article() {
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "submission-cleanup-"));
   const store = createOperationalStore({ workspaceRoot: root });
-  const service = createContentSubmissionService({
+  const input = path.join(root, ".autopublish", "input");
+  const markdown = "# Cleanup fixture\n\nBody\n";
+  const contentHash = crypto.createHash("sha256").update(markdown).digest("hex");
+  const filename = "cleanup-fixture.md";
+  const profile = store.createAccountProfile({
+    platformId: "toutiao",
+    displayName: "Cleanup fixture account",
+  });
+  const batch = store.createSubmissionBatch({
+    batchId: "cleanup-batch",
+    items: [{
+      articleId: "article-cleanup",
+      target: { kind: "platform", platformId: "toutiao", accountProfileId: profile.accountProfileId },
+      payload: {
+        clientId: "client-cleanup",
+        targetPlatformId: "toutiao",
+        accountProfileId: profile.accountProfileId,
+        filename,
+        contentHash,
+      },
+    }],
+  });
+  const directory = path.join(input, "toutiao");
+  fs.mkdirSync(directory, { recursive: true });
+  const filePath = path.join(directory, filename);
+  fs.writeFileSync(filePath, markdown);
+  fs.writeFileSync(filePath + ".submission.json", JSON.stringify({
+    submissionBatchId: batch.batchId,
+    generatedArticleId: "article-cleanup",
+    clientId: "client-cleanup",
+    targetPlatformId: "toutiao",
+    contentHash,
+  }));
+  const service = createSubmissionMaintenanceService({
     workspaceRoot: root,
+    paths: { input },
     operationalStore: store,
     contentStore: {
       getArticle: () => article(),
@@ -54,17 +89,6 @@ function fixture() {
     platforms: [
       { id: "toutiao", scanDir: "toutiao", contentQueueImport: true },
     ],
-  });
-  const profile = store.createAccountProfile({
-    platformId: "toutiao",
-    displayName: "Cleanup fixture account",
-  });
-  const batch = service.createBatch({
-    clientId: "client-cleanup",
-    articleIds: ["article-cleanup"],
-    platformId: "toutiao",
-    accountProfileId: profile.accountProfileId,
-    confirmed: true,
   });
   return { root, store, service, batch, profile };
 }
@@ -116,7 +140,7 @@ test("keeps failed queue residue behind the explicit repair capability", () => {
         ".autopublish",
         "input",
         "toutiao",
-        value.batch.items[0].filename,
+        "cleanup-fixture.md",
       ),
     };
     files.sidecarPath = files.filePath + ".submission.json";
@@ -134,20 +158,6 @@ test("keeps failed queue residue behind the explicit repair capability", () => {
     );
     assert.equal(fs.existsSync(files.filePath), false);
     assert.equal(fs.existsSync(files.sidecarPath), false);
-  } finally {
-    closeFixture(value);
-  }
-});
-
-test("reconciles a batch through the public item projection", () => {
-  const value = fixture();
-  try {
-    const result = value.service.reconcileBatch(value.batch.batchId);
-    assert.equal(result.batch.batchId, value.batch.batchId);
-    assert.equal(result.items.length, 1);
-    assert.equal(result.items[0].status, "queued");
-    assert.equal("filePath" in result.items[0], false);
-    assert.equal("sidecarPath" in result.items[0], false);
   } finally {
     closeFixture(value);
   }
@@ -196,4 +206,113 @@ test("fails closed when published archive attention cannot be read", () => {
     () => cleanup.listArchiveFailures(),
     { code: "PUBLISHED_ARCHIVE_STATE_READ_FAILED" },
   );
+});
+
+test("named maintenance promotes durable prepared staging evidence", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "prepared-recovery-"));
+  try {
+    const batchId = "batch-recovery-promote";
+    const filename = "prepared.md";
+    const markdown = "# Prepared\n\nBody\n";
+    const contentHash = crypto
+      .createHash("sha256")
+      .update(markdown)
+      .digest("hex");
+    const payload = {
+      clientId: "client-prepared",
+      targetPlatformId: "toutiao",
+      accountProfileId: "account-prepared",
+      filename,
+      contentHash,
+    };
+    const batch = {
+      batchId,
+      status: "prepared",
+      items: [{ articleId: "article-prepared", payload }],
+    };
+    const stagedFile = path.join(
+      root,
+      ".submission-staging",
+      batchId,
+      "toutiao",
+      filename,
+    );
+    fs.mkdirSync(path.dirname(stagedFile), { recursive: true });
+    fs.writeFileSync(stagedFile, markdown);
+    fs.writeFileSync(
+      stagedFile + ".submission.json",
+      JSON.stringify({
+        version: 2,
+        submissionBatchId: batchId,
+        generatedArticleId: "article-prepared",
+        clientId: payload.clientId,
+        targetPlatformId: payload.targetPlatformId,
+        accountProfileId: payload.accountProfileId,
+        filename,
+        contentHash,
+      }),
+    );
+    const maintenance = createSubmissionMaintenanceService({
+      workspaceRoot: root,
+      paths: { input: root },
+      contentStore: { isArticleTrashed: () => false },
+      platforms: [{ id: "toutiao", scanDir: "toutiao", contentQueueImport: true }],
+      operationalStore: {
+        listSubmissionBatches: () => [batch],
+        queueSubmissionBatch: () => {
+          batch.status = "queued";
+          return { batchId, status: "queued" };
+        },
+      },
+    });
+
+    assert.deepEqual(maintenance.recoverPreparedBatches(), [
+      { batchId, status: "queued" },
+    ]);
+    assert.equal(fs.existsSync(stagedFile), false);
+    assert.equal(fs.existsSync(path.join(root, "toutiao", filename)), true);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("named maintenance discards a prepared batch with no file evidence", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "prepared-discard-"));
+  try {
+    const batch = {
+      batchId: "batch-recovery-discard",
+      status: "prepared",
+      items: [{
+        articleId: "article-prepared",
+        payload: {
+          clientId: "client-prepared",
+          targetPlatformId: "toutiao",
+          accountProfileId: "account-prepared",
+          filename: "missing.md",
+          contentHash: "0".repeat(64),
+        },
+      }],
+    };
+    let discarded = 0;
+    const maintenance = createSubmissionMaintenanceService({
+      workspaceRoot: root,
+      paths: { input: root },
+      contentStore: { isArticleTrashed: () => false },
+      platforms: [{ id: "toutiao", scanDir: "toutiao", contentQueueImport: true }],
+      operationalStore: {
+        listSubmissionBatches: () => [batch],
+        discardPreparedSubmissionBatch: () => {
+          discarded += 1;
+          batch.status = "discarded";
+        },
+      },
+    });
+
+    assert.deepEqual(maintenance.recoverPreparedBatches(), [
+      { batchId: batch.batchId, status: "discarded" },
+    ]);
+    assert.equal(discarded, 1);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });

@@ -81,7 +81,7 @@ function createHarness(options) {
     workspaceRoot: root,
     contentStore,
     mutationCoordinator: coordinator,
-    submissionService: {
+    articleRemovalImpactQuery: {
       previewArticleRemovalImpact() {
         return { canCommit: true, blockedItems: [] };
       },

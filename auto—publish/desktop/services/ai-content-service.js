@@ -85,16 +85,14 @@ function createAiContentService(opts) {
   const contentStore = options.contentStore;
   const operationalStore = options.operationalStore || null;
   const articleMutationCoordinator = options.articleMutationCoordinator || null;
-  // WorkspaceRuntime injects the sole OperationalStore-backed submission
-  // service. AI content never creates a legacy batch/ledger writer itself.
-  const contentSubmissionService = options.contentSubmissionService || null;
+  const articleRemovalImpactQuery = options.articleRemovalImpactQuery || null;
   const articleTrashService = options.articleTrashService || (contentStore && createArticleTrashService({
     contentStore: contentStore,
     operationalStore: operationalStore,
     mutationCoordinator: articleMutationCoordinator,
     articleRemovalTransitionPort: options.articleRemovalTransitionPort,
     workspaceRoot: workspaceRoot,
-    submissionService: contentSubmissionService,
+    articleRemovalImpactQuery,
     transactionStore: options.articleRemovalTransactionStore,
     now: options.now,
     tokenTtlMs: options.articleRemovalTokenTtlMs,

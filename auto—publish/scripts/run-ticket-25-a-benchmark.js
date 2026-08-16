@@ -116,7 +116,7 @@ async function measureOnce(fixture) {
     listLifecycleFacts: () => read(() => fixture.lifecycleFacts),
     listAttention: () => read(() => fixture.attention),
     listTransactions: () => read(() => fixture.transactions),
-    contentSubmissionService: {
+    submissionMaintenance: {
       listPlatforms: () =>
         read(() => [{ id: "synthetic-platform", contentQueueImport: true }]),
     },

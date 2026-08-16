@@ -82,7 +82,7 @@ function removeOwnedFile(filename, owns, code) {
   fs.unlinkSync(filename);
 }
 
-function createSubmissionBatchRecovery(options) {
+function createPreparedSubmissionRecovery(options) {
   const value = options || {};
   const inputRoot = path.resolve(value.inputRoot);
   if (!value.operationalStore || typeof value.queuePaths !== "function")
@@ -294,4 +294,4 @@ function createSubmissionBatchRecovery(options) {
   });
 }
 
-module.exports = { createSubmissionBatchRecovery, STAGING_DIRECTORY };
+module.exports = { createPreparedSubmissionRecovery, STAGING_DIRECTORY };

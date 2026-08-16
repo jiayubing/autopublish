@@ -6,16 +6,11 @@ const test = require("node:test");
 const root = path.resolve(__dirname, "..");
 const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
 
-test("phase 1 composition is injected and is not a second production runtime", () => {
-  const {
-    createPhaseOneComposition,
-  } = require("../desktop/composition/phase-01-composition");
-  const composition = createPhaseOneComposition({
-    operationalStore: {},
-    publisher: {},
-    clock: () => new Date(),
-  });
-  assert.equal(typeof composition.publicationWorkflow.publish, "function");
+test("retired phase 1 execution composition is absent from production runtime", () => {
+  assert.equal(
+    fs.existsSync(path.join(root, "desktop/composition/phase-01-composition.js")),
+    false,
+  );
   assert.doesNotMatch(read("desktop/main.js"), /phase-01-composition/);
   assert.doesNotMatch(
     read("desktop/workspace-runtime.js"),
@@ -32,7 +27,7 @@ test("phase 1 contracts stay pure while renderer and worker load only shared def
     "src/domain/safe-operational-error.js",
     "src/domain/publisher-contract.js",
     "src/domain/dto.js",
-    "src/application/publication-workflow.js",
+    "src/application/publication-recovery.js",
   ]) {
     assert.doesNotMatch(read(relative), forbidden, relative);
   }

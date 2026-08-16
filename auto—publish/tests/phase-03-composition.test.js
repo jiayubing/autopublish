@@ -5,8 +5,8 @@ const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 const {
-  createPublicationWorkflowComposition,
-} = require("../desktop/composition/publication-workflow-composition");
+  createPublicationRecoveryComposition,
+} = require("../desktop/composition/publication-recovery-composition");
 
 test("Phase 3 composition owns one OperationalStore writer and releases it on dispose", async () => {
   const workspaceRoot = fs.mkdtempSync(
@@ -24,14 +24,17 @@ test("Phase 3 composition owns one OperationalStore writer and releases it on di
       },
     }),
   };
-  const composition = createPublicationWorkflowComposition({
+  const composition = createPublicationRecoveryComposition({
     workspaceRoot,
     publisher,
   });
-  assert.deepEqual(Object.keys(composition.publicationWorkflow), ["recover"]);
+  assert.deepEqual(Object.keys(composition.publicationRecovery), [
+    "recover",
+    "drainPostProcessing",
+  ]);
   assert.equal(composition.operationalStore.verify().schemaVersion, 8);
   await composition.dispose();
-  const next = createPublicationWorkflowComposition({
+  const next = createPublicationRecoveryComposition({
     workspaceRoot,
     publisher,
   });
@@ -48,7 +51,7 @@ test("restarted composition rebuilds uncertain attention from OperationalStore w
       throw new Error("unused");
     },
   };
-  const first = createPublicationWorkflowComposition({
+  const first = createPublicationRecoveryComposition({
     workspaceRoot,
     publisher,
   });
@@ -79,7 +82,7 @@ test("restarted composition rebuilds uncertain attention from OperationalStore w
   } finally {
     await first.dispose();
   }
-  const second = createPublicationWorkflowComposition({
+  const second = createPublicationRecoveryComposition({
     workspaceRoot,
     publisher,
   });
@@ -124,12 +127,12 @@ test("restarted composition rebuilds uncertain attention from OperationalStore w
   } finally {
     await second.dispose();
   }
-  const third = createPublicationWorkflowComposition({
+  const third = createPublicationRecoveryComposition({
     workspaceRoot,
     publisher,
   });
   try {
-    assert.equal(typeof third.publicationWorkflow.reconcile, "undefined");
+    assert.equal(typeof third.publicationRecovery.reconcile, "undefined");
     assert.equal(
       third.createAttentionPorts({}).attentionQuery.list().items.length,
       1,
@@ -166,7 +169,7 @@ test("production composition closes legacy publish before any remote side effect
       };
     },
   };
-  const first = createPublicationWorkflowComposition({
+  const first = createPublicationRecoveryComposition({
     workspaceRoot,
     publisher,
   });
@@ -175,9 +178,9 @@ test("production composition closes legacy publish before any remote side effect
       platformId: "toutiao",
       displayName: "fixture",
     });
-    assert.equal(typeof first.publicationWorkflow.publish, "undefined");
-    assert.equal(typeof first.publicationWorkflow.retry, "undefined");
-    assert.equal(typeof first.publicationWorkflow.reconcile, "undefined");
+    assert.equal(typeof first.publicationRecovery.publish, "undefined");
+    assert.equal(typeof first.publicationRecovery.retry, "undefined");
+    assert.equal(typeof first.publicationRecovery.reconcile, "undefined");
     assert.equal(publishes, 0);
     assert.deepEqual(
       first.operationalStore.listPublicationRecords({
