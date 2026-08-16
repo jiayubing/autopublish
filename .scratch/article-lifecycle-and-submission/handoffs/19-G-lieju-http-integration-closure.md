@@ -7,7 +7,8 @@
 - 19-G 开始 integration HEAD：`6e42cded0fe665a0d9726bcb4e0ca680cef378ff`；开始时工作树干净，19-F 已为 `COMPLETE`。
 - blocking remediation commit：`eb1ca52a52aff1785d6674f258712e2a0a20c412`（Lieju image capability、HTTP session 配置依赖方向、城市目录合同统一）。
 - cross-ticket test-contract remediation commit：`cdab11c02c7b77c827ef6880b5f3a09815964e83`（Phase 1/4 旧 fixture 与当前 prepared/browser 合同对齐）。
-- 最终 clean implementation/test HEAD：`cdab11c02c7b77c827ef6880b5f3a09815964e83`。
+- 原 19-G closure clean implementation/test HEAD：`cdab11c02c7b77c827ef6880b5f3a09815964e83`。
+- 后续 Lieju HTTP charset/image-slot remediation 与最终本地验证 HEAD：`35d0599b9563020c830870ea71bc0e153356eb2a`。
 - 当前结论：**19-G=`COMPLETE`；Wave 13=`PARTIAL`**。本地实现、combined audit、bounded re-audit、完整测试和 package smoke 已闭合；独立 HTTP multipart POST 的真实带图验收仍需另一次明确授权。
 
 本次没有执行真实登录、真实 GET、真实 POST、图片上传、发布、付费或公开页核对；没有读取或记录真实 Cookie、Token、隐藏字段、联系方式、文章正文或 storageState 原文。
@@ -104,3 +105,21 @@ npm run pack:production:smoke
 ## Closure
 
 19-G 的本地 integration closure、blocking remediation、bounded re-audit、最终 clean HEAD gate 和 evidence 已完成。Wave 13 保持 `PARTIAL`，唯一剩余事项是需要单独授权的真实 HTTP multipart 图文验收；Ticket 20/21 不因本 Ticket 完成自动调度。
+
+## Post-closure remediation — 2026-08-16
+
+用户反馈列举网实际文章出现中文乱码、选择 4 张图片但页面只收到 1 张。按当前已验证合同收敛为：HTTP multipart 文本字段使用投稿表单声明的 charset（未声明时 UTF-8）；当前 raw form 只有一个真实图片槽位时，HTTP 只发送一张图片，不因图片数量自动切回 Playwright。多选图片转 Playwright 仍是未来独立能力验收后的产品决策，不在本次本地修复中预设。
+
+实现 commit：`35d0599b9563020c830870ea71bc0e153356eb2a`。
+
+本次变更与回归证据：
+
+- Lieju 定向套件：54 passed，0 failed；覆盖 GBK 表单字段编码、HTTP submit boundary/outcome 和单真实图片槽位合同（4 个候选只发送 1 个，记录降量 warning）。
+- 最终非 Electron 全量回归：`node scripts/run-tests.js --exclude tests/production-preload-sandbox.electron.test.js --exclude tests/renderer-settings-window-focus.electron.test.js`，262 files，1929 passed，0 failed。
+- 权限更新后 Electron 重点测试：`production-preload-sandbox.electron.test.js` 2/2、`renderer-settings-window-focus.electron.test.js` 1/1 通过；未加入 `--no-sandbox`，未为绕过弹窗修改生产启动参数。此前弹窗属于本机 Electron user-data/cache/GPU 权限环境问题。
+- `npm run lint`、renderer/bridge/main 三个 typecheck、Lieju 定向 ESLint/Prettier、`npm audit --omit=dev --audit-level=high`（0 vulnerabilities）均通过。
+- Phase 8 架构门禁：`PASSED`，`capabilityCount=114`、`reachableCount=114`、`failures=[]`；`npm run test:legacy-absence` 通过（source/archive matches 均为 0）。
+- `npm run pack:production:smoke` 通过；`auto—publish/build/evidence/production-smoke.json` 绑定 commit `35d0599b...`，10 项通过、1 项可选 Hepan 检查跳过、0 项失败；生成物位于 `auto—publish/release-production-smoke/win-unpacked`。
+- 根 `npm run format:check` 仍报告 14 个既有且不属于本次 Lieju 改动的文件；本次未扩大范围修改这些文件，所有本次变更文件的定向格式检查已通过。
+
+本次仍未执行真实列举网登录、HTTP GET/POST、图片上传、发布或公开页核对；真实带图验收继续保持 `USER_EXTERNAL_IMAGE_ACCEPTANCE_REQUIRED`，不能用本地 smoke 或用户此前的浏览器现象替代该证据。
