@@ -1,5 +1,7 @@
 const path = require("node:path");
 
+const { MAX_IMAGE_BYTES, MAX_IMAGE_DIMENSION } = require("./image-plan-v1");
+
 const SUPPORTED_IMAGE_EXTENSIONS = Object.freeze([
   ".jpg",
   ".jpeg",
@@ -11,7 +13,7 @@ const MIME_TYPES = Object.freeze({
   png: "image/png",
   webp: "image/webp",
 });
-const MAX_IMAGE_FILE_BYTES = 64 * 1024 * 1024;
+const MAX_IMAGE_FILE_BYTES = MAX_IMAGE_BYTES;
 
 function metadataError(code, message) {
   const error = new Error(message || code);
@@ -178,25 +180,24 @@ function webpMetadata(buffer) {
   };
 }
 
-function readImageMetadata(filename, fsApi) {
+function parseImageMetadata(filename, buffer) {
   const extension = supportedImageExtension(filename);
   if (!extension)
     throw metadataError(
       "IMAGE_FORMAT_UNSUPPORTED",
       "Image format is unsupported",
     );
-  const fileSystem = fsApi || require("node:fs");
-  const stats = fileSystem.statSync(filename);
-  if (!stats.isFile() || stats.size > MAX_IMAGE_FILE_BYTES)
+  if (
+    !Buffer.isBuffer(buffer) ||
+    buffer.length === 0 ||
+    buffer.length > MAX_IMAGE_FILE_BYTES
+  )
     throw metadataError(
-      stats.size > MAX_IMAGE_FILE_BYTES
+      Buffer.isBuffer(buffer) && buffer.length > MAX_IMAGE_FILE_BYTES
         ? "IMAGE_FILE_TOO_LARGE"
         : "IMAGE_FORMAT_INVALID",
-      "Image file cannot be safely inspected",
+      "Image content cannot be safely inspected",
     );
-  const buffer = fileSystem.readFileSync(filename);
-  if (!Buffer.isBuffer(buffer) || buffer.length === 0)
-    throw metadataError("IMAGE_FORMAT_INVALID", "Image content is empty");
   const parsed =
     extension === ".png"
       ? pngMetadata(buffer)
@@ -210,6 +211,15 @@ function readImageMetadata(filename, fsApi) {
       "IMAGE_FORMAT_MISMATCH",
       "Image extension does not match its content",
     );
+  if (
+    !Number.isInteger(parsed.width) ||
+    parsed.width < 1 ||
+    parsed.width > MAX_IMAGE_DIMENSION ||
+    !Number.isInteger(parsed.height) ||
+    parsed.height < 1 ||
+    parsed.height > MAX_IMAGE_DIMENSION
+  )
+    throw metadataError("IMAGE_FORMAT_INVALID", "Image dimensions are invalid");
   return {
     extension: extension,
     mimeType: parsed.mimeType,
@@ -219,10 +229,24 @@ function readImageMetadata(filename, fsApi) {
   };
 }
 
+function readImageMetadata(filename, fsApi) {
+  const fileSystem = fsApi || require("node:fs");
+  const stats = fileSystem.statSync(filename);
+  if (!stats.isFile() || stats.size > MAX_IMAGE_FILE_BYTES)
+    throw metadataError(
+      stats.size > MAX_IMAGE_FILE_BYTES
+        ? "IMAGE_FILE_TOO_LARGE"
+        : "IMAGE_FORMAT_INVALID",
+      "Image file cannot be safely inspected",
+    );
+  return parseImageMetadata(filename, fileSystem.readFileSync(filename));
+}
+
 module.exports = {
   SUPPORTED_IMAGE_EXTENSIONS,
   MAX_IMAGE_FILE_BYTES,
   supportedImageExtension,
+  parseImageMetadata,
   readImageMetadata,
   metadataError,
 };

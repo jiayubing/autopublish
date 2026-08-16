@@ -1,4 +1,9 @@
+"use strict";
+
+const crypto = require("node:crypto");
+const fs = require("node:fs");
 const path = require("node:path");
+const util = require("node:util");
 
 const { createClientImagePathPolicy } = require("./client-image-path-policy");
 const { createClientImageScanner } = require("./client-image-scanner");
@@ -8,6 +13,12 @@ const {
   normalizeImageCount,
 } = require("./client-image-selector");
 const { relativePathForImageId } = require("./client-image-reference");
+const {
+  MAX_IMAGE_FILE_BYTES,
+  parseImageMetadata,
+} = require("./client-image-metadata");
+
+const INSPECT = util.inspect.custom;
 
 function libraryError(code, message) {
   const error = new Error(message || code);
@@ -28,8 +39,122 @@ function safeImage(image) {
   };
 }
 
+function exactInput(value, keys) {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw libraryError(
+      "CLIENT_IMAGE_INPUT_INVALID",
+      "Client image input is invalid",
+    );
+  const actual = Object.keys(value).sort();
+  const expected = keys.slice().sort();
+  if (
+    actual.length !== expected.length ||
+    actual.some(function (key, index) {
+      return key !== expected[index];
+    })
+  )
+    throw libraryError(
+      "CLIENT_IMAGE_INPUT_INVALID",
+      "Client image input is invalid",
+    );
+  return value;
+}
+
+function safeSelectionImage(image) {
+  return Object.freeze({
+    imageId: image.id,
+    name: image.name,
+    extension: image.extension,
+    mimeType: image.mimeType,
+    width: image.width,
+    height: image.height,
+    size: image.size,
+  });
+}
+
+function unreadableAsset(code) {
+  return libraryError(
+    code || "CLIENT_IMAGE_NOT_FOUND",
+    "Client image asset is unavailable",
+  );
+}
+
+function privateAsset(value) {
+  const privateBytes = value.bytes;
+  delete value.bytes;
+  Object.defineProperties(value, {
+    bytes: {
+      enumerable: true,
+      get: function () {
+        return Buffer.from(privateBytes);
+      },
+    },
+    toJSON: {
+      enumerable: false,
+      value: function () {
+        throw libraryError(
+          "CLIENT_IMAGE_ASSET_SERIALIZATION_FORBIDDEN",
+          "Client image assets cannot be serialized",
+        );
+      },
+    },
+    [INSPECT]: {
+      enumerable: false,
+      value: function () {
+        return "[ClientImageAsset]";
+      },
+    },
+  });
+  Object.freeze(value);
+  return new Proxy(value, Object.freeze({}));
+}
+
+function readCheckedBytes(fsApi, filename) {
+  let descriptor;
+  let primaryError;
+  try {
+    const noFollow = fs.constants.O_NOFOLLOW || 0;
+    descriptor = fsApi.openSync(filename, fs.constants.O_RDONLY | noFollow);
+    const stats = fsApi.fstatSync(descriptor);
+    if (!stats.isFile())
+      throw unreadableAsset("CLIENT_IMAGE_PATH_OUT_OF_BOUNDS");
+    if (stats.size > MAX_IMAGE_FILE_BYTES)
+      throw unreadableAsset("IMAGE_FILE_TOO_LARGE");
+    const bytes = Buffer.allocUnsafe(stats.size);
+    let offset = 0;
+    while (offset < bytes.length) {
+      const count = fsApi.readSync(
+        descriptor,
+        bytes,
+        offset,
+        bytes.length - offset,
+        offset,
+      );
+      if (count === 0) throw unreadableAsset("IMAGE_READ_FAILED");
+      offset += count;
+    }
+    return bytes;
+  } catch (error) {
+    primaryError = error;
+    if (error && (error.code === "ENOENT" || error.code === "ENOTDIR"))
+      throw unreadableAsset();
+    if (error && /^(?:CLIENT_IMAGE_|IMAGE_)/.test(error.code || ""))
+      throw error;
+    throw unreadableAsset("IMAGE_READ_FAILED");
+  } finally {
+    if (descriptor !== undefined) {
+      try {
+        fsApi.closeSync(descriptor);
+      } catch (error) {
+        if (!primaryError) throw unreadableAsset("IMAGE_READ_FAILED");
+      }
+    }
+  }
+}
+
 function createClientImageLibrary(options) {
   const opts = options || {};
+  const fsApi = opts.fs || fs;
   const pathPolicy = opts.pathPolicy || createClientImagePathPolicy(opts);
   const scanner =
     opts.scanner ||
@@ -74,90 +199,109 @@ function createClientImageLibrary(options) {
     );
   }
 
-  function listImages(clientId, optionsValue) {
-    return scan(clientId, optionsValue).images;
-  }
-
-  function scanMany(clientIds, optionsValue) {
-    if (!Array.isArray(clientIds))
-      throw libraryError(
-        "CLIENT_IMAGE_INPUT_INVALID",
-        "Client image scan requires client ids",
-      );
-    return clientIds.map(function (clientId) {
-      return scan(clientId, optionsValue);
-    });
-  }
-
   function invalidate(clientId) {
     if (clientId === undefined) return cache.invalidate();
     const client = pathPolicy.resolveClient(clientId);
     return cache.invalidate(client.cacheKey);
   }
 
-  function resolveImage(clientId, imageId) {
-    const internal = getInternalSnapshot(clientId, false);
-    const relativePath = relativePathForImageId(imageId);
-    const image =
-      relativePath &&
-      internal.snapshot.images.find(function (item) {
-        return item.id === imageId;
-      });
-    if (!image)
-      throw libraryError(
-        "CLIENT_IMAGE_NOT_FOUND",
-        "Client image was not found",
-      );
+  function readAsset(input) {
+    exactInput(input, ["clientId", "imageId"]);
+    const client = pathPolicy.resolveClient(input.clientId);
+    const imageRoot = pathPolicy.imageRoot(client);
+    const relativePath = relativePathForImageId(input.imageId);
+    if (!imageRoot || !relativePath) throw unreadableAsset();
+    const filename = path.resolve(client.directory, relativePath);
+    if (!pathPolicy.contentPolicy.sameOrWithin(imageRoot.path, filename))
+      throw unreadableAsset("CLIENT_IMAGE_PATH_OUT_OF_BOUNDS");
     let checked;
     try {
-      checked = pathPolicy.inspectEntry(
-        internal.client,
-        path.join(internal.client.directory, relativePath),
-        "file",
-      );
+      checked = pathPolicy.inspectEntry(client, filename, "file");
     } catch (error) {
       if (error && error.code === "CLIENT_IMAGE_MISSING")
-        throw libraryError(
-          "CLIENT_IMAGE_NOT_FOUND",
-          "Client image was not found",
-        );
+        throw unreadableAsset();
       throw error;
     }
-    return Object.assign({}, safeImage(image), {
-      filePath: checked.path,
-      realPath: checked.realPath,
+    if (
+      !pathPolicy.contentPolicy.sameOrWithin(
+        imageRoot.realPath,
+        checked.realPath,
+      )
+    )
+      throw unreadableAsset("CLIENT_IMAGE_PATH_OUT_OF_BOUNDS");
+    const bytes = readCheckedBytes(fsApi, checked.realPath);
+    const rechecked = pathPolicy.inspectEntry(client, filename, "file");
+    if (
+      rechecked.realPath !== checked.realPath ||
+      rechecked.stats.size !== bytes.length ||
+      !pathPolicy.contentPolicy.sameOrWithin(
+        imageRoot.realPath,
+        rechecked.realPath,
+      )
+    )
+      throw unreadableAsset("CLIENT_IMAGE_PATH_OUT_OF_BOUNDS");
+    const metadata = parseImageMetadata(relativePath, bytes);
+    return privateAsset({
+      name: path.basename(relativePath),
+      extension: metadata.extension,
+      mimeType: metadata.mimeType,
+      width: metadata.width,
+      height: metadata.height,
+      size: metadata.size,
+      bytes: Buffer.from(bytes),
+      assetFingerprint: crypto.createHash("sha256").update(bytes).digest("hex"),
     });
   }
 
-  function selectForClient(clientId, optionsValue) {
-    const input = optionsValue || {};
-    const internal = getInternalSnapshot(clientId, Boolean(input.refresh));
+  function selectForClient(input) {
+    const keys =
+      input && Object.hasOwn(input, "random")
+        ? ["clientId", "count", "random"]
+        : ["clientId", "count"];
+    exactInput(input, keys);
+    if (input.random !== undefined && typeof input.random !== "function")
+      throw libraryError(
+        "CLIENT_IMAGE_INPUT_INVALID",
+        "Image random source is invalid",
+      );
+    pathPolicy.assertClientId(input.clientId);
+    const count = normalizeImageCount(input.count);
+    if (count === 0)
+      return Object.freeze({
+        version: 1,
+        clientId: input.clientId,
+        requestedCount: 0,
+        images: Object.freeze([]),
+        warnings: Object.freeze([]),
+      });
+    const internal = getInternalSnapshot(input.clientId, false);
     const selected = selectImages(internal.snapshot.images, {
-      count: normalizeImageCount(input.count),
+      count,
       random: input.random,
-      excludeImageIds: input.excludeImageIds,
     });
-    return Object.assign({}, selected, {
-      clientId: clientId,
-      images: selected.images.map(safeImage),
-      diagnostics: internal.snapshot.diagnostics.map(function (item) {
-        return Object.assign({}, item);
-      }),
+    const warnings = internal.snapshot.diagnostics.length
+      ? [
+          Object.freeze({
+            code: "CLIENT_IMAGE_SELECTION_SCAN_DEGRADED",
+            stage: "scan",
+          }),
+        ]
+      : [];
+    return Object.freeze({
+      version: 1,
+      clientId: input.clientId,
+      requestedCount: selected.requestedCount,
+      images: Object.freeze(selected.images.map(safeSelectionImage)),
+      warnings: Object.freeze(warnings),
     });
   }
 
-  return {
+  return Object.freeze({
     scan: scan,
-    scanMany: scanMany,
-    listImages: listImages,
-    listAvailableImages: listImages,
     invalidate: invalidate,
-    resolveImage: resolveImage,
-    selectImages: selectForClient,
-    select: function (clientId, optionsValue) {
-      return selectForClient(clientId, optionsValue);
-    },
-  };
+    imageSelectionPort: Object.freeze({ select: selectForClient }),
+    imageAssetReader: Object.freeze({ read: readAsset }),
+  });
 }
 
 module.exports = { createClientImageLibrary };

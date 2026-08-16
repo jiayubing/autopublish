@@ -196,6 +196,19 @@ function createRegularQueueApplication(options) {
     return Boolean(platform && platform.imagePublishing);
   }
 
+  function queueConfigForTarget(input, target) {
+    const queueConfig = queueConfigFrom(input);
+    if (groupImagePublishingSupported(target.platformId)) return queueConfig;
+    if (queueConfig && queueConfig.imageCount !== undefined && queueConfig.imageCount !== 0)
+      throw fail("REGULAR_QUEUE_IMAGE_PUBLISHING_UNSUPPORTED");
+    return Object.freeze({
+      ...(queueConfig && queueConfig.queueGroupId
+        ? { queueGroupId: queueConfig.queueGroupId }
+        : {}),
+      imageCount: 0,
+    });
+  }
+
   function factsFor(refs) {
     return transitions.listArticleLifecycleFacts({
       articleIds: [...new Set(refs.map(function (ref) { return ref.articleId; }))],
@@ -215,7 +228,7 @@ function createRegularQueueApplication(options) {
   function previewRegularQueueAdmission(input) {
     const target = targetFrom(input);
     const refs = refsFrom(input);
-    queueConfigFrom(input);
+    queueConfigForTarget(input, target);
     const facts = factsFor(refs);
     const key = targetKey(target);
     const items = refs.map(function (ref) {
@@ -279,7 +292,7 @@ function createRegularQueueApplication(options) {
   function admitRegularQueueItems(input) {
     const target = targetFrom(input);
     const refs = refsFrom(input);
-    const queueConfig = queueConfigFrom(input);
+    const queueConfig = queueConfigForTarget(input, target);
     const platform = platformList().find(function (candidate) { return candidate.id === target.platformId; });
     const account = accountProfileResolver({
       accountProfileId: target.accountProfileId,
@@ -539,10 +552,23 @@ function createRegularQueueApplication(options) {
     if (
       !groupImageCountTransitions ||
       typeof groupImageCountTransitions.setRegularQueueGroupImageCount !==
-        "function"
+        "function" ||
+      !groupTransitions ||
+      typeof groupTransitions.listRegularQueueGroupSnapshots !== "function"
     )
       throw fail("REGULAR_QUEUE_GROUP_IMAGE_COUNT_UNAVAILABLE");
     const request = imageCountUpdateFrom(input);
+    const group = groupTransitions
+      .listRegularQueueGroupSnapshots({})
+      .find(function (candidate) {
+        return candidate && candidate.queueGroupId === request.queueGroupId;
+      });
+    if (
+      group &&
+      !groupImagePublishingSupported(group.platformId) &&
+      request.imageCount !== 0
+    )
+      throw fail("REGULAR_QUEUE_IMAGE_PUBLISHING_UNSUPPORTED");
     groupImageCountTransitions.setRegularQueueGroupImageCount(request);
     notifyDataInvalidated("REGULAR_QUEUE_GROUP_IMAGE_COUNT_UPDATED");
     return listRegularQueueGroups();

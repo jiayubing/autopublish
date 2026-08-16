@@ -60,11 +60,12 @@ function addClient(root, clientId) {
 
 function makeService(root, random) {
   const paths = createPortableContentPaths(root);
+  const library = createClientImageLibrary({
+    workspaceRoot: root,
+    imageDirectoryName: paths.clientImageDirectoryName,
+  });
   return createRegularImagePlanService({
-    imageLibrary: createClientImageLibrary({
-      workspaceRoot: root,
-      imageDirectoryName: paths.clientImageDirectoryName,
-    }),
+    imageSelectionPort: library.imageSelectionPort,
     random,
   });
 }
@@ -100,6 +101,7 @@ describe("regular image plan service", function () {
     });
 
     assert.equal(firstPlan.requestedCount, 5);
+    assert.equal(firstPlan.version, 1);
     assert.equal(firstPlan.selectedCount, 2);
     assert.equal(firstPlan.textOnly, false);
     assert.deepEqual(
@@ -124,16 +126,23 @@ describe("regular image plan service", function () {
     const client = addClient(root, "client-a");
     let selections = 0;
     const zeroService = createRegularImagePlanService({
-      imageLibrary: {
-        selectImages() {
+      imageSelectionPort: {
+        select(input) {
           selections += 1;
-          throw new Error("zero image plans must not scan");
+          return {
+            version: 1,
+            clientId: input.clientId,
+            requestedCount: input.count,
+            images: [],
+            warnings: [],
+          };
         },
       },
     });
     assert.deepEqual(
       zeroService.createPlan({ clientId: "client-a", imageCount: 0 }),
       {
+        version: 1,
         requestedCount: 0,
         selectedCount: 0,
         textOnly: true,
@@ -141,7 +150,7 @@ describe("regular image plan service", function () {
         warnings: [],
       },
     );
-    assert.equal(selections, 0);
+    assert.equal(selections, 1);
 
     const missingPlan = makeService(root).createPlan({
       clientId: "client-a",
@@ -164,14 +173,29 @@ describe("regular image plan service", function () {
       { code: "REGULAR_IMAGE_PLAN_SCAN_DEGRADED", stage: "scan" },
       { code: "REGULAR_IMAGE_PLAN_EMPTY", stage: "selection" },
     ]);
+
+    fs.rmSync(path.join(imageDirectory, "broken.png"));
+    fs.writeFileSync(
+      path.join(imageDirectory, "oversized-dimension.png"),
+      png(100001, 1),
+    );
+    const oversizedDimensionPlan = makeService(root).createPlan({
+      clientId: "client-a",
+      imageCount: 1,
+    });
+    assert.deepEqual(oversizedDimensionPlan.images, []);
+    assert.deepEqual(oversizedDimensionPlan.warnings, [
+      { code: "REGULAR_IMAGE_PLAN_SCAN_DEGRADED", stage: "scan" },
+      { code: "REGULAR_IMAGE_PLAN_EMPTY", stage: "selection" },
+    ]);
   });
 
   it("degrades recoverable scans without exposing their details, but rejects invalid contracts", function () {
     const root = temporaryDirectory("regular-image-plan-failure-");
     const unsafeDetail = path.join(root, "secret-client-path");
     const service = createRegularImagePlanService({
-      imageLibrary: {
-        selectImages() {
+      imageSelectionPort: {
+        select() {
           const error = new Error("failed at " + unsafeDetail + " with token");
           error.code = "EIO";
           throw error;
@@ -180,6 +204,7 @@ describe("regular image plan service", function () {
     });
     const plan = service.createPlan({ clientId: "client-a", imageCount: 1 });
     assert.deepEqual(plan, {
+      version: 1,
       requestedCount: 1,
       selectedCount: 0,
       textOnly: true,
@@ -192,17 +217,26 @@ describe("regular image plan service", function () {
       JSON.stringify(plan),
       new RegExp(escaped(unsafeDetail)),
     );
+    const validatingLibrary = createClientImageLibrary({ workspaceRoot: root });
+    const validatingService = createRegularImagePlanService({
+      imageSelectionPort: validatingLibrary.imageSelectionPort,
+    });
     assert.throws(
-      () => service.createPlan({ clientId: "../client-a", imageCount: 1 }),
+      () =>
+        validatingService.createPlan({
+          clientId: "../client-a",
+          imageCount: 1,
+        }),
       { code: "CLIENT_IMAGE_CLIENT_INVALID" },
     );
     assert.throws(
-      () => service.createPlan({ clientId: "client-a", imageCount: 6 }),
+      () =>
+        validatingService.createPlan({ clientId: "client-a", imageCount: 6 }),
       { code: "CLIENT_IMAGE_COUNT_INVALID" },
     );
     const programmingFailure = createRegularImagePlanService({
-      imageLibrary: {
-        selectImages() {
+      imageSelectionPort: {
+        select() {
           throw new Error("unexpected programming failure");
         },
       },
@@ -213,12 +247,15 @@ describe("regular image plan service", function () {
       /unexpected programming failure/,
     );
     const unsafeReference = createRegularImagePlanService({
-      imageLibrary: {
-        selectImages() {
+      imageSelectionPort: {
+        select(input) {
           return {
+            version: 1,
+            clientId: input.clientId,
+            requestedCount: input.count,
             images: [
               {
-                id: "client-image:QzpcXHNlY3JldC5wbmc",
+                imageId: "C:\\secret.png",
                 name: "secret.png",
                 extension: ".png",
                 mimeType: "image/png",
@@ -227,6 +264,7 @@ describe("regular image plan service", function () {
                 size: 1,
               },
             ],
+            warnings: [],
           };
         },
       },
@@ -242,16 +280,14 @@ describe("regular image plan service", function () {
     const workspacePath = path.join(root, "workspace");
     const imageLibraryPath =
       require.resolve("../src/content/client-image-library");
-    const preparationPortPath = require.resolve(
-      "../desktop/services/regular-platform-preparation-port",
-    );
+    const preparationPortPath =
+      require.resolve("../desktop/services/regular-platform-preparation-port");
     const originalModule = require.cache[imageLibraryPath];
     const originalPreparationPort = require.cache[preparationPortPath];
     const capturedOptions = [];
     const preparationOptions = [];
-    const originalCreatePreparationPort = require(
-      "../desktop/services/regular-platform-preparation-port",
-    ).createRegularPlatformPreparationPort;
+    const originalCreatePreparationPort =
+      require("../desktop/services/regular-platform-preparation-port").createRegularPlatformPreparationPort;
     require.cache[imageLibraryPath] = {
       id: imageLibraryPath,
       filename: imageLibraryPath,
@@ -260,9 +296,18 @@ describe("regular image plan service", function () {
         createClientImageLibrary(options) {
           capturedOptions.push(options);
           return {
-            selectImages() {
-              return { images: [], diagnostics: [] };
-            },
+            imageSelectionPort: Object.freeze({
+              select(input) {
+                return Object.freeze({
+                  version: 1,
+                  clientId: input.clientId,
+                  requestedCount: input.count,
+                  images: Object.freeze([]),
+                  warnings: Object.freeze([]),
+                });
+              },
+            }),
+            imageAssetReader: Object.freeze({ read() {} }),
           };
         },
       },

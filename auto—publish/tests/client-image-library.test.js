@@ -1,13 +1,18 @@
 const { describe, it, beforeEach, afterEach } = require("node:test");
 const assert = require("node:assert/strict");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const util = require("node:util");
+const v8 = require("node:v8");
 
 const {
   createClientImageLibrary,
 } = require("../src/content/client-image-library");
-const { createClientImageScanCache } = require("../src/content/client-image-cache");
+const {
+  createClientImageScanCache,
+} = require("../src/content/client-image-cache");
 
 function png(width, height) {
   const value = Buffer.alloc(57);
@@ -126,6 +131,14 @@ describe("client image library", function () {
     fs.writeFileSync(path.join(clientTwo, "other.png"), png(7, 8));
 
     const library = createClientImageLibrary({ workspaceRoot: workspaceRoot });
+    assert.deepEqual(Object.keys(library).sort(), [
+      "imageAssetReader",
+      "imageSelectionPort",
+      "invalidate",
+      "scan",
+    ]);
+    assert.deepEqual(Object.keys(library.imageSelectionPort), ["select"]);
+    assert.deepEqual(Object.keys(library.imageAssetReader), ["read"]);
     const snapshot = library.scan("client-one");
 
     assert.deepEqual(
@@ -232,7 +245,9 @@ describe("client image library", function () {
       fs.closeSync(descriptor);
     }
 
-    const snapshot = createClientImageLibrary({ workspaceRoot }).scan("client-one");
+    const snapshot = createClientImageLibrary({ workspaceRoot }).scan(
+      "client-one",
+    );
 
     assert.deepEqual(snapshot.images, []);
     assert.equal(snapshot.diagnostics[0].code, "IMAGE_FILE_TOO_LARGE");
@@ -244,54 +259,49 @@ describe("client image library", function () {
     fs.writeFileSync(path.join(clientOne, "three.png"), png(3, 3));
     const library = createClientImageLibrary({ workspaceRoot: workspaceRoot });
 
-    const firstArticle = library.selectImages("client-one", {
+    const firstArticle = library.imageSelectionPort.select({
+      clientId: "client-one",
       count: 3,
       random: function () {
         return 0;
       },
     });
     assert.equal(firstArticle.requestedCount, 3);
-    assert.equal(firstArticle.selectedCount, 3);
     assert.equal(
       new Set(
         firstArticle.images.map(function (item) {
-          return item.id;
+          return item.imageId;
         }),
       ).size,
       3,
     );
-    assert.equal(firstArticle.shortfall, 0);
-    assert.equal(firstArticle.textOnly, false);
+    assert.equal(firstArticle.images.length, 3);
 
-    const secondArticle = library.selectImages("client-one", {
+    const secondArticle = library.imageSelectionPort.select({
+      clientId: "client-one",
       count: 5,
       random: function () {
         return 0;
       },
     });
-    assert.equal(secondArticle.selectedCount, 3);
-    assert.equal(secondArticle.shortfall, 2);
-    assert.equal(secondArticle.images[0].id, firstArticle.images[0].id);
+    assert.equal(secondArticle.images.length, 3);
+    assert.equal(
+      secondArticle.images[0].imageId,
+      firstArticle.images[0].imageId,
+    );
 
-    const defaultCount = library.selectImages("client-one", {
-      random: function () {
-        return 0;
-      },
-    });
-    assert.equal(defaultCount.requestedCount, 1);
-    assert.equal(defaultCount.selectedCount, 1);
-
-    const textOnly = library.selectImages("client-one", {
+    const textOnly = library.imageSelectionPort.select({
+      clientId: "client-one",
       count: 0,
       random: function () {
         throw new Error("random must not be called");
       },
     });
     assert.deepEqual(textOnly.images, []);
-    assert.equal(textOnly.textOnly, true);
+    assert.equal(textOnly.requestedCount, 0);
     assert.throws(
       function () {
-        library.selectImages("client-one", { count: 6 });
+        library.imageSelectionPort.select({ clientId: "client-one", count: 6 });
       },
       function (error) {
         return error.code === "CLIENT_IMAGE_COUNT_INVALID";
@@ -326,7 +336,9 @@ describe("client image library", function () {
       scanner: scanner,
     });
 
-    library.scanMany(["client-one", "client-one", "client-two"]);
+    library.scan("client-one");
+    library.scan("client-one");
+    library.scan("client-two");
     assert.deepEqual(calls, ["client-one", "client-two"]);
     assert.equal(library.invalidate("client-one"), 1);
     library.scan("client-one");
@@ -389,7 +401,12 @@ describe("client image library", function () {
     assert.deepEqual(calls, ["client-one", "client-two", "client-three"]);
 
     firstLibrary.scan("client-two");
-    assert.deepEqual(calls, ["client-one", "client-two", "client-three", "client-two"]);
+    assert.deepEqual(calls, [
+      "client-one",
+      "client-two",
+      "client-three",
+      "client-two",
+    ]);
 
     const secondCache = createClientImageScanCache({ capacity: 1 });
     const secondLibrary = createClientImageLibrary({
@@ -432,12 +449,13 @@ describe("client image library", function () {
     const firstScanReads = directoryReads;
     for (let index = 0; index < 20; index += 1) {
       assert.equal(
-        library.selectImages("client-one", {
+        library.imageSelectionPort.select({
+          clientId: "client-one",
           count: 1,
           random: function () {
             return 0;
           },
-        }).selectedCount,
+        }).images.length,
         1,
       );
     }
@@ -446,7 +464,7 @@ describe("client image library", function () {
     assert.equal(directoryReads, firstScanReads * 2);
   });
 
-  it("resolves a stable reference only after rechecking the current client boundary", function () {
+  it("reads private immutable assets only after rechecking stale cache and client boundaries", function () {
     const filename = path.join(clientOne, "nested", "resolve-me.png");
     fs.writeFileSync(filename, png(11, 12));
     const library = createClientImageLibrary({ workspaceRoot: workspaceRoot });
@@ -454,21 +472,140 @@ describe("client image library", function () {
       return item.name === "resolve-me.png";
     });
 
-    const resolved = library.resolveImage("client-one", image.id);
-    assert.equal(resolved.relativePath, "nested/resolve-me.png");
-    assert.equal(resolved.filePath, filename);
-    assert.equal(fs.readFileSync(resolved.filePath).equals(png(11, 12)), true);
+    const asset = library.imageAssetReader.read({
+      clientId: "client-one",
+      imageId: image.id,
+    });
+    assert.deepEqual(
+      {
+        name: asset.name,
+        extension: asset.extension,
+        mimeType: asset.mimeType,
+        width: asset.width,
+        height: asset.height,
+        size: asset.size,
+        assetFingerprint: asset.assetFingerprint,
+      },
+      {
+        name: "resolve-me.png",
+        extension: ".png",
+        mimeType: "image/png",
+        width: 11,
+        height: 12,
+        size: png(11, 12).length,
+        assetFingerprint: crypto
+          .createHash("sha256")
+          .update(png(11, 12))
+          .digest("hex"),
+      },
+    );
+    assert.equal(asset.bytes.equals(png(11, 12)), true);
+    assert.equal(Object.isFrozen(asset), true);
+    assert.equal(util.inspect(asset), "[ClientImageAsset]");
+    assert.throws(() => JSON.stringify(asset), {
+      code: "CLIENT_IMAGE_ASSET_SERIALIZATION_FORBIDDEN",
+    });
+    assert.throws(
+      () => structuredClone(asset),
+      (error) => error && error.name === "DataCloneError",
+    );
+    assert.throws(() => v8.serialize(asset));
+    const exposedBytes = asset.bytes;
+    exposedBytes[0] = 0;
+    assert.equal(asset.bytes.equals(png(11, 12)), true);
+    assert.equal(
+      crypto.createHash("sha256").update(asset.bytes).digest("hex"),
+      asset.assetFingerprint,
+    );
     assert.throws(
       function () {
-        library.resolveImage("client-one", "client-image:Li4vb3V0c2lkZS5wbmc");
+        library.imageAssetReader.read({
+          clientId: "client-one",
+          imageId: "client-image:Li4vb3V0c2lkZS5wbmc",
+        });
       },
       function (error) {
-        return error.code === "CLIENT_IMAGE_NOT_FOUND";
+        return [
+          "CLIENT_IMAGE_NOT_FOUND",
+          "CLIENT_IMAGE_PATH_OUT_OF_BOUNDS",
+          "CLIENT_IMAGE_REFERENCE_INVALID",
+        ].includes(error.code);
       },
+    );
+    assert.throws(
+      () =>
+        library.imageAssetReader.read({
+          clientId: "client-two",
+          imageId: image.id,
+        }),
+      { code: "CLIENT_IMAGE_NOT_FOUND" },
+    );
+    fs.writeFileSync(filename, "damaged after selection");
+    assert.throws(
+      () =>
+        library.imageAssetReader.read({
+          clientId: "client-one",
+          imageId: image.id,
+        }),
+      { code: "IMAGE_FORMAT_INVALID" },
+    );
+    const descriptor = fs.openSync(filename, "w");
+    try {
+      fs.writeSync(descriptor, png(1, 1), 0, png(1, 1).length, 0);
+      fs.ftruncateSync(descriptor, 64 * 1024 * 1024 + 1);
+    } finally {
+      fs.closeSync(descriptor);
+    }
+    assert.throws(
+      () =>
+        library.imageAssetReader.read({
+          clientId: "client-one",
+          imageId: image.id,
+        }),
+      { code: "IMAGE_FILE_TOO_LARGE" },
+    );
+    fs.rmSync(filename);
+    assert.throws(
+      () =>
+        library.imageAssetReader.read({
+          clientId: "client-one",
+          imageId: image.id,
+        }),
+      { code: "CLIENT_IMAGE_NOT_FOUND" },
     );
     assert.doesNotMatch(
       JSON.stringify(library.scan("client-one")),
       new RegExp(workspaceRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
     );
+  });
+
+  it("rejects an asset replaced by a symlink after selection", function (t) {
+    const outside = fs.mkdtempSync(
+      path.join(os.tmpdir(), "client-image-read-outside-"),
+    );
+    try {
+      const filename = path.join(clientOne, "replace.png");
+      const outsideImage = path.join(outside, "outside.png");
+      fs.writeFileSync(filename, png(2, 3));
+      fs.writeFileSync(outsideImage, png(4, 5));
+      const library = createClientImageLibrary({ workspaceRoot });
+      const selected = library.imageSelectionPort.select({
+        clientId: "client-one",
+        count: 1,
+        random: () => 0,
+      });
+      fs.rmSync(filename);
+      if (!createLinkOrSkip(t, outsideImage, filename, "file")) return;
+      assert.throws(
+        () =>
+          library.imageAssetReader.read({
+            clientId: "client-one",
+            imageId: selected.images[0].imageId,
+          }),
+        { code: "CLIENT_IMAGE_SYMLINK" },
+      );
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
   });
 });

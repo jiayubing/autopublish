@@ -42,6 +42,7 @@ function plan(names, requestedCount) {
     }),
   );
   return Object.freeze({
+    version: 1,
     requestedCount:
       requestedCount === undefined ? images.length : requestedCount,
     selectedCount: images.length,
@@ -85,17 +86,27 @@ function form(slotCount) {
   });
 }
 
-function resolver(root, failures) {
+function assetReader(root, failures) {
   const value = failures || new Map();
   return Object.freeze({
-    resolveImage(_clientId, id) {
-      const error = value.get(id);
+    read(input) {
+      const error = value.get(input.imageId);
       if (error) throw error;
       const relative = Buffer.from(
-        id.slice("client-image:".length),
+        input.imageId.slice("client-image:".length),
         "base64url",
       ).toString("utf8");
-      return { filePath: path.join(root, relative) };
+      const bytes = fs.readFileSync(path.join(root, relative));
+      return Object.freeze({
+        name: relative,
+        extension: ".png",
+        mimeType: "image/png",
+        width: bytes.readUInt32BE(16),
+        height: bytes.readUInt32BE(20),
+        size: bytes.length,
+        bytes,
+        assetFingerprint: sha256(bytes),
+      });
     },
   });
 }
@@ -118,7 +129,7 @@ test("Lieju multipart preparation freezes the first four deliverable images in c
       imagePlan: plan(names),
       form: form(4),
       preparedSubmissionEvidenceV1: evidence(),
-      imageResolver: resolver(root),
+      imageAssetReader: assetReader(root),
       formValueOverrides: {
         "postdb[title]": "合成标题",
         "postdb[content]": "合成正文",
@@ -191,7 +202,7 @@ test("Lieju multipart preparation keeps one real slot instead of fabricating ext
       imagePlan: plan(names),
       form: form(1),
       preparedSubmissionEvidenceV1: evidence(),
-      imageResolver: resolver(root),
+      imageAssetReader: assetReader(root),
     });
 
     assert.equal(prepared.preparedSubmissionEvidenceV1.images.length, 1);
@@ -228,7 +239,7 @@ test("Lieju multipart image failures are best-effort and can safely degrade to t
       imagePlan: plan(names),
       form: form(4),
       preparedSubmissionEvidenceV1: evidence(),
-      imageResolver: resolver(root, failures),
+      imageAssetReader: assetReader(root, failures),
     });
 
     assert.deepEqual(
@@ -271,7 +282,7 @@ test("Lieju multipart preparation handles zero images, partial delivery, and fre
       imagePlan: partialPlan,
       form: form(4),
       preparedSubmissionEvidenceV1: evidence(),
-      imageResolver: resolver(root),
+      imageAssetReader: assetReader(root),
     });
     assert.deepEqual(prepared.preparedSubmissionEvidenceV1.images, [
       { assetFingerprint: sha256(original), layoutSlot: 0 },
@@ -290,7 +301,7 @@ test("Lieju multipart preparation handles zero images, partial delivery, and fre
       imagePlan: plan([]),
       form: form(4),
       preparedSubmissionEvidenceV1: evidence(),
-      imageResolver: resolver(root),
+      imageAssetReader: assetReader(root),
     });
     assert.deepEqual(
       {
@@ -307,7 +318,7 @@ test("Lieju multipart preparation handles zero images, partial delivery, and fre
       imagePlan: plan(["good.png"], 4),
       form: form(4),
       preparedSubmissionEvidenceV1: evidence(),
-      imageResolver: resolver(root),
+      imageAssetReader: assetReader(root),
     });
     assert.deepEqual(
       {
@@ -335,7 +346,7 @@ test("Lieju multipart preparation handles zero images, partial delivery, and fre
       imagePlan: plan([]),
       form: Object.freeze({ controls }),
       preparedSubmissionEvidenceV1: evidence(),
-      imageResolver: resolver(root),
+      imageAssetReader: assetReader(root),
       formValueOverrides: { "postdb[title]": "替换标题" },
     });
     const hiddenBody = hiddenPreserved.multipart.consume().body.getBuffer();

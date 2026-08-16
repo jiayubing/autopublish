@@ -188,7 +188,7 @@ function createLiejuRuntime(runtimeContext) {
         loginProbeUrl: LIEJU.publishUrl,
       });
     },
-    imageResolver: context.imageResolver,
+    imageAssetReader: context.imageAssetReader,
     liejuSubmissionMode:
       context.liejuSubmissionMode === undefined
         ? process.env.LIEJU_SUBMISSION_MODE
@@ -708,6 +708,7 @@ function verifyPostSubmit(runtime, initialEvidence) {
 
 function defaultImagePlan() {
   return Object.freeze({
+    version: 1,
     requestedCount: 0,
     selectedCount: 0,
     textOnly: true,
@@ -845,7 +846,7 @@ function prepareFrozenMultipart(runtime, form, evidence, profile, imagePlan) {
     imagePlan: imagePlan === undefined ? defaultImagePlan() : imagePlan,
     form,
     preparedSubmissionEvidenceV1: evidence,
-    imageResolver: runtime.imageResolver,
+    imageAssetReader: runtime.imageAssetReader,
     formValueOverrides: requireLiejuFormOverrides(form, evidence, profile),
   });
 }

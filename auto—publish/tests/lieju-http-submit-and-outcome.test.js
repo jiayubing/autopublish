@@ -1,6 +1,7 @@
 "use strict";
 
 const assert = require("node:assert/strict");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -166,6 +167,7 @@ function png(width, height) {
 
 function imagePlan(name) {
   return {
+    version: 1,
     requestedCount: 1,
     selectedCount: 1,
     textOnly: false,
@@ -384,8 +386,20 @@ test("Lieju HTTP submit sends the frozen successful image manifest in its real f
     const adapter = createPlatformAdapter({
       browserRuntime: { stateFile: fixture.stateFile },
       httpRequest: runtime.request,
-      imageResolver: {
-        resolveImage: () => ({ filePath: imagePath }),
+      imageAssetReader: {
+        read: () => ({
+          name: "cover.png",
+          extension: ".png",
+          mimeType: "image/png",
+          width: 4,
+          height: 3,
+          size: imageBytes.length,
+          bytes: imageBytes,
+          assetFingerprint: crypto
+            .createHash("sha256")
+            .update(imageBytes)
+            .digest("hex"),
+        }),
       },
     });
     const prepared = await adapter.preparePlatformSubmission(

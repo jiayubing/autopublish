@@ -82,7 +82,10 @@ function openRuntime(root, options) {
         id: "toutiao", publicationTargetKind: "platform", imagePublishing: false,
       },
       {
-        id: "hepan", publicationTargetKind: "platform", imagePublishing: true,
+        id: "hepan", publicationTargetKind: "platform", imagePublishing: false,
+      },
+      {
+        id: "lieju", publicationTargetKind: "platform", imagePublishing: true,
       },
     ],
   });
@@ -108,7 +111,11 @@ function setup() {
     }),
     hepan: runtime.store.createAccountProfile({
       platformId: "hepan",
-      displayName: "禾畔账号",
+      displayName: "河畔账号",
+    }),
+    lieju: runtime.store.createAccountProfile({
+      platformId: "lieju",
+      displayName: "列举网账号",
     }),
   };
   return {
@@ -143,6 +150,7 @@ test("18-B application admits only imageCount 0..5, preserves existing groups, a
     fixture.runtime.contentStore.createArticle(article("default-count"));
     fixture.runtime.contentStore.createArticle(article("zero-count"));
     fixture.runtime.contentStore.createArticle(article("append-count"));
+    fixture.runtime.contentStore.createArticle(article("unsupported-count"));
 
     const defaultAdmission = fixture.runtime.application.admitRegularQueueItems(
       admissionInput(fixture.profiles.toutiao, "default-count"),
@@ -150,11 +158,11 @@ test("18-B application admits only imageCount 0..5, preserves existing groups, a
     assert.equal(
       group(fixture.runtime.application, defaultAdmission.items[0].queueGroupId)
         .imageCount,
-      1,
+      0,
     );
 
     const zeroAdmission = fixture.runtime.application.admitRegularQueueItems(
-      admissionInput(fixture.profiles.hepan, "zero-count", { imageCount: 0 }),
+      admissionInput(fixture.profiles.lieju, "zero-count", { imageCount: 0 }),
     );
     const before = group(
       fixture.runtime.application,
@@ -164,7 +172,7 @@ test("18-B application admits only imageCount 0..5, preserves existing groups, a
     assert.equal(before.imagePublishingSupported, true);
 
     fixture.runtime.application.admitRegularQueueItems(
-      admissionInput(fixture.profiles.hepan, "append-count", {
+      admissionInput(fixture.profiles.lieju, "append-count", {
         queueGroupId: before.queueGroupId,
         imageCount: 5,
       }),
@@ -217,6 +225,23 @@ test("18-B application admits only imageCount 0..5, preserves existing groups, a
         { code: "REGULAR_QUEUE_CONFIG_INVALID" },
       );
     }
+    for (const profile of [fixture.profiles.toutiao, fixture.profiles.hepan])
+      assert.throws(
+        () =>
+          fixture.runtime.application.previewRegularQueueAdmission(
+            admissionInput(profile, "default-count", { imageCount: 1 }),
+          ),
+        { code: "REGULAR_QUEUE_IMAGE_PUBLISHING_UNSUPPORTED" },
+      );
+    assert.throws(
+      () =>
+        fixture.runtime.application.admitRegularQueueItems(
+          admissionInput(fixture.profiles.hepan, "unsupported-count", {
+            imageCount: 1,
+          }),
+        ),
+      { code: "REGULAR_QUEUE_IMAGE_PUBLISHING_UNSUPPORTED" },
+    );
     assert.throws(
       () =>
         fixture.runtime.application.previewRegularQueueAdmission(
@@ -261,16 +286,20 @@ test("18-B rereads a saved zero-to-nonzero update after restart and fails closed
       admission.items[0].queueGroupId,
     );
     assert.equal(before.imagePublishingSupported, false);
-    fixture.runtime.application.updateRegularQueueGroupImageCount({
-      queueGroupId: before.queueGroupId,
-      imageCount: 1,
-      expectedRevision: before.revision,
-    });
+    assert.throws(
+      () =>
+        fixture.runtime.application.updateRegularQueueGroupImageCount({
+          queueGroupId: before.queueGroupId,
+          imageCount: 1,
+          expectedRevision: before.revision,
+        }),
+      { code: "REGULAR_QUEUE_IMAGE_PUBLISHING_UNSUPPORTED" },
+    );
     fixture.runtime.close();
 
     reopened = openRuntime(fixture.root);
     const persisted = group(reopened.application, before.queueGroupId);
-    assert.equal(persisted.imageCount, 1);
+    assert.equal(persisted.imageCount, 0);
     assert.equal(persisted.imagePublishingSupported, false);
     assert.equal(
       Object.prototype.hasOwnProperty.call(persisted, "imagePath"),
@@ -292,7 +321,7 @@ test("18-B IPC accepts only the closed image-count command and returns its refre
   try {
     fixture.runtime.contentStore.createArticle(article("ipc-image-count"));
     const admission = fixture.runtime.application.admitRegularQueueItems(
-      admissionInput(fixture.profiles.hepan, "ipc-image-count", {
+      admissionInput(fixture.profiles.lieju, "ipc-image-count", {
         imageCount: 1,
       }),
     );

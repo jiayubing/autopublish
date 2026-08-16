@@ -1,14 +1,10 @@
 "use strict";
 
-const crypto = require("node:crypto");
 const FormData = require("form-data");
 const iconv = require("iconv-lite");
 
 const domain = require("../../domain");
-const {
-  relativePathForImageId,
-} = require("../../content/client-image-reference");
-const { readImageMetadata } = require("../../content/client-image-metadata");
+const { parseImagePlanV1 } = require("../../content/image-plan-v1");
 
 const MAX_LIEJU_IMAGE_COUNT = 4;
 const MAX_LIEJU_IMAGE_BYTES = 1024 * 1024;
@@ -29,76 +25,6 @@ function exactKeys(value, keys, code) {
   const expected = [...keys].sort();
   if (actual.join("\0") !== expected.join("\0")) throw fail(code);
   return value;
-}
-
-function validImageName(value) {
-  return (
-    typeof value === "string" &&
-    value.length >= 1 &&
-    value.length <= 255 &&
-    !/[\\/\0]/.test(value) &&
-    value !== "." &&
-    value !== ".."
-  );
-}
-
-function validImagePlanImage(value) {
-  exactKeys(
-    value,
-    ["imageId", "name", "extension", "mimeType", "width", "height", "size"],
-    "LIEJU_IMAGE_PLAN_INVALID",
-  );
-  if (
-    typeof value.imageId !== "string" ||
-    !relativePathForImageId(value.imageId) ||
-    !validImageName(value.name) ||
-    typeof value.extension !== "string" ||
-    !/^\.(?:png|jpe?g|webp)$/i.test(value.extension) ||
-    !value.name.toLowerCase().endsWith(value.extension.toLowerCase()) ||
-    !["image/png", "image/jpeg", "image/webp"].includes(value.mimeType) ||
-    !Number.isInteger(value.width) ||
-    value.width < 1 ||
-    !Number.isInteger(value.height) ||
-    value.height < 1 ||
-    !Number.isInteger(value.size) ||
-    value.size < 0
-  )
-    throw fail("LIEJU_IMAGE_PLAN_INVALID");
-  return Object.freeze({
-    imageId: value.imageId,
-    name: value.name,
-    extension: value.extension.toLowerCase(),
-    mimeType: value.mimeType,
-    width: value.width,
-    height: value.height,
-    size: value.size,
-  });
-}
-
-function parseImagePlan(value) {
-  exactKeys(
-    value,
-    ["requestedCount", "selectedCount", "textOnly", "images", "warnings"],
-    "LIEJU_IMAGE_PLAN_INVALID",
-  );
-  if (
-    !Number.isInteger(value.requestedCount) ||
-    value.requestedCount < 0 ||
-    value.requestedCount > 5 ||
-    !Number.isInteger(value.selectedCount) ||
-    value.selectedCount < 0 ||
-    value.selectedCount > value.requestedCount ||
-    typeof value.textOnly !== "boolean" ||
-    !Array.isArray(value.images) ||
-    value.images.length !== value.selectedCount ||
-    !Array.isArray(value.warnings) ||
-    value.textOnly !== (value.images.length === 0)
-  )
-    throw fail("LIEJU_IMAGE_PLAN_INVALID");
-  const images = value.images.map(validImagePlanImage);
-  if (new Set(images.map((image) => image.imageId)).size !== images.length)
-    throw fail("LIEJU_IMAGE_PLAN_INVALID");
-  return Object.freeze(images);
 }
 
 function parseFormControls(value) {
@@ -173,10 +99,6 @@ function imageWarning(code) {
   return Object.freeze({ code, stage: "delivery" });
 }
 
-function fingerprint(bytes) {
-  return crypto.createHash("sha256").update(bytes).digest("hex");
-}
-
 function formCharset(value) {
   const charset = value === undefined ? "utf-8" : String(value).toLowerCase();
   if (!FORM_CHARSETS.has(charset)) throw fail("LIEJU_MULTIPART_FORM_INVALID");
@@ -207,28 +129,31 @@ function appendEncodedText(body, name, value, charset) {
   });
 }
 
-function prepareImage(candidate, clientId, imageResolver, fsApi) {
-  if (!imageResolver || typeof imageResolver.resolveImage !== "function")
-    throw fail("LIEJU_IMAGE_RESOLVER_UNAVAILABLE");
-  const resolved = imageResolver.resolveImage(clientId, candidate.imageId);
-  if (!resolved || typeof resolved.filePath !== "string" || !resolved.filePath)
-    throw fail("LIEJU_IMAGE_RESOLVE_INVALID");
-  const metadata = readImageMetadata(resolved.filePath, fsApi);
-  const bytes = fsApi.readFileSync(resolved.filePath);
+function prepareImage(candidate, clientId, imageAssetReader) {
+  if (!imageAssetReader || typeof imageAssetReader.read !== "function")
+    throw fail("LIEJU_IMAGE_ASSET_READER_UNAVAILABLE");
+  const asset = imageAssetReader.read({ clientId, imageId: candidate.imageId });
+  const bytes = asset && asset.bytes;
   if (
+    !asset ||
+    typeof asset !== "object" ||
+    typeof asset.name !== "string" ||
+    !asset.name ||
+    /[\\/\0]/.test(asset.name) ||
+    typeof asset.mimeType !== "string" ||
     !Buffer.isBuffer(bytes) ||
     bytes.length < 1 ||
     bytes.length > MAX_LIEJU_IMAGE_BYTES ||
-    metadata.size !== bytes.length ||
-    metadata.extension !== candidate.extension ||
-    metadata.mimeType !== candidate.mimeType
+    asset.size !== bytes.length ||
+    typeof asset.assetFingerprint !== "string" ||
+    !/^[a-f0-9]{64}$/.test(asset.assetFingerprint)
   )
     throw fail("LIEJU_IMAGE_DELIVERY_INVALID");
   return Object.freeze({
-    filename: candidate.name,
-    mimeType: metadata.mimeType,
-    bytes,
-    assetFingerprint: fingerprint(bytes),
+    filename: asset.name,
+    mimeType: asset.mimeType,
+    bytes: Buffer.from(bytes),
+    assetFingerprint: asset.assetFingerprint,
   });
 }
 
@@ -327,7 +252,7 @@ function prepareLiejuImageMultipart(input) {
   const baseEvidence = domain.parsePreparedSubmissionEvidenceV1(
     value.preparedSubmissionEvidenceV1,
   );
-  const imagePlan = parseImagePlan(value.imagePlan);
+  const imagePlan = parseImagePlanV1(value.imagePlan);
   const controls = parseFormControls(value.form);
   const overrides = parseOverrides(value.formValueOverrides, controls);
   const charset = formCharset(value.form && value.form.charset);
@@ -335,7 +260,7 @@ function prepareLiejuImageMultipart(input) {
   const warnings = [];
   const images = [];
 
-  for (const candidate of imagePlan) {
+  for (const candidate of imagePlan.images) {
     if (images.length >= slots.length) {
       warnings.push(imageWarning("LIEJU_IMAGE_SLOT_CAPACITY_REACHED"));
       continue;
@@ -344,8 +269,7 @@ function prepareLiejuImageMultipart(input) {
       const image = prepareImage(
         candidate,
         value.clientId,
-        value.imageResolver,
-        value.fs || require("node:fs"),
+        value.imageAssetReader,
       );
       images.push(
         Object.freeze({

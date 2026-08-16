@@ -39,6 +39,7 @@ function claim(platformId) {
 
 function imagePlan() {
   return Object.freeze({
+    version: 1,
     requestedCount: 1,
     selectedCount: 1,
     textOnly: false,

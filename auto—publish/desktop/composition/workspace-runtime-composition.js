@@ -160,9 +160,7 @@ async function createWorkspaceRuntimeComposition(deps) {
       ...require("../../src/platforms/platform-runtime-context").createPlatformRuntimeContextFromWorkspacePaths(
         paths,
       ),
-      imageResolver: Object.freeze({
-        resolveImage: clientImageLibrary.resolveImage,
-      }),
+      imageAssetReader: clientImageLibrary.imageAssetReader,
       getPlatformSettingsService: function () {
         return platformSettingsService;
       },
@@ -644,7 +642,7 @@ async function createWorkspaceRuntimeComposition(deps) {
     });
     const regularImagePlanService =
       require("../services/regular-image-plan-service").createRegularImagePlanService(
-        { imageLibrary: clientImageLibrary },
+        { imageSelectionPort: clientImageLibrary.imageSelectionPort },
       );
     const platformSubmissionExecutor =
       require("../services/regular-platform-preparation-port").createRegularPlatformPreparationPort(

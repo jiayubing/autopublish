@@ -133,6 +133,7 @@ function imagePlan(imageCount) {
         )
       : [];
   return Object.freeze({
+    version: 1,
     requestedCount: imageCount,
     selectedCount: images.length,
     textOnly: images.length === 0,
@@ -870,6 +871,7 @@ test("recoverable image-plan faults downgrade to text-only before the submission
           id: "toutiao",
           async preparePlatformSubmission(claim, plan) {
             assert.deepEqual(plan, {
+              version: 1,
               requestedCount: 3,
               selectedCount: 0,
               textOnly: true,

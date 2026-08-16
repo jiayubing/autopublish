@@ -1,6 +1,7 @@
 "use strict";
 
 const assert = require("node:assert/strict");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -154,6 +155,7 @@ function png(width, height) {
 
 function imagePlan() {
   return {
+    version: 1,
     requestedCount: 1,
     selectedCount: 1,
     textOnly: false,
@@ -172,11 +174,24 @@ function imagePlan() {
   };
 }
 
-function createImageResolver(root) {
+function createImageAssetReader(root) {
   const image = path.join(root, "transport-policy.png");
-  fs.writeFileSync(image, png(4, 3));
+  const bytes = png(4, 3);
+  fs.writeFileSync(image, bytes);
   return {
-    resolveImage: () => ({ filePath: image }),
+    read: () => ({
+      name: "transport-policy.png",
+      extension: ".png",
+      mimeType: "image/png",
+      width: 4,
+      height: 3,
+      size: bytes.length,
+      bytes,
+      assetFingerprint: crypto
+        .createHash("sha256")
+        .update(bytes)
+        .digest("hex"),
+    }),
   };
 }
 
@@ -375,7 +390,7 @@ test("Lieju auto falls back before POST and browser consumes the frozen city, zo
     runtimeContext: {
       browserRuntime: { stateFile: fixture.stateFile },
       httpRequest: http.request,
-      imageResolver: createImageResolver(fixture.root),
+      imageAssetReader: createImageAssetReader(fixture.root),
     },
   });
   try {
@@ -573,7 +588,7 @@ test("Lieju browser submit fails closed when a frozen image input no longer matc
     runtimeContext: {
       liejuSubmissionMode: "playwright_only",
       browserRuntime: { stateFile: fixture.stateFile },
-      imageResolver: createImageResolver(fixture.root),
+      imageAssetReader: createImageAssetReader(fixture.root),
     },
     frozenFormMatches: false,
   });
