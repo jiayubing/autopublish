@@ -1,8 +1,8 @@
 # Post-Wave 发布平台扩展性与图片库边界收敛计划
 
-**Status:** `RUNNING`
+**Status:** `COMPLETE`
 
-**当前 gate：**`E6 FINAL CLEAN-HEAD GATE PENDING (AUTHORIZED MANUAL DISPATCH)`
+**当前 gate：**`E6 COMPLETE`
 
 **职责：**在已完成 `POST-WAVE-SUBMISSION-ARCHITECTURE-CLOSEOUT-PLAN.md` 的基础上，降低新增普通发布平台的通用接入成本，并把客户图片库稳定为高内聚、窄接口、应用内模块。本文是独立的后续实施计划，不重开已完成的 Wave/Ticket/Maintenance，不回填既有 closeout，不代表已授权执行真实登录、发布、上传、付费或生产迁移。
 
@@ -332,22 +332,22 @@ loader 只向调用者暴露其需要的角色，不暴露完整实现对象：
 
 ## 7. 最终验收矩阵
 
-- [ ] `PlatformDefinitionV1` 是平台静态元数据与 capability 的唯一 owner。
-- [ ] loader 对 exact contract、重复 ID、非法 host/path 和 capability/port mismatch fail-closed。
-- [ ] 标准 reference platform 无共享层平台 ID 特例即可进入普通投稿公开链路。
-- [ ] Renderer 不保留平台 display-name 平行表。
-- [ ] workspace composition、account runtime、worker session 不保留普通平台 ID 条件分支。
-- [ ] security/package 的显式平台差异有 code-owned definition 或具名平台 owner，不来自用户/远端配置。
-- [ ] 普通队列、付费媒体、文章生命周期、attention、publication writer 数量均未增加。
-- [ ] accepted/rejected/group-blocked/uncertain 与禁止自动 retry 行为不变。
-- [ ] 图片库仍只有一个实例和一个权威文件边界 owner。
-- [ ] regular image selection 只依赖 selection port；平台图片交付只依赖 `ImagePlanV1 + imageAssetReader`。
-- [ ] `src/platforms/*` 不依赖 `client-image-*` 内部实现文件。
-- [ ] 图片扫描/读取失败继续 best-effort 自动降级，不新增 retry/人工 decision 状态。
-- [ ] 不新增图片 IPC/UI/数据库/使用状态。
-- [ ] reference fixture 不进入 production package，真实平台所需资产完整进入 package。
-- [ ] targeted、typecheck、build、packaging、完整测试与最终 smoke 在同一 source state PASS。
-- [ ] 未执行的真实外部验收及原因明确记录。
+- [x] `PlatformDefinitionV1` 是平台静态元数据与 capability 的唯一 owner。
+- [x] loader 对 exact contract、重复 ID、非法 host/path 和 capability/port mismatch fail-closed。
+- [x] 标准 reference platform 无共享层平台 ID 特例即可进入普通投稿公开链路。
+- [x] Renderer 不保留平台 display-name 平行表。
+- [x] workspace composition、account runtime、worker session 不保留普通平台 ID 条件分支。
+- [x] security/package 的显式平台差异有 code-owned definition 或具名平台 owner，不来自用户/远端配置。
+- [x] 普通队列、付费媒体、文章生命周期、attention、publication writer 数量均未增加。
+- [x] accepted/rejected/group-blocked/uncertain 与禁止自动 retry 行为不变。
+- [x] 图片库仍只有一个实例和一个权威文件边界 owner。
+- [x] regular image selection 只依赖 selection port；平台图片交付只依赖 `ImagePlanV1 + imageAssetReader`。
+- [x] `src/platforms/*` 不依赖 `client-image-*` 内部实现文件。
+- [x] 图片扫描/读取失败继续 best-effort 自动降级，不新增 retry/人工 decision 状态。
+- [x] 不新增图片 IPC/UI/数据库/使用状态。
+- [x] reference fixture 不进入 production package，真实平台所需资产完整进入 package。
+- [x] targeted、typecheck、build、packaging、完整测试与最终 smoke 在同一 source state PASS。
+- [x] 未执行的真实外部验收及原因明确记录。
 
 ## 8. 验证阶梯
 
@@ -409,12 +409,12 @@ loader 只向调用者暴露其需要的角色，不暴露完整实现对象：
 
 ## 12. Closure record（实施时填写）
 
-- **Execution status:** `RUNNING`
-- **Current gate:** `E6 FINAL CLEAN-HEAD GATE PENDING (AUTHORIZED MANUAL DISPATCH)`
-- **Implementation source state:** E6 implementation commit `e0a7c8078d9152792a2db52d130de6b26243128d`（base `89c02ae18ab5f15c836738d003346c74ba518228`）；本记录与 handoff 等待 provenance commit 后执行 final clean-HEAD gate
-- **Completed packages:** `E0, E1, E2, E3, E4, E5`；E6 combined Primary Audit、blocking remediation、bounded re-audit、implementation commit、dirty full test 与 production package smoke 已完成；provenance commit 与 final clean-HEAD closure 尚未执行
-- **Commands and results:** exact combined matrix `204 passed / 0 failed / 0 skipped`；packaging contracts `49 passed / 0 failed / 0 skipped`；main/bridge/Renderer typecheck、Renderer build、定向 ESLint PASS。final-gate remediation 后显式启用 Electron focus fixture 的 full `npm test` 为 `1935 passed / 0 failed / 0 skipped`；`npm run pack:production:smoke:dirty` PASS。详细 evidence 见 `handoffs/post-wave-platform-extensibility-e6-primary-audit-and-remediation-20260816.md`
+- **Execution status:** `COMPLETE`
+- **Current gate:** `E6 COMPLETE`
+- **Implementation source state:** E6 implementation commit `e0a7c8078d9152792a2db52d130de6b26243128d`，provenance commit/final clean-gate HEAD `e49b9b2f547a3775e1c88c77d6093168fe28ab0a`（base `89c02ae18ab5f15c836738d003346c74ba518228`）
+- **Completed packages:** `E0, E1, E2, E3, E4, E5, E6`；combined Primary Audit、blocking remediation、bounded re-audit、implementation/provenance commits 与 final clean-HEAD closure 均已完成
+- **Commands and results:** exact combined matrix `204 passed / 0 failed / 0 skipped`；packaging contracts `49 passed / 0 failed / 0 skipped`；main/bridge/Renderer typecheck、Renderer build、定向 ESLint PASS。在 clean HEAD `e49b9b2` 上显式启用 Electron focus fixture 的 full `npm test` 为 `1935 passed / 0 failed / 0 skipped`，runner lifecycle `CLOSED`、`allFilesReported=true`、`noSkippedTodo=true`；`npm run pack:production:smoke` PASS，绑定 clean commit `e49b9b2`。详细 evidence 见 `handoffs/post-wave-platform-extensibility-e6-primary-audit-and-remediation-20260816.md`
 - **Audit findings and disposition:** Primary Audit 关闭两个 blocking P2：内置 module-load 未按平台隔离（`INTRODUCED_BY_CHANGE`），settings contribution 可冒充其他平台 adapter（`CROSS_COMPONENT_INTERACTION`）。Final gate 又关闭三个 `PROCESS_EVIDENCE_GAP`：E3 具名 settings contribution 与旧依赖门禁不一致、Renderer fixture 未提供 definition display-name projection、workspace junction fixture 仍覆盖 E2 退役 input path。定向复审与 full gate PASS，无 remaining blocking/deferred finding，未触发 escalation
-- **Unrun acceptance and reasons:** 最终 clean-HEAD evidence 等待本次 provenance commit 后运行。真实登录/发布/上传/付费/迁移未授权且本计划禁止执行
-- **Remaining risks:** 无已知代码或 process-evidence finding；E6 仍缺 provenance commit 与最终 clean-HEAD gate，不能标记 `COMPLETE`
-- **Final Git status:** HEAD `e0a7c80`；implementation 已提交，本计划与 handoff 为待提交 provenance docs；未 merge/push
+- **Unrun acceptance and reasons:** 未执行真实登录、投稿、图片上传、付费、取消、订单核对、生产数据库或迁移；这些操作未获逐次授权且不属于本计划自动 gate。Hepan Python smoke 为 `SKIPPED_OPTIONAL (optional-python-not-supplied)`，不代表真实河畔验收
+- **Remaining risks:** 无已知 blocking/deferred finding；真实平台外部协议仍只由已有合成测试与 package contract 覆盖，后续真实验收需另行逐次授权
+- **Final Git status:** final clean-gate HEAD `e49b9b2`；本 closure record 与 handoff 由独立 docs-only commit 固化；未 merge/push

@@ -2,7 +2,7 @@
 
 **工作包：**`E6 — Combined audit 与 closure`
 
-**当前结论：**E1～E5 combined Primary Audit 及 bounded re-audit 已完成；final full gate 暴露的三个 process-evidence gap 也已按现行 owner/contract 收敛。最终 dirty implementation source state 的 full test 与 production package smoke 均 `PASS`。用户已授权继续，E6 implementation 已提交为 `e0a7c8078d9152792a2db52d130de6b26243128d`。E6 仍为 `RUNNING`：尚缺 provenance commit 与 final clean-HEAD evidence，不能标记 `COMPLETE`。
+**当前结论：**`COMPLETE`。E1～E5 combined Primary Audit 及 bounded re-audit 已完成；final full gate 暴露的三个 process-evidence gap 也已按现行 owner/contract 收敛。E6 implementation 已提交为 `e0a7c8078d9152792a2db52d130de6b26243128d`，provenance 与 final clean-gate HEAD 为 `e49b9b2f547a3775e1c88c77d6093168fe28ab0a`。clean-HEAD full test 与 production package smoke 均 `PASS`，无 remaining blocking/deferred finding。
 
 ## Source state and scope
 
@@ -74,16 +74,20 @@ F3～F5 都未修改 schema、事实 writer、事务、不确定结果或远端�
 
 发现并撤除无关整文件格式化后，已在恢复既有排版的最小 production/test diff 上重新运行 owner test 与上述 204-test combined matrix；本节不复用任何较早 source state 的结果证明当前实现。
 
-## Final full gate and next action
+## Final full gate and closure
 
 - `RUN_ELECTRON_FOCUS_TESTS=1 npm test`：收集 267 个测试文件，`1935 passed / 0 failed / 0 skipped`；runner lifecycle `CLOSED`、`allFilesReported=true`、`noSkippedTodo=true`。
 - `npm run pack:production:smoke:dirty`：PASS；production directory package、Renderer build/typecheck、preload build/sandbox、artifact manifest、Playwright runtime、migration CLI、workspace schema/storage boundary、package/contract absence 均通过。Hepan Python 为 `SKIPPED_OPTIONAL (optional-python-not-supplied)`，符合本地合成 smoke 合同，不代表真实河畔验收。
 - final-gate remediation 定向验证：`renderer-platform-queue-refresh-lifecycle` `3/3`；`workspace-bootstrap-service` `34/34`；`phase-08-cleanup-gates` `5/5`；dependency direction report `PASSED`。
+- 在 clean HEAD `e49b9b2f547a3775e1c88c77d6093168fe28ab0a` 上再次运行 `$env:RUN_ELECTRON_FOCUS_TESTS='1'; npm test`：收集 267 个测试文件，`1935 passed / 0 failed / 0 skipped`；runner lifecycle `CLOSED`、`allFilesReported=true`、`noSkippedTodo=true`。
+- 同一 clean HEAD 上运行 `npm run pack:production:smoke`：PASS；clean-build/manifest 均绑定 `e49b9b2`，production directory package、Renderer build/typecheck、preload build/sandbox、artifact manifest、Playwright runtime、migration CLI、workspace schema/storage boundary、package/contract absence 均通过。Hepan Python 为 `SKIPPED_OPTIONAL (optional-python-not-supplied)`。
+- 最终 `git diff --check` PASS，构建后 `git status --short --branch` 仍为 clean `codex/jiagou`。
 - 未执行真实登录、投稿、图片上传、付费、取消、订单核对、生产数据库或迁移；这些操作未授权且不属于本计划自动 gate。
-- Implementation 已提交为 `e0a7c8078d9152792a2db52d130de6b26243128d`；未 merge 或 push。下一步提交本 handoff 与计划 provenance docs，并在最终 clean HEAD 重绑合同要求的 final evidence，然后才能标记 `COMPLETE`。
+- E6 已满足计划完成定义并停止；未 merge 或 push。
 
 ## Git state
 
 - Implementation commit：`e0a7c8078d9152792a2db52d130de6b26243128d`（base `89c02ae18ab5f15c836738d003346c74ba518228`）。
-- Dirty files：仅本计划与本 handoff 的 provenance 更新，等待 docs commit。
+- Provenance/final clean-gate HEAD：`e49b9b2f547a3775e1c88c77d6093168fe28ab0a`。
+- 本 closure record 与计划的 `COMPLETE` 状态由独立 docs-only commit 固化；该提交不修改 production、schema、tests 或 gate，不使 `e49b9b2` 的 clean-gate evidence 失效。
 - 无已知无关用户改动；未 merge/push。
