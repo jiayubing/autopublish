@@ -346,13 +346,13 @@ C4 不是默认因文件较长而强制拆分。C3 完成后先运行 gate：
 - **Execution status:** `PARTIAL`
 - **Current gate:** `C3 COMPLETE / C4 GATE READY`
 - **Base HEAD:** `ed81e6c47e0c12b8d03766268550841e1c4fdc45`
-- **Final source state (`HEAD + diff/status`):** C3 基于 C2 closure commit `ed81e6c47e0c12b8d03766268550841e1c4fdc45`（`codex/jiagou`）实施；当前为该 HEAD 加本计划 §15 所列 production/test/document working-tree diff，未提交。
+- **Final source state (`HEAD + diff/status`):** C3 基于 C2 closure commit `ed81e6c47e0c12b8d03766268550841e1c4fdc45`（`codex/jiagou`）实施；最终 production/test/package source state 已进入 implementation commit `3f5931cc4a51f6b9ce45c46de4cc80900b3804ff`。
 - **Implemented scope:** C0～C2 已完成；C3 已把删除影响查询、投稿维护、prepared-batch 本地恢复、startup uncertain recovery 与 post-processing drain 迁入具名 owner，并删除 18-operation facade、generic batch/retry chain、generic publication workflow 与 test-only orchestrator；ordinary/paid writer 与 OperationalStore facts/schema 未改变。
 - **Commands and results:** C0～C2 evidence 见 §12～§14；C3 定向行为矩阵、主进程 typecheck、115-capability matrix、Phase 8 architecture/package gates、cleanup/package contract、remediation ASAR matrix 与 diff check 均 PASS，见 §15.4、§15.6。
 - **Audit findings and disposition:** C0～C2 见既有记录；C3 Primary Audit 发现 1 个 blocking `P2 / PROCESS_EVIDENCE_GAP`，package verifier 会放行缺少 C3 runtime 依赖或混入 3 个遗漏 retired file 的 ASAR；已修复并通过 bounded re-audit，无剩余 blocking finding。
 - **Unrun acceptance and reasons:** 未运行完整 `npm test`、实际重建 ASAR 的 production package smoke 或真实账号/投稿/付费/订单操作；完整仓库与真实产物 gate 留给 C5，真实外部操作未获授权且不属于 C3。
 - **Remaining risks:** C4 intake session gate、C5 combined audit/final clean-HEAD gate 尚未执行；实际重建 ASAR smoke 留在 C5。
-- **Final Git status:** C3 production、tests、package gate、audit remediation 与本计划为未提交 working-tree change；未 stage/commit/merge/push，未更新 Wave Plan、Ticket/Maintenance 或历史 handoff，未执行 C4 gate。详见 §15.5～§15.6。
+- **Final Git status:** C3 production、tests、package gate 与 audit remediation 已提交为 `3f5931cc4a51f6b9ce45c46de4cc80900b3804ff`；本 closure record 作为后续 documentation-only commit 提交。未 merge/push，未更新 Wave Plan、Ticket/Maintenance 或历史 handoff，未执行 C4 gate。详见 §15.5～§15.6。
 
 ## 12. C0 record — 实时消费者清单与合同冻结
 
@@ -686,7 +686,7 @@ exit 0; only Git LF→CRLF working-copy warnings, no whitespace error
 ### 15.1 Source state 与实施边界
 
 - **Base HEAD：**`ed81e6c47e0c12b8d03766268550841e1c4fdc45`（`codex/jiagou`），开始时 clean；该 commit 已包含 C2 closure。
-- **执行模式：**Manual Dispatch；本轮完成 C3 implementation、定向验证、Primary Audit、blocking finding remediation 与 bounded re-audit，未 commit、push 或执行 C4 gate。
+- **执行模式：**Manual Dispatch；本轮完成 C3 implementation、定向验证、Primary Audit、blocking finding remediation 与 bounded re-audit；用户随后明确授权提交，未 push 或执行 C4 gate。
 - **Owner 边界：**删除影响查询只读 OperationalStore lifecycle facts；maintenance 只处理本地 prepared/staging recovery、trash residue 与 archive failure observation；publication recovery 只把 stranded remote-started 标记为 uncertain 并 drain post-processing。未新增 writer、schema、远端 retry 或 transport。
 - **外部副作用：**全部测试使用合成数据、临时 workspace、fake processor/transport 或静态 package fixture；未执行真实登录、投稿、付费、取消、订单核对、生产数据写入或网络请求。
 
@@ -744,7 +744,8 @@ exit 0；只有 Git LF→CRLF working-copy warning，无 whitespace error。
 ### 15.5 当前 gate / Git 状态
 
 - C3 implementation、Primary Audit、blocking finding remediation 与 bounded re-audit 已完成，C3 标记 `COMPLETE`；C4 gate 变为 `READY`，本轮未执行 C4 gate。
-- 当前 source state 是 `ed81e6c47e0c12b8d03766268550841e1c4fdc45 + working-tree diff`；未 stage/commit/merge/push。
+- 最终 production/test/package source state 是 implementation commit `3f5931cc4a51f6b9ce45c46de4cc80900b3804ff`；本计划的 provenance 校正是 documentation-only，不使既有验证失效。
+- implementation 与 closure record 均提交后工作树 clean；未 merge/push。
 - 未更新 Wave Plan、Ticket/Maintenance 或历史 handoff；`M05-0-authoritative-test-disposition-ledger.md` 在测试工具生成后保持 HEAD 内容，不属于 C3 diff。
 
 ### 15.6 Primary Audit、remediation 与 bounded re-audit
