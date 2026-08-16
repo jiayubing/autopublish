@@ -2,7 +2,7 @@
 
 **Status:** `RUNNING`
 
-**当前 gate：**`E6 READY`
+**当前 gate：**`E6 FINAL CLEAN-HEAD GATE PENDING (AUTHORIZED MANUAL DISPATCH)`
 
 **职责：**在已完成 `POST-WAVE-SUBMISSION-ARCHITECTURE-CLOSEOUT-PLAN.md` 的基础上，降低新增普通发布平台的通用接入成本，并把客户图片库稳定为高内聚、窄接口、应用内模块。本文是独立的后续实施计划，不重开已完成的 Wave/Ticket/Maintenance，不回填既有 closeout，不代表已授权执行真实登录、发布、上传、付费或生产迁移。
 
@@ -410,11 +410,11 @@ loader 只向调用者暴露其需要的角色，不暴露完整实现对象：
 ## 12. Closure record（实施时填写）
 
 - **Execution status:** `RUNNING`
-- **Current gate:** `E6 READY`
-- **Implementation source state:** clean E5 implementation/audit HEAD `33fab07a080efa2c31b5d248495c63ff37a2eef4`
-- **Completed packages:** `E0, E1, E2, E3, E4, E5`；E5 implementation、Primary Audit、clean-HEAD validation 与 provenance closure 均已完成
-- **Commands and results:** 在 clean implementation HEAD `33fab07` 上，E5 精确直接矩阵 `120 passed / 0 failed / 0 skipped`；packaging contracts `49 passed / 0 failed / 0 skipped`；main/bridge/Renderer typecheck、Renderer build、定向 ESLint、新增文件 Prettier、测试发现与 `git diff --check` PASS。详细 evidence 见 `handoffs/post-wave-platform-extensibility-e5-audit-closure-20260816.md`
-- **Audit findings and disposition:** E0～E4 findings 均已关闭；E5 Primary Audit PASS，无 P0～P3、无 blocking/deferred finding、无需 remediation/bounded re-audit，未触发 escalation
-- **Unrun acceptance and reasons:** full `npm test` 与实际 package smoke 留给 E6 最终组合 gate；main/bridge/Renderer typecheck、Renderer build 和 packaging contracts 已在 E5 运行；真实登录/发布/上传/付费/迁移未授权且本工作包禁止执行
-- **Remaining risks:** E5 无已知/deferred finding；full `npm test`、E1～E5 combined audit 与实际 package smoke 留给 E6 combined closure
-- **Final Git status:** clean E5 implementation HEAD `33fab07`；本计划与 E5 closure handoff 由独立 provenance docs commit 固化；未 merge/push，未进入 E6
+- **Current gate:** `E6 FINAL CLEAN-HEAD GATE PENDING (AUTHORIZED MANUAL DISPATCH)`
+- **Implementation source state:** E6 implementation commit `e0a7c8078d9152792a2db52d130de6b26243128d`（base `89c02ae18ab5f15c836738d003346c74ba518228`）；本记录与 handoff 等待 provenance commit 后执行 final clean-HEAD gate
+- **Completed packages:** `E0, E1, E2, E3, E4, E5`；E6 combined Primary Audit、blocking remediation、bounded re-audit、implementation commit、dirty full test 与 production package smoke 已完成；provenance commit 与 final clean-HEAD closure 尚未执行
+- **Commands and results:** exact combined matrix `204 passed / 0 failed / 0 skipped`；packaging contracts `49 passed / 0 failed / 0 skipped`；main/bridge/Renderer typecheck、Renderer build、定向 ESLint PASS。final-gate remediation 后显式启用 Electron focus fixture 的 full `npm test` 为 `1935 passed / 0 failed / 0 skipped`；`npm run pack:production:smoke:dirty` PASS。详细 evidence 见 `handoffs/post-wave-platform-extensibility-e6-primary-audit-and-remediation-20260816.md`
+- **Audit findings and disposition:** Primary Audit 关闭两个 blocking P2：内置 module-load 未按平台隔离（`INTRODUCED_BY_CHANGE`），settings contribution 可冒充其他平台 adapter（`CROSS_COMPONENT_INTERACTION`）。Final gate 又关闭三个 `PROCESS_EVIDENCE_GAP`：E3 具名 settings contribution 与旧依赖门禁不一致、Renderer fixture 未提供 definition display-name projection、workspace junction fixture 仍覆盖 E2 退役 input path。定向复审与 full gate PASS，无 remaining blocking/deferred finding，未触发 escalation
+- **Unrun acceptance and reasons:** 最终 clean-HEAD evidence 等待本次 provenance commit 后运行。真实登录/发布/上传/付费/迁移未授权且本计划禁止执行
+- **Remaining risks:** 无已知代码或 process-evidence finding；E6 仍缺 provenance commit 与最终 clean-HEAD gate，不能标记 `COMPLETE`
+- **Final Git status:** HEAD `e0a7c80`；implementation 已提交，本计划与 handoff 为待提交 provenance docs；未 merge/push
