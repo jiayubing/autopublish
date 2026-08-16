@@ -411,10 +411,10 @@ loader 只向调用者暴露其需要的角色，不暴露完整实现对象：
 
 - **Execution status:** `RUNNING`
 - **Current gate:** `E2 READY`
-- **Implementation source state:** `7747e64743ad3441097df1294874bc120772a1ad + E0 documentation diff + E1 implementation/remediation/test/audit diff`
+- **Implementation source state:** `6c1641ea89acfacd3c9877b6f92bfffb28d54763`（E0/E1 integration commit）
 - **Completed packages:** `E0, E1`
 - **Commands and results:** E1 最终定向矩阵 `167 passed / 0 failed`；packaging contracts `49 passed / 0 failed`；Phase 1 + Phase 8 architecture/package gate `8 passed / 0 failed`；定向 ESLint 与 `git diff --check` PASS。详细命令、finding 与 closure evidence 见 `handoffs/post-wave-platform-extensibility-e1-audit-closure-20260816.md`
 - **Audit findings and disposition:** E0 Primary Audit F1–F3 已关闭；E1 Primary Audit F1–F5 均已最小修复，bounded re-audit PASS，无 deferred finding
 - **Unrun acceptance and reasons:** full `npm test`、Renderer typecheck/build 与真实 electron-builder package smoke 不属于 E1 工作包 closure gate；真实登录/发布/上传/付费/迁移未授权且本工作包禁止执行
 - **Remaining risks:** E2 尚未开始；Renderer display-name、external-host、named workspace path、共享 composition 中的特殊平台 contribution 等静态知识仍按 E2/E3 gate 保留
-- **Final Git status:** E0 文档与 E1 production/test/handoff diff 均未提交；未 stage/commit/merge/push
+- **Final Git status:** E0/E1 已进入本地 integration commit `6c1641ea89acfacd3c9877b6f92bfffb28d54763`；未 merge/push

@@ -4,7 +4,7 @@
 
 **基线：**`codex/jiagou @ 7747e64743ad3441097df1294874bc120772a1ad + E0 documentation diff + E1 implementation diff`
 
-**结论：**E1 `COMPLETE`；Primary Audit 的 blocking findings 已全部修复，Bounded Re-audit `PASS`，下一 gate 为 `E2 READY`。未进入 E2，未 stage/commit/merge/push。
+**结论：**E1 `COMPLETE`；Primary Audit 的 blocking findings 已全部修复，Bounded Re-audit `PASS`，下一 gate 为 `E2 READY`。E0/E1 已进入本地 integration commit `6c1641ea89acfacd3c9877b6f92bfffb28d54763`；未进入 E2，未 merge/push。
 
 ## Scope
 
@@ -75,6 +75,6 @@ Toutiao platform factory 未下传 runtime context，scan/profile/daemon/state �
 
 ## Git / provenance
 
-- HEAD 仍为 `7747e64743ad3441097df1294874bc120772a1ad`。
-- E0 文档、E1 implementation/remediation/tests/audit handoff 均保留为 working-tree diff。
-- 未 stage、commit、merge、push。
+- Base HEAD：`7747e64743ad3441097df1294874bc120772a1ad`。
+- E0/E1 implementation/remediation/tests/audit integration commit：`6c1641ea89acfacd3c9877b6f92bfffb28d54763`。
+- 未 merge/push。
