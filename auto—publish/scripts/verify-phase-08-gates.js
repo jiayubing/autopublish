@@ -34,6 +34,13 @@ const DEPENDENCY_RULES = [
   {
     name: "src-to-desktop",
     roots: ["src"],
+    // Platform modules own the registration point for their named optional
+    // settings contribution while the settings implementation remains in its
+    // desktop application-service owner.
+    allowlist: new Map([
+      ["src/platforms/hepan/platform.js", 1],
+      ["src/platforms/media/platform.js", 1],
+    ]),
     forbidden: (specifier) => /^desktop(?:\/|$)/.test(specifier),
   },
   {

@@ -103,6 +103,24 @@ test("missing, undeclared, and malformed ports fail closed without hiding a vali
   }
 });
 
+test("a missing enabled built-in module is quarantined without hiding another valid platform", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "platform-module-load-"));
+  const diagnostics = [];
+  const restore = setDiagnosticReporter((record) => { diagnostics.push(record); return true; });
+  try {
+    const configPath = path.join(root, "platforms.json");
+    fs.writeFileSync(configPath, JSON.stringify({ enabled: ["missing-module", "toutiao"] }), "utf8");
+    const loaded = loadPlatformModules({ configPath });
+    assert.deepEqual(loaded.map((platform) => platform.definition.id), ["toutiao"]);
+    assert.equal(diagnostics.length, 1);
+    assert.equal(diagnostics[0].code, "PLATFORM_MODULE_LOAD_FAILED");
+    assert.deepEqual(diagnostics[0].metadata, { action: "module-load", platformId: "missing-module" });
+  } finally {
+    restore();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("loader quarantines every module that shares a duplicate platform id", () => {
   const diagnostics = [];
   const restore = setDiagnosticReporter((record) => { diagnostics.push(record); return true; });
@@ -175,6 +193,18 @@ test("built-in optional contributions stay platform-owned and exact", async () =
     profileKey: "lieju",
     requiredFields: ["city", "contact", "phone"],
   });
+});
+
+test("settings contributions cannot impersonate another platform adapter", () => {
+  const fixture = moduleFor(
+    definition("settings-fixture", {
+      capabilities: { regularSubmission: false, legacyQueueImport: false, loginSession: false, accountInspection: false, imagePublishing: false },
+      contributions: { settings: true, clientProfile: false, runtimeArtifacts: false },
+    }),
+    () => ({ settingsContribution: { createSettingsAdapter: () => ({ id: "media" }) } }),
+  );
+  const loaded = loadPlatformModules({ platformModules: [fixture], enabledIds: ["settings-fixture"] });
+  assert.throws(() => loaded[0].settingsContribution.createSettingsAdapter({}), { code: "PLATFORM_PORT_INVALID" });
 });
 
 test("shared composition and worker boundaries contain no special-platform branch", () => {

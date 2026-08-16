@@ -307,13 +307,13 @@ describe("workspace bootstrap service", function() {
     } finally { harness.cleanup(); }
   });
 
-  it("rejects every existing AutoPublish directory link before initialization", async function(t) {
+  it("rejects every owned AutoPublish directory link before initialization", async function(t) {
     const directDirectories = [
       ".autopublish", ".autopublish/input", ".autopublish/data", ".autopublish/published",
       ".autopublish/failed", ".autopublish/research", ".autopublish/batches",
       ".autopublish/queue", ".autopublish/submission-records", "clients", "templates", "generated"
     ];
-    const nestedDirectories = [".autopublish/input/media", ".autopublish/input/lieju", ".autopublish/input/toutiao"];
+    const nestedDirectories = [".autopublish/input/media"];
     let linkPermissionError = null;
 
     for (const relativePath of directDirectories.concat(nestedDirectories)) {

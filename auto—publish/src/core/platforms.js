@@ -54,6 +54,7 @@ const DECLARATIONS = Object.freeze([
   ["contributions", "runtimeArtifacts", "runtimeArtifactContribution"],
 ]);
 const PORT_NAMES = Object.freeze(Object.keys(PORT_SPECS));
+const BUILTIN_MODULE_LOAD_FAILED = Symbol("BUILTIN_MODULE_LOAD_FAILED");
 
 function imagePublishingCapability(platform) {
   return Object.freeze({ supported: Boolean(platform && platform.definition && platform.definition.capabilities.imagePublishing) });
@@ -86,6 +87,15 @@ function exactPort(port, portName, platformId) {
     });
     const frozenProjection = Object.freeze({ platformId, requirements: Object.freeze(requirements) });
     normalized.describe = function () { return frozenProjection; };
+  }
+  if (portName === "settingsContribution") {
+    const createSettingsAdapter = port.createSettingsAdapter;
+    normalized.createSettingsAdapter = function (context) {
+      const adapter = createSettingsAdapter(context);
+      if (!adapter || typeof adapter !== "object" || Array.isArray(adapter) || adapter.id !== platformId)
+        throw platformError("PLATFORM_PORT_INVALID", { platformId, port: portName });
+      return adapter;
+    };
   }
   return Object.freeze(normalized);
 }
@@ -120,7 +130,14 @@ function normalizePlatformModule(moduleValue, definition, runtimeContext) {
 }
 
 function builtinPlatformModules(enabledIds) {
-  return enabledIds.map((id) => require(path.resolve(__dirname, "../platforms", id, "platform")));
+  return enabledIds.map(function (platformId) {
+    try {
+      return require(path.resolve(__dirname, "../platforms", platformId, "platform"));
+    } catch (error) {
+      safeDiagnostic(error, platformId, "module-load");
+      return BUILTIN_MODULE_LOAD_FAILED;
+    }
+  });
 }
 
 function loadEnabledPlatformDefinitions(options) {
@@ -151,6 +168,10 @@ function loadPlatformModules(options) {
   const seen = new Set();
   const duplicateIds = new Set();
   modules.forEach(function (moduleValue, index) {
+    if (moduleValue === BUILTIN_MODULE_LOAD_FAILED) {
+      definitions[index] = null;
+      return;
+    }
     try {
       const definition = parsePlatformDefinitionV1(moduleValue && moduleValue.definition);
       if (seen.has(definition.id)) duplicateIds.add(definition.id);

@@ -31,7 +31,7 @@ function installDesktopFixture(page) {
     };
     const queueData = () => ({
       revision: state.queueRevision,
-      platforms: [],
+      platforms: [{ id: "toutiao", displayName: "头条" }],
       queue: [],
     });
     const groupData = () => [

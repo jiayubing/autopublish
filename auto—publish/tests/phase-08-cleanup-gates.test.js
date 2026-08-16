@@ -54,11 +54,21 @@ test("architecture guards cover Workstream D boundaries with a bounded legacy al
   const ruleNames = new Set(DEPENDENCY_RULES.map((rule) => rule.name));
   for (const name of [
     "application-service-to-ipc-contract",
+    "src-to-desktop",
     "platform-adapter-to-global-runtime-config",
     "renderer-to-platform-automation",
   ])
     assert.equal(ruleNames.has(name), true, name);
 
+  const srcRule = DEPENDENCY_RULES.find(
+    (rule) => rule.name === "src-to-desktop",
+  );
+  assert.deepEqual([...srcRule.allowlist.entries()].sort(), [
+    ["src/platforms/hepan/platform.js", 1],
+    ["src/platforms/media/platform.js", 1],
+  ]);
+  assert.equal(srcRule.forbidden("desktop/services/example"), true);
+  assert.equal(srcRule.forbidden("src/platforms/example"), false);
   const runtimeRule = DEPENDENCY_RULES.find(
     (rule) => rule.name === "platform-adapter-to-global-runtime-config",
   );
