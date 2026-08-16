@@ -322,6 +322,12 @@ const api = {
         input,
       );
     },
+    getSubmissionCenterSnapshot: function (input) {
+      return ipcRenderer.invoke(
+        "content:get-submission-center-snapshot",
+        input,
+      );
+    },
     previewArticleRemovalImpact: function (input) {
       return ipcRenderer.invoke(
         "content:preview-article-removal-impact",

@@ -491,6 +491,26 @@ const COMMON_ERRORS = Object.freeze({
     retryability: "manual-check",
     userMessage: "付费媒体预检当前不可用。",
   },
+  SUBMISSION_CENTER_CLIENT_INVALID: {
+    category: "validation",
+    retryability: "never",
+    userMessage: "当前客户不属于这个内容库，请重新选择。",
+  },
+  SUBMISSION_CENTER_SNAPSHOT_STALE: {
+    category: "conflict",
+    retryability: "safe",
+    userMessage: "投稿状态持续变化，请稍后刷新。",
+  },
+  SUBMISSION_CENTER_SNAPSHOT_INVALID: {
+    category: "internal",
+    retryability: "manual-check",
+    userMessage: "投稿中心数据未通过安全校验。",
+  },
+  SUBMISSION_CENTER_QUERY_FAILED: {
+    category: "internal",
+    retryability: "safe",
+    userMessage: "无法读取投稿中心，请稍后刷新。",
+  },
 });
 
 const errorCodes = Object.freeze(Object.keys(COMMON_ERRORS));

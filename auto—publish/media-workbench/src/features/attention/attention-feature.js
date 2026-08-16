@@ -112,6 +112,20 @@ export function createAttentionFeature(adapters = {}) {
         publish();
       }
     },
+    replaceSnapshot(data, reason = 'submission-center-snapshot') {
+      if (disposed || !scope) return false;
+      attentionQuery.invalidate();
+      revision = Number.isSafeInteger(data?.revision) ? data.revision : 0;
+      items = Array.isArray(data?.items) ? data.items : [];
+      counts = data?.counts || { total: items.length, actionable: 0 };
+      const nextFingerprint = fingerprintOf({ revision, items });
+      if (pendingPreview && pendingPreview.bindingFingerprint !== nextFingerprint)
+        pendingPreview = null;
+      fingerprint = nextFingerprint;
+      query = queryState(false, null, reason);
+      publish();
+      return true;
+    },
     async previewAction(input) {
       if (disposed || !scope) throw featureError('ARTICLE_ATTENTION_UNAVAILABLE', '需处理中心当前不可用。');
       const item = items.find((candidate) => candidate.attentionId === input?.attentionId);

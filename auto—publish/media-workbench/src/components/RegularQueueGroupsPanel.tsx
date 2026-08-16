@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { RegularQueueGroupSnapshot } from "../types/publication";
 
-type QueueGroupView = RegularQueueGroupSnapshot & {
+type QueueGroupView = Omit<RegularQueueGroupSnapshot, "manuallyPaused"> & {
   platformLabel: string;
   accountLabel: string;
   showAccount: boolean;

@@ -631,6 +631,26 @@ export interface ArticleAttentionItem {
   allowedActions: string[];
   updatedAt?: string | null;
   message?: string | null;
+  targetLabel?: string | null;
+}
+
+export interface SubmissionCenterSnapshot {
+  schemaVersion: 1;
+  clientId: string;
+  revision: number;
+  regular: {
+    groups: Array<Omit<RegularQueueGroupSnapshot, "manuallyPaused">>;
+  };
+  paid: {
+    batches: Array<Omit<PaidMediaExecutionBatch, "paused" | "mediaRemarks">>;
+  };
+  attention: { items: ArticleAttentionItem[] };
+  counts: {
+    regularItems: number;
+    paidBatches: number;
+    attentionItems: number;
+    total: number;
+  };
 }
 
 export interface ArticleAttentionList {

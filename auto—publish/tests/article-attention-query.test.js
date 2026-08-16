@@ -264,6 +264,65 @@ it("deduplicates stable attention identities and rebuilds only for a newer revis
   assert.equal(query.list({ clientId: "other-client" }).items.length, 0);
 });
 
+it("uses client-scoped article batches with an entity-count independent lookup budget", () => {
+  let revision = 12;
+  const calls = { articles: 0, trash: 0, single: 0 };
+  const transactions = [];
+  for (let index = 0; index < 300; index += 1) {
+    transactions.push({
+      transactionId: `repair-c1-${index}`,
+      clientId: "client-1",
+      articleId: `article-c1-${index}`,
+      status: "needs_repair",
+      phase: "needs_repair",
+    });
+  }
+  transactions.push({
+    transactionId: "repair-c2",
+    clientId: "client-2",
+    articleId: "article-c2",
+    status: "needs_repair",
+    phase: "needs_repair",
+  });
+  const query = createArticleAttentionQuery({
+    getRevision: () => revision,
+    readers: {
+      listTransactions: () => transactions,
+      listArticles: (clientId) => {
+        calls.articles += 1;
+        return clientId === "client-1"
+          ? [{ id: "article-c1-0", status: "generated", title: "客户一" }]
+          : [{ id: "article-c2", status: "generated", title: "客户二" }];
+      },
+      listTrashedArticles: () => {
+        calls.trash += 1;
+        return [];
+      },
+      getArticle: () => {
+        calls.single += 1;
+        throw new Error("single lookup must not run");
+      },
+    },
+    articleRemovalService: { retryArticleRemovalTransaction: () => ({}) },
+  });
+
+  const first = query.list({ clientId: "client-1" });
+  assert.equal(first.items.length, 300);
+  assert.equal(first.items.every((item) => item.clientId === "client-1"), true);
+  assert.deepEqual(calls, { articles: 1, trash: 1, single: 0 });
+  query.list({ clientId: "client-1" });
+  assert.deepEqual(calls, { articles: 1, trash: 1, single: 0 });
+
+  const secondClient = query.list({ clientId: "client-2" });
+  assert.equal(secondClient.items.length, 1);
+  assert.equal(secondClient.items[0].titleSnapshot, "客户二");
+  assert.deepEqual(calls, { articles: 2, trash: 2, single: 0 });
+
+  revision += 1;
+  query.list({ clientId: "client-1" });
+  assert.deepEqual(calls, { articles: 3, trash: 3, single: 0 });
+});
+
 it("fails closed to safe navigation when optional lookups fail and never probes generic retry", () => {
   const diagnostics = [];
   const restoreDiagnostics = setDiagnosticReporter(function (record) {

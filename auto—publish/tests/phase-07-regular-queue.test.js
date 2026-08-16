@@ -289,6 +289,33 @@ test("regular queue application enforces one platform/account and returns per-ar
   }
 });
 
+test("regular queue snapshots fail closed to the requested client", () => {
+  const fixture = makeFixture();
+  try {
+    fixture.add(article("article-a", "client-a"));
+    fixture.add(article("article-b", "client-b"));
+    fixture.application.admitRegularQueueItems(
+      admissionInput(fixture, [ref("article-a", "client-a")]),
+    );
+    fixture.application.admitRegularQueueItems(
+      admissionInput(fixture, [ref("article-b", "client-b")]),
+    );
+
+    const clientAGroups = fixture.application.listRegularQueueGroups({
+      clientId: "client-a",
+    });
+    assert.equal(clientAGroups.length, 1);
+    assert.deepEqual(
+      clientAGroups.flatMap((group) =>
+        group.remaining.map((item) => item.articleRef),
+      ),
+      [ref("article-a", "client-a")],
+    );
+  } finally {
+    fixture.close();
+  }
+});
+
 test("regular admission creates one FIFO group and atomic facts, hides the immutable snapshot, and is idempotent", () => {
   const fixture = makeFixture();
   try {

@@ -209,6 +209,16 @@ function registerContentSubmissionIpc(deps) {
     );
   const paidMedia = deps.paidMediaPreflightService || deps.paidMediaPreflight;
   const paidExecution = deps.paidMediaExecutionService;
+  const submissionCenter = deps.submissionCenterSnapshot;
+  if (submissionCenter && typeof submissionCenter.get === "function")
+    deps.ipcMain.handle(
+      "content:get-submission-center-snapshot",
+      function (event, input) {
+        return wrap(function () {
+          return submissionCenter.get(input);
+        });
+      },
+    );
   deps.ipcMain.handle(
     "content:preview-trashed-article-queue-residue",
     function () {

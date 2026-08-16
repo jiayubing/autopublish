@@ -343,12 +343,15 @@ function createRegularQueueApplication(options) {
     }));
   }
 
-  function listRegularQueueGroups() {
+  function listRegularQueueGroups(input) {
     if (
       !groupTransitions ||
       typeof groupTransitions.listRegularQueueGroupSnapshots !== "function"
     )
       throw fail("REGULAR_QUEUE_GROUP_QUERY_UNAVAILABLE");
+    const requestedClientId = input && typeof input.clientId === "string"
+      ? input.clientId
+      : null;
     const groups = groupTransitions.listRegularQueueGroupSnapshots({}) || [];
     if (!Array.isArray(groups)) throw fail("REGULAR_QUEUE_GROUP_QUERY_INVALID");
     const articlesByClient = new Map();
@@ -501,6 +504,15 @@ function createRegularQueueApplication(options) {
           /^[A-Z][A-Z0-9_]{0,127}$/.test(group.actions.reasonCode)
             ? group.actions.reasonCode
             : null;
+        const scopedCurrent = requestedClientId && group.current &&
+          group.current.clientId !== requestedClientId ? null : group.current;
+        const scopedRemaining = requestedClientId
+          ? group.remaining.filter(function (item) {
+              return item && item.clientId === requestedClientId;
+            })
+          : group.remaining;
+        if (requestedClientId && !scopedCurrent && scopedRemaining.length === 0)
+          return null;
         return Object.freeze({
           queueGroupId: group.queueGroupId,
           platformId: group.platformId,
@@ -510,8 +522,8 @@ function createRegularQueueApplication(options) {
           runState: group.runState,
           pauseIntent: group.pauseIntent,
           manuallyPaused: group.manuallyPaused,
-          current: group.current ? itemFor(group.current) : null,
-          remaining: Object.freeze(group.remaining.map((item) => itemFor(item))),
+          current: scopedCurrent ? itemFor(scopedCurrent) : null,
+          remaining: Object.freeze(scopedRemaining.map((item) => itemFor(item))),
           actions: Object.freeze({
             canStart: group.actions && group.actions.canStart === true,
             canPause: group.actions && group.actions.canPause === true,
@@ -521,7 +533,7 @@ function createRegularQueueApplication(options) {
           createdAt: group.createdAt,
           updatedAt: group.updatedAt,
         });
-      }),
+      }).filter(Boolean),
     );
   }
 

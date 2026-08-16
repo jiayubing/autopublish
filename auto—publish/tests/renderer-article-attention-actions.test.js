@@ -88,6 +88,19 @@ test('article attention actions produce visible publication/detail results', asy
           attentionCountItems: [{ articleId: article.id, count: 2 }],
           orderSummaryItems: [{ articleId: article.id, summary: { status: 'none', label: '无订单', records: 0, active: 0, published: 0, attention: 0 } }],
         }),
+        getSubmissionCenterSnapshot: () => ok({
+          schemaVersion: 1,
+          clientId: article.clientId,
+          revision: 1,
+          regular: { groups: [] },
+          paid: { batches: [] },
+          attention: { items: [
+            { ...attention, targetLabel: '蓝色河畔 / account-1' },
+            { ...paidResolution, targetLabel: '蓝色河畔 / account-1' },
+            { ...repair, targetLabel: '蓝色河畔 / account-1' },
+          ] },
+          counts: { regularItems: 0, paidBatches: 0, attentionItems: 3, total: 3 },
+        }),
         listArticleAttention: () => ok({ revision: 1, items: [attention, paidResolution, repair], counts: { total: 3, actionable: 3 } }),
         getArticleAttention: ({ attentionId }) => ok({ item: attentionId === repair.attentionId ? repair : attention }), previewArticleAttention: ({ attentionId, action, resolutionInput }) => ok({ attentionId, revision: 1, action, requiresConfirmation: true, confirmationToken: 'attention-token', resolutionInput, message: '投稿明确失败', changedScopes: [] }),
         resolveArticleAttention: ({ attentionId, action }) => { calls.push(action); return ok({ outcome: action === 'open-publication' ? 'open-publication' : 'inspection_required', attentionId, changedScopes: [] }); },
@@ -112,7 +125,7 @@ test('article attention actions produce visible publication/detail results', asy
     assert.equal(await page.getByText('失败后可打开统一投稿入口', { exact: true }).count(), 1);
     const attentionRegion = page.getByRole('region', { name: '需处理页面' });
     assert.equal(await attentionRegion.getByText('测试客户', { exact: true }).count(), 2);
-    assert.ok(await attentionRegion.getByText('蓝色河畔 / account-1', { exact: true }).isVisible());
+    assert.equal(await attentionRegion.getByText('蓝色河畔 / account-1', { exact: true }).count(), 2);
     assert.equal(await attentionRegion.getByRole('button', { name: /打开发起投稿/ }).count(), 1);
     assert.equal(await attentionRegion.getByRole('button', { name: /打开发布详情/ }).count(), 1);
     assert.equal(await attentionRegion.getByRole('button', { name: /移入回收站/ }).count(), 0);

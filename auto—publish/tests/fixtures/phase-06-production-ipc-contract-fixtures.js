@@ -965,6 +965,21 @@ const PRODUCTION_CALLERS = Object.freeze({
     application: "snapshot.get",
     featureBinding: "loadManagement",
   }),
+  "content.getSubmissionCenterSnapshot": Object.freeze({
+    view: "media-workbench/src/App.tsx",
+    viewSymbol: "useSubmissionCenterFeature",
+    feature:
+      "media-workbench/src/features/submission-center/use-submission-center-feature.ts",
+    featureSymbol: "useSubmissionCenterFeature",
+    bridge: "media-workbench/src/bridge/content.ts",
+    bridgeSymbol: "getSubmissionCenterSnapshot",
+    preloadMethod: "getSubmissionCenterSnapshot",
+    command: "content.getSubmissionCenterSnapshot",
+    channel: "content:get-submission-center-snapshot",
+    registrar: "desktop/ipc/content-submission-ipc.js",
+    application: "submissionCenter.get",
+    featureBinding: "getSnapshot",
+  }),
   "attention.listArticleAttention": Object.freeze({
     view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
     viewSymbol: "useAttentionFeature",
@@ -2047,6 +2062,11 @@ const PRODUCTION_CONSUMERS = Object.freeze({
     "media-workbench/src/features/content/use-content-workbench-feature.ts",
     "refreshManagement",
   ],
+  "content.getSubmissionCenterSnapshot": [
+    "lifecycle",
+    "media-workbench/src/features/submission-center/use-submission-center-feature.ts",
+    "refresh",
+  ],
   "attention.listArticleAttention": [
     "lifecycle",
     "media-workbench/src/features/attention/use-attention-feature.ts",
@@ -2382,7 +2402,7 @@ const PRODUCTION_STATE_CONSUMERS = Object.freeze({
   "content.listRegularQueueGroups": [
     "media-workbench/src/components/PlatformWorkbench.tsx",
     "snapshot",
-    "regularQueueGroups",
+    "regularQueueGroupViews",
   ],
   "content.listClients": [
     "media-workbench/src/components/ContentWorkbench.tsx",
@@ -2403,6 +2423,11 @@ const PRODUCTION_STATE_CONSUMERS = Object.freeze({
     "media-workbench/src/components/ContentWorkbench.tsx",
     "content.snapshot",
     "management",
+  ],
+  "content.getSubmissionCenterSnapshot": [
+    "media-workbench/src/App.tsx",
+    "submissionCenter.snapshot",
+    "data",
   ],
   "content.listPaidMediaBatches": [
     "media-workbench/src/components/PaidMediaWorkbench.tsx",
@@ -2463,6 +2488,8 @@ const PRODUCTION_FEATURE_SURFACES = Object.freeze({
     "media-workbench/src/features/attention/attention-feature.js",
   "media-workbench/src/features/generation/use-generation-feature.ts":
     "media-workbench/src/features/generation/generation-feature.js",
+  "media-workbench/src/features/submission-center/use-submission-center-feature.ts":
+    "media-workbench/src/features/submission-center/submission-center-feature.js",
   "media-workbench/src/features/workspace/workspace-coordinator-context.tsx":
     "media-workbench/src/features/workspace/workspace-coordinator.js",
 });
@@ -2546,6 +2573,14 @@ const PRODUCTION_NESTED_FEATURES = Object.freeze({
     method: "refreshManagement",
     binding: "loadManagement",
     stateField: "management",
+  }),
+  "content.getSubmissionCenterSnapshot": Object.freeze({
+    source:
+      "media-workbench/src/features/submission-center/submission-center-feature.js",
+    factory: "createSubmissionCenterFeature",
+    method: "refresh",
+    binding: "getSnapshot",
+    stateField: "data",
   }),
   "content.listPaidMediaBatches": Object.freeze({
     source:
@@ -2946,6 +2981,8 @@ const PRODUCTION_SOURCE_OWNERS = Object.freeze({
     "useAttentionFeature",
   "media-workbench/src/features/generation/use-generation-feature.ts":
     "useGenerationFeature",
+  "media-workbench/src/features/submission-center/use-submission-center-feature.ts":
+    "useSubmissionCenterFeature",
   "media-workbench/src/features/workspace/workspace-coordinator-context.tsx":
     "WorkspaceCoordinatorProvider",
   "media-workbench/src/components/WorkspaceSelectionPanel.tsx":
@@ -3981,6 +4018,28 @@ const rawProductionIpcContractFixtures = [
       "desktop/preload.js:content:get-article-management-snapshot",
     request: { clientId: "client-1" },
     result: contentManagementFixture(),
+  },
+  {
+    capability: "content.getSubmissionCenterSnapshot",
+    channel: "content:get-submission-center-snapshot",
+    owner: "content",
+    productionCaller:
+      "desktop/preload.js:content:get-submission-center-snapshot",
+    request: { clientId: "client-1" },
+    result: {
+      schemaVersion: 1,
+      clientId: "client-1",
+      revision: 0,
+      regular: { groups: [] },
+      paid: { batches: [] },
+      attention: { items: [] },
+      counts: {
+        regularItems: 0,
+        paidBatches: 0,
+        attentionItems: 0,
+        total: 0,
+      },
+    },
   },
   {
     capability: "attention.listArticleAttention",

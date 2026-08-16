@@ -5,6 +5,7 @@ import { useAttentionFeature } from "../features/attention/use-attention-feature
 import { useConfirmation } from "../confirmation";
 import type { ContentWorkbenchFeature } from "../features/content/use-content-workbench-feature";
 import type { ArticleAttentionItem } from "../types/publication";
+import type { useSubmissionCenterFeature } from "../features/submission-center/use-submission-center-feature";
 import RegularQueueGroupsPanel from "./RegularQueueGroupsPanel";
 import PaidMediaWorkbench from "./PaidMediaWorkbench";
 import ArticleAttentionPanel from "./content/ArticleAttentionPanel";
@@ -14,6 +15,7 @@ type SubmissionCenterSection = "regular" | "paid" | "attention";
 
 interface PlatformWorkbenchProps {
   content: ContentWorkbenchFeature;
+  submissionCenter: ReturnType<typeof useSubmissionCenterFeature>;
   onOpenArticleLibrary: (intent?: {
     articleId?: string;
     clientId?: string;
@@ -21,17 +23,9 @@ interface PlatformWorkbenchProps {
   onOpenOrders: () => void;
 }
 
-function attentionTargetLabel(
-  item: ArticleAttentionItem,
-  publicationTargetKey?: string | null,
-): string {
-  const targetKey = item.targetKey || publicationTargetKey || "";
-  const account = /(?:^|:)account:(.+)$/.exec(targetKey)?.[1];
-  return `${item.displayName || item.platformId || "未指定平台"} / ${account || "账号未记录"}`;
-}
-
 export default function PlatformWorkbench({
   content,
+  submissionCenter,
   onOpenArticleLibrary,
   onOpenOrders,
 }: PlatformWorkbenchProps) {
@@ -42,16 +36,40 @@ export default function PlatformWorkbench({
     content.snapshot.clients.find((client) => client.id === clientId)?.name ||
     clientId ||
     "当前客户";
-  const publicationRecords = content.snapshot.management.publicationRecords || [];
+  const center = submissionCenter.snapshot;
   const { snapshot: attentionSnapshot, feature: attentionFeature } =
-    useAttentionFeature(clientId);
+    useAttentionFeature(clientId, {
+      clientId: center.data.clientId,
+      revision: center.data.revision,
+      items: center.data.attention.items,
+      counts: {
+        total: center.data.counts.attentionItems,
+        actionable: center.data.attention.items.filter((item) =>
+          item.allowedActions.some((action) =>
+            !["inspect", "open-publication", "open-article"].includes(action),
+          ),
+        ).length,
+      },
+    });
   const [section, setSection] = useState<SubmissionCenterSection>("regular");
   const [attentionDetail, setAttentionDetail] =
     useState<ArticleAttentionItem | null>(null);
   const [attentionError, setAttentionError] = useState("");
   const [actionError, setActionError] = useState("");
-  const groups = snapshot.regularQueueGroupViews;
-  const groupQuery = snapshot.regularQueueGroups.query;
+  const groups = center.data.regular.groups.map((group) => {
+    const labels = snapshot.regularQueueGroupViews.find(
+      (candidate) => candidate.queueGroupId === group.queueGroupId,
+    );
+    return {
+      ...labels,
+      ...group,
+      platformLabel: labels?.platformLabel || group.platformId,
+      accountLabel: labels?.accountLabel || group.accountProfileId,
+      showAccount: labels?.showAccount ?? true,
+      stateLabel: labels?.stateLabel || group.runState,
+    };
+  });
+  const groupQuery = center.query;
   const commands = snapshot.commands;
   const residue = snapshot.residue;
   const residueBusy = residue.phase === "checking" || residue.phase === "cleaning";
@@ -205,7 +223,7 @@ export default function PlatformWorkbench({
                 <button
                   type="button"
                   disabled={groupQuery.loading}
-                  onClick={() => void feature.refreshRegularQueueGroups("manual")}
+                  onClick={() => void submissionCenter.feature.refresh("manual")}
                   className="rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40"
                 >
                   <RefreshCw className={`mr-1 inline h-3.5 w-3.5 ${groupQuery.loading ? "animate-spin" : ""}`} />
@@ -275,6 +293,7 @@ export default function PlatformWorkbench({
         {section === "paid" && (
           <PaidMediaWorkbench
             content={content}
+            submissionCenter={submissionCenter}
             onStartPaidMediaBatch={(input) =>
               content.commands.startPaidMediaBatch(input)
             }
@@ -296,12 +315,7 @@ export default function PlatformWorkbench({
               onPreviewAction={attentionFeature.previewAction}
               onExecutePreview={attentionFeature.executePreview}
               getTargetLabel={(item) =>
-                attentionTargetLabel(
-                  item,
-                  publicationRecords.find(
-                    (record) => record.publicationId === item.publicationId,
-                  )?.targetKey,
-                )
+                item.targetLabel || "未指定目标 / 账号未记录"
               }
               clientLabel={clientLabel}
               onOpenPublication={openAttentionTarget}

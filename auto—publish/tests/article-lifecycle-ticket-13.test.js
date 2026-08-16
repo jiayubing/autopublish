@@ -24,10 +24,10 @@ const {
 
 const NOW = "2026-08-07T00:00:00.000Z";
 
-function article(articleId) {
+function article(articleId, clientId = "client-a") {
   return {
     id: articleId,
-    clientId: "client-a",
+    clientId,
     platform: "toutiao",
     scenario: "guide",
     templateId: "template-1",
@@ -55,7 +55,7 @@ function fixture(options) {
   const articleStore = createArticleStore(root);
   contentStore = createContentStore({
     articleStore,
-    listClientIds: () => ["client-a"],
+    listClientIds: () => ["client-a", "client-b"],
   });
   const code = "系统投稿标识-13";
   const coordinator = createArticleMutationCoordinator({
@@ -109,6 +109,16 @@ async function admit(fixtureValue) {
       { clientId: "client-a", articleId: "article-b" },
       { clientId: "client-a", articleId: "article-a" },
     ],
+    mediaResourceId: "media-13",
+  });
+  return fixtureValue.preflight.confirm({
+    confirmationToken: preview.confirmationToken,
+  });
+}
+
+async function admitForClient(fixtureValue, clientId, articleId) {
+  const preview = await fixtureValue.preflight.preflight({
+    articleRefs: [{ clientId, articleId }],
     mediaResourceId: "media-13",
   });
   return fixtureValue.preflight.confirm({
@@ -204,6 +214,31 @@ function beginAndBuildEvidence(value, batchId, claimToken, orderId) {
   });
   return { execution, started, snapshot, paidTarget };
 }
+
+test("paid batch snapshots fail closed to the requested client", async () => {
+  const value = fixture();
+  try {
+    value.contentStore.createArticle(article("article-client-b", "client-b"));
+    const clientABatch = await admitForClient(value, "client-a", "article-a");
+    await admitForClient(value, "client-b", "article-client-b");
+    const orchestrator = createPaidMediaBatchOrchestrator({
+      paidExecutionTransitions: value.transitions,
+      orderCreationPort: { createOrder: async () => ({ orderId: "unused" }) },
+    });
+
+    const clientABatches = orchestrator.snapshot({ clientId: "client-a" });
+    assert.equal(clientABatches.length, 1);
+    assert.equal(clientABatches[0].batchId, clientABatch.batchId);
+    assert.deepEqual(
+      clientABatches[0].items.map(
+        (item) => item.articleIdentityV1.clientId,
+      ),
+      ["client-a"],
+    );
+  } finally {
+    value.close();
+  }
+});
 
 test("order V1 contracts are recursive, exact, and bind the paid target", () => {
   const articleIdentityV1 = {

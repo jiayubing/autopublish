@@ -191,6 +191,28 @@ test("article attention list crosses the authenticated IPC seam as an exact path
   );
 });
 
+test("legacy article attention result contract does not accept submission-center target labels", function () {
+  const registry = createContractRegistry(articleAttentionContracts);
+  const contract = registry.byChannel("content:list-article-attention");
+  assert.throws(
+    () => registry.success(contract, {
+      revision: 1,
+      items: [{
+        attentionId: "attention-1",
+        kind: "regular_platform_failed",
+        owner: "regular-platform-outcome",
+        freeze: { article: false },
+        resolutionPriority: 300,
+        safeFacts: {},
+        allowedActions: ["inspect"],
+        targetLabel: "new-contract-only",
+      }],
+      counts: { total: 1, actionable: 0 },
+    }),
+    (error) => error && error.code === "IPC_UNKNOWN_FIELD",
+  );
+});
+
 test("article attention preview exposes only the confirmation decision DTO", async function () {
   const handlers = new Map();
   const ipcMain = createAuthenticatedIpcMain(

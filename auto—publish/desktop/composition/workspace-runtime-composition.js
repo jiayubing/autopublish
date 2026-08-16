@@ -768,9 +768,25 @@ async function createWorkspaceRuntimeComposition(deps) {
       readers: {
         listOrderAttention: mediaApplication.listOrderAttention,
         listTransactions: aiContentService.listArticleRemovalTransactions,
+        listArticles: aiContentService.listGeneratedArticles,
+        listTrashedArticles: aiContentService.listTrashedArticles,
         getArticle: aiContentService.getGeneratedArticle,
       },
     });
+    const submissionCenterSnapshot =
+      require("../services/submission-center-snapshot").createSubmissionCenterSnapshot({
+        getRevision: invalidation.getRevision,
+        getWorkspaceRuntimeId: invalidation.getWorkspaceRuntimeId,
+        validateClient: function (clientId) {
+          return require("../../src/content/client-knowledge").getClient(
+            workspaceRoot,
+            clientId,
+          );
+        },
+        listRegularQueueGroups: regularQueueApplication.listRegularQueueGroups,
+        listPaidMediaBatches: mediaApplication.getPaidMediaBatches,
+        listAttention: attentionPorts.attentionQuery.list,
+      });
     modules = {
       taskService,
       platformSettingsService,
@@ -790,6 +806,7 @@ async function createWorkspaceRuntimeComposition(deps) {
       platformWorkbenchService,
       publicationComposition,
       attentionPorts,
+      submissionCenterSnapshot,
       platformApplication,
       mediaApplication,
     };
@@ -834,6 +851,7 @@ async function createWorkspaceRuntimeComposition(deps) {
       articleMutationCoordinator,
       publicationWorkflow: publicationComposition.publicationWorkflow,
       articleAttentionQuery: attentionPorts.attentionQuery,
+      submissionCenterSnapshot,
       articleAttentionResolver: attentionPorts.attentionResolver,
       postProcessingPort: attentionPorts.postProcessingPort,
       runtimeDiagnosticsService: runtime.diagnosticsService,

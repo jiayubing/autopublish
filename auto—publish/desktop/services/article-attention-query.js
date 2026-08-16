@@ -63,7 +63,8 @@ function createArticleAttentionQuery(options) {
   const readers = opts.readers || {};
   const hasAuthoritativeRevision = typeof opts.getRevision === "function";
   let fallbackRevision = 1;
-  let cachedSnapshot = null;
+  const cachedSnapshots = new Map();
+  let cachedRevision = null;
 
   function reader(name, fallback) {
     return typeof readers[name] === "function" ? readers[name] : fallback;
@@ -265,6 +266,91 @@ function createArticleAttentionQuery(options) {
     };
   }
 
+  function batchArticleLookup(clientId) {
+    const listArticles = reader("listArticles", null);
+    const listTrashedArticles = reader("listTrashedArticles", null);
+    if (!clientId || (!listArticles && !listTrashedArticles)) return null;
+    const active = new Map();
+    const trashed = new Map();
+    let unavailable = false;
+
+    function readBatch(source, target, operation, fallbackCode) {
+      if (!source) return;
+      try {
+        const items = source(clientId);
+        if (!Array.isArray(items)) throw Object.assign(new Error("Invalid article batch"), { code: fallbackCode });
+        items.forEach(function (item) {
+          if (!item || typeof item !== "object") return;
+          const value = item.tombstone && typeof item.tombstone === "object"
+            ? item.tombstone
+            : item;
+          const articleId = safeText(value.articleId || value.id, 200);
+          if (articleId) target.set(articleId, value);
+        });
+      } catch (error) {
+        unavailable = true;
+        reportDiagnostic({
+          code: "ARTICLE_ATTENTION_LOOKUP_FAILED",
+          module: "article-attention-query",
+          category: "storage",
+          operationId: `article-attention-${operation}`,
+          metadata: {
+            operation,
+            phase: "read",
+            outcome: "unavailable",
+            errorCode: diagnosticErrorCode(error, fallbackCode),
+          },
+        });
+      }
+    }
+
+    readBatch(listArticles, active, "article-batch-read", "ARTICLE_BATCH_READ_FAILED");
+    readBatch(
+      listTrashedArticles,
+      trashed,
+      "trashed-article-batch-read",
+      "ARTICLE_TRASH_BATCH_READ_FAILED",
+    );
+
+    return function resolve(item) {
+      const value = item || {};
+      const articleId = safeText(value.articleId, 200);
+      if (unavailable)
+        return {
+          exists: null,
+          status: value.articleStatus || null,
+          title: null,
+          lookupStatus: "unavailable",
+        };
+      if (articleId && active.has(articleId)) {
+        const article = active.get(articleId);
+        return {
+          exists: true,
+          status: article.status || null,
+          title: article.title || null,
+          submissionEligible: evaluateArticleSubmissionEligibility(article).eligible,
+          lookupStatus: "available",
+        };
+      }
+      if (articleId && trashed.has(articleId)) {
+        const tombstone = trashed.get(articleId);
+        return {
+          exists: false,
+          removed: true,
+          status: "removed",
+          title: tombstone.titleSnapshot || tombstone.title || null,
+          lookupStatus: "available",
+        };
+      }
+      return {
+        exists: false,
+        status: value.articleStatus || null,
+        title: null,
+        lookupStatus: "not_found",
+      };
+    };
+  }
+
   function titleFor(item, articleState) {
     const snapshot = safeText(item && (item.titleSnapshot || item.title), 200);
     return snapshot || safeText(articleState && articleState.title, 200);
@@ -317,9 +403,11 @@ function createArticleAttentionQuery(options) {
     );
   }
 
-  function makeEntry(kind, item, facts) {
+  function makeEntry(kind, item, facts, resolveArticle) {
     const value = item || {};
-    const articleState = facts.articleState || articleLookup(value);
+    const articleState =
+      facts.articleState ||
+      (resolveArticle ? resolveArticle(value) : articleLookup(value));
     const normalizedFacts = Object.assign({}, facts, {
       kind,
       articleStatus: facts.articleStatus || articleState.status || null,
@@ -416,11 +504,16 @@ function createArticleAttentionQuery(options) {
     };
   }
 
-  function transactionEntries() {
+  function inClientScope(item, clientId) {
+    return !clientId || (item && item.clientId === clientId);
+  }
+
+  function transactionEntries(clientId, resolveArticle) {
     return readTransactions()
       .filter(function (item) {
         return (
           item &&
+          inClientScope(item, clientId) &&
           (item.status === "needs_repair" || item.phase === "needs_repair")
         );
       })
@@ -434,21 +527,24 @@ function createArticleAttentionQuery(options) {
             freezeArticle: true,
             freezeReasonCode: "REMOVAL_NEEDS_REPAIR",
           },
+          resolveArticle,
         );
       });
   }
 
-  function publicationEntries() {
+  function publicationEntries(clientId, resolveArticle) {
     return readOperationalPublications()
       .filter(function (item) {
-        return item && ["uncertain", "failed"].includes(item.status);
+        return item && inClientScope(item, clientId) && ["uncertain", "failed"].includes(item.status);
       })
       .map(function (item) {
         const latest =
           Array.isArray(item.attempts) && item.attempts.length
             ? item.attempts[item.attempts.length - 1]
             : null;
-        const articleState = articleLookup(item);
+        const articleState = resolveArticle
+          ? resolveArticle(item)
+          : articleLookup(item);
         const paidOrderCreation = Boolean(item.orderCreationAttemptId);
         const kind =
           item.status === "uncertain"
@@ -483,14 +579,15 @@ function createArticleAttentionQuery(options) {
                 : null,
             hasPublishedEvidence: Boolean(item.remoteId && item.remoteUrl),
           },
+          resolveArticle,
         );
       });
   }
 
-  function orderEntries() {
+  function orderEntries(clientId, resolveArticle) {
     return readOrderAttention()
       .filter(function (item) {
-        return item && item.anomaly && (item.orderNid || item.orderId);
+        return item && inClientScope(item, clientId) && item.anomaly && (item.orderNid || item.orderId);
       })
       .map(function (item) {
         const anomaly = item.anomaly || {};
@@ -509,12 +606,15 @@ function createArticleAttentionQuery(options) {
             freezeArticle: true,
             freezeReasonCode: "ORDER_STATUS_ANOMALY",
           },
+          resolveArticle,
         );
       });
   }
 
-  function archiveEntries() {
-    const operational = readOperationalPostProcessing().map(function (item) {
+  function archiveEntries(clientId, resolveArticle) {
+    const operational = readOperationalPostProcessing().filter(function (item) {
+      return inClientScope(item, clientId);
+    }).map(function (item) {
       return makeEntry(
         ATTENTION_KINDS.PUBLISHED_ARCHIVE_FAILED,
         Object.assign({}, item, {
@@ -526,10 +626,13 @@ function createArticleAttentionQuery(options) {
           hasQueueBinding: !!(item.jobId && item.attemptId),
           canRetryArchive: true,
         },
+        resolveArticle,
       );
     });
     return operational.concat(
-      readArchiveFailures().map(function (item) {
+      readArchiveFailures().filter(function (item) {
+        return inClientScope(item, clientId);
+      }).map(function (item) {
         return makeEntry(ATTENTION_KINDS.PUBLISHED_ARCHIVE_FAILED, item, {
           hasQueueBinding: !!(
             item.batchId &&
@@ -538,17 +641,18 @@ function createArticleAttentionQuery(options) {
             item.targetPlatformId
           ),
           canRetryArchive: true,
-        });
+        }, resolveArticle);
       }),
     );
   }
 
-  function entries() {
-    const transactions = transactionEntries();
+  function entries(clientId) {
+    const resolveArticle = batchArticleLookup(clientId);
+    const transactions = transactionEntries(clientId, resolveArticle);
     const all = transactions.concat(
-      publicationEntries(),
-      orderEntries(),
-      archiveEntries(),
+      publicationEntries(clientId, resolveArticle),
+      orderEntries(clientId, resolveArticle),
+      archiveEntries(clientId, resolveArticle),
     );
     const unique = new Map();
     all.forEach(function (entry) {
@@ -569,17 +673,21 @@ function createArticleAttentionQuery(options) {
     );
   }
 
-  function snapshot() {
+  function snapshot(clientId) {
     const revision = currentRevision();
-    if (!cachedSnapshot || cachedSnapshot.revision !== revision) {
-      cachedSnapshot = { revision: revision, entries: entries() };
+    if (cachedRevision !== revision) {
+      cachedSnapshots.clear();
+      cachedRevision = revision;
     }
-    return cachedSnapshot;
+    const cacheKey = `${revision}\u0000${clientId || ""}`;
+    if (!cachedSnapshots.has(cacheKey))
+      cachedSnapshots.set(cacheKey, { revision: revision, entries: entries(clientId) });
+    return cachedSnapshots.get(cacheKey);
   }
 
   function list(input) {
     const value = input || {};
-    const current = snapshot();
+    const current = snapshot(value.clientId);
     const filtered = current.entries.filter(function (entry) {
       return !value.clientId || entry.item.clientId === value.clientId;
     });
@@ -606,7 +714,7 @@ function createArticleAttentionQuery(options) {
   function get(input) {
     const attentionId = input && input.attentionId;
     if (typeof attentionId !== "string" || !attentionId.trim()) return null;
-    const entry = snapshot().entries.find(function (candidate) {
+    const entry = snapshot(input.clientId).entries.find(function (candidate) {
       return (
         candidate.item.attentionId === attentionId &&
         (!input.clientId || candidate.item.clientId === input.clientId)
@@ -618,7 +726,7 @@ function createArticleAttentionQuery(options) {
   function getPolicy(input) {
     const attentionId = input && input.attentionId;
     if (typeof attentionId !== "string" || !attentionId.trim()) return null;
-    const entry = snapshot().entries.find(function (candidate) {
+    const entry = snapshot(input.clientId).entries.find(function (candidate) {
       return (
         candidate.item.attentionId === attentionId &&
         (!input.clientId || candidate.item.clientId === input.clientId)
@@ -629,7 +737,8 @@ function createArticleAttentionQuery(options) {
 
   function invalidate() {
     if (!hasAuthoritativeRevision) fallbackRevision += 1;
-    cachedSnapshot = null;
+    cachedSnapshots.clear();
+    cachedRevision = null;
     return currentRevision();
   }
 

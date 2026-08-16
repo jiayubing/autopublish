@@ -135,7 +135,24 @@ function createPaidMediaBatchOrchestrator(options) {
   let globalRun = null;
 
   function snapshot(input) {
-    return transitions.listPaidSubmissionBatchSnapshots(input || {});
+    const request = input || {};
+    const batches = transitions.listPaidSubmissionBatchSnapshots(
+      request.batchId === undefined ? {} : { batchId: request.batchId },
+    );
+    if (typeof request.clientId !== "string" || !request.clientId)
+      return batches;
+    return batches.filter(function (batch) {
+      const items = Array.isArray(batch && batch.items) ? batch.items : [];
+      const clients = new Set(items.map(function (item) {
+        return (
+          item &&
+          item.articleIdentityV1 &&
+          item.articleIdentityV1.clientId
+        );
+      }).filter(Boolean));
+      if (clients.size > 1) throw fail("PAID_EXECUTION_BATCH_IDENTITY_INVALID");
+      return clients.has(request.clientId);
+    });
   }
 
   function initializePaused() {

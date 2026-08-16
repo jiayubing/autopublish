@@ -461,6 +461,7 @@ const submissionPaidMediaContractFixtures = Object.freeze([
 module.exports = {
   submissionPaidMediaContracts,
   submissionPaidMediaContractFixtures,
+  paidExecutionBatch,
   projectPaidPreflight,
   projectPaidAdmission,
   projectPaidMediaBatchList,

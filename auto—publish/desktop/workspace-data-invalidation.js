@@ -4,7 +4,7 @@ const { randomUUID } = require("node:crypto");
 
 const ALLOWED_SCOPES = Object.freeze([
   "platformQueue", "articleAttention", "articleManagement",
-  "orders", "contentSources", "mediaWorkbench"
+  "orders", "contentSources", "mediaWorkbench", "submissionCenter"
 ]);
 
 // The reason code is the command's domain fact.  Scopes are a presentation
@@ -48,7 +48,12 @@ function safeReasonCode(value) {
 
 function scopesForReason(reasonCode) {
   const code = safeReasonCode(reasonCode);
-  if (SCOPES_BY_REASON[code]) return SCOPES_BY_REASON[code].slice();
+  if (SCOPES_BY_REASON[code]) {
+    const scopes = SCOPES_BY_REASON[code].slice();
+    if (scopes.some((scope) => ["platformQueue", "articleAttention", "orders"].includes(scope)))
+      scopes.push("submissionCenter");
+    return [...new Set(scopes)];
+  }
   return [];
 }
 

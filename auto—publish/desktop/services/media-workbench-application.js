@@ -230,13 +230,13 @@ function createMediaWorkbenchApplication(options) {
       }
       return paidMediaPreflightService.confirm(input || {});
     },
-    getPaidMediaBatches: () => {
+    getPaidMediaBatches: (input) => {
       if (
         !paidMediaBatchOrchestrator ||
         typeof paidMediaBatchOrchestrator.snapshot !== "function"
       )
         return { items: [] };
-      return { items: paidMediaBatchOrchestrator.snapshot({}) };
+      return { items: paidMediaBatchOrchestrator.snapshot(input || {}) };
     },
     startPaidMediaBatch: (input) => {
       if (

@@ -393,6 +393,7 @@ const submissionRegularContractFixtures = Object.freeze([
 module.exports = {
   submissionRegularContracts,
   submissionRegularContractFixtures,
+  regularQueueGroupSnapshot,
   projectRegularAdmission,
   projectRegularRemovalResult,
 };

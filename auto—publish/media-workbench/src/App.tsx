@@ -10,8 +10,8 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { useMediaFeature } from "./features/media/use-media-feature";
 import { useContentWorkbenchFeature } from "./features/content/use-content-workbench-feature";
-import { usePlatformFeature } from "./features/platform/platform-feature-context";
 import { SettingsFeatureProvider } from "./features/settings/settings-context";
+import { useSubmissionCenterFeature } from "./features/submission-center/use-submission-center-feature";
 
 const ResourceLibrary = lazy(() => import("./components/ResourceLibrary"));
 const OrdersView = lazy(() => import("./components/OrdersView"));
@@ -47,8 +47,10 @@ function AppContent() {
     clientId?: string;
   } | null>(null);
   const { snapshot: mediaSnapshot, feature: mediaFeature } = useMediaFeature();
-  const { snapshot: platformSnapshot } = usePlatformFeature();
   const content = useContentWorkbenchFeature();
+  const submissionCenter = useSubmissionCenterFeature(
+    content.snapshot.selectedClientId || "",
+  );
   const resources = mediaSnapshot.resources.items;
   const orders = mediaSnapshot.orders.items;
   const balance = mediaSnapshot.balance.value;
@@ -66,7 +68,8 @@ function AppContent() {
       mediaSnapshot.orders.query,
     ].every((query) => !query.loading) &&
     !content.snapshot.query.loading &&
-    !content.snapshot.managementQuery.loading;
+    !content.snapshot.managementQuery.loading &&
+    !submissionCenter.snapshot.query.loading;
   const isCheckingBalance = mediaSnapshot.commands.checkBalance.busy;
   const mediaRefreshResult = mediaSnapshot.commands.refreshResources.result as {
     truncated?: boolean;
@@ -85,28 +88,12 @@ function AppContent() {
         ? lifecycleCount
         : content.snapshot.management.articles.length +
           content.snapshot.management.trash.length;
-    const regularQueue = platformSnapshot.regularQueueGroupViews.reduce(
-      (
-        total: number,
-        group: { current?: unknown; remaining?: unknown[] },
-      ) =>
-        total + (group.current ? 1 : 0) + (group.remaining || []).length,
-      0,
-    );
-    const paidBatches = (content.snapshot.paidMediaExecution.items || []).filter(
-      (batch) =>
-        batch.status === "needs_attention" ||
-        batch.actions?.canStart === true ||
-        batch.actions?.canPause === true ||
-        batch.actions?.canCancelRemaining === true,
-    ).length;
-    const attention = content.snapshot.management.attention.counts.total;
     return {
       articleLibrary,
-      submissionCenter: regularQueue + paidBatches + attention,
+      submissionCenter: submissionCenter.snapshot.data.counts.total,
       orders: orders.length,
     };
-  }, [content.snapshot, orders.length, platformSnapshot.regularQueueGroupViews]);
+  }, [content.snapshot, orders.length, submissionCenter.snapshot.data.counts.total]);
 
   function openArticleLibrary(intent?: {
     articleId?: string;
@@ -263,6 +250,7 @@ function AppContent() {
                 >
                   <PlatformWorkbench
                     content={content}
+                    submissionCenter={submissionCenter}
                     onOpenArticleLibrary={openArticleLibrary}
                     onOpenOrders={() => setCurrentView("orders")}
                   />

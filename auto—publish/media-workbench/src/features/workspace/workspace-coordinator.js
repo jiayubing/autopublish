@@ -5,6 +5,7 @@ const KNOWN_SCOPES = Object.freeze([
   "orders",
   "contentSources",
   "mediaWorkbench",
+  "submissionCenter",
 ]);
 const KNOWN_SCOPE_SET = new Set(KNOWN_SCOPES);
 const RUNTIME_ID = /^[A-Za-z0-9._:-]{1,128}$/;

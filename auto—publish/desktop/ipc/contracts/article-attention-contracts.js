@@ -260,6 +260,7 @@ function projectArticleAttentionResolution(input) {
 module.exports = {
   articleAttentionContracts,
   articleAttentionList,
+  articleAttentionItem,
   projectArticleAttentionItem,
   projectArticleAttentionList,
   projectArticleAttentionPreview,

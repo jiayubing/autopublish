@@ -2,12 +2,14 @@ import React, { useState } from "react";
 import { LoaderCircle, RefreshCw } from "lucide-react";
 import type { ContentWorkbenchFeature } from "../features/content/use-content-workbench-feature";
 import type { PaidMediaExecutionBatch } from "../types/publication";
+import type { useSubmissionCenterFeature } from "../features/submission-center/use-submission-center-feature";
 
 export interface PaidMediaWorkbenchProps {
   content: ContentWorkbenchFeature;
   onStartPaidMediaBatch: ContentWorkbenchFeature["commands"]["startPaidMediaBatch"];
   onPausePaidMediaBatch: ContentWorkbenchFeature["commands"]["pausePaidMediaBatch"];
   onCancelRemainingPaidMediaBatchItems: ContentWorkbenchFeature["commands"]["cancelRemainingPaidMediaBatchItems"];
+  submissionCenter?: ReturnType<typeof useSubmissionCenterFeature>;
 }
 
 function messageOf(value: unknown, fallback: string): string {
@@ -18,15 +20,20 @@ function money(value: number): string {
   return `¥${value.toFixed(2)}`;
 }
 
-function statusLabel(batch: PaidMediaExecutionBatch): string {
+type PaidMediaExecutionBatchView = Omit<
+  PaidMediaExecutionBatch,
+  "paused" | "mediaRemarks"
+>;
+
+function statusLabel(batch: PaidMediaExecutionBatchView): string {
   if (batch.status === "needs_attention") return "需人工核对";
   if (batch.status === "completed") return "已完成";
   if (batch.runState === "in_flight") return "执行中";
-  if (batch.paused) return "已暂停";
+  if (batch.runState === "paused") return "已暂停";
   return "待执行";
 }
 
-function itemLabel(batch: PaidMediaExecutionBatch): string {
+function itemLabel(batch: PaidMediaExecutionBatchView): string {
   const item = batch.currentItem;
   if (!item) return "暂无在途或待执行文章";
   return `${item.title || item.articleRef.articleId} · ${item.status}`;
@@ -37,23 +44,26 @@ export default function PaidMediaWorkbench({
   onStartPaidMediaBatch,
   onPausePaidMediaBatch,
   onCancelRemainingPaidMediaBatchItems,
+  submissionCenter,
 }: PaidMediaWorkbenchProps) {
   const { paidMediaExecution, scope } = content.snapshot;
   const [actionError, setActionError] = useState("");
   const commandStates = content.snapshot.commands;
-  const batches: PaidMediaExecutionBatch[] = Array.isArray(
-    paidMediaExecution.items,
-  )
-    ? paidMediaExecution.items
-    : [];
-  const queryError = paidMediaExecution.query.error?.userMessage;
+  const batches: PaidMediaExecutionBatchView[] = submissionCenter
+    ? submissionCenter.snapshot.data.paid.batches
+    : Array.isArray(paidMediaExecution.items)
+      ? paidMediaExecution.items
+      : [];
+  const paidQuery = submissionCenter?.snapshot.query || paidMediaExecution.query;
+  const queryError = paidQuery.error?.userMessage;
 
   const refresh = async () => {
     setActionError("");
-    await content.refreshPaidMediaBatches("paid-manual");
+    if (submissionCenter) await submissionCenter.feature.refresh("paid-manual");
+    else await content.refreshPaidMediaBatches("paid-manual");
   };
 
-  if (!scope || (paidMediaExecution.query.loading && batches.length === 0))
+  if (!scope || (paidQuery.loading && batches.length === 0))
     return (
       <div className="flex h-full items-center justify-center text-slate-500">
         <LoaderCircle className="mr-2 h-5 w-5 animate-spin" />
@@ -78,14 +88,14 @@ export default function PaidMediaWorkbench({
         <button
           type="button"
           onClick={() => void refresh()}
-          disabled={paidMediaExecution.query.loading}
+          disabled={paidQuery.loading}
           aria-label="刷新已确认付费批次"
           className="inline-flex h-9 items-center gap-1 rounded-md border border-slate-300 px-2 text-xs text-slate-600 disabled:opacity-50"
         >
           <RefreshCw
-            className={`h-3.5 w-3.5 ${paidMediaExecution.query.loading ? "animate-spin" : ""}`}
+            className={`h-3.5 w-3.5 ${paidQuery.loading ? "animate-spin" : ""}`}
           />
-          {paidMediaExecution.query.loading ? "刷新中…" : "刷新批次"}
+          {paidQuery.loading ? "刷新中…" : "刷新批次"}
         </button>
       </div>
 

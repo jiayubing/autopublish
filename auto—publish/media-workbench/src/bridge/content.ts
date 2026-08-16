@@ -13,6 +13,7 @@ import type {
   RegularQueueAdmissionPreview,
   RegularQueueAdmissionResult,
   RegularQueueGroupSnapshot,
+  SubmissionCenterSnapshot,
 } from "../types/publication";
 import type {
   ContentClient,
@@ -94,6 +95,9 @@ type CoreContentApi = {
   getArticleManagementSnapshot: (input: {
     clientId: string;
   }) => Promise<ContentIpcResponse<ArticleManagementSnapshotWire>>;
+  getSubmissionCenterSnapshot: (input: {
+    clientId: string;
+  }) => Promise<ContentIpcResponse<SubmissionCenterSnapshot>>;
   getArticleEditor: (input: {
     clientId: string;
     articleId: string;
@@ -524,6 +528,15 @@ export async function getArticleManagementSnapshot(
         ),
       };
     },
+  );
+}
+
+export async function getSubmissionCenterSnapshot(
+  clientId: string,
+): Promise<SubmissionCenterSnapshot> {
+  return callCoreContent(
+    (api) => requireBridgeMethod(api.getSubmissionCenterSnapshot)({ clientId }),
+    "Unable to load submission center snapshot",
   );
 }
 
