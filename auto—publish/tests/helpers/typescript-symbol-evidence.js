@@ -1732,15 +1732,30 @@ function reachableNodesFromCallable(
   const visited = new Set();
   const nodes = [];
   function enqueueLocalSymbol(symbol) {
+    const canonical = canonicalSymbol(checker, symbol);
     const target = declarationOf(
-      canonicalSymbol(checker, symbol),
+      canonical,
       (candidate) =>
         candidate.getSourceFile() === sourceFile &&
         (ts.isFunctionLike(candidate) ||
           (ts.isVariableDeclaration(candidate) &&
             Boolean(callableBody(candidate)))),
     );
-    if (target) pending.push(target);
+    if (target) {
+      pending.push(target);
+      return;
+    }
+    for (const candidate of canonical?.declarations || []) {
+      if (
+        candidate.getSourceFile() !== sourceFile ||
+        !ts.isVariableDeclaration(candidate) ||
+        !candidate.initializer ||
+        !ts.isCallExpression(candidate.initializer)
+      )
+        continue;
+      for (const argument of candidate.initializer.arguments)
+        if (ts.isFunctionLike(argument)) pending.push(argument);
+    }
   }
   while (pending.length) {
     const current = pending.shift();
@@ -1841,6 +1856,24 @@ function reachableNodesFromCallable(
       if (local) pending.push(local);
     }
     if (!includeReturnedMembers) continue;
+    const enqueueReturnedObjectMembers = (value) => {
+      if (!ts.isObjectLiteralExpression(value)) return false;
+      for (const property of value.properties) {
+        if (ts.isMethodDeclaration(property)) pending.push(property);
+        else if (ts.isShorthandPropertyAssignment(property))
+          enqueueLocalSymbol(
+            checker.getShorthandAssignmentValueSymbol(property) ||
+              property.name,
+          );
+        else if (ts.isPropertyAssignment(property)) {
+          if (ts.isFunctionLike(property.initializer))
+            pending.push(property.initializer);
+          else if (!enqueueReturnedObjectMembers(property.initializer))
+            enqueueLocalSymbol(canonicalSymbol(checker, property.initializer));
+        }
+      }
+      return true;
+    };
     for (const returned of direct.filter(ts.isReturnStatement)) {
       const value = returned.expression;
       if (!value || !ts.isObjectLiteralExpression(value)) continue;
@@ -1859,7 +1892,7 @@ function reachableNodesFromCallable(
         else if (ts.isPropertyAssignment(property)) {
           if (ts.isFunctionLike(property.initializer))
             pending.push(property.initializer);
-          else
+          else if (!enqueueReturnedObjectMembers(property.initializer))
             enqueueLocalSymbol(canonicalSymbol(checker, property.initializer));
         }
       }

@@ -897,10 +897,12 @@ test("order mutations invalidate orders, article management, and attention even 
     "articleManagement",
     "articleAttention",
     "orders",
+    "submissionCenter",
   ]);
   assert.deepEqual(scopesForReason("PAID_ORDER_STATUS_ANOMALY_RESOLVED"), [
     "articleManagement",
     "articleAttention",
     "orders",
+    "submissionCenter",
   ]);
 });

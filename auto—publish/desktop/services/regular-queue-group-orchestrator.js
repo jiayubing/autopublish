@@ -104,15 +104,18 @@ function createRegularQueueGroupOrchestrator(options) {
       ? value.onDataInvalidated
       : null;
 
+  function notifyDataInvalidated(reasonCode) {
+    if (!onDataInvalidated) return;
+    try {
+      onDataInvalidated(reasonCode);
+    } catch (_) {
+      diagnose("REGULAR_DATA_INVALIDATION_FAILED", "data-invalidation");
+    }
+  }
+
   function applyOutcome(input) {
     const transition = outcomeService.applyRegularOutcome(input);
-    if (onDataInvalidated) {
-      try {
-        onDataInvalidated("PUBLICATION_RECONCILED");
-      } catch (_) {
-        diagnose("REGULAR_DATA_INVALIDATION_FAILED", "data-invalidation");
-      }
-    }
+    notifyDataInvalidated("PUBLICATION_RECONCILED");
     return transition;
   }
 
@@ -291,11 +294,14 @@ function createRegularQueueGroupOrchestrator(options) {
       queueGroupId: input && input.queueGroupId,
       running: true,
     });
+    notifyDataInvalidated("REGULAR_QUEUE_GROUP_RUN_INTENT_CHANGED");
     return runGroup(group.queueGroupId);
   }
 
   async function startAll() {
     const started = transitions.startAllRegularQueueGroups();
+    if (started.changedCount > 0)
+      notifyDataInvalidated("REGULAR_QUEUE_GROUP_RUN_INTENT_CHANGED");
     const runnable = started.groups.filter(
       (group) => group.pauseIntent === "none",
     );
@@ -309,14 +315,19 @@ function createRegularQueueGroupOrchestrator(options) {
   }
 
   function pauseGroup(input) {
-    return transitions.setRegularQueueGroupRunIntent({
+    const group = transitions.setRegularQueueGroupRunIntent({
       queueGroupId: input && input.queueGroupId,
       running: false,
     });
+    notifyDataInvalidated("REGULAR_QUEUE_GROUP_RUN_INTENT_CHANGED");
+    return group;
   }
 
   function pauseAll() {
-    return transitions.pauseAllRegularQueueGroups();
+    const result = transitions.pauseAllRegularQueueGroups();
+    if (result.changedCount > 0)
+      notifyDataInvalidated("REGULAR_QUEUE_GROUP_RUN_INTENT_CHANGED");
+    return result;
   }
 
   function initializePaused() {

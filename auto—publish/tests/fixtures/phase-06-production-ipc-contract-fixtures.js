@@ -1185,8 +1185,9 @@ const PRODUCTION_CALLERS = Object.freeze({
     featureBinding: "hydrate",
   }),
   "content.previewRegularQueueAdmission": Object.freeze({
-    view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
+    view:
+      "media-workbench/src/components/content/use-submission-intake-session.ts",
+    viewSymbol: "useSubmissionIntakeSession",
     feature:
       "media-workbench/src/features/content/use-content-workbench-feature.ts",
     featureSymbol: "useContentWorkbenchFeature",
@@ -1200,8 +1201,9 @@ const PRODUCTION_CALLERS = Object.freeze({
     featureBinding: "previewRegularQueueAdmission",
   }),
   "content.admitRegularQueueItems": Object.freeze({
-    view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
+    view:
+      "media-workbench/src/components/content/use-submission-intake-session.ts",
+    viewSymbol: "useSubmissionIntakeSession",
     feature:
       "media-workbench/src/features/content/use-content-workbench-feature.ts",
     featureSymbol: "useContentWorkbenchFeature",
@@ -1330,8 +1332,9 @@ const PRODUCTION_CALLERS = Object.freeze({
     featureBinding: "pauseAllRegularQueueGroups",
   }),
   "content.previewPaidMediaPreflight": Object.freeze({
-    view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
+    view:
+      "media-workbench/src/components/content/use-submission-intake-session.ts",
+    viewSymbol: "useSubmissionIntakeSession",
     feature:
       "media-workbench/src/features/content/use-content-workbench-feature.ts",
     featureSymbol: "useContentWorkbenchFeature",
@@ -1345,8 +1348,9 @@ const PRODUCTION_CALLERS = Object.freeze({
     featureBinding: "previewPaidMediaPreflight",
   }),
   "content.confirmPaidMediaBatch": Object.freeze({
-    view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
+    view:
+      "media-workbench/src/components/content/use-submission-intake-session.ts",
+    viewSymbol: "useSubmissionIntakeSession",
     feature:
       "media-workbench/src/features/content/use-content-workbench-feature.ts",
     featureSymbol: "useContentWorkbenchFeature",
@@ -2133,12 +2137,12 @@ const PRODUCTION_CONSUMERS = Object.freeze({
   ],
   "content.previewRegularQueueAdmission": [
     "direct",
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
+    "media-workbench/src/components/content/use-submission-intake-session.ts",
     "previewRegularQueueAdmission",
   ],
   "content.admitRegularQueueItems": [
     "direct",
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
+    "media-workbench/src/components/content/use-submission-intake-session.ts",
     "admitRegularQueueItems",
   ],
   "media.prepareOrderCancellation": [
@@ -2194,12 +2198,12 @@ const PRODUCTION_CONSUMERS = Object.freeze({
   ],
   "content.previewPaidMediaPreflight": [
     "direct",
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
+    "media-workbench/src/components/content/use-submission-intake-session.ts",
     "previewPaidMediaPreflight",
   ],
   "content.confirmPaidMediaBatch": [
     "direct",
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
+    "media-workbench/src/components/content/use-submission-intake-session.ts",
     "confirmPaidMediaBatch",
   ],
   "content.listPaidMediaBatches": [
@@ -2797,10 +2801,6 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
           "content.preparePermanentDeleteArticle",
           "content.permanentlyDeleteArticle",
           "content.retryArticleRemovalTransaction",
-          "content.previewRegularQueueAdmission",
-          "content.admitRegularQueueItems",
-          "content.previewPaidMediaPreflight",
-          "content.confirmPaidMediaBatch",
           "content.startPaidMediaBatch",
           "content.pausePaidMediaBatch",
           "content.cancelRemainingPaidMediaBatchItems",
@@ -2827,6 +2827,10 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
           "attention.resolveArticleAttention",
           "content.articleRemovalTransactionChanged",
           "content.getArticleRemovalTransaction",
+          "content.previewRegularQueueAdmission",
+          "content.admitRegularQueueItems",
+          "content.previewPaidMediaPreflight",
+          "content.confirmPaidMediaBatch",
           "generation.previewCancelPending",
           "generation.cancelPending",
           "workspace.getRuntimeIdentity",
@@ -2995,6 +2999,8 @@ const PRODUCTION_SOURCE_OWNERS = Object.freeze({
   "media-workbench/src/components/ContentWorkbench.tsx": "ContentWorkbench",
   "media-workbench/src/components/content/GeneratedArticlesView.tsx":
     "GeneratedArticlesView",
+  "media-workbench/src/components/content/use-submission-intake-session.ts":
+    "useSubmissionIntakeSession",
   "media-workbench/src/components/content/AccountProfileSelector.tsx":
     "AccountProfileSelector",
   "media-workbench/src/components/content/ArticleAttentionPanel.tsx":

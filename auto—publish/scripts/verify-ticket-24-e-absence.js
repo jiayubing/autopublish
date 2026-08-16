@@ -46,7 +46,6 @@ const INTERNAL_HISTORICAL_MAINTENANCE_ALLOWLIST = Object.freeze([
   "desktop/services/submission-action-policy.js",
   "desktop/services/submission-action-recovery.js",
   "desktop/services/submission-item-projection.js",
-  "desktop/services/submission-result-reconciliation.js",
   "src/content/article-lifecycle-facts.js",
   "src/infrastructure/operational-store/internal/operational-store-publication-aggregate.js",
   "src/infrastructure/operational-store/internal/operational-store-recovery-aggregate.js",

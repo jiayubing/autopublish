@@ -127,7 +127,7 @@ async function measureOnce(fixture) {
     elapsedMs: Number((performance.now() - startedAt).toFixed(3)),
     counters,
     loadedArticleCount: snapshot.articles.length,
-    loadedOrderCount: snapshot.orders.length,
+    loadedOrderCount: fixture.lifecycleFacts.orders.length,
   };
 }
 

@@ -228,7 +228,9 @@ function createMediaWorkbenchApplication(options) {
         error.code = "PAID_MEDIA_PREFLIGHT_UNAVAILABLE";
         throw error;
       }
-      return paidMediaPreflightService.confirm(input || {});
+      const result = await paidMediaPreflightService.confirm(input || {});
+      if (invalidateData) invalidateData("SUBMISSION_BATCH_CREATED");
+      return result;
     },
     getPaidMediaBatches: (input) => {
       if (
@@ -248,15 +250,24 @@ function createMediaWorkbenchApplication(options) {
         throw error;
       }
       const batchId = input && input.batchId;
-      return Promise.resolve(
-        paidMediaBatchOrchestrator.startBatch(input || {}),
-      ).then((execution) => ({
-        executionStatus:
-          execution && typeof execution.status === "string"
-            ? execution.status
-            : "idle",
-        batch: paidMediaBatchOrchestrator.snapshot({ batchId })[0],
-      }));
+      const execution = paidMediaBatchOrchestrator.startBatch(input || {});
+      if (invalidateData) invalidateData("PAID_BATCH_EXECUTION_CHANGED");
+      return Promise.resolve(execution).then(
+        (result) => {
+          if (invalidateData) invalidateData("PAID_BATCH_EXECUTION_CHANGED");
+          return {
+            executionStatus:
+              result && typeof result.status === "string"
+                ? result.status
+                : "idle",
+            batch: paidMediaBatchOrchestrator.snapshot({ batchId })[0],
+          };
+        },
+        (error) => {
+          if (invalidateData) invalidateData("PAID_BATCH_EXECUTION_CHANGED");
+          throw error;
+        },
+      );
     },
     pausePaidMediaBatch: (input) => {
       if (
@@ -267,9 +278,9 @@ function createMediaWorkbenchApplication(options) {
         error.code = "PAID_MEDIA_EXECUTION_UNAVAILABLE";
         throw error;
       }
-      return {
-        batch: paidMediaBatchOrchestrator.pauseBatch(input || {}),
-      };
+      const batch = paidMediaBatchOrchestrator.pauseBatch(input || {});
+      if (invalidateData) invalidateData("PAID_BATCH_EXECUTION_CHANGED");
+      return { batch };
     },
     cancelRemainingPaidMediaBatchItems: (input) => {
       if (

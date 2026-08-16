@@ -21,7 +21,7 @@ function installDesktopFixture(page) {
     const state = {
       workspaceRuntimeId,
       queueCalls: 0,
-      groupCalls: 0,
+      submissionCenterCalls: 0,
       imageCountUpdates: [],
       imageUpdateFailure: false,
       pendingImageUpdate: null,
@@ -52,6 +52,26 @@ function installDesktopFixture(page) {
         updatedAt: "2026-08-15T00:00:00.000Z",
       },
     ];
+    const submissionCenterData = () => {
+      const group = state.currentGroup || groupData()[0];
+      group.imagePublishingSupported = state.imagePublishingSupported === true;
+      group.revision = state.queueRevision;
+      const regularItems = group.remaining.length + (group.current ? 1 : 0);
+      return {
+        schemaVersion: 1,
+        clientId: "fixture-client",
+        revision: state.queueRevision,
+        regular: { groups: [group] },
+        paid: { batches: [] },
+        attention: { items: [] },
+        counts: {
+          regularItems,
+          paidBatches: 0,
+          attentionItems: 0,
+          total: regularItems,
+        },
+      };
+    };
     const updateImageCount = (input) => {
       const update = () => {
         if (state.imageUpdateFailure) {
@@ -162,16 +182,32 @@ function installDesktopFixture(page) {
           cleanableCount: 0,
           reportedCount: 0,
         }),
-      listContentClients: () => response([]),
+      listClients: () =>
+        response({
+          clients: [
+            {
+              id: "fixture-client",
+              name: "fixture-client",
+              knowledgeFiles: [],
+            },
+          ],
+        }),
       listContentArticles: () => response([]),
-      listRegularQueueGroups: () => {
-        state.groupCalls += 1;
-        const group = state.currentGroup || groupData()[0];
-        group.imagePublishingSupported =
-          state.imagePublishingSupported === true;
-        group.revision = state.queueRevision;
-        return response({ items: [group] });
+      getArticleManagementSnapshot: ({ clientId }) =>
+        response({
+          clientId,
+          revision: state.queueRevision,
+          articles: [],
+          trash: [],
+          publicationRecords: [],
+          submissionPlatforms: [],
+          workflowItems: [],
+        }),
+      getSubmissionCenterSnapshot: () => {
+        state.submissionCenterCalls += 1;
+        return response(submissionCenterData());
       },
+      listRegularQueueGroups: () => response({ items: groupData() }),
       updateRegularQueueGroupImageCount: updateImageCount,
       startRegularQueueGroup: () => response([]),
       pauseRegularQueueGroup: () => response([]),
@@ -250,7 +286,7 @@ function installDesktopFixture(page) {
           schemaVersion: 1,
           workspaceRuntimeId: state.workspaceRuntimeId,
           revision,
-          scopes: ["platformQueue"],
+          scopes: ["platformQueue", "submissionCenter"],
           reasonCode: "FIXTURE_TERMINAL",
         };
         state.invalidationListeners
@@ -264,7 +300,7 @@ function installDesktopFixture(page) {
           schemaVersion: 1,
           workspaceRuntimeId: nextRuntimeId,
           revision,
-          scopes: ["platformQueue"],
+          scopes: ["platformQueue", "submissionCenter"],
           reasonCode: "FIXTURE_RUNTIME_SWITCH",
         };
         state.invalidationListeners
@@ -276,7 +312,7 @@ function installDesktopFixture(page) {
           schemaVersion: 1,
           workspaceRuntimeId: runtimeId,
           revision,
-          scopes: ["platformQueue"],
+          scopes: ["platformQueue", "submissionCenter"],
           reasonCode: "FIXTURE_DELAYED_INVALIDATION",
         };
         state.invalidationListeners
@@ -286,8 +322,8 @@ function installDesktopFixture(page) {
       getQueueCalls() {
         return state.queueCalls;
       },
-      getGroupCalls() {
-        return state.groupCalls;
+      getSubmissionCenterCalls() {
+        return state.submissionCenterCalls;
       },
       setImagePublishingSupported(supported) {
         state.imagePublishingSupported = supported === true;
@@ -295,7 +331,7 @@ function installDesktopFixture(page) {
           schemaVersion: 1,
           workspaceRuntimeId: state.workspaceRuntimeId,
           revision: state.queueRevision + 1,
-          scopes: ["platformQueue"],
+          scopes: ["platformQueue", "submissionCenter"],
           reasonCode: "FIXTURE_IMAGE_CAPABILITY_CHANGED",
         };
         state.invalidationListeners
@@ -396,7 +432,7 @@ describe("renderer platform queue lifecycle", { concurrency: false }, () => {
     if (buildDir) fs.rmSync(buildDir, { recursive: true, force: true });
   });
 
-  it("loads queue groups once and refreshes them only on explicit user intent", async () => {
+  it("loads the submission center once and refreshes it only on explicit user intent", async () => {
     const page = await browser.newPage({
       viewport: { width: 1200, height: 800 },
     });
@@ -405,21 +441,21 @@ describe("renderer platform queue lifecycle", { concurrency: false }, () => {
     await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
     await page.getByText("数据已就绪").waitFor();
     const initialCalls = await page.evaluate(() =>
-      window.__platformQueueLifecycle.getGroupCalls(),
+      window.__platformQueueLifecycle.getSubmissionCenterCalls(),
     );
     assert.equal(
       initialCalls,
       1,
-      "PlatformFeatureProvider owns the initial queue-group load",
+      "the submission-center feature owns the initial composite load",
     );
 
     await page.waitForTimeout(500);
     assert.equal(
       await page.evaluate(() =>
-        window.__platformQueueLifecycle.getGroupCalls(),
+        window.__platformQueueLifecycle.getSubmissionCenterCalls(),
       ),
       initialCalls,
-      "initial idle does not trigger another group query",
+      "initial idle does not trigger another submission-center query",
     );
 
     await page.locator("#nav-item-submission-center").click();
@@ -427,7 +463,7 @@ describe("renderer platform queue lifecycle", { concurrency: false }, () => {
     await page.waitForTimeout(500);
     assert.equal(
       await page.evaluate(() =>
-        window.__platformQueueLifecycle.getGroupCalls(),
+        window.__platformQueueLifecycle.getSubmissionCenterCalls(),
       ),
       initialCalls,
       "mounting the page does not refresh again",
@@ -436,7 +472,8 @@ describe("renderer platform queue lifecycle", { concurrency: false }, () => {
     await page.getByRole("button", { name: "刷新", exact: true }).click();
     await page.waitForFunction(
       (expected) =>
-        window.__platformQueueLifecycle.getGroupCalls() === expected + 1,
+        window.__platformQueueLifecycle.getSubmissionCenterCalls() ===
+        expected + 1,
       initialCalls,
     );
     await page.close();
@@ -511,8 +548,10 @@ describe("renderer platform queue lifecycle", { concurrency: false }, () => {
     );
     assert.equal(
       await page.evaluate(async () => {
-        const response = await window.desktopConsole.content.listRegularQueueGroups();
-        return response.data.items[0].imagePublishingSupported;
+        const response = await window.desktopConsole.content.getSubmissionCenterSnapshot({
+          clientId: "fixture-client",
+        });
+        return response.data.regular.groups[0].imagePublishingSupported;
       }),
       true,
     );

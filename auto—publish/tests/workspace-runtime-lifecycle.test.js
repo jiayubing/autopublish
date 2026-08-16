@@ -127,13 +127,18 @@ it("maps every production workspace mutation reason explicitly without a broad f
     "ARTICLE_REMOVAL_TRANSACTION_CHANGED",
     "ARTICLE_ATTENTION_RESOLVED",
     "TRASHED_QUEUE_RESIDUE_RESOLVED",
-    "FAILED_QUEUE_ITEMS_CLEANED"
+    "FAILED_QUEUE_ITEMS_CLEANED",
+    "REGULAR_QUEUE_GROUP_RUN_INTENT_CHANGED",
+    "REGULAR_QUEUE_GROUP_IMAGE_COUNT_UPDATED"
   ].forEach(function(reasonCode) {
     assert.deepEqual(scopesForReason(reasonCode), submissionScopes, reasonCode);
   });
   assert.deepEqual(scopesForReason("CONTENT_EXPORT_QUEUED"), ["articleManagement", "articleAttention", "platformQueue", "mediaWorkbench", "submissionCenter"]);
   assert.deepEqual(scopesForReason("MEDIA_SUBMIT_COMPLETED"), ["articleManagement", "articleAttention", "platformQueue", "orders", "submissionCenter"]);
   assert.deepEqual(scopesForReason("PAID_ORDER_RESOLUTION_CHANGED"), ["articleManagement", "articleAttention", "orders", "submissionCenter"]);
+  ["PAID_BATCH_EXECUTION_CHANGED", "PAID_BATCH_REMAINING_CANCELLED"].forEach(function(reasonCode) {
+    assert.deepEqual(scopesForReason(reasonCode), ["articleManagement", "articleAttention", "orders", "submissionCenter"], reasonCode);
+  });
   [
     "CONTENT_SOURCE_CHANGED",
     "CONTENT_QUESTION_CREATED",

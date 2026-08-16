@@ -1108,7 +1108,10 @@ test("orchestrator distinguishes transport failure before and after submission-s
     });
     assert.equal(result.observation.status, "uncertain");
     assert.equal(submits, 1);
-    assert.deepEqual(invalidationReasons, ["PUBLICATION_RECONCILED"]);
+    assert.deepEqual(invalidationReasons, [
+      "REGULAR_QUEUE_GROUP_RUN_INTENT_CHANGED",
+      "PUBLICATION_RECONCILED",
+    ]);
     const snapshot = after.transitions.getRegularOutcomeSnapshot({
       regularPublicationAttemptId: admitted.attemptId,
     });

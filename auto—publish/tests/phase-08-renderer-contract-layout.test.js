@@ -122,6 +122,7 @@ const domainTypeSymbols = {
     "ContentSubmissionCancellationPreview",
     "ArticleAttentionItem",
     "ArticleAttentionList",
+    "SubmissionCenterSnapshot",
     "ArticleTrashRecord",
     "ArticleManagementSnapshot",
     "ArticleAttentionPreview",
@@ -226,7 +227,7 @@ test("renderer shared types have one domain owner and no legacy barrel", () => {
     }
   }
 
-  assert.equal(expectedOwners.size, 141);
+  assert.equal(expectedOwners.size, 142);
 
   const actualDeclarations = new Map();
   const expectedOwnerFiles = Object.keys(domainTypeSymbols)
@@ -258,7 +259,7 @@ test("renderer shared types have one domain owner and no legacy barrel", () => {
     }
   }
 
-  assert.equal(actualDeclarations.size, 141);
+  assert.equal(actualDeclarations.size, 142);
   assert.deepEqual(
     [...actualDeclarations.keys()].sort(),
     [...expectedOwners.keys()].sort(),

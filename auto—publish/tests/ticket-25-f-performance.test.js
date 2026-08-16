@@ -77,7 +77,7 @@ test("25-F measures public batch/read projections at the frozen scale with hard 
     assert.doesNotMatch(report.command, /[A-Za-z]:[\\/]/);
 
     const expectedCounts = {
-      article_management_snapshot: [7, 7],
+      article_management_snapshot: [5, 5],
       regular_queue_snapshot: [2, 2],
       paid_order_snapshot: [1, 1],
     };

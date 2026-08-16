@@ -57,14 +57,20 @@ function errorMessage(value: unknown, fallback: string): string {
 export function useSubmissionIntakeSession({
   scopeKey,
   availableArticleRefs,
-  commands,
+  previewRegularQueueAdmission,
+  admitRegularQueueItems,
+  previewPaidMediaPreflight,
+  confirmPaidMediaBatch,
   commandStates,
   confirm,
   onCommitted,
 }: {
   scopeKey: string;
   availableArticleRefs: ArticleRef[];
-  commands: GeneratedArticlesCommands;
+  previewRegularQueueAdmission: GeneratedArticlesCommands["previewRegularQueueAdmission"];
+  admitRegularQueueItems: GeneratedArticlesCommands["admitRegularQueueItems"];
+  previewPaidMediaPreflight: GeneratedArticlesCommands["previewPaidMediaPreflight"];
+  confirmPaidMediaBatch: GeneratedArticlesCommands["confirmPaidMediaBatch"];
   commandStates: Record<string, { busy: boolean }>;
   confirm: (options: ConfirmationOptions) => Promise<boolean>;
   onCommitted: () => void;
@@ -227,7 +233,7 @@ export function useSubmissionIntakeSession({
     }));
   }, [invalidateAsync, mutationPending]);
 
-  const submitRegular = useCallback(async () => {
+  async function submitRegular() {
     if (
       !state.open ||
       !state.articleRefs.length ||
@@ -252,7 +258,7 @@ export function useSubmissionIntakeSession({
       accountProfileId: state.accountProfileId,
     };
     try {
-      const preview = await commands.previewRegularQueueAdmission(input);
+      const preview = await previewRegularQueueAdmission(input);
       if (!isCurrent(requestedScope, epoch)) return;
       if (isContentCommandStaleResult(preview)) {
         pendingRef.current = null;
@@ -274,7 +280,7 @@ export function useSubmissionIntakeSession({
       }
       pendingRef.current = "regular_admit";
       setState((current) => ({ ...current, pending: "regular_admit" }));
-      const result = await commands.admitRegularQueueItems(input);
+      const result = await admitRegularQueueItems(input);
       if (!isCurrent(requestedScope, epoch)) return;
       if (isContentCommandStaleResult(result)) {
         pendingRef.current = null;
@@ -298,9 +304,9 @@ export function useSubmissionIntakeSession({
         pending: null,
       }));
     }
-  }, [commandBusy, commands, confirm, isCurrent, onCommitted, scopeKey, state]);
+  }
 
-  const previewPaid = useCallback(async () => {
+  async function previewPaid() {
     if (
       !state.open ||
       !state.articleRefs.length ||
@@ -319,7 +325,7 @@ export function useSubmissionIntakeSession({
       pending: "paid_preview",
     }));
     try {
-      const result = await commands.previewPaidMediaPreflight({
+      const result = await previewPaidMediaPreflight({
         articleRefs: state.articleRefs,
         mediaResourceId: state.mediaResourceId,
       });
@@ -344,9 +350,9 @@ export function useSubmissionIntakeSession({
         pending: null,
       }));
     }
-  }, [commandBusy, commands, isCurrent, scopeKey, state]);
+  }
 
-  const confirmPaid = useCallback(async () => {
+  async function confirmPaid() {
     const confirmationToken = state.paidPreflight?.confirmationToken;
     if (
       !confirmationToken ||
@@ -365,7 +371,7 @@ export function useSubmissionIntakeSession({
       pending: "paid_confirm",
     }));
     try {
-      const result = await commands.confirmPaidMediaBatch({ confirmationToken });
+      const result = await confirmPaidMediaBatch({ confirmationToken });
       if (!isCurrent(requestedScope, epoch)) return;
       if (isContentCommandStaleResult(result)) {
         pendingRef.current = null;
@@ -389,7 +395,7 @@ export function useSubmissionIntakeSession({
         pending: null,
       }));
     }
-  }, [commandBusy, commands, isCurrent, onCommitted, scopeKey, state.articleRefs.length, state.paidPreflight]);
+  }
 
   return {
     snapshot: {

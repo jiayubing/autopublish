@@ -73,6 +73,7 @@ test("media order IPC projection preserves a zero actual amount", () => {
 
 test("paid-media confirmation establishes a paused batch without starting order creation", async () => {
   let starts = 0;
+  const invalidations = [];
   const application = createMediaWorkbenchApplication({
     mediaClientProvider: () => ({}),
     mediaResourceService: {},
@@ -96,6 +97,7 @@ test("paid-media confirmation establishes a paused batch without starting order 
         return { status: "submitted" };
       },
     },
+    invalidateData: (reasonCode) => invalidations.push(reasonCode),
   });
 
   const result = await application.confirmPaidMedia({
@@ -106,6 +108,47 @@ test("paid-media confirmation establishes a paused batch without starting order 
   assert.equal(result.batchId, "paid-batch-paused");
   assert.equal(result.execution, undefined);
   assert.equal(starts, 0);
+  assert.deepEqual(invalidations, ["SUBMISSION_BATCH_CREATED"]);
+});
+
+test("paid-media execution mutations invalidate the unified submission center", async () => {
+  const invalidations = [];
+  const application = createMediaWorkbenchApplication({
+    mediaClientProvider: () => ({}),
+    mediaResourceService: {},
+    mediaOrderService: { listOrderViews: () => [] },
+    resourceStore: { getAll: () => ({ resources: [] }) },
+    poolStore: { getAll: () => [] },
+    draftStore: { get: () => null },
+    mediaWorkbenchService: {
+      scanArticles: async () => [],
+      resolveSubmissionFile: (filename) => filename,
+    },
+    paidMediaBatchOrchestrator: {
+      startBatch: async ({ batchId }) => ({ batchId, status: "completed" }),
+      pauseBatch: ({ batchId }) => ({ batchId, runState: "paused" }),
+      cancelRemaining: async ({ batchId }) => ({
+        batchId,
+        status: "remaining_cancelled",
+        cancelledCount: 1,
+      }),
+      snapshot: ({ batchId }) => [{ batchId, status: "completed" }],
+    },
+    invalidateData: (reasonCode) => invalidations.push(reasonCode),
+  });
+
+  await application.startPaidMediaBatch({ batchId: "paid-batch-1" });
+  application.pausePaidMediaBatch({ batchId: "paid-batch-1" });
+  await application.cancelRemainingPaidMediaBatchItems({
+    batchId: "paid-batch-1",
+  });
+
+  assert.deepEqual(invalidations, [
+    "PAID_BATCH_EXECUTION_CHANGED",
+    "PAID_BATCH_EXECUTION_CHANGED",
+    "PAID_BATCH_EXECUTION_CHANGED",
+    "PAID_BATCH_REMAINING_CANCELLED",
+  ]);
 });
 
 test("public media pool command projects a full Renderer resource to its exact selection DTO", async () => {
