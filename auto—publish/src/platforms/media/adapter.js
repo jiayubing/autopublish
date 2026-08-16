@@ -225,6 +225,8 @@ function createPlatformAdapter(runtimeContext) {
   };
 }
 
-module.exports = Object.assign(createPlatformAdapter(), {
+module.exports = {
   createPlatformAdapter: createPlatformAdapter,
-});
+  createMediaAdapter: createMediaAdapter,
+  createMediaSupplierAdapter: createMediaSupplierAdapter,
+};

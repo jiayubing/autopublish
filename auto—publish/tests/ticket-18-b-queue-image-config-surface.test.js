@@ -79,15 +79,12 @@ function openRuntime(root, options) {
     onDataInvalidated: (code) => invalidations.push(code),
     platforms: value.platforms || [
       {
-        id: "toutiao",
-        contentQueueImport: true,
-        publicationTarget: { kind: "platform" },
+        definition: { id: "toutiao", publicationTargetKind: "platform", capabilities: { imagePublishing: false } },
+        regularSubmission: {},
       },
       {
-        id: "hepan",
-        contentQueueImport: true,
-        publicationTarget: { kind: "platform" },
-        imagePublishingCapability: { supported: true },
+        definition: { id: "hepan", publicationTargetKind: "platform", capabilities: { imagePublishing: true } },
+        regularSubmission: {},
       },
     ],
   });

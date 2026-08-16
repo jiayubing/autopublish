@@ -12,7 +12,7 @@ test("platform account inspector binds only a verified remote identity to its ex
   const inspector = createPlatformAccountInspector({
     adapters: {
       toutiao: {
-        inspectAccount: async () => ({
+        inspect: async () => ({
           verified: true,
           displayName: "fixture-account",
           remoteAccountId: "remote-123",
@@ -59,9 +59,9 @@ test("platform account inspector prepares the session before inspecting identity
   const inspector = createPlatformAccountInspector({
     adapters: {
       toutiao: {
-        ensureAccountInspectionReady: async (task) =>
+        prepare: async (task) =>
           calls.push(["ready", task]),
-        inspectAccount: async () => {
+        inspect: async () => {
           calls.push(["inspect"]);
           return {
             verified: true,
@@ -107,12 +107,12 @@ test("account inspection fails closed without calling inspectAccount when sessio
   const inspector = createPlatformAccountInspector({
     adapters: {
       toutiao: {
-        ensureAccountInspectionReady: async () => {
+        prepare: async () => {
           const error = new Error("session unavailable");
           error.code = "PLAYWRIGHT_SESSION_NOT_OPEN";
           throw error;
         },
-        inspectAccount: async () => {
+        inspect: async () => {
           inspections += 1;
           return {
             verified: true,
@@ -140,13 +140,13 @@ test("account inspection fails closed without calling inspectAccount when sessio
   assert.equal(inspections, 0);
 });
 
-test("account inspection keeps the session fallback for non-browser adapters", async () => {
+test("account inspection uses the explicit prepare port for non-browser adapters", async () => {
   const calls = [];
   const inspector = createPlatformAccountInspector({
     adapters: {
       hepan: {
-        ensureSession: async () => calls.push("session"),
-        inspectAccount: async () => {
+        prepare: async () => calls.push("session"),
+        inspect: async () => {
           calls.push("inspect");
           return {
             verified: true,
@@ -178,7 +178,7 @@ test("platform account inspector fails closed for a missing or platform-mismatch
   const inspector = createPlatformAccountInspector({
     adapters: {
       toutiao: {
-        inspectAccount: async () => ({
+        inspect: async () => ({
           verified: true,
           displayName: "remote-name",
           remoteAccountId: "remote-123",
@@ -225,7 +225,7 @@ test("platform account inspector blocks a later remote account change for the sa
   const inspector = createPlatformAccountInspector({
     adapters: {
       toutiao: {
-        inspectAccount: async () => ({
+        inspect: async () => ({
           verified: true,
           displayName: "fixture-account",
           remoteAccountId: "replacement",

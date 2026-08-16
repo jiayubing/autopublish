@@ -17,8 +17,8 @@ function fingerprint(platformId, remoteAccountId) {
 
 async function ensureAccountInspectionReady(adapter, task) {
   const input = task || {};
-  if (typeof adapter.ensureAccountInspectionReady === "function") {
-    await adapter.ensureAccountInspectionReady(
+  if (typeof adapter.prepare === "function") {
+    await adapter.prepare(
       Object.freeze({
         targetPlatformId: input.targetPlatformId,
         accountProfileId: input.accountProfileId,
@@ -26,9 +26,6 @@ async function ensureAccountInspectionReady(adapter, task) {
       }),
     );
     return;
-  }
-  if (typeof adapter.ensureSession === "function") {
-    await adapter.ensureSession();
   }
 }
 
@@ -56,14 +53,14 @@ function createPlatformAccountInspector(options) {
         !platformId ||
         !expectedProfileId ||
         !adapter ||
-        typeof adapter.inspectAccount !== "function"
+        typeof adapter.inspect !== "function"
       ) {
         return Object.freeze({ verified: false });
       }
       let evidence;
       try {
         await ensureAccountInspectionReady(adapter, task);
-        evidence = await adapter.inspectAccount();
+        evidence = await adapter.inspect();
       } catch (_) {
         return Object.freeze({ verified: false });
       }

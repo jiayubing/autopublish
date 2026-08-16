@@ -84,8 +84,8 @@ function createRegularQueueApplication(options) {
 
   function platformList() {
     return (configuredPlatforms || []).filter(function (platform) {
-      return platform && platform.contentQueueImport === true &&
-        (!platform.publicationTarget || platform.publicationTarget.kind === "platform");
+      return platform && platform.regularSubmission &&
+        platform.definition.publicationTargetKind === "platform";
     });
   }
 
@@ -102,7 +102,7 @@ function createRegularQueueApplication(options) {
     if (typeof request.accountProfileId !== "string" || !request.accountProfileId.trim())
       throw fail("ACCOUNT_PROFILE_REQUIRED");
     const platformId = request.platformId.trim();
-    const platform = platformList().find(function (candidate) { return candidate.id === platformId; });
+    const platform = platformList().find(function (candidate) { return candidate.definition.id === platformId; });
     if (!platform) throw fail("REGULAR_QUEUE_PLATFORM_UNSUPPORTED");
     let target;
     try {
@@ -193,7 +193,7 @@ function createRegularQueueApplication(options) {
 
   function groupImagePublishingSupported(platformId) {
     const platform = platformList().find(function (candidate) {
-      return candidate.id === platformId;
+      return candidate.definition.id === platformId;
     });
     return imagePublishingCapability(platform).supported;
   }

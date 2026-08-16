@@ -21,6 +21,8 @@ const {
   createBrowserSessionLifecycle,
 } = require("../shared/browser-session-lifecycle");
 
+var INPUT_ROOT = DIRS.inputDir;
+var BROWSER_CHANNEL = PW.browserChannel;
 var SESSION = pwSessionConfig("toutiao");
 var SESSION_OPTS = { session: SESSION };
 var LOGIN_WAIT_TIMEOUT_MS = 5 * 60 * 1000;
@@ -46,26 +48,58 @@ var TOUTIAO = {
   successUrlPattern: /\/profile_v4\/graphic\/articles(?:[/?#]|$)/,
 };
 
-var SESSION_LIFECYCLE = createBrowserSessionLifecycle({
-  session: SESSION,
-  stateDir: DIRS.stateDir,
-  run: pwInvokeSync,
-  ensureDir: ensureDir,
-  sleep: sleep,
-  start: function () {
-    pwInvokeSync(
-      [
-        "open",
-        TOUTIAO.base,
-        "--browser=" + PW.browserChannel,
-        "--headed",
-        "--persistent",
-        "--profile=" + SESSION.profileDir,
-      ],
-      { timeout: 20000, session: SESSION },
-    );
-  },
-});
+function createSessionLifecycle() {
+  return createBrowserSessionLifecycle({
+    session: SESSION,
+    stateDir: SESSION.stateFile ? path.dirname(SESSION.stateFile) : DIRS.stateDir,
+    run: pwInvokeSync,
+    ensureDir: ensureDir,
+    sleep: sleep,
+    start: function () {
+      pwInvokeSync(
+        [
+          "open",
+          TOUTIAO.base,
+          "--browser=" + BROWSER_CHANNEL,
+          "--headed",
+          "--persistent",
+          "--profile=" + SESSION.profileDir,
+        ],
+        { timeout: 20000, session: SESSION },
+      );
+    },
+  });
+}
+
+var SESSION_LIFECYCLE = createSessionLifecycle();
+
+function configureRuntime(runtimeContext) {
+  var context = runtimeContext || {};
+  var browserRuntime = context.browserRuntime || {};
+  var workspacePaths = context.workspacePaths || {};
+  var hasExplicitRuntime = Object.keys(browserRuntime).length > 0 || Object.keys(workspacePaths).length > 0;
+  if (!hasExplicitRuntime) {
+    INPUT_ROOT = DIRS.inputDir;
+    BROWSER_CHANNEL = PW.browserChannel;
+    SESSION = pwSessionConfig("toutiao");
+    SESSION_OPTS = { session: SESSION };
+    SESSION_LIFECYCLE = createSessionLifecycle();
+    return;
+  }
+  var profileRoot = browserRuntime.profileRoot || workspacePaths.browser;
+  var daemonRoot = browserRuntime.daemonRoot || (profileRoot ? path.join(profileRoot, "sessions") : "");
+  var stateDir = browserRuntime.stateDir || (profileRoot ? path.join(profileRoot, "state") : DIRS.stateDir);
+  SESSION = pwSessionConfig({
+    session: "toutiao",
+    profileDir: browserRuntime.profileDir || (profileRoot ? path.join(profileRoot, "profiles", "toutiao") : undefined),
+    daemonDir: browserRuntime.daemonDir || (daemonRoot ? path.join(daemonRoot, "toutiao") : undefined),
+    stateFile: browserRuntime.stateFile || path.join(stateDir, "toutiao.json"),
+  });
+  SESSION_OPTS = { session: SESSION };
+  BROWSER_CHANNEL = browserRuntime.browserChannel || PW.browserChannel;
+  INPUT_ROOT = workspacePaths.input || (workspacePaths.toutiaoInput ? path.dirname(workspacePaths.toutiaoInput) : DIRS.inputDir);
+  SESSION_LIFECYCLE = createSessionLifecycle();
+}
 function daemonAlive() {
   return SESSION_LIFECYCLE.isAlive();
 }
@@ -551,7 +585,7 @@ function isStopError(error) {
 }
 
 function scanArticles(scanDir) {
-  var inputDir = path.join(DIRS.inputDir, scanDir);
+  var inputDir = path.join(INPUT_ROOT, scanDir);
   if (!fs.existsSync(inputDir)) {
     return [];
   }
@@ -619,7 +653,9 @@ function loadSidecar(articleFile) {
   }
 }
 
-module.exports = {
+function createPlatformAdapter(runtimeContext) {
+  configureRuntime(runtimeContext);
+  return {
   id: "toutiao",
   publicationTarget: { kind: "platform", granularity: "platform" },
   contentQueueImport: true,
@@ -636,4 +672,7 @@ module.exports = {
   closeSession: closeBrowserSession,
   scanArticles: scanArticles,
   parseArticleFiles: parseArticleFiles,
-};
+  };
+}
+
+module.exports = { createPlatformAdapter };

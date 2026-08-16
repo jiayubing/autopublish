@@ -8,7 +8,8 @@ function createPlatformAccountRuntimeAdapters(options) {
   const settingsService = value.platformSettingsService;
   const adapters = {};
   loadedPlatforms.forEach((platform) => {
-    if (platform && typeof platform.id === "string") adapters[platform.id] = platform;
+    if (platform && platform.definition && platform.accountInspection)
+      adapters[platform.definition.id] = platform.accountInspection;
   });
 
   const hepan = adapters.hepan;
@@ -18,7 +19,7 @@ function createPlatformAccountRuntimeAdapters(options) {
     typeof settingsService.test === "function"
   ) {
     adapters.hepan = Object.assign({}, hepan, {
-      inspectAccount: async function () {
+      inspect: async function () {
         try {
           const result = await settingsService.test("hepan", {});
           const account = result && result.account;

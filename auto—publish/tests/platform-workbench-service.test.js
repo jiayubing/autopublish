@@ -274,7 +274,7 @@ describe("platform-workbench-service", function () {
       adapters: {
         lieju: {
           id: "lieju",
-          parseArticleFiles: async (items) => [
+          parse: async (items) => [
             {
               title: "title",
               body: "body",
@@ -303,7 +303,7 @@ describe("platform-workbench-service", function () {
       adapters: {
         lieju: {
           id: "lieju",
-          parseArticleFiles: async () => [{ title: "adapter title" }],
+          parse: async () => [{ title: "adapter title" }],
         },
       },
     });
@@ -341,7 +341,7 @@ describe("platform-workbench-service", function () {
       adapters: {
         lieju: {
           id: "lieju",
-          parseArticleFiles: async () => [{ title: "adapter title" }],
+          parse: async () => [{ title: "adapter title" }],
         },
       },
     });

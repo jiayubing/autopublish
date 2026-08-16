@@ -1220,8 +1220,8 @@ function createLiejuAdapter(runtimeContext) {
   };
 }
 
-module.exports = Object.assign(createLiejuAdapter(), {
+module.exports = {
   createPlatformAdapter: createLiejuAdapter,
   httpFormParser,
   createLiejuHttpSession,
-});
+};

@@ -87,7 +87,7 @@ function fixture() {
       isArticleTrashed: () => true,
     },
     platforms: [
-      { id: "toutiao", scanDir: "toutiao", contentQueueImport: true },
+      { definition: { id: "toutiao", publicationTargetKind: "platform", capabilities: { imagePublishing: false } }, submissionDirectoryEntry: { id: "toutiao", displayName: "头条", publicationTargetKind: "platform", scanDir: "toutiao", imagePublishing: false }, regularSubmission: {} },
     ],
   });
   return { root, store, service, batch, profile };
@@ -256,7 +256,7 @@ test("named maintenance promotes durable prepared staging evidence", () => {
       workspaceRoot: root,
       paths: { input: root },
       contentStore: { isArticleTrashed: () => false },
-      platforms: [{ id: "toutiao", scanDir: "toutiao", contentQueueImport: true }],
+      platforms: [{ definition: { id: "toutiao", publicationTargetKind: "platform", capabilities: { imagePublishing: false } }, submissionDirectoryEntry: { id: "toutiao", displayName: "头条", publicationTargetKind: "platform", scanDir: "toutiao", imagePublishing: false }, regularSubmission: {} }],
       operationalStore: {
         listSubmissionBatches: () => [batch],
         queueSubmissionBatch: () => {
@@ -298,7 +298,7 @@ test("named maintenance discards a prepared batch with no file evidence", () => 
       workspaceRoot: root,
       paths: { input: root },
       contentStore: { isArticleTrashed: () => false },
-      platforms: [{ id: "toutiao", scanDir: "toutiao", contentQueueImport: true }],
+      platforms: [{ definition: { id: "toutiao", publicationTargetKind: "platform", capabilities: { imagePublishing: false } }, submissionDirectoryEntry: { id: "toutiao", displayName: "头条", publicationTargetKind: "platform", scanDir: "toutiao", imagePublishing: false }, regularSubmission: {} }],
       operationalStore: {
         listSubmissionBatches: () => [batch],
         discardPreparedSubmissionBatch: () => {

@@ -82,14 +82,14 @@ test("two platform fixtures and the fake publisher validate the common contract 
       "failed",
     );
   for (const platformId of ["toutiao", "lieju"]) {
-    const legacyAdapter = require(`../src/platforms/${platformId}/adapter`);
-    assert.equal(legacyAdapter.id, platformId);
-    assert.equal(legacyAdapter.publicationTarget.kind, "platform");
-    assert.equal(legacyAdapter.publicationTarget.granularity, "platform");
+    const platform = require(`../src/platforms/${platformId}/platform`);
+    assert.equal(platform.definition.id, platformId);
+    assert.equal(platform.definition.publicationTargetKind, "platform");
+    const loaded = platform.createPlatform();
     if (platformId === "lieju")
-      assert.equal(typeof legacyAdapter.publishArticle, "undefined");
-    else assert.equal(typeof legacyAdapter.publishArticle, "function");
-    assert.equal(typeof legacyAdapter.preparePlatformSubmission, "function");
+      assert.equal(loaded.legacyQueue, undefined);
+    else assert.equal(typeof loaded.legacyQueue.publish, "function");
+    assert.equal(typeof loaded.regularSubmission.preparePlatformSubmission, "function");
   }
   assert.equal(
     parsePublishOutcome(

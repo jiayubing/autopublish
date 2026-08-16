@@ -39,8 +39,12 @@ it("platform loader constructs adapters from explicit workspace and browser runt
     const onePaths = createWorkspacePaths(one);
     const twoPaths = createWorkspacePaths(two);
     fs.mkdirSync(onePaths.hepanInput, { recursive: true });
+    fs.mkdirSync(onePaths.toutiaoInput, { recursive: true });
+    fs.mkdirSync(twoPaths.toutiaoInput, { recursive: true });
     fs.mkdirSync(twoPaths.mediaInput, { recursive: true });
     fs.writeFileSync(path.join(onePaths.hepanInput, "one.txt"), "one");
+    fs.writeFileSync(path.join(onePaths.toutiaoInput, "one.md"), "# one");
+    fs.writeFileSync(path.join(twoPaths.toutiaoInput, "two.md"), "# two");
     fs.writeFileSync(path.join(twoPaths.mediaInput, "two.txt"), "two");
 
     const oneContext = createPlatformRuntimeContext({
@@ -51,13 +55,16 @@ it("platform loader constructs adapters from explicit workspace and browser runt
       workspacePaths: twoPaths,
       browserRuntime: { browserChannel: "msedge", profileDir: path.join(two, "profiles") },
     });
-    const oneAdapters = loadPlatforms({ platformIds: ["hepan", "media"], runtimeContext: oneContext });
-    const twoAdapters = loadPlatforms({ platformIds: ["hepan", "media"], runtimeContext: twoContext });
+    const oneAdapters = loadPlatforms({ platformIds: ["hepan", "toutiao", "media"], runtimeContext: oneContext });
+    const twoAdapters = loadPlatforms({ platformIds: ["hepan", "toutiao", "media"], runtimeContext: twoContext });
 
-    assert.deepStrictEqual(oneAdapters.find((adapter) => adapter.id === "hepan").scanArticles().map((item) => item.filename), ["one.txt"]);
-    assert.deepStrictEqual(oneAdapters.find((adapter) => adapter.id === "media").scanArticles(), []);
-    assert.deepStrictEqual(twoAdapters.find((adapter) => adapter.id === "hepan").scanArticles(), []);
-    assert.deepStrictEqual(twoAdapters.find((adapter) => adapter.id === "media").scanArticles().map((item) => item.filename), ["two.txt"]);
+    assert.deepStrictEqual(oneAdapters.find((platform) => platform.definition.id === "hepan").legacyQueue.scan().map((item) => item.filename), ["one.txt"]);
+    assert.equal(oneAdapters.find((platform) => platform.definition.id === "media").legacyQueue, undefined);
+    assert.deepStrictEqual(twoAdapters.find((platform) => platform.definition.id === "hepan").legacyQueue.scan(), []);
+    assert.notEqual(oneAdapters.find((platform) => platform.definition.id === "hepan").legacyQueue, twoAdapters.find((platform) => platform.definition.id === "hepan").legacyQueue);
+    assert.deepStrictEqual(oneAdapters.find((platform) => platform.definition.id === "toutiao").legacyQueue.scan().map((item) => item.filename), ["one.md"]);
+    assert.deepStrictEqual(twoAdapters.find((platform) => platform.definition.id === "toutiao").legacyQueue.scan().map((item) => item.filename), ["two.md"]);
+    assert.notEqual(oneAdapters.find((platform) => platform.definition.id === "toutiao").loginSession, twoAdapters.find((platform) => platform.definition.id === "toutiao").loginSession);
     assert.equal(oneContext.browserRuntime.browserChannel, "chromium");
     assert.equal(oneContext.browserRuntime.profileDir, path.join(one, "profiles"));
     assert.equal(twoContext.browserRuntime.browserChannel, "msedge");

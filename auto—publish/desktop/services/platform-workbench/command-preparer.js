@@ -163,8 +163,8 @@ function createPlatformCommandPreparer(options) {
       filename: task.filename,
       fileBaseName: path.basename(task.filename, path.extname(task.filename)),
     };
-    const parsed = adapter.parseArticleFiles
-      ? await adapter.parseArticleFiles([source])
+    const parsed = adapter.parse
+      ? await adapter.parse([source])
       : [await fallbackParseArticle(source, filePath)];
     if (!parsed.length)
       throw submissionInputError(

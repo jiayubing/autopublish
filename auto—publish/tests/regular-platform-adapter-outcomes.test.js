@@ -261,13 +261,14 @@ function loadBrowserAdapter(platformId, options) {
     },
   };
   delete require.cache[adapterPath];
-  const adapter = require(adapterPath);
+  const adapterModule = require(adapterPath);
+  const adapter = platformId === "toutiao" ? adapterModule.createPlatformAdapter() : adapterModule;
   return {
     adapter,
     runtimeCalls,
     sessionConfigs,
     restore() {
-      adapter.closeSession();
+      if (typeof adapter.closeSession === "function") adapter.closeSession();
       delete require.cache[adapterPath];
       if (previousAdapter) require.cache[adapterPath] = previousAdapter;
       if (previousPlaywright)
@@ -383,9 +384,10 @@ test("Lieju rejects an incomplete publication profile before opening the remote 
   const calls = [];
   const loaded = loadBrowserAdapter("lieju", { calls });
   try {
+    const adapter = loaded.adapter.createPlatformAdapter({ liejuSubmissionMode: "playwright_only" });
     await assert.rejects(
       () =>
-        loaded.adapter.preparePlatformSubmission(
+        adapter.preparePlatformSubmission(
           Object.assign(claim("lieju"), {
             publicationProfile: {
               city: "",
@@ -408,7 +410,8 @@ test("Lieju rejects an incomplete publication profile before opening the remote 
 test("Lieju account inspection runs DOM lookup in the browser page context", async () => {
   const ready = loadBrowserAdapter("lieju", { identityReady: true });
   try {
-    assert.deepEqual(await ready.adapter.inspectAccount(), {
+    const adapter = ready.adapter.createPlatformAdapter({ liejuSubmissionMode: "playwright_only" });
+    assert.deepEqual(await adapter.inspectAccount(), {
       verified: true,
       remoteAccountId: "98765",
       displayName: "fixture-lieju-account",
@@ -419,7 +422,8 @@ test("Lieju account inspection runs DOM lookup in the browser page context", asy
 
   const missing = loadBrowserAdapter("lieju", { identityReady: false });
   try {
-    assert.deepEqual(await missing.adapter.inspectAccount(), {
+    const adapter = missing.adapter.createPlatformAdapter({ liejuSubmissionMode: "playwright_only" });
+    assert.deepEqual(await adapter.inspectAccount(), {
       verified: false,
     });
   } finally {
@@ -431,7 +435,8 @@ test("Lieju account inspection reads the current public account link without rep
   const pageFixture = createLiejuAccountInspectionPageFixture();
   const loaded = loadBrowserAdapter("lieju", { pageFixture });
   try {
-    assert.deepEqual(await loaded.adapter.inspectAccount(), {
+    const adapter = loaded.adapter.createPlatformAdapter({ liejuSubmissionMode: "playwright_only" });
+    assert.deepEqual(await adapter.inspectAccount(), {
       verified: true,
       remoteAccountId: "759917",
       displayName: "fixture-lieju-account",
@@ -470,7 +475,7 @@ test("Lieju factory binds the injected runtime session and Playwright toolchain"
 
     await adapter.ensureAccountInspectionReady();
 
-    assert.deepEqual(sessionConfigs[1], {
+    assert.deepEqual(sessionConfigs[0], {
       session: "lieju",
       profileDir: path.join(browser, "profiles", "lieju"),
       daemonDir: path.join(browser, "sessions", "lieju"),

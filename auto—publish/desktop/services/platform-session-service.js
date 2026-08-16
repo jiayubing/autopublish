@@ -12,7 +12,7 @@ function createPlatformSessionService(options) {
   function adapterFor(platformId) {
     if (typeof platformId !== "string" || !platformId || platformId.trim() !== platformId) throw invalid("PLATFORM_LOGIN_INPUT_INVALID");
     const adapter = adapters[platformId];
-    if (!adapter || typeof adapter.openLogin !== "function" || typeof adapter.checkLogin !== "function" || typeof adapter.saveSession !== "function") throw invalid("PLATFORM_LOGIN_UNAVAILABLE");
+    if (!adapter || typeof adapter.open !== "function" || typeof adapter.check !== "function" || typeof adapter.save !== "function") throw invalid("PLATFORM_LOGIN_UNAVAILABLE");
     return adapter;
   }
   function assertCapability() {
@@ -20,13 +20,12 @@ function createPlatformSessionService(options) {
   }
   return Object.freeze({
     supports: (platformId) => { try { adapterFor(platformId); return true; } catch (_) { return false; } },
-    openLogin: async (platformId) => { assertCapability(); await adapterFor(platformId).openLogin(); return { platformId, status: "opened" }; },
+    openLogin: async (platformId) => { assertCapability(); await adapterFor(platformId).open(); return { platformId, status: "opened" }; },
     checkLogin: async (platformId) => {
       assertCapability();
       const adapter = adapterFor(platformId);
-      if (typeof adapter.ensureSession === "function") await adapter.ensureSession();
-      const authenticated = (await adapter.checkLogin()) === true;
-      if (authenticated) await adapter.saveSession();
+      const authenticated = (await adapter.check()) === true;
+      if (authenticated) await adapter.save();
       return { platformId, authenticated };
     },
   });

@@ -94,16 +94,16 @@ function loadBrowserAdapter(platformId) {
   };
   delete require.cache[adapterPath];
   const adapterModule = require(adapterPath);
-  const adapter =
-    platformId === "lieju" &&
-    typeof adapterModule.createPlatformAdapter === "function"
-      ? adapterModule.createPlatformAdapter({
+  const adapter = adapterModule.createPlatformAdapter(
+    platformId === "lieju"
+      ? {
           browserRuntime: {
             stateFile,
           },
           liejuSubmissionMode: "playwright_only",
-        })
-      : adapterModule;
+        }
+      : undefined,
+  );
   return {
     adapter,
     restore() {

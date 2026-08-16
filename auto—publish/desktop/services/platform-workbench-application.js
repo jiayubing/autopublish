@@ -22,7 +22,9 @@ function createPlatformWorkbenchApplication(options) {
   const values = options || {};
   const loadedPlatforms = values.loadedPlatforms || loadPlatforms();
   const adapters = {};
-  loadedPlatforms.forEach((platform) => { adapters[platform.id] = platform; });
+  loadedPlatforms.forEach((platform) => {
+    if (platform.loginSession) adapters[platform.definition.id] = platform.loginSession;
+  });
   const ensurePlaywright = typeof values.assertPlaywrightAvailable === "function"
     ? values.assertPlaywrightAvailable
     : () => assertPlaywrightAvailable(values.runtimeDiagnosticsService);
@@ -34,7 +36,7 @@ function createPlatformWorkbenchApplication(options) {
   if (!workbenchService) throw new Error("Platform application requires the workspace ContentStore service");
 
   async function getQueue() {
-    const nonMedia = loadedPlatforms.filter((platform) => platform.id !== "media");
+    const nonMedia = loadedPlatforms.filter((platform) => platform.definition.publicationTargetKind === "platform");
     const grouped = workbenchService.scanQueue();
     const queue = [];
     for (const group of grouped) {
@@ -69,8 +71,8 @@ function createPlatformWorkbenchApplication(options) {
     }
     return projectPlatformQueue({
       platforms: nonMedia.map((platform) => ({
-        id: platform.id,
-        loginAvailable: platformSessionService.supports(platform.id),
+        id: platform.definition.id,
+        loginAvailable: platformSessionService.supports(platform.definition.id),
       })),
       queue,
     });

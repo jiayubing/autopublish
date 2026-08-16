@@ -91,19 +91,15 @@ function makeFixture() {
     accountProfileResolver: store.assertExecutableAccountProfile,
     platforms: [
       {
-        id: "hepan",
-        contentQueueImport: true,
-        publicationTarget: { kind: "platform" },
+        definition: { id: "hepan", publicationTargetKind: "platform" },
+        regularSubmission: {},
       },
       {
-        id: "toutiao",
-        contentQueueImport: true,
-        publicationTarget: { kind: "platform" },
+        definition: { id: "toutiao", publicationTargetKind: "platform" },
+        regularSubmission: {},
       },
       {
-        id: "media",
-        contentQueueImport: true,
-        publicationTarget: { kind: "resource" },
+        definition: { id: "media", publicationTargetKind: "resource" },
       },
     ],
   });

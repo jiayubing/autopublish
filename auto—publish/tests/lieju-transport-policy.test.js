@@ -10,7 +10,7 @@ const adapterModulePath = require.resolve("../src/platforms/lieju/adapter");
 const playwrightModulePath = require.resolve("../src/core/playwright");
 const operatorFlowModulePath = require.resolve("../src/core/operator-flow");
 const { createPlatformAdapter } = require("../src/platforms/lieju/adapter");
-const { validateAdapter } = require("../src/core/platforms");
+const { loadPlatformModules } = require("../src/core/platforms");
 const { normalizeRuntimeConfig } = require("../desktop/runtime-config-store");
 
 function claim(city) {
@@ -297,11 +297,9 @@ test("Lieju runtime configuration admits only the platform-level modes", () => {
 });
 
 test("Lieju registers only its prepared-submission contract", () => {
-  const adapter = createPlatformAdapter({
-    liejuSubmissionMode: "playwright_only",
-  });
-  assert.equal(validateAdapter(adapter, "lieju"), null);
-  assert.equal(Object.hasOwn(adapter, "publishArticle"), false);
+  const platform = loadPlatformModules({ platformModules: [require("../src/platforms/lieju/platform")], enabledIds: ["lieju"], runtimeContext: { liejuSubmissionMode: "playwright_only" } })[0];
+  assert.equal(typeof platform.regularSubmission.preparePlatformSubmission, "function");
+  assert.equal(platform.legacyQueue, undefined);
 });
 
 test("Lieju declares the existing image capability after multipart support is ready", () => {

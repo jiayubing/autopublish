@@ -183,7 +183,11 @@ describe("article management snapshot", function () {
         },
       },
       loadedPlatforms: [
-        { id: "toutiao", displayName: "头条", contentQueueImport: true },
+        {
+          definition: { id: "toutiao", publicationTargetKind: "platform", capabilities: { imagePublishing: false } },
+          submissionDirectoryEntry: { id: "toutiao", displayName: "头条", publicationTargetKind: "platform", scanDir: "toutiao", imagePublishing: false },
+          regularSubmission: {},
+        },
       ],
       operationalStore: {
         listArticleLifecycleFacts: () => ({

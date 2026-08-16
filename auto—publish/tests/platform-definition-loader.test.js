@@ -1,0 +1,149 @@
+"use strict";
+
+const assert = require("node:assert/strict");
+const test = require("node:test");
+const {
+  parsePlatformDefinitionV1,
+  parsePlatformDefinitionsV1,
+} = require("../src/core/platform-definition");
+const { loadPlatformModules, loadPlatforms } = require("../src/core/platforms");
+const { setDiagnosticReporter } = require("../src/diagnostics/diagnostic-producer");
+
+function definition(id, overrides) {
+  const base = {
+    schemaVersion: 1,
+    id,
+    displayName: `Fixture ${id}`,
+    publicationTargetKind: "platform",
+    scanDir: id,
+    capabilities: {
+      regularSubmission: true,
+      legacyQueueImport: false,
+      loginSession: false,
+      accountInspection: false,
+      imagePublishing: false,
+    },
+    contributions: {
+      settings: false,
+      clientProfile: false,
+      runtimeArtifacts: false,
+    },
+    externalHosts: [],
+  };
+  return Object.assign(base, overrides || {});
+}
+
+function moduleFor(input, createPlatform) {
+  return { definition: input, createPlatform: createPlatform || (() => ({ regularSubmission: { preparePlatformSubmission: async () => ({}) } })) };
+}
+
+test("PlatformDefinitionV1 parses only the exact immutable schema", () => {
+  const parsed = parsePlatformDefinitionV1(definition("fixture"));
+  assert.equal(parsed.id, "fixture");
+  assert.equal(Object.isFrozen(parsed), true);
+  assert.equal(Object.isFrozen(parsed.capabilities), true);
+  assert.equal(Object.isFrozen(parsed.externalHosts), true);
+  assert.throws(() => parsePlatformDefinitionV1(Object.assign(definition("fixture"), { extra: true })), { code: "PLATFORM_DEFINITION_UNKNOWN_FIELD" });
+  assert.throws(() => parsePlatformDefinitionV1(Object.assign(definition("fixture"), { schemaVersion: 2 })), { code: "PLATFORM_DEFINITION_SCHEMA_UNSUPPORTED" });
+  assert.throws(() => parsePlatformDefinitionV1(definition("../fixture")), { code: "PLATFORM_DEFINITION_ID_INVALID" });
+  assert.throws(() => parsePlatformDefinitionV1(Object.assign(definition("fixture"), { displayName: "bad\u202ename" })), { code: "PLATFORM_DEFINITION_DISPLAY_NAME_INVALID" });
+  assert.throws(() => parsePlatformDefinitionV1(Object.assign(definition("fixture"), { scanDir: "fixture/path" })), { code: "PLATFORM_DEFINITION_SCAN_DIR_INVALID" });
+  assert.throws(() => parsePlatformDefinitionV1(Object.assign(definition("fixture"), { externalHosts: ["https://example.com/path"] })), { code: "PLATFORM_DEFINITION_EXTERNAL_HOST_INVALID" });
+});
+
+test("definition sets reject duplicates and invalid capability invariants", () => {
+  assert.throws(() => parsePlatformDefinitionsV1([definition("fixture"), definition("fixture")]), { code: "PLATFORM_DEFINITION_ID_DUPLICATE" });
+  assert.throws(() => parsePlatformDefinitionV1(definition("fixture", { capabilities: { regularSubmission: false, legacyQueueImport: false, loginSession: false, accountInspection: false, imagePublishing: true } })), { code: "PLATFORM_DEFINITION_INVARIANT_VIOLATION" });
+  assert.throws(() => parsePlatformDefinitionV1(definition("resource-fixture", { publicationTargetKind: "resource" })), { code: "PLATFORM_DEFINITION_INVARIANT_VIOLATION" });
+});
+
+test("loader exposes only declared exact ports and isolates each runtime", async () => {
+  let nextRuntime = 0;
+  const fixture = moduleFor(definition("fixture"), () => {
+    const runtime = ++nextRuntime;
+    return { regularSubmission: { preparePlatformSubmission: async () => runtime } };
+  });
+  const one = loadPlatformModules({ platformModules: [fixture], enabledIds: ["fixture"] })[0];
+  const two = loadPlatformModules({ platformModules: [fixture], enabledIds: ["fixture"] })[0];
+  assert.deepEqual(Object.keys(one), ["definition", "submissionDirectoryEntry", "regularSubmission"]);
+  assert.equal(await one.regularSubmission.preparePlatformSubmission(), 1);
+  assert.equal(await two.regularSubmission.preparePlatformSubmission(), 2);
+  assert.equal(one.legacyQueue, undefined);
+  assert.equal(Object.hasOwn(one, "legacyQueue"), false);
+  assert.equal(Object.isFrozen(one.regularSubmission), true);
+});
+
+test("missing, undeclared, and malformed ports fail closed without hiding a valid platform", () => {
+  const diagnostics = [];
+  const restore = setDiagnosticReporter((record) => { diagnostics.push(record); return true; });
+  try {
+    const loaded = loadPlatformModules({
+      platformModules: [
+        moduleFor(definition("missing"), () => ({})),
+        moduleFor(definition("undeclared", { capabilities: { regularSubmission: false, legacyQueueImport: false, loginSession: false, accountInspection: false, imagePublishing: false } })),
+        moduleFor(definition("undefined-port", { capabilities: { regularSubmission: false, legacyQueueImport: false, loginSession: false, accountInspection: false, imagePublishing: false } }), () => ({ regularSubmission: undefined })),
+        moduleFor(definition("extra"), () => ({ regularSubmission: { preparePlatformSubmission: async () => ({}), extra: () => undefined } })),
+        moduleFor(definition("valid")),
+      ],
+      enabledIds: ["missing", "undeclared", "undefined-port", "extra", "valid"],
+    });
+    assert.deepEqual(loaded.map((platform) => platform.definition.id), ["valid"]);
+    assert.deepEqual(diagnostics.map((record) => record.code).sort(), ["PLATFORM_PORT_INVALID", "PLATFORM_PORT_REQUIRED", "PLATFORM_PORT_UNDECLARED", "PLATFORM_PORT_UNDECLARED"].sort());
+    assert.equal(JSON.stringify(diagnostics).includes("preparePlatformSubmission"), false);
+  } finally {
+    restore();
+  }
+});
+
+test("loader quarantines every module that shares a duplicate platform id", () => {
+  const diagnostics = [];
+  const restore = setDiagnosticReporter((record) => { diagnostics.push(record); return true; });
+  try {
+    const loaded = loadPlatformModules({
+      platformModules: [
+        moduleFor(definition("duplicate")),
+        moduleFor(definition("duplicate")),
+        moduleFor(definition("valid")),
+      ],
+      enabledIds: ["duplicate", "valid"],
+    });
+    assert.deepEqual(loaded.map((platform) => platform.definition.id), ["valid"]);
+    assert.equal(diagnostics.filter((record) => record.code === "PLATFORM_DEFINITION_ID_DUPLICATE").length, 1);
+  } finally {
+    restore();
+  }
+});
+
+test("built-in projections and enabled filtering match the frozen four-platform matrix", () => {
+  const loaded = loadPlatforms();
+  const matrix = Object.fromEntries(loaded.map((platform) => [platform.definition.id, {
+    displayName: platform.definition.displayName,
+    kind: platform.definition.publicationTargetKind,
+    regular: Boolean(platform.regularSubmission),
+    legacy: Boolean(platform.legacyQueue),
+    login: Boolean(platform.loginSession),
+    inspect: Boolean(platform.accountInspection),
+    image: platform.definition.capabilities.imagePublishing,
+  }]));
+  assert.deepEqual(matrix, {
+    lieju: { displayName: "列举网", kind: "platform", regular: true, legacy: false, login: true, inspect: true, image: true },
+    toutiao: { displayName: "头条", kind: "platform", regular: true, legacy: true, login: true, inspect: true, image: false },
+    hepan: { displayName: "蓝色河畔", kind: "platform", regular: true, legacy: true, login: false, inspect: true, image: false },
+    media: { displayName: "付费媒体", kind: "resource", regular: false, legacy: false, login: false, inspect: false, image: false },
+  });
+  assert.deepEqual(loadPlatforms({ platformIds: ["lieju"] }).map((platform) => platform.definition.id), ["lieju"]);
+  assert.equal(Array.isArray(loadPlatforms({ platformIds: ["toutiao"] })[0].legacyQueue.scan()), true);
+});
+
+test("disabled modules are packaged as code but never executed", () => {
+  let executed = false;
+  const fixture = moduleFor(definition("disabled"), () => { executed = true; return { regularSubmission: { preparePlatformSubmission: async () => ({}) } }; });
+  const loaded = loadPlatformModules({ platformModules: [fixture, moduleFor(definition("enabled"))], enabledIds: ["enabled"] });
+  assert.deepEqual(loaded.map((platform) => platform.definition.id), ["enabled"]);
+  assert.equal(executed, false);
+  for (const id of ["lieju", "toutiao", "hepan", "media"]) {
+    assert.equal(typeof require(`../src/platforms/${id}/definition`).id, "string");
+    assert.equal(typeof require(`../src/platforms/${id}/platform`).createPlatform, "function");
+    assert.equal(Object.hasOwn(require(`../src/platforms/${id}/adapter`), "id"), false);
+  }
+});

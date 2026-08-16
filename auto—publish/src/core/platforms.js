@@ -1,137 +1,138 @@
-const fs = require("fs");
-const path = require("path");
-
+const fs = require("node:fs");
+const path = require("node:path");
 const { reportDiagnostic } = require("../diagnostics/diagnostic-producer");
+const { parsePlatformDefinitionV1, platformError } = require("./platform-definition");
 
 function configPath() {
   return path.resolve(__dirname, "../../config/platforms.json");
 }
 
-function normalizePlatformIds(platformIds) {
-  if (!Array.isArray(platformIds) || platformIds.length === 0) {
-    return null;
-  }
+const PORT_SPECS = Object.freeze({
+  regularSubmission: Object.freeze(["preparePlatformSubmission"]),
+  legacyQueue: Object.freeze(["scan", "parse", "publish", "close"]),
+  loginSession: Object.freeze(["open", "check", "save", "close"]),
+  accountInspection: Object.freeze(["prepare", "inspect"]),
+  settingsContribution: Object.freeze(["createSettingsAdapter"]),
+  clientProfileContribution: Object.freeze(["requirement", "createProfileReader"]),
+  runtimeArtifactContribution: Object.freeze(["describe"]),
+});
+const DECLARATIONS = Object.freeze([
+  ["capabilities", "regularSubmission", "regularSubmission"],
+  ["capabilities", "legacyQueueImport", "legacyQueue"],
+  ["capabilities", "loginSession", "loginSession"],
+  ["capabilities", "accountInspection", "accountInspection"],
+  ["contributions", "settings", "settingsContribution"],
+  ["contributions", "clientProfile", "clientProfileContribution"],
+  ["contributions", "runtimeArtifacts", "runtimeArtifactContribution"],
+]);
+const PORT_NAMES = Object.freeze(Object.keys(PORT_SPECS));
 
-  var selected = {};
-  for (var i = 0; i < platformIds.length; i++) {
-    if (platformIds[i]) {
-      selected[String(platformIds[i])] = true;
-    }
-  }
-  return selected;
+function imagePublishingCapability(platform) {
+  return Object.freeze({ supported: Boolean(platform && platform.definition && platform.definition.capabilities.imagePublishing) });
 }
 
-function imagePublishingCapability(adapter) {
-  const declared = adapter && adapter.imagePublishingCapability;
-  return Object.freeze({
-    supported: Boolean(
-      declared &&
-      typeof declared === "object" &&
-      !Array.isArray(declared) &&
-      declared.supported === true,
-    ),
+function exactPort(port, portName, platformId) {
+  if (!port || typeof port !== "object" || Array.isArray(port)) throw platformError("PLATFORM_PORT_REQUIRED", { platformId, port: portName });
+  const expected = PORT_SPECS[portName].slice().sort();
+  const actual = Object.keys(port).sort();
+  if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) throw platformError("PLATFORM_PORT_INVALID", { platformId, port: portName });
+  PORT_SPECS[portName].forEach(function (key) {
+    if (!(portName === "clientProfileContribution" && key === "requirement") && typeof port[key] !== "function") throw platformError("PLATFORM_PORT_INVALID", { platformId, port: portName });
   });
+  const normalized = Object.assign({}, port);
+  if (portName === "clientProfileContribution") {
+    const requirement = port.requirement;
+    if (!requirement || typeof requirement !== "object" || Array.isArray(requirement) || Object.keys(requirement).sort().join(",") !== "profileKey,requiredFields" || typeof requirement.profileKey !== "string" || !/^[A-Za-z][A-Za-z0-9-]{0,63}$/.test(requirement.profileKey) || !Array.isArray(requirement.requiredFields) || requirement.requiredFields.length === 0 || requirement.requiredFields.some((field) => typeof field !== "string" || !/^[A-Za-z][A-Za-z0-9-]{0,63}$/.test(field)) || new Set(requirement.requiredFields).size !== requirement.requiredFields.length)
+      throw platformError("PLATFORM_PORT_INVALID", { platformId, port: portName });
+    normalized.requirement = Object.freeze({ profileKey: requirement.profileKey, requiredFields: Object.freeze(requirement.requiredFields.slice()) });
+  }
+  if (portName === "runtimeArtifactContribution") {
+    let projection;
+    try { projection = port.describe(); } catch (_) { throw platformError("PLATFORM_PORT_INVALID", { platformId, port: portName }); }
+    if (!projection || typeof projection !== "object" || Array.isArray(projection) || Object.keys(projection).sort().join(",") !== "platformId,requirements" || projection.platformId !== platformId || !Array.isArray(projection.requirements))
+      throw platformError("PLATFORM_PORT_INVALID", { platformId, port: portName });
+    const requirements = projection.requirements.map(function (item) {
+      if (!item || typeof item !== "object" || Array.isArray(item) || Object.keys(item).sort().join(",") !== "artifactId,kind,packagedPath,required,smokeCheck" || typeof item.artifactId !== "string" || !/^[A-Za-z][A-Za-z0-9-]{0,63}$/.test(item.artifactId) || !["file", "directory-sentinel"].includes(item.kind) || typeof item.packagedPath !== "string" || item.packagedPath.includes("\\") || item.packagedPath.startsWith("/") || item.packagedPath.split("/").includes("..") || /[*?\[\]{}]/.test(item.packagedPath) || !(item.packagedPath.startsWith(`src/platforms/${platformId}/`) || item.packagedPath.startsWith(`resources/${platformId}/`) || item.packagedPath.startsWith("runtime-tools/")) || typeof item.required !== "boolean" || typeof item.smokeCheck !== "string" || !/^[A-Za-z][A-Za-z0-9-]{0,63}$/.test(item.smokeCheck))
+        throw platformError("PLATFORM_PORT_INVALID", { platformId, port: portName });
+      return Object.freeze(Object.assign({}, item));
+    });
+    const frozenProjection = Object.freeze({ platformId, requirements: Object.freeze(requirements) });
+    normalized.describe = function () { return frozenProjection; };
+  }
+  return Object.freeze(normalized);
 }
 
-function validateAdapter(adapter, id) {
-  if (!adapter || adapter.id !== id) {
-    return (
-      "平台 adapter id 不匹配: 配置=" + id + " 模块=" + (adapter && adapter.id)
-    );
-  }
-
-  if (!adapter.scanDir) {
-    return "[" + id + "] adapter missing scanDir";
-  }
-
-  var requiredFunctions = ["ensureSession", "ensureLoggedIn", "closeSession"];
-
-  for (var i = 0; i < requiredFunctions.length; i++) {
-    var name = requiredFunctions[i];
-    if (typeof adapter[name] !== "function") {
-      return "[" + id + "] adapter missing function: " + name;
-    }
-  }
-
-  var usesPreparedPlatformSubmission =
-    adapter.contentQueueImport === true &&
-    adapter.publicationTarget &&
-    adapter.publicationTarget.kind === "platform";
-  if (usesPreparedPlatformSubmission) {
-    if (typeof adapter.preparePlatformSubmission !== "function") {
-      return "[" + id + "] adapter missing function: preparePlatformSubmission";
-    }
-  } else if (typeof adapter.publishArticle !== "function") {
-    return "[" + id + "] adapter missing function: publishArticle";
-  }
-
-  var hasOwnScan = typeof adapter.scanArticles === "function";
-  var hasOwnParse = typeof adapter.parseArticleFiles === "function";
-  if (hasOwnScan !== hasOwnParse) {
-    return (
-      "[" +
-      id +
-      "] adapter scanArticles and parseArticleFiles must be provided together"
-    );
-  }
-
-  return null;
+function safeDiagnostic(error, fallbackPlatformId, action) {
+  const metadata = (error && error.metadata) || {};
+  const platformId = typeof metadata.platformId === "string" ? metadata.platformId : fallbackPlatformId;
+  const safeMetadata = { action };
+  if (/^[a-z][a-z0-9-]{0,63}$/.test(platformId || "")) safeMetadata.platformId = platformId;
+  ["schemaVersion", "capability", "port"].forEach(function (key) {
+    const value = metadata[key];
+    if ((key === "schemaVersion" && Number.isInteger(value)) || (typeof value === "string" && /^[A-Za-z][A-Za-z0-9-]{0,63}$/.test(value))) safeMetadata[key] = value;
+  });
+  reportDiagnostic({ code: error && /^PLATFORM_[A-Z0-9_]+$/.test(error.code || "") ? error.code : "PLATFORM_MODULE_LOAD_FAILED", module: "core-platforms", category: "validation", operationId: "platform-loader", metadata: safeMetadata });
 }
 
-function loadPlatforms(options) {
+function normalizePlatformModule(moduleValue, definition, runtimeContext) {
+  if (!moduleValue || typeof moduleValue !== "object" || Object.keys(moduleValue).some((key) => key !== "definition" && key !== "createPlatform") || typeof moduleValue.createPlatform !== "function") throw platformError("PLATFORM_MODULE_LOAD_FAILED", { platformId: definition.id });
+  const raw = moduleValue.createPlatform(runtimeContext || {});
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw platformError("PLATFORM_MODULE_LOAD_FAILED", { platformId: definition.id });
+  Object.keys(raw).forEach(function (key) {
+    if (!PORT_NAMES.includes(key)) throw platformError("PLATFORM_PORT_UNDECLARED", { platformId: definition.id, port: key });
+  });
+  const loaded = { definition, submissionDirectoryEntry: Object.freeze({ id: definition.id, displayName: definition.displayName, publicationTargetKind: definition.publicationTargetKind, scanDir: definition.scanDir, imagePublishing: definition.capabilities.imagePublishing }) };
+  DECLARATIONS.forEach(function (entry) {
+    const declared = definition[entry[0]][entry[1]];
+    const portName = entry[2];
+    if (!declared && Object.hasOwn(raw, portName)) throw platformError("PLATFORM_PORT_UNDECLARED", { platformId: definition.id, capability: entry[1], port: portName });
+    if (declared) loaded[portName] = exactPort(raw[portName], portName, definition.id);
+  });
+  return Object.freeze(loaded);
+}
+
+function builtinPlatformModules() {
+  return ["lieju", "toutiao", "hepan", "media"].map((id) => require(path.resolve(__dirname, "../platforms", id, "platform")));
+}
+
+function loadPlatformModules(options) {
   var opts = options || {};
-  var selected = normalizePlatformIds(opts.platformIds);
-  var runtimeContext = opts.runtimeContext;
-  var raw = fs.readFileSync(configPath(), "utf-8");
-  var cfg = JSON.parse(raw);
-  var enabled = cfg.enabled || [];
-  var platforms = [];
-
-  for (var i = 0; i < enabled.length; i++) {
-    var id = enabled[i];
-    if (selected && !selected[id]) {
-      continue;
-    }
-
-    var adapterPath = path.resolve(__dirname, "../platforms", id, "adapter");
-    var adapter;
+  const modules = Array.isArray(opts.platformModules) ? opts.platformModules.slice() : builtinPlatformModules();
+  const enabled = new Set(Array.isArray(opts.enabledIds) ? opts.enabledIds : (JSON.parse(fs.readFileSync(configPath(), "utf8")).enabled || []));
+  const selected = Array.isArray(opts.platformIds) ? new Set(opts.platformIds) : null;
+  const definitions = [];
+  const seen = new Set();
+  const duplicateIds = new Set();
+  modules.forEach(function (moduleValue, index) {
     try {
-      var adapterModule = require(adapterPath);
-      adapter =
-        runtimeContext &&
-        typeof adapterModule.createPlatformAdapter === "function"
-          ? adapterModule.createPlatformAdapter(runtimeContext)
-          : adapterModule;
-    } catch (e) {
-      reportDiagnostic({
-        code: "PLATFORM_ADAPTER_LOAD_FAILED",
-        module: "core-platforms",
-        category: "internal",
-        operationId: "platform-loader",
-        metadata: { platformId: id, action: "load" },
-      });
-      continue;
+      const definition = parsePlatformDefinitionV1(moduleValue && moduleValue.definition);
+      if (seen.has(definition.id)) duplicateIds.add(definition.id);
+      seen.add(definition.id);
+      definitions[index] = definition;
+    } catch (error) {
+      safeDiagnostic(error, null, "definition-parse");
+      definitions[index] = null;
     }
-
-    var error = validateAdapter(adapter, id);
-    if (error) {
-      reportDiagnostic({
-        code: "PLATFORM_ADAPTER_INVALID",
-        module: "core-platforms",
-        category: "validation",
-        operationId: "platform-loader",
-        metadata: { platformId: id, action: "validate" },
-      });
-      continue;
-    }
-
-    platforms.push(adapter);
-  }
-
-  if (platforms.length === 0) {
-    throw new Error("没有可用的平台 adapter，请检查 config/platforms.json");
-  }
-  return platforms;
+  });
+  duplicateIds.forEach(function (platformId) {
+    safeDiagnostic(
+      platformError("PLATFORM_DEFINITION_ID_DUPLICATE", { platformId }),
+      platformId,
+      "definition-parse",
+    );
+  });
+  const platforms = [];
+  modules.forEach(function (moduleValue, index) {
+    const definition = definitions[index];
+    if (!definition || duplicateIds.has(definition.id)) return;
+    if (!enabled.has(definition.id) || (selected && !selected.has(definition.id))) return;
+    try { platforms.push(normalizePlatformModule(moduleValue, definition, opts.runtimeContext)); }
+    catch (error) { safeDiagnostic(error, definition.id, "load"); }
+  });
+  if (platforms.length === 0) throw platformError("PLATFORM_MODULE_LOAD_FAILED");
+  return Object.freeze(platforms);
 }
 
-module.exports = { loadPlatforms, validateAdapter, imagePublishingCapability };
+function loadPlatforms(options) { return loadPlatformModules(options); }
+
+module.exports = { loadPlatforms, loadPlatformModules, normalizePlatformModule, imagePublishingCapability };

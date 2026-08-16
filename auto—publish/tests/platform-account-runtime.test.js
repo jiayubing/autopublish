@@ -11,8 +11,8 @@ test("Hepan account inspection uses the configured settings test result", async 
   const adapters = createPlatformAccountRuntimeAdapters({
     loadedPlatforms: [
       {
-        id: "hepan",
-        inspectAccount: async () => ({ verified: false }),
+        definition: { id: "hepan" },
+        accountInspection: { prepare: async () => undefined, inspect: async () => ({ verified: false }) },
       },
     ],
     platformSettingsService: {
@@ -28,7 +28,7 @@ test("Hepan account inspection uses the configured settings test result", async 
     },
   });
 
-  assert.deepEqual(await adapters.hepan.inspectAccount(), {
+  assert.deepEqual(await adapters.hepan.inspect(), {
     verified: true,
     remoteAccountId: "12345",
     displayName: "fixture-hepan",
@@ -38,7 +38,7 @@ test("Hepan account inspection uses the configured settings test result", async 
 
 test("Hepan account inspection fails closed for an unsafe settings result", async () => {
   const adapters = createPlatformAccountRuntimeAdapters({
-    loadedPlatforms: [{ id: "hepan" }],
+    loadedPlatforms: [{ definition: { id: "hepan" }, accountInspection: { prepare: async () => undefined, inspect: async () => ({ verified: false }) } }],
     platformSettingsService: {
       test: async () => ({
         ok: true,
@@ -46,5 +46,5 @@ test("Hepan account inspection fails closed for an unsafe settings result", asyn
       }),
     },
   });
-  assert.deepEqual(await adapters.hepan.inspectAccount(), { verified: false });
+  assert.deepEqual(await adapters.hepan.inspect(), { verified: false });
 });

@@ -423,7 +423,7 @@ async function createWorkspaceRuntimeComposition(deps) {
                 workspaceRoot,
                 paths: injectedPaths,
                 platforms: loadedPlatforms.map(function (platform) {
-                  return { id: platform.id, scanDir: platform.scanDir };
+                  return { id: platform.definition.id, scanDir: platform.definition.scanDir };
                 }),
                 operationalStore,
                 autoTrashArticle,
@@ -568,14 +568,16 @@ async function createWorkspaceRuntimeComposition(deps) {
     );
     const adapters = {};
     loadedPlatforms.forEach(function (platform) {
-      adapters[platform.id] = platform;
+      if (platform.legacyQueue) adapters[platform.definition.id] = platform.legacyQueue;
     });
     const regularPlatformAdapters = loadedPlatforms.map(function (platform) {
-      return platform.id === "hepan"
-        ? require("../services/hepan-regular-preparation-adapter").createHepanRegularPreparationAdapter(
-            { platformSettingsService, paths: injectedPaths },
-          )
-        : platform;
+      if (platform.definition.id !== "hepan") return platform;
+      const hepan = require("../services/hepan-regular-preparation-adapter").createHepanRegularPreparationAdapter(
+        { platformSettingsService, paths: injectedPaths },
+      );
+      return Object.freeze(Object.assign({}, platform, {
+        regularSubmission: Object.freeze({ preparePlatformSubmission: hepan.preparePlatformSubmission }),
+      }));
     });
     const regularImagePlanService =
       require("../services/regular-image-plan-service").createRegularImagePlanService(
@@ -633,7 +635,7 @@ async function createWorkspaceRuntimeComposition(deps) {
           paths: injectedPaths,
           contentStore,
           platforms: loadedPlatforms.map(function (platform) {
-            return { id: platform.id, scanDir: platform.scanDir };
+            return platform.submissionDirectoryEntry;
           }),
           adapters,
         },
@@ -642,7 +644,7 @@ async function createWorkspaceRuntimeComposition(deps) {
     const platformSessionService =
       require("../services/platform-session-service").createPlatformSessionService(
         {
-          adapters,
+          adapters: Object.fromEntries(loadedPlatforms.filter(function (platform) { return platform.loginSession; }).map(function (platform) { return [platform.definition.id, platform.loginSession]; })),
           assertPlaywrightAvailable: function () {
             return require("../services/playwright-capability").assertPlaywrightAvailable(
               runtime.diagnosticsService,

@@ -112,7 +112,7 @@ test("authenticated platform and account registrars return path-free typed proje
   );
   registerPlatformIpc({
     ipcMain,
-    loadedPlatforms: [{ id: "toutiao", scanDir: "C:\\private\\queue" }],
+    loadedPlatforms: [{ definition: { id: "toutiao", publicationTargetKind: "platform" } }],
     platformSessionService: { supports: () => true },
     platformWorkbenchService: {
       scanQueue: () => [

@@ -18,13 +18,15 @@ var activeRunId = null;
 var activeAbortController = null;
 var resultDisconnectScheduled = false;
 var platformRuntimeContext = null;
+var hepanRuntimeConfig = null;
+var activeWorkerPlatforms = null;
 const WORKER_SCHEMA_VERSION = 1;
 
 function loadWorkerPlatforms() {
   const { loadPlatforms } = require("../../src/core/platforms");
   return loadPlatforms(
     platformRuntimeContext
-      ? { runtimeContext: platformRuntimeContext }
+      ? { runtimeContext: Object.assign({}, platformRuntimeContext, { hepanRuntime: hepanRuntimeConfig }) }
       : undefined,
   );
 }
@@ -176,20 +178,14 @@ process.on("message", function (message) {
     );
     stopRequested = true;
     try {
-      const platforms = loadWorkerPlatforms();
-      platforms.forEach(function (p) {
-        if (typeof p.closeSession === "function") {
-          try {
-            p.closeSession();
-          } catch (_) {
-            reportWorkerDiagnostic(
-              "PLATFORM_WORKER_SESSION_CLOSE_FAILED",
-              "storage",
-              "pause-close-session",
-              { action: "close-session" },
-            );
-          }
-        }
+      const platforms = activeWorkerPlatforms || loadWorkerPlatforms();
+      require("./publisher-executor").closeWorkerPlatforms(platforms, function () {
+        reportWorkerDiagnostic(
+          "PLATFORM_WORKER_SESSION_CLOSE_FAILED",
+          "storage",
+          "pause-close-session",
+          { action: "close-session" },
+        );
       });
     } catch (_) {
       reportWorkerDiagnostic(
@@ -271,17 +267,13 @@ process.on("message", function (message) {
           { taskKind: "platform-submit", taskCount: plan.tasks.length },
         );
 
+        hepanRuntimeConfig = options.hepanRuntime || null;
         const loadedPlatforms = loadWorkerPlatforms();
+        activeWorkerPlatforms = loadedPlatforms;
         const adapters = {};
         loadedPlatforms.forEach(function (platform) {
-          adapters[platform.id] = platform;
+          adapters[platform.definition.id] = platform;
         });
-        if (
-          adapters.hepan &&
-          typeof adapters.hepan.setRuntimeConfig === "function"
-        ) {
-          adapters.hepan.setRuntimeConfig(options.hepanRuntime || null);
-        }
 
         var activeTask = null;
         var heartbeat = setInterval(function () {
@@ -332,25 +324,14 @@ process.on("message", function (message) {
         activeAbortController = null;
         restoreDiagnosticReporter();
         try {
-          const loadedPlatforms = loadWorkerPlatforms();
-          loadedPlatforms.forEach(function (platform) {
-            if (
-              platform.id === "hepan" &&
-              typeof platform.clearRuntimeConfig === "function"
-            )
-              platform.clearRuntimeConfig();
-            if (typeof platform.closeSession === "function") {
-              try {
-                platform.closeSession();
-              } catch (_) {
-                reportWorkerDiagnostic(
-                  "PLATFORM_WORKER_SESSION_CLOSE_FAILED",
-                  "storage",
-                  "final-close-session",
-                  { action: "close-session" },
-                );
-              }
-            }
+          const loadedPlatforms = activeWorkerPlatforms || loadWorkerPlatforms();
+          require("./publisher-executor").closeWorkerPlatforms(loadedPlatforms, function () {
+            reportWorkerDiagnostic(
+              "PLATFORM_WORKER_SESSION_CLOSE_FAILED",
+              "storage",
+              "final-close-session",
+              { action: "close-session" },
+            );
           });
         } catch (_) {
           reportWorkerDiagnostic(
@@ -359,6 +340,9 @@ process.on("message", function (message) {
             "platform-cleanup",
             { action: "cleanup" },
           );
+        } finally {
+          activeWorkerPlatforms = null;
+          hepanRuntimeConfig = null;
         }
       }
       return;

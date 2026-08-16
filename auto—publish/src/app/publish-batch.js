@@ -2,18 +2,14 @@ const path = require("path");
 
 const { DIRS } = require("../../scripts/config");
 const { ensureAllDirs } = require("../core/files");
-const { scanArticles } = require("../core/articles");
 const { loadPlatforms } = require("../core/platforms");
 
 function getPlatforms(options) {
   return loadPlatforms(options);
 }
 
-function scanOnlyForPlatform(adapter) {
-  const hasOwnScan = typeof adapter.scanArticles === "function";
-  const hasOwnParse = typeof adapter.parseArticleFiles === "function";
-  if (hasOwnScan !== hasOwnParse) return [];
-  return hasOwnScan ? adapter.scanArticles(adapter.scanDir) : scanArticles(adapter.scanDir);
+function scanOnlyForPlatform(platform) {
+  return platform.legacyQueue.scan();
 }
 
 function summarizeArticle(article) {
@@ -27,12 +23,12 @@ function summarizeArticle(article) {
 function createQueueSnapshot(options) {
   const opts = options || {};
   ensureAllDirs();
-  const platforms = getPlatforms({ platformIds: opts.platformIds });
-  const queue = platforms.map((adapter) => {
-    const articles = scanOnlyForPlatform(adapter);
+  const platforms = getPlatforms({ platformIds: opts.platformIds }).filter((platform) => platform.legacyQueue);
+  const queue = platforms.map((platform) => {
+    const articles = scanOnlyForPlatform(platform);
     return {
-      platformId: adapter.id,
-      scanDir: adapter.scanDir,
+      platformId: platform.definition.id,
+      scanDir: platform.definition.scanDir,
       count: articles.length,
       articles: articles.map(summarizeArticle),
     };

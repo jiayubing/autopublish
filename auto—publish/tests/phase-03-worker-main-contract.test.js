@@ -5,6 +5,7 @@ const path = require("node:path");
 const test = require("node:test");
 const os = require("node:os");
 const {
+  closeWorkerPlatforms,
   createWorkerPublisherExecutor,
 } = require("../desktop/worker/publisher-executor");
 const {
@@ -20,6 +21,16 @@ test("platform worker does not construct the legacy stateful workbench", () => {
   assert.doesNotMatch(source, /createPlatformWorkbenchService/);
 });
 
+test("worker cleanup closes every loaded legacy queue and isolates cleanup failures", () => {
+  const calls = [];
+  closeWorkerPlatforms([
+    { legacyQueue: { close: () => { calls.push("first"); throw new Error("close failed"); } } },
+    { regularSubmission: { preparePlatformSubmission: async () => undefined } },
+    { legacyQueue: { close: () => calls.push("second") } },
+  ], () => calls.push("failure"));
+  assert.deepEqual(calls, ["first", "failure", "second"]);
+});
+
 test("worker publisher executor returns an adapter outcome without a state writer", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-03-worker-"));
   const queue = path.join(root, "queue");
@@ -30,15 +41,13 @@ test("worker publisher executor returns an adapter outcome without a state write
     paths: { input: root },
     adapters: {
       fixture: {
-        scanDir: "queue",
-        parseArticleFiles: async () => [{ title: "title", body: "body" }],
-        publishArticle: async () => {
-          published += 1;
-          return {
-            status: "accepted",
-            remoteId: "remote-1",
-            remoteUrl: "https://example.test/article/1",
-          };
+        definition: { scanDir: "queue" },
+        legacyQueue: {
+          parse: async () => [{ title: "title", body: "body" }],
+          publish: async () => {
+            published += 1;
+            return { status: "accepted", remoteId: "remote-1", remoteUrl: "https://example.test/article/1" };
+          },
         },
       },
     },
@@ -69,10 +78,10 @@ test("worker publisher executor turns an adapter exception into uncertain", asyn
     paths: { input: root },
     adapters: {
       fixture: {
-        scanDir: "queue",
-        parseArticleFiles: async () => [{ title: "title", body: "body" }],
-        publishArticle: async () => {
-          throw new Error("connection ended");
+        definition: { scanDir: "queue" },
+        legacyQueue: {
+          parse: async () => [{ title: "title", body: "body" }],
+          publish: async () => { throw new Error("connection ended"); },
         },
       },
     },
@@ -102,10 +111,8 @@ test("worker publisher executor blocks a prepared-submission adapter before star
     paths: { input: root },
     adapters: {
       prepared: {
-        scanDir: "queue",
-        ensureSession: async () => calls.push("session"),
-        ensureLoggedIn: async () => calls.push("login"),
-        preparePlatformSubmission: async () => calls.push("prepare"),
+        definition: { scanDir: "queue" },
+        regularSubmission: { preparePlatformSubmission: async () => calls.push("prepare") },
       },
     },
   });
@@ -140,7 +147,7 @@ test("dead main submission service seam is absent", () => {
   );
 });
 
-test("worker publisher executor never invokes the media adapter without main-process settings", async () => {
+test("worker publisher executor never invokes a resource platform without a legacy queue port", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase04-media-worker-"));
   try {
     fs.mkdirSync(path.join(root, "source"), { recursive: true });
@@ -154,10 +161,8 @@ test("worker publisher executor never invokes the media adapter without main-pro
       paths: { input: root },
       adapters: {
         media: {
-          scanDir: "source",
-          publishArticle: async () => {
-            invoked = true;
-          },
+          definition: { scanDir: "source" },
+          regularSubmission: { preparePlatformSubmission: async () => { invoked = true; } },
         },
       },
     });
@@ -172,7 +177,7 @@ test("worker publisher executor never invokes the media adapter without main-pro
     });
     assert.equal(
       result.results[0].outcome.errorCode,
-      "MEDIA_MAIN_PROCESS_REQUIRED",
+      "SUBMISSION_ADAPTER_MISSING",
     );
     assert.equal(invoked, false);
   } finally {

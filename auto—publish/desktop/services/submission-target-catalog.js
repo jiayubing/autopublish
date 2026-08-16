@@ -6,12 +6,13 @@ const {
 } = require("../../src/core/platforms");
 
 function queueTarget(platform) {
+  const entry = platform.submissionDirectoryEntry;
   return {
-    id: platform.id,
-    displayName: platform.displayName,
-    scanDir: platform.scanDir || platform.id,
-    contentQueueImport: platform.contentQueueImport === true,
-    publicationTarget: platform.publicationTarget || { kind: "platform" },
+    id: entry.id,
+    displayName: entry.displayName,
+    scanDir: entry.scanDir,
+    contentQueueImport: Boolean(platform.regularSubmission),
+    publicationTarget: { kind: entry.publicationTargetKind },
     imagePublishingCapability: imagePublishingCapability(platform),
   };
 }
@@ -28,23 +29,22 @@ function createSubmissionTargetCatalog(options) {
     return all()
       .filter(
         (platform) =>
-          !platform.publicationTarget ||
-          platform.publicationTarget.kind === "platform",
+          platform.submissionDirectoryEntry.publicationTargetKind === "platform",
       )
       .map(queueTarget);
   }
 
   function find(id) {
-    return all().find((platform) => platform && platform.id === id) || null;
+    return all().find((platform) => platform && platform.definition.id === id) || null;
   }
 
   function list() {
     return queueTargets().map((platform) => ({
       id: platform.id,
-      displayName: platform.displayName || platform.id,
-      scanDir: platform.scanDir || platform.id,
-      contentQueueImport: platform.contentQueueImport === true,
-      imagePublishingCapability: imagePublishingCapability(platform),
+      displayName: platform.displayName,
+      scanDir: platform.scanDir,
+      contentQueueImport: platform.contentQueueImport,
+      imagePublishingCapability: platform.imagePublishingCapability,
     }));
   }
 

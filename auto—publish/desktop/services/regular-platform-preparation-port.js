@@ -27,9 +27,9 @@ function createRegularPlatformPreparationPort(options) {
   if (!imagePlanService || typeof imagePlanService.createPlan !== "function")
     throw fail("REGULAR_IMAGE_PLAN_SERVICE_REQUIRED");
   const adapters = new Map();
-  for (const adapter of value.adapters || [])
-    if (adapter && typeof adapter.id === "string")
-      adapters.set(adapter.id, adapter);
+  for (const platform of value.adapters || [])
+    if (platform && platform.definition && platform.regularSubmission)
+      adapters.set(platform.definition.id, platform.regularSubmission);
 
   return Object.freeze({
     async preparePlatformSubmission(claim) {

@@ -111,30 +111,13 @@ function resolveHepanRuntime(workspaceRoot, environment) {
   };
 }
 
-let batchRuntime = null;
-
 function currentRuntime() {
-  if (batchRuntime) return Object.assign({}, batchRuntime);
   const resolved = resolveHepanRuntime(DIRS.rootDir, process.env);
   return {
     cookiePath: resolved.cookiePath,
     pythonPath: resolved.pythonPath,
     categoryId: Number(process.env.HEPAN_CATEGORY_ID || 121),
     vendorDir: process.env.HEPAN_VENDOR_DIR || "",
-    siteOrigin: HEPAN_SITE_ORIGIN,
-  };
-}
-
-function setRuntimeConfig(runtime) {
-  if (!runtime || typeof runtime !== "object") {
-    batchRuntime = null;
-    return;
-  }
-  batchRuntime = {
-    cookiePath: runtime.cookiePath || "",
-    pythonPath: runtime.pythonPath || "",
-    categoryId: Number(runtime.categoryId || 121),
-    vendorDir: runtime.vendorDir || "",
     siteOrigin: HEPAN_SITE_ORIGIN,
   };
 }
@@ -166,7 +149,7 @@ function createHepanAdapter(options) {
   const imagesDirectory =
     values.imageDir || pathApi.join(inputDirectory, "images");
   const payloadDirectory = values.tempDir || pathApi.join(DIRS.tmpDir, "hepan");
-  const runtimeValue = values.runtime;
+  let runtimeValue = values.runtime ? Object.assign({}, values.runtime) : null;
   const getRuntime =
     typeof values.getRuntime === "function"
       ? values.getRuntime
@@ -175,6 +158,17 @@ function createHepanAdapter(options) {
             ? Object.assign({}, runtimeValue)
             : currentRuntime();
         };
+  function setRuntimeConfig(runtime) {
+    runtimeValue = runtime && typeof runtime === "object"
+      ? {
+          cookiePath: runtime.cookiePath || "",
+          pythonPath: runtime.pythonPath || "",
+          categoryId: Number(runtime.categoryId || 121),
+          vendorDir: runtime.vendorDir || "",
+          siteOrigin: HEPAN_SITE_ORIGIN,
+        }
+      : null;
+  }
   const spawnProcess =
     typeof values.spawnProcess === "function" ? values.spawnProcess : spawn;
   const commandRunner =
@@ -792,12 +786,10 @@ function createHepanAdapter(options) {
     resolveHepanRuntime,
     setRuntimeConfig,
     clearRuntimeConfig: function () {
-      batchRuntime = null;
+      runtimeValue = null;
     },
   };
 }
-
-const defaultAdapter = createHepanAdapter();
 
 function createPlatformAdapter(runtimeContext) {
   const context = runtimeContext || {};
@@ -810,13 +802,9 @@ function createPlatformAdapter(runtimeContext) {
   });
 }
 
-module.exports = Object.assign({}, defaultAdapter, {
+module.exports = {
   createPlatformAdapter,
   createHepanAdapter,
   resolveHepanRuntime,
   cleanupExpiredHepanPayloads,
-  setRuntimeConfig,
-  clearRuntimeConfig: function () {
-    batchRuntime = null;
-  },
-});
+};
