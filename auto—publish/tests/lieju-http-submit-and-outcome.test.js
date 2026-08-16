@@ -411,6 +411,46 @@ test("Lieju HTTP submit sends the frozen successful image manifest in its real f
   }
 });
 
+test("Lieju HTTP multipart encodes text fields using the publication form charset", async () => {
+  const fixture = stateFixture();
+  const runtime = makeRequestRuntime({
+    getResponses: [
+      response(),
+      response({ body: cityDirectory() }),
+      response({
+        headers: { "content-type": "text/html; charset=gbk" },
+        body: Buffer.from(
+          publicationForm()
+            .replace('<meta charset="utf-8">', '<meta charset="gbk">')
+            .replace("请选择", "select")
+            .replace("最终区域", "final"),
+          "ascii",
+        ),
+      }),
+    ],
+    postResponses: [
+      response({
+        body: '<meta charset="utf-8">发布成功 <a href="https://ly.lieju.com/beijing/765433.html">详情</a>',
+      }),
+    ],
+  });
+  try {
+    const prepared = await prepare(createAdapter(fixture, runtime));
+    assert.deepEqual(await prepared.submitPreparedPublication(), {
+      status: "accepted",
+      remoteId: "765433",
+      remoteUrl: "https://ly.lieju.com/beijing/765433.html",
+    });
+    const body = runtime.postCalls[0].input.data;
+    assert.equal(body.includes(Buffer.from("合成标题", "utf8")), false);
+    assert.equal(body.includes(Buffer.from("合成正文", "utf8")), false);
+    assert.equal(body.includes(Buffer.from("bacfb3c9b1eacce2", "hex")), true);
+    assert.equal(body.includes(Buffer.from("bacfb3c9d5fdcec4", "hex")), true);
+  } finally {
+    fs.rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test("Lieju marks the submission boundary before a late HTTP response", async () => {
   const fixture = stateFixture();
   let resolvePost;

@@ -70,7 +70,8 @@ function declaredCharset(value) {
 
 function charsetDeclarations(value) {
   const values = [];
-  const pattern = /(?:^|[;,])\s*charset\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s;,>]+))/gi;
+  const pattern =
+    /(?:^|[;,])\s*charset\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s;,>]+))/gi;
   for (const match of String(value || "").matchAll(pattern)) {
     const charset = declaredCharset(match[1] || match[2] || match[3]);
     if (!charset) throw parserError("LIEJU_HTML_CHARSET_UNSUPPORTED");
@@ -135,7 +136,16 @@ function decodeLiejuHttpHtml(response) {
 }
 
 function normalizedText(value) {
-  return String(value || "").replace(/\s+/g, " ").trim();
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizedFormCharset(value) {
+  if (value === undefined) return "utf-8";
+  const charset = declaredCharset(value);
+  if (!charset) throw parserError("LIEJU_FORM_CHARSET_INVALID");
+  return charset;
 }
 
 function cityTargetFromUrl(value) {
@@ -169,7 +179,8 @@ function cityTargetFromHref(href) {
 }
 
 function resolveLiejuCityTarget(html, customerCity) {
-  if (typeof html !== "string") throw parserError("LIEJU_CITY_DIRECTORY_INVALID");
+  if (typeof html !== "string")
+    throw parserError("LIEJU_CITY_DIRECTORY_INVALID");
   const requestedCity = normalizedText(customerCity) || DEFAULT_CITY;
   const $ = cheerio.load(html);
   const links = $("a[href]").toArray();
@@ -308,7 +319,8 @@ function successfulControls($, form) {
     .each(function () {
       const element = $(this);
       const name = element.attr("name");
-      if (!name || isDisabled($, this) || isPaidPromotionControl($, this)) return;
+      if (!name || isDisabled($, this) || isPaidPromotionControl($, this))
+        return;
 
       if (this.name === "input") {
         const type = (element.attr("type") || "text").toLowerCase();
@@ -375,8 +387,10 @@ function safeFormMetadata(result) {
   });
 }
 
-function parseLiejuPublicationForm(html, cityTarget) {
-  if (typeof html !== "string") throw parserError("LIEJU_PUBLICATION_FORM_INVALID");
+function parseLiejuPublicationForm(html, cityTarget, options) {
+  if (typeof html !== "string")
+    throw parserError("LIEJU_PUBLICATION_FORM_INVALID");
+  const charset = normalizedFormCharset(options && options.charset);
   const target = normalizedCityTarget(cityTarget);
   const $ = cheerio.load(html);
   let parsed = null;
@@ -385,14 +399,12 @@ function parseLiejuPublicationForm(html, cityTarget) {
     const form = $(this);
     const action = validatedFormAction(form.attr("action"), target);
     const method = (form.attr("method") || "get").trim().toUpperCase();
-    const enctype = (form.attr("enctype") || "application/x-www-form-urlencoded")
+    const enctype = (
+      form.attr("enctype") || "application/x-www-form-urlencoded"
+    )
       .trim()
       .toLowerCase();
-    if (
-      !action ||
-      method !== "POST" ||
-      enctype !== "multipart/form-data"
-    )
+    if (!action || method !== "POST" || enctype !== "multipart/form-data")
       return;
     parsed = { form: this, action, method, enctype };
   });
@@ -402,6 +414,7 @@ function parseLiejuPublicationForm(html, cityTarget) {
     method: parsed.method,
     enctype: parsed.enctype,
     action: parsed.action,
+    charset,
     controls: successfulControls($, parsed.form),
     zoneId: lastNonEmptyZoneId($, parsed.form),
   };

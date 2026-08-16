@@ -863,10 +863,10 @@ async function prepareHttpPublicationForm(runtime, profile) {
     const formResponse = requireHttpPublicationResponse(
       await port.get(city.url),
     );
-    return httpFormParser.parseLiejuPublicationForm(
-      httpFormParser.decodeLiejuHttpHtml(formResponse).html,
-      city,
-    );
+    const decodedForm = httpFormParser.decodeLiejuHttpHtml(formResponse);
+    return httpFormParser.parseLiejuPublicationForm(decodedForm.html, city, {
+      charset: decodedForm.charset,
+    });
   });
 }
 

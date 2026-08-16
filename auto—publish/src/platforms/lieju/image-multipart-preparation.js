@@ -2,6 +2,7 @@
 
 const crypto = require("node:crypto");
 const FormData = require("form-data");
+const iconv = require("iconv-lite");
 
 const domain = require("../../domain");
 const {
@@ -13,6 +14,7 @@ const MAX_LIEJU_IMAGE_COUNT = 4;
 const MAX_LIEJU_IMAGE_BYTES = 1024 * 1024;
 const FILE_SLOT_NAME = /^local_file([1-9][0-9]*)$/;
 const INSPECT = Symbol.for("nodejs.util.inspect.custom");
+const FORM_CHARSETS = new Set(["utf-8", "gbk", "gb2312", "gb18030"]);
 
 function fail(code) {
   const error = new Error(code);
@@ -175,6 +177,36 @@ function fingerprint(bytes) {
   return crypto.createHash("sha256").update(bytes).digest("hex");
 }
 
+function formCharset(value) {
+  const charset = value === undefined ? "utf-8" : String(value).toLowerCase();
+  if (!FORM_CHARSETS.has(charset)) throw fail("LIEJU_MULTIPART_FORM_INVALID");
+  return charset;
+}
+
+function escapeHeaderParam(value) {
+  return String(value)
+    .replace(/\r/g, "%0D")
+    .replace(/\n/g, "%0A")
+    .replace(/"/g, "%22");
+}
+
+function appendEncodedText(body, name, value, charset) {
+  if (charset === "utf-8") {
+    body.append(name, value);
+    return;
+  }
+  const bytes = iconv.encode(value, charset);
+  body.append(name, bytes, {
+    knownLength: bytes.length,
+    header:
+      "--" +
+      body.getBoundary() +
+      '\r\nContent-Disposition: form-data; name="' +
+      escapeHeaderParam(name) +
+      '"\r\n\r\n',
+  });
+}
+
 function prepareImage(candidate, clientId, imageResolver, fsApi) {
   if (!imageResolver || typeof imageResolver.resolveImage !== "function")
     throw fail("LIEJU_IMAGE_RESOLVER_UNAVAILABLE");
@@ -200,7 +232,7 @@ function prepareImage(candidate, clientId, imageResolver, fsApi) {
   });
 }
 
-function createMultipartCapability(controls, overrides, images) {
+function createMultipartCapability(controls, overrides, images, charset) {
   let consumed = false;
 
   function consumeOnce() {
@@ -214,11 +246,13 @@ function createMultipartCapability(controls, overrides, images) {
       const body = new FormData();
       for (const control of controls) {
         if (control.type === "file") continue;
-        body.append(
+        appendEncodedText(
+          body,
           control.name,
           control.type === "hidden"
             ? control.value
             : (overrides.get(control.name) ?? control.value),
+          charset,
         );
       }
       for (const image of images) {
@@ -296,6 +330,7 @@ function prepareLiejuImageMultipart(input) {
   const imagePlan = parseImagePlan(value.imagePlan);
   const controls = parseFormControls(value.form);
   const overrides = parseOverrides(value.formValueOverrides, controls);
+  const charset = formCharset(value.form && value.form.charset);
   const slots = contiguousImageSlots(controls);
   const warnings = [];
   const images = [];
@@ -338,7 +373,7 @@ function prepareLiejuImageMultipart(input) {
   return Object.freeze({
     preparedSubmissionEvidenceV1,
     warnings: Object.freeze(warnings),
-    multipart: createMultipartCapability(controls, overrides, images),
+    multipart: createMultipartCapability(controls, overrides, images, charset),
   });
 }
 

@@ -37,7 +37,8 @@
 2. 保留真实隐藏字段的当次 GET 值，但始终视为不透明临时数据。不缓存跨表单重用，不推导、不改写、不持久化、不记录值。
 3. 付费推广 checkbox / radio 默认未选且不进入 multipart。本 Ticket 不得因解析顺序、默认 value 或页面模板而产生付费副作。
 4. 图片 control 仅使用实际存在的 `local_file1..N`，同一个冻结 manifest 顺序映射到连续文件槽。不提交脚本内未实例化模板槽，不超过页面当次声明的最大槽位数。
-5. 请求 body、文件 buffer / stream、Cookie、联系方式、完整 HTML 和远端原始异常均不得进入诊断。只允许记录稳定 code、阶段、状态分类和安全计数。
+5. HTTP multipart 的文本字段使用投稿 form 声明的字符集编码；缺少声明时按 UTF-8 处理。若当次原始 form 只暴露一个真实图片槽位，HTTP 路径只提交该一张，不因图片数量自动切换 Playwright；是否为多选改走 Playwright，须以后续独立能力验收为依据。
+6. 请求 body、文件 buffer / stream、Cookie、联系方式、完整 HTML 和远端原始异常均不得进入诊断。只允许记录稳定 code、阶段、状态分类和安全计数。
 
 ## 列举网正文提交表示
 

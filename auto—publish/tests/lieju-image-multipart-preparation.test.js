@@ -178,6 +178,36 @@ test("Lieju multipart preparation freezes the first four deliverable images in c
   }
 });
 
+test("Lieju multipart preparation keeps one real slot instead of fabricating extra HTTP image fields", () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "lieju-multipart-one-slot-"),
+  );
+  const names = ["one.png", "two.png", "three.png", "four.png"];
+  try {
+    for (const [index, name] of names.entries())
+      fs.writeFileSync(path.join(root, name), png(index + 1, index + 2));
+    const prepared = prepareLiejuImageMultipart({
+      clientId: "client-lieju-image",
+      imagePlan: plan(names),
+      form: form(1),
+      preparedSubmissionEvidenceV1: evidence(),
+      imageResolver: resolver(root),
+    });
+
+    assert.equal(prepared.preparedSubmissionEvidenceV1.images.length, 1);
+    assert.deepEqual(prepared.warnings, [
+      { code: "LIEJU_IMAGE_SLOT_CAPACITY_REACHED", stage: "delivery" },
+      { code: "LIEJU_IMAGE_SLOT_CAPACITY_REACHED", stage: "delivery" },
+      { code: "LIEJU_IMAGE_SLOT_CAPACITY_REACHED", stage: "delivery" },
+    ]);
+    const body = prepared.multipart.consume().body.getBuffer();
+    assert.equal(body.includes(Buffer.from('name="local_file1"')), true);
+    assert.equal(body.includes(Buffer.from('name="local_file2"')), false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("Lieju multipart image failures are best-effort and can safely degrade to text only", () => {
   const root = fs.mkdtempSync(
     path.join(os.tmpdir(), "lieju-multipart-failure-"),
