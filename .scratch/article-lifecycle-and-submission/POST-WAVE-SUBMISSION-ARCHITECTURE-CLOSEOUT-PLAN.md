@@ -1,6 +1,6 @@
 # Post-Wave 投稿架构收尾优化计划
 
-**Status:** `PARTIAL / POST_WAVE_CLOSEOUT`
+**Status:** `COMPLETE / POST_WAVE_CLOSEOUT`
 
 **职责：**把 2026-08-16 架构排查中确认的四个候选收敛为一条可串行实施、可审计、可停止的独立收尾计划。它以既有 Wave/Ticket 全部完成为前提，不属于新的 Wave/Maintenance，不写入或回填 `ARTICLE-LIFECYCLE-WAVE-EXECUTION-PLAN.md`，也不重开任何已完成 gate。
 
@@ -275,21 +275,21 @@ C4 不是默认因文件较长而强制拆分。C3 完成后先运行 gate：
 
 ## 6. 最终验收矩阵
 
-- [ ] 投稿中心一个 query 返回普通、付费、attention 和 badge 所需一致 snapshot。
-- [ ] 所有 section 共享一个 authoritative revision；stale/reordered result 不覆盖新 scope。
-- [ ] Renderer 不再跨 article-management、platform、paid 和 attention snapshot 推断标签或动作。
-- [ ] 文章库 wire 不含 `submissionBatches`、`cancellationPlans`、完整 attention snapshot 和重复 summary maps。
-- [ ] Renderer-facing article workflow 不含 `canQueue`、`queue`、`retarget` legacy shape；内部 admission owner 行为保持正确。
-- [ ] 文章删除影响查询不再依赖通用投稿 facade，且仍只读、fail-closed。
-- [ ] residue cleanup、archive failure observation、startup recovery 和 post-processing drain 保留。
-- [ ] generic batch/retry facade、test-only orchestrator 和过期 package requirement 消失。
-- [ ] uncertain 路径没有自动远端 retry，startup recovery 也不产生远端请求。
-- [ ] regular/paid/attention/removal 各自唯一 owner 未增加 writer、锁或状态机。
-- [ ] 投稿选择 session 若实施，只保存易失 UI 状态；若 defer，有 gate evidence。
-- [ ] query/scan 数量为预先冻结的常数预算，0 external transport。
-- [ ] Renderer 覆盖 loading、empty、error、disabled、confirm、stale、client switch 和 narrow layout。
-- [ ] contract/IPC/preload/bridge/types/fixtures/tests/package 同步删除 legacy surface，无 compatibility alias。
-- [ ] Primary Audit、blocking remediation、bounded re-audit 和最终 source-state gate PASS。
+- [x] 投稿中心一个 query 返回普通、付费、attention 和 badge 所需一致 snapshot。
+- [x] 所有 section 共享一个 authoritative revision；stale/reordered result 不覆盖新 scope。
+- [x] Renderer 不再跨 article-management、platform、paid 和 attention snapshot 推断标签或动作。
+- [x] 文章库 wire 不含 `submissionBatches`、`cancellationPlans`、完整 attention snapshot 和重复 summary maps。
+- [x] Renderer-facing article workflow 不含 `canQueue`、`queue`、`retarget` legacy shape；内部 admission owner 行为保持正确。
+- [x] 文章删除影响查询不再依赖通用投稿 facade，且仍只读、fail-closed。
+- [x] residue cleanup、archive failure observation、startup recovery 和 post-processing drain 保留。
+- [x] generic batch/retry facade、test-only orchestrator 和过期 package requirement 消失。
+- [x] uncertain 路径没有自动远端 retry，startup recovery 也不产生远端请求。
+- [x] regular/paid/attention/removal 各自唯一 owner 未增加 writer、锁或状态机。
+- [x] 投稿选择 session 若实施，只保存易失 UI 状态；若 defer，有 gate evidence。
+- [x] query/scan 数量为预先冻结的常数预算，0 external transport。
+- [x] Renderer 覆盖 loading、empty、error、disabled、confirm、stale、client switch 和 narrow layout。
+- [x] contract/IPC/preload/bridge/types/fixtures/tests/package 同步删除 legacy surface，无 compatibility alias。
+- [x] Primary Audit、blocking remediation、bounded re-audit 和最终 source-state gate PASS。
 
 ## 7. 验证阶梯
 
@@ -343,16 +343,16 @@ C4 不是默认因文件较长而强制拆分。C3 完成后先运行 gate：
 
 ## 11. Closure record（实施时填写）
 
-- **Execution status:** `PARTIAL`
-- **Current gate:** `C4 COMPLETE / C5 READY`
+- **Execution status:** `COMPLETE`
+- **Current gate:** `C5 COMPLETE / CLOSEOUT CLOSED`
 - **Base HEAD:** `ed81e6c47e0c12b8d03766268550841e1c4fdc45`
-- **Final source state (`HEAD + diff/status`):** C3 已进入 commit `3f5931cc4a51f6b9ce45c46de4cc80900b3804ff`，C3 closure record 已进入 `b6e7365fe3abf1ae826bf29cc48b2366699b6f89`；C4 基于该 clean HEAD 实施，当前以 `HEAD b6e7365 + working-tree diff` 绑定未提交 source state。
-- **Implemented scope:** C0～C3 已完成；C4 四项 gate 全满足后，新增只拥有确认前易失状态的 Renderer session hook，统一 selection snapshot、mode/target、paid preflight token、feedback/error、同步 pending guard 与 workspace/client/selection/target stale fencing；View 只消费 snapshot/intents，普通/付费命令仍进入既有具名 owner，回收/编辑/详情/筛选未迁入 session。
-- **Commands and results:** C0～C3 evidence 见 §12～§15；C4 最终 Renderer build、Renderer/bridge typecheck、8 项投稿会话直接交互矩阵、相邻 content feature/attention/responsive 回归与 diff check PASS，见 §16.4～§16.5。
-- **Audit findings and disposition:** C0～C3 见既有记录；C4 Primary Audit 发现 1 个 blocking `P2 / INTRODUCED_BY_CHANGE`：只依赖上游 busy 留有重复启动窗口，且 mutation 发出后目标变化可能丢弃真实成功反馈；已增加 session-owned synchronous pending guard、preview/mutation 分阶段冻结和刷新竞态回归，并通过 bounded re-audit，无剩余 blocking finding。
-- **Unrun acceptance and reasons:** 未运行完整 `npm test`、实际重建 ASAR 的 production package smoke 或真实账号/投稿/付费/订单操作；完整仓库与真实产物 gate 留给 C5，真实外部操作未获授权且不属于 C4。
-- **Remaining risks:** C5 combined audit/final clean-HEAD gate 尚未执行；实际重建 ASAR smoke 留在 C5。
-- **Final Git status:** C4 production/tests/本计划均未 stage/commit/merge/push；未更新 Wave Plan、Ticket/Maintenance 或历史 handoff。详见 §16.5～§16.6。
+- **Final source state (`HEAD + diff/status`):** C4 已进入 commit `87b1b650e7f10e7ead524f0fde0ed6c8e6c8f86f`；C5 production/test/acceptance 已进入 commit `c4b5eb12ccb6cf24cca735cf76e70d02ef2091a3`，本 closure record 随后以 documentation-only commit 收口。最终 production/test gate 后未再修改 production、contract、test 或 package source。
+- **Implemented scope:** C0～C4 已完成；C5 combined audit 补齐普通/付费 queue mutation 对统一投稿中心 snapshot 的 invalidation，并同步修正 C1～C4 组合后暴露的 TypeChecker consumer、Renderer query fixture、acceptance evidence、absence/package 与性能预算合同漂移；未新增 writer、schema、兼容层或远端副作用路线。
+- **Commands and results:** C0～C4 evidence 见 §12～§16；C5 定向 invalidation matrix 68/68、C1～C4 combined regression 111/111、production IPC capability matrix 115/115、Renderer history 8/8、queue lifecycle 3/3、三项 typecheck、Renderer build、packaging 49/49、完整 `npm test` 1908/1908 与 dirty ASAR production smoke 全部 PASS，见 §17.4。
+- **Audit findings and disposition:** C5 Primary Audit 发现 1 个 blocking `P1 / CROSS_COMPONENT_INTERACTION`：统一投稿中心切换为 composite snapshot 后，若干普通/付费 mutation 未 invalidation `submissionCenter`，会令 section 与 badge 长期陈旧；已在 invalidation owner 与两个应用服务补齐稳定 reason/scope，并通过直接调用方、状态矩阵和完整仓库 bounded re-audit。无剩余 blocking finding。
+- **Unrun acceptance and reasons:** 未执行真实登录、投稿、付费、取消、订单核对、生产迁移或真实供应商图片传输；这些用户可见或可能收费的外部操作未获本次授权，且不属于本地 closure。Hepan 可选 Python 检查因未提供 optional Python 记为 `SKIPPED_OPTIONAL`，不影响 production package verifier 成功。
+- **Remaining risks:** Renderer build 仍有既有 >500 kB chunk warning；真实外部账号/供应商行为未验证。没有已知本地 blocking risk。
+- **Final Git status:** C5 implementation/tests/acceptance 已提交；本 closure record 以独立 documentation-only commit 提交后工作树 clean。未 merge/push，未更新 Wave Plan、Ticket/Maintenance 或历史 handoff。详见 §17.5～§17.6。
 
 ## 12. C0 record — 实时消费者清单与合同冻结
 
@@ -762,7 +762,7 @@ exit 0；只有 Git LF→CRLF working-copy warning，无 whitespace error。
 ### 16.1 Gate 结论与 source state
 
 - **Base HEAD：**`b6e7365fe3abf1ae826bf29cc48b2366699b6f89`（`codex/jiagou`），开始时 clean；该 HEAD 已包含 C3 implementation 与 closure record。
-- **执行模式：**Manual Dispatch；本轮完成 C4 gate、implementation、定向验证、Primary Audit、blocking finding remediation 与 bounded re-audit。未 commit、push 或进入 C5。
+- **执行模式：**Manual Dispatch；C4 当轮完成 gate、implementation、定向验证、Primary Audit、blocking finding remediation 与 bounded re-audit；其 production、tests 与 closure record 随后进入 commit `87b1b650e7f10e7ead524f0fde0ed6c8e6c8f86f`。未 push。
 - **Gate 结论：**四项全部满足，选择实施而非 defer：普通/付费路径仍共同协调 selection、target、preflight/confirmation、busy/error 与 scope stale reset；两条路径需要理解同一组 selection/target/token/pending 不变量；抽取后 View 可只消费一个 snapshot 与 intents；不需要新增持久状态、主进程业务规则或通用 dispatcher。
 - **外部副作用：**全部自动化使用 headless Renderer、合成 workspace/client/article/media 与 fake desktop bridge；未执行真实登录、投稿、付费、取消、订单核对或生产数据操作。
 
@@ -811,6 +811,87 @@ exit 0；只有 Git LF→CRLF working-copy warning，无 whitespace error。
 
 ### 16.6 当前 gate / Git 状态
 
-- 当前 source state 为 `HEAD b6e7365fe3abf1ae826bf29cc48b2366699b6f89 + C4 working-tree diff`；C4 production、tests 与本记录未提交。
-- 工作树仅包含 C4 的 5 个 production/test 文件与本计划；无 staged change。未 merge/push，未更新 Wave Plan、Ticket/Maintenance 或历史 handoff。
-- C5 combined audit、完整 final clean-HEAD gate 与实际重建 ASAR smoke 尚未执行；Manual Dispatch 到 C4 closure 停止，不自动进入 C5。
+- C4 production、tests 与本记录已进入 commit `87b1b650e7f10e7ead524f0fde0ed6c8e6c8f86f`；该 commit 是 C5 的 clean base HEAD。
+- C4 commit 后未 push；Wave Plan、Ticket/Maintenance 和历史 handoff 未因 C4 改写。
+- C5 combined audit、最终 source-state gate 与实际重建 ASAR smoke 已完成，结果见 §17。
+
+## 17. C5 record — Combined audit 与 closure
+
+### 17.1 Source state 与审计边界
+
+- **Base HEAD：**`87b1b650e7f10e7ead524f0fde0ed6c8e6c8f86f`（`codex/jiagou`），包含 C4 production、tests 与 closure record；C5 production/test/acceptance commit 为 `c4b5eb12ccb6cf24cca735cf76e70d02ef2091a3`。
+- **执行模式：**Manual Dispatch；只对 C1～C4 最终组合边界执行一次 Primary Audit，修复 blocking finding 后执行 bounded re-audit。implementation 与 closure record 分为工程提交和 documentation-only 提交；未 merge 或 push。
+- **Scope：**统一投稿中心 composite snapshot/revision/invalidation；article-management 窄 read model；普通/付费 admission 与 batch execution；attention/removal/recovery；C4 intake session 的命令 consumer；IPC/preload/bridge/types/fixtures；Renderer refresh/navigation；absence/package/performance 合同及 C1～C4 直接回归。
+- **Checked invariants：**所有投稿中心消费者观察同一 authoritative snapshot/revision；mutation 后 snapshot 与 badge 可刷新；stale/reordered result 不覆盖新 scope；ordinary/paid/attention/removal owner 不变；uncertain/recovery 不产生远端自动 retry；C4 session 只拥有易失 UI 状态；legacy surface 不回流 source/package；query/scan 为冻结常数预算且 0 external transport。
+
+### 17.2 Primary Audit finding 与 remediation
+
+- **Finding 1 — `P1 / CROSS_COMPONENT_INTERACTION`（blocking）：**C1 将页面与 badge 统一到 `submissionCenter` composite snapshot 后，普通 queue group start/pause/start-all/pause-all、普通 image-count update、付费确认及付费 batch start/pause/cancel-remaining 仍只 invalidation 旧局部 scope或未发出统一 scope，导致 mutation 成功后 section 与 sidebar badge 可长期陈旧。
+- **Root owner 修复：**在 `workspace-data-invalidation.js` 增加 `REGULAR_QUEUE_GROUP_RUN_INTENT_CHANGED`、`REGULAR_QUEUE_GROUP_IMAGE_COUNT_UPDATED`、`PAID_BATCH_EXECUTION_CHANGED`、`PAID_BATCH_REMAINING_CANCELLED` 到 `submissionCenter` 的稳定映射；付费确认复用现有 `SUBMISSION_BATCH_CREATED`。`regular-queue-group-orchestrator.js` 与 `media-workbench-application.js` 在对应成功 mutation 后从真实应用服务 owner 发出 reason，没有在 UI、adapter 或 store 建立旁路 writer。
+- **Regression coverage：**补齐单组/全部普通队列运行意图、image count、付费 confirm/start/pause/cancel remaining 的 invalidation 断言；失败/不确定路径不伪造成功 invalidation，既有 lifecycle/uncertain 行为保持。
+
+### 17.3 组合合同漂移与 bounded 修复
+
+1. C4 intake session 抽取后，production IPC TypeChecker fixture 仍把四个 capability 绑定到旧 View consumer。session 改为接收四个最小命令依赖并以具名 async intent 调用；symbol evidence walker 只扩展到返回对象中的嵌套 intent 与本地 hook-wrapped callable，仍以真实 TypeScript symbol identity 证明消费者，115/115 capability matrix PASS。
+2. Renderer queue lifecycle fixture 仍从旧局部 queue-group query 读取业务数据；改为从 `content.getSubmissionCenterSnapshot` 读取，旧 query 只保留 platform/account presentation label，并验证 `submissionCenter` invalidation。3/3 lifecycle tests PASS。
+3. C3 删除 shadow test 后，Ticket 25-A story 6/83 仍引用已删除文件；只移除该 dangling evidence，保留两条现存 text-only evidence，合同 6/6 PASS。
+4. 完整 gate 暴露六处 C1～C3 的精确合同预算漂移：content operation 33→34、Renderer contract/type owner 141→142、App feature evidence 改为 `useSubmissionCenterFeature`、已删除 reconciliation 文件退出 absence allowlist、25-A benchmark 从合成 lifecycle facts 统计 order、article-management query/scan 预算 7→5。修复仅同步当前公开合同与已实现 owner，bounded regression 18/18 PASS。
+5. 没有修改 schema、持久事实 writer、事务边界或远端副作用语义；未触发扩大 fresh full audit 的条件。
+
+### 17.4 最终命令与结果
+
+```text
+node --test tests/workspace-runtime-lifecycle.test.js tests/phase-06-media-typed-ipc.test.js tests/regular-platform-outcomes.test.js tests/ticket-18-b-queue-image-config-surface.test.js tests/article-lifecycle-ticket-15.test.js
+68 passed / 0 failed；覆盖普通/付费 mutation → submissionCenter invalidation 与直接 lifecycle 调用方。
+
+C1～C4 combined regression
+111 passed / 0 failed。
+
+production IPC fixture matrix
+115 / 115 capabilities PASS；Phase 8 cleanup gates PASS。
+
+node --test tests/renderer-history-editor-flow.test.js
+8 passed / 0 failed。
+
+node --test tests/renderer-platform-queue-refresh-lifecycle.test.js
+3 passed / 0 failed。
+
+npm run typecheck:renderer
+PASS。
+
+npm run typecheck:bridge
+PASS。
+
+npm run typecheck:main
+PASS。
+
+npm run build:renderer
+PASS；仅有既有 >500 kB chunk-size warning。
+
+npm run test:packaging
+49 passed / 0 failed。
+
+$env:RUN_ELECTRON_FOCUS_TESTS = '1'; npm test
+263 test files；1908 passed / 0 failed / 0 skipped / 0 todo / 0 cancelled；lifecycle CLOSED；allFilesReported true。
+
+npm run pack:production:smoke:dirty
+PASS；ASAR/package 重建成功；packaged preload sandbox 3/3；verify-production-package `ok: true`，artifactCount 13，renderer contract source/generated/archive matches 均为 0。Hepan 为 SKIPPED_OPTIONAL（optional-python-not-supplied）。
+
+git diff --check
+exit 0；仅有 Git LF→CRLF working-copy warning，无 whitespace error。
+```
+
+完整测试显式设置 `RUN_ELECTRON_FOCUS_TESTS=1`，因为默认环境会按设计 skip 合成 Electron focus fixture，而完整 runner 合同将任何 skip 判为失败；该 fixture 不触发真实外部操作。ASAR smoke 使用本地合成/打包输入，未执行真实登录、投稿、付费、取消、订单或生产迁移。
+
+### 17.5 Bounded re-audit 与 closure 结论
+
+- **Bounded scope：**只复核 finding、invalidation reason/scope 修复、两个直接应用服务、普通/付费 mutation 状态矩阵、composite snapshot 的 Renderer/IPC 消费者，以及完整 gate 暴露的直接合同漂移。
+- **Result：**所有 blocking finding 已关闭；P0 为 0，P1 为 0，未遗留阻塞 P2。完整测试、typecheck、build、packaging 和真实重建 ASAR smoke 在同一 production/test source state PASS。
+- **Escalation check：**修复未改变公开产品语义、schema、事实 owner、事务或远端副作用边界，未引入新 P0/P1，因此未重开 fresh full audit。
+- **Conclusion：**`PASS`；C5 `COMPLETE`，Post-Wave closeout `CLOSED`。
+
+### 17.6 最终 Git / evidence 状态
+
+- 最终 production/test source state 为 commit `c4b5eb12ccb6cf24cca735cf76e70d02ef2091a3`；之后只提交本 closure 文档，因此既有验证仍绑定最终 production/test source。
+- C5 的 19 个 production/test/acceptance 文件已进入上述工程提交；本计划进入紧随其后的 documentation-only commit，提交后工作树 clean。历史 `M05-0-authoritative-test-disposition-ledger.md` 内容和 Git 状态均与 HEAD 一致。
+- 未 merge、push；未更新 Wave Plan、既有 Ticket/Maintenance 或历史 handoff，也未创建新 handoff。
