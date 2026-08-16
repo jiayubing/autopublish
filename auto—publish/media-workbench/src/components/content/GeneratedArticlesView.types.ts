@@ -82,6 +82,7 @@ export type GeneratedArticlesCommands = Record<
 
 export interface GeneratedArticlesViewProps {
   clientId: string;
+  workspaceScopeKey: string;
   client?: ContentClient;
   saveClientLiejuPublicationProfile: (input: {
     clientId: string;

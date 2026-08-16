@@ -381,6 +381,11 @@ export default function ContentWorkbench({
               <div className="min-h-0 min-w-0 flex-1">
                 <GeneratedArticlesView
                   clientId={clientId}
+                  workspaceScopeKey={
+                    content.snapshot.scope
+                      ? `${content.snapshot.scope.workspaceRuntimeId}:${clientId}`
+                      : `unscoped:${clientId}`
+                  }
                   client={clients.find((item) => item.id === clientId)}
                   saveClientLiejuPublicationProfile={saveClientLiejuPublicationProfile}
                   management={management}

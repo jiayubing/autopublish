@@ -344,15 +344,15 @@ C4 不是默认因文件较长而强制拆分。C3 完成后先运行 gate：
 ## 11. Closure record（实施时填写）
 
 - **Execution status:** `PARTIAL`
-- **Current gate:** `C3 COMPLETE / C4 GATE READY`
+- **Current gate:** `C4 COMPLETE / C5 READY`
 - **Base HEAD:** `ed81e6c47e0c12b8d03766268550841e1c4fdc45`
-- **Final source state (`HEAD + diff/status`):** C3 基于 C2 closure commit `ed81e6c47e0c12b8d03766268550841e1c4fdc45`（`codex/jiagou`）实施；最终 production/test/package source state 已进入 implementation commit `3f5931cc4a51f6b9ce45c46de4cc80900b3804ff`。
-- **Implemented scope:** C0～C2 已完成；C3 已把删除影响查询、投稿维护、prepared-batch 本地恢复、startup uncertain recovery 与 post-processing drain 迁入具名 owner，并删除 18-operation facade、generic batch/retry chain、generic publication workflow 与 test-only orchestrator；ordinary/paid writer 与 OperationalStore facts/schema 未改变。
-- **Commands and results:** C0～C2 evidence 见 §12～§14；C3 定向行为矩阵、主进程 typecheck、115-capability matrix、Phase 8 architecture/package gates、cleanup/package contract、remediation ASAR matrix 与 diff check 均 PASS，见 §15.4、§15.6。
-- **Audit findings and disposition:** C0～C2 见既有记录；C3 Primary Audit 发现 1 个 blocking `P2 / PROCESS_EVIDENCE_GAP`，package verifier 会放行缺少 C3 runtime 依赖或混入 3 个遗漏 retired file 的 ASAR；已修复并通过 bounded re-audit，无剩余 blocking finding。
-- **Unrun acceptance and reasons:** 未运行完整 `npm test`、实际重建 ASAR 的 production package smoke 或真实账号/投稿/付费/订单操作；完整仓库与真实产物 gate 留给 C5，真实外部操作未获授权且不属于 C3。
-- **Remaining risks:** C4 intake session gate、C5 combined audit/final clean-HEAD gate 尚未执行；实际重建 ASAR smoke 留在 C5。
-- **Final Git status:** C3 production、tests、package gate 与 audit remediation 已提交为 `3f5931cc4a51f6b9ce45c46de4cc80900b3804ff`；本 closure record 作为后续 documentation-only commit 提交。未 merge/push，未更新 Wave Plan、Ticket/Maintenance 或历史 handoff，未执行 C4 gate。详见 §15.5～§15.6。
+- **Final source state (`HEAD + diff/status`):** C3 已进入 commit `3f5931cc4a51f6b9ce45c46de4cc80900b3804ff`，C3 closure record 已进入 `b6e7365fe3abf1ae826bf29cc48b2366699b6f89`；C4 基于该 clean HEAD 实施，当前以 `HEAD b6e7365 + working-tree diff` 绑定未提交 source state。
+- **Implemented scope:** C0～C3 已完成；C4 四项 gate 全满足后，新增只拥有确认前易失状态的 Renderer session hook，统一 selection snapshot、mode/target、paid preflight token、feedback/error、同步 pending guard 与 workspace/client/selection/target stale fencing；View 只消费 snapshot/intents，普通/付费命令仍进入既有具名 owner，回收/编辑/详情/筛选未迁入 session。
+- **Commands and results:** C0～C3 evidence 见 §12～§15；C4 最终 Renderer build、Renderer/bridge typecheck、8 项投稿会话直接交互矩阵、相邻 content feature/attention/responsive 回归与 diff check PASS，见 §16.4～§16.5。
+- **Audit findings and disposition:** C0～C3 见既有记录；C4 Primary Audit 发现 1 个 blocking `P2 / INTRODUCED_BY_CHANGE`：只依赖上游 busy 留有重复启动窗口，且 mutation 发出后目标变化可能丢弃真实成功反馈；已增加 session-owned synchronous pending guard、preview/mutation 分阶段冻结和刷新竞态回归，并通过 bounded re-audit，无剩余 blocking finding。
+- **Unrun acceptance and reasons:** 未运行完整 `npm test`、实际重建 ASAR 的 production package smoke 或真实账号/投稿/付费/订单操作；完整仓库与真实产物 gate 留给 C5，真实外部操作未获授权且不属于 C4。
+- **Remaining risks:** C5 combined audit/final clean-HEAD gate 尚未执行；实际重建 ASAR smoke 留在 C5。
+- **Final Git status:** C4 production/tests/本计划均未 stage/commit/merge/push；未更新 Wave Plan、Ticket/Maintenance 或历史 handoff。详见 §16.5～§16.6。
 
 ## 12. C0 record — 实时消费者清单与合同冻结
 
@@ -756,3 +756,61 @@ exit 0；只有 Git LF→CRLF working-copy warning，无 whitespace error。
 - **Remediation：**补齐 C3 maintenance/recovery 直接 runtime inventory 与上述 3 个 retired file；新增 `c3-package-verifier.test.js`，用三份独立合成 ASAR 验证 baseline 通过、缺任一列明 runtime file 失败、混入任一遗漏 retired file 失败。
 - **Bounded re-audit：**仅复核 finding 修复 diff、合成 ASAR 行为、package/production packaging、Phase 8 cleanup、test discovery/inventory、eslint 与 diff check；78 tests PASS，test discovery 发现 263 个测试文件且无 dangling entry。修复未改变 schema、writer、事务、公开业务合同或远端副作用边界，不触发 escalation。
 - **Conclusion：**`PASS`；P0/P1 为 0，唯一 blocking P2 已关闭，无 deferred C3 blocker。C3 `COMPLETE`，C4 gate `READY`。
+
+## 16. C4 record — 临时投稿选择会话
+
+### 16.1 Gate 结论与 source state
+
+- **Base HEAD：**`b6e7365fe3abf1ae826bf29cc48b2366699b6f89`（`codex/jiagou`），开始时 clean；该 HEAD 已包含 C3 implementation 与 closure record。
+- **执行模式：**Manual Dispatch；本轮完成 C4 gate、implementation、定向验证、Primary Audit、blocking finding remediation 与 bounded re-audit。未 commit、push 或进入 C5。
+- **Gate 结论：**四项全部满足，选择实施而非 defer：普通/付费路径仍共同协调 selection、target、preflight/confirmation、busy/error 与 scope stale reset；两条路径需要理解同一组 selection/target/token/pending 不变量；抽取后 View 可只消费一个 snapshot 与 intents；不需要新增持久状态、主进程业务规则或通用 dispatcher。
+- **外部副作用：**全部自动化使用 headless Renderer、合成 workspace/client/article/media 与 fake desktop bridge；未执行真实登录、投稿、付费、取消、订单核对或生产数据操作。
+
+### 16.2 实施结果与 owner 边界
+
+1. 新增 `use-submission-intake-session.ts`，只拥有确认前易失状态：打开状态、文章 identity snapshot、普通/付费模式、目标、账号、付费 preflight/token、error/feedback 与本地 pending；关闭、unmount、scope/selection/target 变化均废弃旧 async result，且不写持久事实。
+2. session 通过现有 `previewRegularQueueAdmission`、`admitRegularQueueItems`、`previewPaidMediaPreflight`、`confirmPaidMediaBatch` intents 调用具名 feature adapter；最终 eligibility、费用、确认 token、原子冻结与事实写入仍由主进程既有 owner 决定。
+3. `ContentWorkbench` 将 `workspaceRuntimeId + clientId` 作为 session scope identity 下传；client/workspace 切换同步 fence 旧结果，随后 effect 清空 session。列表选择仍服务列表/回收交互，但打开投稿时复制为 session identity snapshot；selection eligibility 改变会关闭未提交 preview，已发出的 mutation 则冻结到明确结果，避免丢弃真实成功反馈。
+4. `GeneratedArticlesView` 删除普通/付费投稿协调状态与 async command 流程，只展示 session snapshot、提交 intents、列表选择和处理导航。回收事务、文章编辑、发布详情、筛选与 lifecycle reason-code 仍留在原组件/feature，未进入 session。
+5. session-owned synchronous pending guard 在 React 状态提交前即可阻止双击重复 preview/confirm；preview 阶段允许关闭或改变目标并丢弃迟到结果，`regular_admit` / `paid_confirm` 发出后冻结 session mutation intents，直到明确结果或 workspace/client scope 失效。
+
+### 16.3 状态矩阵证据
+
+- open/close/reopen 与 regular preview → cancel → confirm：取消确认不调用 admission，session 保留；再次确认只产生一次 admission，成功后清理 selection 并显示反馈。
+- paid preview → close → target change：旧 preflight/token 被清空，未调用 confirm；新目标必须重新 preflight。paid confirm 双击只调用一次确认命令，成功后清理 session/selection。
+- client scope switch + late async result：延迟 paid preflight 返回前切换客户，投稿 dialog 与 preflight 均保持关闭，迟到结果不覆盖新 scope，也不调用确认。
+- command-driven management refresh race：fake admission/paid confirm 在返回前先把文章 lifecycle 投影改为 `in_submission`；session 在 mutation pending 期间不被 selection eligibility refresh 提前清空，明确成功结果仍展示且只提交一次。
+- dirty/published/removal 边界：既有 dirty editor、published read-only、removal needs-repair → recovery 与窄 viewport 回归继续 PASS；session 未接管这些状态机。
+
+### 16.4 最终命令与结果
+
+```text
+npm run build:renderer
+PASS；包含 Renderer TypeScript `tsc --noEmit` 与 Vite production build。仅有既有 chunk-size warning。
+
+node --test tests/renderer-history-editor-flow.test.js tests/renderer-responsive-layout.test.js tests/renderer-article-attention-actions.test.js tests/phase-06-content-workbench-feature.test.mjs tests/content-workbench-regression.test.js
+25 passed / 0 failed；覆盖 session 普通/付费/target/scope/double-click/selection-clear、相邻 content feature、attention navigation 与响应式布局。
+
+npm run typecheck:bridge
+PASS。
+
+git diff --check
+exit 0；只有 Git LF→CRLF working-copy warning，无 whitespace error。
+```
+
+未运行完整 `npm test`、主进程 typecheck、实际重建 ASAR 的 production package smoke 或真实外部账号操作。C4 没有主进程/IPC/preload/package 改动，直接 Renderer/bridge/bundle 与交互矩阵已覆盖当前风险；完整仓库与真实产物 gate按计划留给 C5。真实登录、投稿、付费、取消和订单操作未获授权且不属于本地 session 内聚。
+
+### 16.5 Primary Audit、remediation 与 bounded re-audit
+
+- **Scope：**C4 production/test diff；session state/pending/scope fencing、`GeneratedArticlesView` snapshot/intents consumer、`ContentWorkbench` workspace/client identity、普通/付费具名 command adapter、相邻回收/编辑/attention/响应式回归。
+- **Checked invariants：**session 只有易失 UI 状态；没有新增 writer、schema、主进程状态机、transport 或通用 dispatcher；ordinary/paid admission 仍由既有 owner 最终判断；target/selection/scope stale 不复用 token 或覆盖新状态；mutation 双击与 eligibility refresh 不制造重复命令或隐藏明确结果。
+- **Finding 1 — `P2 / INTRODUCED_BY_CHANGE`（blocking）：**初版只从上游 `commandStates.busy` 派生 busy，React commit 前双击可启动两个 preview/confirm；mutation 请求已经发出后若 selection/target 投影变化，通用 stale reset 还可能丢弃真实成功反馈。
+- **Remediation：**增加同步 `pendingRef` 与公开 pending snapshot，分离可废弃的 `regular_preview/paid_preview` 和已发出的 `regular_admit/paid_confirm`；所有 intents 在 mutation pending 时冻结，preview 仍可由 close/target/scope 变化废弃；selection eligibility effect 在 mutation pending 时等待明确结果。交互 fixture 增加同 tick 双击和 command-driven lifecycle refresh 竞态。
+- **Bounded re-audit：**只复核 finding 修复 diff、session 直接调用方、双击/target/client/selection refresh 矩阵、最终 bundle、Renderer/bridge typecheck 与 diff check；直接 8 项 session/文章库交互全部 PASS，未发现重复 command、迟到覆盖或成功反馈丢失。修复未改变公开 IPC、schema、writer、事务或远端副作用边界，不触发 escalation。
+- **Conclusion：**`PASS`；P0/P1 为 0，唯一 blocking P2 已关闭，无 deferred C4 blocker。C4 `COMPLETE`，C5 `READY`。
+
+### 16.6 当前 gate / Git 状态
+
+- 当前 source state 为 `HEAD b6e7365fe3abf1ae826bf29cc48b2366699b6f89 + C4 working-tree diff`；C4 production、tests 与本记录未提交。
+- 工作树仅包含 C4 的 5 个 production/test 文件与本计划；无 staged change。未 merge/push，未更新 Wave Plan、Ticket/Maintenance 或历史 handoff。
+- C5 combined audit、完整 final clean-HEAD gate 与实际重建 ASAR smoke 尚未执行；Manual Dispatch 到 C4 closure 停止，不自动进入 C5。

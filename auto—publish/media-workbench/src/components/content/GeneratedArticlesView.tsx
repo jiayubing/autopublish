@@ -17,7 +17,6 @@ import type {
   ArticleTrashRecord,
   PublicationArchiveEntry,
   PublicationHistoryRecord,
-  PaidMediaPreflight,
 } from "../../types/publication";
 import type { GeneratedContentArticle } from "../../types/generation";
 import type { MediaResource } from "../../types/media";
@@ -35,6 +34,7 @@ import ClientLiejuPublicationProfileEditor from "./ClientLiejuPublicationProfile
 import PaidMediaPreflightDialog from "./PaidMediaPreflightDialog";
 import { useConfirmation } from "../../confirmation";
 import { isContentCommandStaleResult } from "../../content-command-result";
+import { useSubmissionIntakeSession } from "./use-submission-intake-session";
 
 type GeneratedArticlesViewProps = {
   management: ArticleManagementReadModel;
@@ -71,6 +71,7 @@ function transactionReason(
 
 export default function GeneratedArticlesView({
   clientId,
+  workspaceScopeKey,
   client,
   saveClientLiejuPublicationProfile,
   management,
@@ -115,16 +116,8 @@ export default function GeneratedArticlesView({
     () => mediaResources.filter((resource) => typeof resource.price === "number"),
     [mediaResources],
   );
-  const [platformId, setPlatformId] = useState("");
-  const [accountProfileId, setAccountProfileId] = useState("");
   const [drawerArticle, setDrawerArticle] =
     useState<GeneratedContentArticle | null>(null);
-  const [intakeOpen, setIntakeOpen] = useState(false);
-  const [intakeMode, setIntakeMode] = useState<"regular" | "paid">("regular");
-  const [mediaResourceId, setMediaResourceId] = useState("");
-  const [paidPreflight, setPaidPreflight] =
-    useState<PaidMediaPreflight | null>(null);
-  const [intakeError, setIntakeError] = useState("");
   const clientIdRef = useRef(clientId);
   const mountedRef = useRef(true);
   const lastNonTrashStageRef = useRef<ArticleWorkflowFilter>(
@@ -132,11 +125,7 @@ export default function GeneratedArticlesView({
   );
   const [selected, setSelected] = useState<string[]>([]);
   const [error, setError] = useState("");
-  const visibleError = error || intakeError || query.error?.userMessage || "";
-  const [batchFeedback, setBatchFeedback] = useState<{
-    kind: "status" | "error";
-    text: string;
-  } | null>(null);
+  const visibleError = error || query.error?.userMessage || "";
   const [trashPreview, setTrashPreview] = useState<ArticleTrashPreview | null>(
     null,
   );
@@ -183,13 +172,9 @@ export default function GeneratedArticlesView({
 
   const resetClientState = useCallback(() => {
     setError("");
-    setBatchFeedback(null);
     setTrashFeedback(null);
     setTrashPreview(null);
     setDrawerArticle(null);
-    setPaidPreflight(null);
-    setIntakeOpen(false);
-    setIntakeError("");
   }, []);
 
   const updateSelected = useCallback((next: React.SetStateAction<string[]>) => {
@@ -308,6 +293,19 @@ export default function GeneratedArticlesView({
     ? []
     : selectedArticles.filter(canSubmitArticle);
   const selectedTrashableArticles = selectedArticles.filter(canTrashArticle);
+  const submissionSession = useSubmissionIntakeSession({
+    scopeKey: workspaceScopeKey,
+    availableArticleRefs: selectedSubmittableArticles.map((article) => ({
+      clientId: article.clientId,
+      articleId: article.id,
+    })),
+    commands,
+    commandStates,
+    confirm,
+    onCommitted: () => updateSelected([]),
+  });
+  const intake = submissionSession.snapshot;
+  const intakeIntents = submissionSession.intents;
   const removalStatus = transactionStatusOf(removalTransaction);
   const removalTransactionOpen =
     removalStatus === "pending_auto_recovery" ||
@@ -346,132 +344,14 @@ export default function GeneratedArticlesView({
     );
   }
 
-  async function submitRegularSelection() {
-    const requestedClientId = clientId;
-    if (
-      commandBusy(
-        "previewRegularQueueAdmission",
-        "admitRegularQueueItems",
-      )
-    )
-      return;
-    const selectedSubmittable = selectedSubmittableArticles;
-    if (!selectedSubmittable.length || !platformId || !accountProfileId) return;
-    setError("");
-    try {
-      if (
-        typeof commands.previewRegularQueueAdmission === "function" &&
-        typeof commands.admitRegularQueueItems === "function"
-      ) {
-        const regularInput = {
-          articleRefs: selectedSubmittable.map((article) => ({
-            clientId: requestedClientId,
-            articleId: article.id,
-          })),
-          platformId,
-          accountProfileId,
-        };
-        const preview =
-          await commands.previewRegularQueueAdmission(regularInput);
-        if (
-          isContentCommandStaleResult(preview) ||
-          !isCurrentClient(requestedClientId)
-        )
-          return;
-        if (!preview.queueableCount && !preview.idempotentCount)
-          throw new Error("没有符合普通平台队列规则的文章");
-        if (
-          !(await confirm({
-            title: "确认发起普通平台投稿",
-            message: `将新增 ${preview.queueableCount} 项普通平台投稿，已存在跳过 ${preview.idempotentCount} 项，缺失 ${preview.missingCount} 项，冲突 ${preview.conflictCount} 项。`,
-            confirmLabel: "确认发起投稿",
-          }))
-        )
-          return;
-        const result = await commands.admitRegularQueueItems(regularInput);
-        if (
-          isContentCommandStaleResult(result) ||
-          !isCurrentClient(requestedClientId)
-        )
-          return;
-        updateSelected([]);
-        setBatchFeedback({
-          kind: "status",
-          text: `已发起 ${result.admittedCount || 0} 项普通平台投稿。`,
-        });
-        return;
-      }
-      throw new Error("请选择一个已配置账号的普通平台");
-    } catch (value) {
-      if (isCurrentClient(requestedClientId))
-        setError(value instanceof Error ? value.message : "发起普通平台投稿失败");
-    }
-  }
-
   function openSubmissionIntake() {
     if (!selectedSubmittableArticles.length || selectedDirtyArticle) return;
-    setIntakeError("");
-    setPaidPreflight(null);
-    setIntakeMode("regular");
-    setIntakeOpen(true);
-  }
-
-  async function previewPaidSelection() {
-    const requestedClientId = clientId;
-    if (
-      !selectedSubmittableArticles.length ||
-      !mediaResourceId ||
-      commandBusy("previewPaidMediaPreflight")
-    )
-      return;
-    setIntakeError("");
-    try {
-      const result = await commands.previewPaidMediaPreflight({
-        articleRefs: selectedSubmittableArticles.map((article) => ({
-          clientId: requestedClientId,
-          articleId: article.id,
-        })),
-        mediaResourceId,
-      });
-      if (
-        isContentCommandStaleResult(result) ||
-        !isCurrentClient(requestedClientId)
-      )
-        return;
-      setPaidPreflight(result as PaidMediaPreflight);
-    } catch (value) {
-      if (isCurrentClient(requestedClientId))
-        setIntakeError(
-          value instanceof Error ? value.message : "付费媒体预检失败",
-        );
-    }
-  }
-
-  async function confirmPaidSelection() {
-    const requestedClientId = clientId;
-    const confirmationToken = paidPreflight?.confirmationToken;
-    if (!confirmationToken || commandBusy("confirmPaidMediaBatch")) return;
-    setIntakeError("");
-    try {
-      const result = await commands.confirmPaidMediaBatch({ confirmationToken });
-      if (
-        isContentCommandStaleResult(result) ||
-        !isCurrentClient(requestedClientId)
-      )
-        return;
-      updateSelected([]);
-      setPaidPreflight(null);
-      setIntakeOpen(false);
-      setBatchFeedback({
-        kind: "status",
-        text: `已确认 ${result.articleCount || selectedSubmittableArticles.length} 篇文章进入付费投稿批次。`,
-      });
-    } catch (value) {
-      if (isCurrentClient(requestedClientId))
-        setIntakeError(
-          value instanceof Error ? value.message : "确认付费投稿失败",
-        );
-    }
+    intakeIntents.open(
+      selectedSubmittableArticles.map((article) => ({
+        clientId: article.clientId,
+        articleId: article.id,
+      })),
+    );
   }
 
   function openArticle(
@@ -873,14 +753,14 @@ export default function GeneratedArticlesView({
             移入回收站 ({selectedTrashableArticles.length})
           </button>
         </div>
-        {batchFeedback && (
+        {intake.feedback && (
           <div
-            role={batchFeedback.kind === "error" ? "alert" : "status"}
-            aria-live={batchFeedback.kind === "error" ? "assertive" : "polite"}
-            tabIndex={batchFeedback.kind === "error" ? -1 : undefined}
-            className={`min-w-0 rounded border p-2 text-xs ${batchFeedback.kind === "error" ? "border-rose-100 bg-rose-50 text-rose-700" : "border-blue-100 bg-blue-50 text-blue-700"}`}
+            role={intake.feedback.kind === "error" ? "alert" : "status"}
+            aria-live={intake.feedback.kind === "error" ? "assertive" : "polite"}
+            tabIndex={intake.feedback.kind === "error" ? -1 : undefined}
+            className={`min-w-0 rounded border p-2 text-xs ${intake.feedback.kind === "error" ? "border-rose-100 bg-rose-50 text-rose-700" : "border-blue-100 bg-blue-50 text-blue-700"}`}
           >
-            {batchFeedback.text}
+            {intake.feedback.text}
           </div>
         )}
         {trashFeedback && (
@@ -1069,7 +949,7 @@ export default function GeneratedArticlesView({
         }
         onClose={() => setDrawerArticle(null)}
       />
-      {intakeOpen && (
+      {intake.open && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/30 p-4"
           role="dialog"
@@ -1081,18 +961,14 @@ export default function GeneratedArticlesView({
               <div>
                 <h3 className="text-base font-semibold text-slate-800">发起投稿</h3>
                 <p className="mt-1 text-xs leading-5 text-slate-500">
-                  当前选择 {selectedSubmittableArticles.length} 篇文章；确认前不会创建投稿批次或订单。
+                  当前选择 {intake.articleCount} 篇文章；确认前不会创建投稿批次或订单。
                 </p>
               </div>
               <button
                 type="button"
                 aria-label="关闭发起投稿"
-                onClick={() => {
-                  setIntakeOpen(false);
-                  setPaidPreflight(null);
-                  setIntakeError("");
-                }}
-                disabled={commandBusy("previewPaidMediaPreflight", "confirmPaidMediaBatch")}
+                onClick={intakeIntents.close}
+                disabled={intake.mutationBusy}
                 className="rounded p-1 text-slate-400 hover:bg-slate-100 disabled:opacity-40"
               >
                 ×
@@ -1102,41 +978,33 @@ export default function GeneratedArticlesView({
               <button
                 type="button"
                 role="tab"
-                aria-selected={intakeMode === "regular"}
-                onClick={() => {
-                  setIntakeMode("regular");
-                  setPaidPreflight(null);
-                  setIntakeError("");
-                }}
-                className={`rounded px-3 py-2 text-xs font-semibold ${intakeMode === "regular" ? "bg-slate-900 text-white" : "border border-slate-300 text-slate-600"}`}
+                aria-selected={intake.mode === "regular"}
+                onClick={() => intakeIntents.setMode("regular")}
+                disabled={intake.mutationBusy}
+                className={`rounded px-3 py-2 text-xs font-semibold ${intake.mode === "regular" ? "bg-slate-900 text-white" : "border border-slate-300 text-slate-600"}`}
               >
                 普通平台
               </button>
               <button
                 type="button"
                 role="tab"
-                aria-selected={intakeMode === "paid"}
-                onClick={() => {
-                  setIntakeMode("paid");
-                  setPaidPreflight(null);
-                  setIntakeError("");
-                }}
-                className={`rounded px-3 py-2 text-xs font-semibold ${intakeMode === "paid" ? "bg-slate-900 text-white" : "border border-slate-300 text-slate-600"}`}
+                aria-selected={intake.mode === "paid"}
+                onClick={() => intakeIntents.setMode("paid")}
+                disabled={intake.mutationBusy}
+                className={`rounded px-3 py-2 text-xs font-semibold ${intake.mode === "paid" ? "bg-slate-900 text-white" : "border border-slate-300 text-slate-600"}`}
               >
                 付费媒体
               </button>
             </div>
-            {intakeMode === "regular" ? (
+            {intake.mode === "regular" ? (
               <div className="mt-4 grid gap-3">
                 <label className="grid gap-1 text-xs text-slate-600">
                   普通平台投稿目标
                   <select
                     aria-label="普通平台投稿目标"
-                    value={platformId}
-                    onChange={(event) => {
-                      setPlatformId(event.target.value);
-                      setAccountProfileId("");
-                    }}
+                    value={intake.platformId}
+                    onChange={(event) => intakeIntents.setRegularPlatform(event.target.value)}
+                    disabled={intake.mutationBusy}
                     className="h-9 rounded border border-slate-300 px-2 text-sm"
                   >
                     <option value="">请选择一个平台</option>
@@ -1149,22 +1017,22 @@ export default function GeneratedArticlesView({
                 </label>
                 <AccountProfileSelector
                   platforms={submissionPlatforms}
-                  platformId={platformId}
-                  value={accountProfileId}
-                  onChange={setAccountProfileId}
+                  platformId={intake.platformId}
+                  value={intake.accountProfileId}
+                  onChange={intakeIntents.setAccountProfile}
                 />
                 <button
                   type="button"
-                  onClick={() => void submitRegularSelection()}
+                  onClick={() => void intakeIntents.submitRegular()}
                   disabled={
-                    !selectedSubmittableArticles.length ||
-                    !platformId ||
-                    !accountProfileId ||
-                    commandBusy("previewRegularQueueAdmission", "admitRegularQueueItems")
+                    !intake.articleCount ||
+                    !intake.platformId ||
+                    !intake.accountProfileId ||
+                    intake.regularBusy
                   }
                   className="justify-self-end rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
                 >
-                  {commandBusy("previewRegularQueueAdmission", "admitRegularQueueItems") ? "检查中…" : "确认发起投稿"}
+                  {intake.regularBusy ? "检查中…" : "确认发起投稿"}
                 </button>
               </div>
             ) : (
@@ -1173,12 +1041,9 @@ export default function GeneratedArticlesView({
                   媒体资源
                   <select
                     aria-label="付费媒体资源"
-                    value={mediaResourceId}
-                    disabled={!quotedMediaResources.length}
-                    onChange={(event) => {
-                      setMediaResourceId(event.target.value);
-                      setPaidPreflight(null);
-                    }}
+                    value={intake.mediaResourceId}
+                    disabled={!quotedMediaResources.length || intake.mutationBusy}
+                    onChange={(event) => intakeIntents.setMediaResource(event.target.value)}
                     className="h-9 rounded border border-slate-300 px-2 text-sm"
                   >
                     <option value="">
@@ -1193,29 +1058,29 @@ export default function GeneratedArticlesView({
                     ))}
                   </select>
                 </label>
-                {!paidPreflight && (
+                {!intake.paidPreflight && (
                   <button
                     type="button"
-                    onClick={() => void previewPaidSelection()}
-                    disabled={!mediaResourceId || commandBusy("previewPaidMediaPreflight")}
+                    onClick={() => void intakeIntents.previewPaid()}
+                    disabled={!intake.mediaResourceId || intake.paidPreviewBusy}
                     className="justify-self-end rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
                   >
-                    {commandBusy("previewPaidMediaPreflight") ? "检查中…" : "检查费用与文章"}
+                    {intake.paidPreviewBusy ? "检查中…" : "检查费用与文章"}
                   </button>
                 )}
               </div>
             )}
-            {intakeError && <p role="alert" className="mt-3 rounded border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{intakeError}</p>}
+            {intake.error && <p role="alert" className="mt-3 rounded border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{intake.error}</p>}
           </div>
         </div>
       )}
-      {paidPreflight && (
+      {intake.paidPreflight && (
         <PaidMediaPreflightDialog
-          model={paidPreflight}
-          busy={commandBusy("confirmPaidMediaBatch")}
-          error={intakeError}
-          onClose={() => setPaidPreflight(null)}
-          onConfirm={confirmPaidSelection}
+          model={intake.paidPreflight}
+          busy={intake.paidConfirmBusy}
+          error={intake.error}
+          onClose={intakeIntents.closePaidPreflight}
+          onConfirm={intakeIntents.confirmPaid}
         />
       )}
     </div>
