@@ -2,7 +2,7 @@
 
 **Status:** `RUNNING`
 
-**当前 gate：**`E5 READY`
+**当前 gate：**`E5 COMMIT READY`
 
 **职责：**在已完成 `POST-WAVE-SUBMISSION-ARCHITECTURE-CLOSEOUT-PLAN.md` 的基础上，降低新增普通发布平台的通用接入成本，并把客户图片库稳定为高内聚、窄接口、应用内模块。本文是独立的后续实施计划，不重开已完成的 Wave/Ticket/Maintenance，不回填既有 closeout，不代表已授权执行真实登录、发布、上传、付费或生产迁移。
 
@@ -410,11 +410,11 @@ loader 只向调用者暴露其需要的角色，不暴露完整实现对象：
 ## 12. Closure record（实施时填写）
 
 - **Execution status:** `RUNNING`
-- **Current gate:** `E5 READY`
-- **Implementation source state:** `4f8f45235795dc4a561a0254202bf134ab9c72e8`
-- **Completed packages:** `E0, E1, E2, E3, E4`；E4 implementation、Primary Audit finding remediation、bounded re-audit、clean-HEAD validation 与 provenance closure 均已完成
-- **Commands and results:** 在 clean implementation HEAD `4f8f452` 上，E4 直接矩阵 `97 passed / 0 failed / 0 skipped`；计划 §1 baseline `104 passed / 0 failed / 0 skipped`；packaging contracts `49 passed / 0 failed / 0 skipped`；main typecheck、E4 定向 ESLint 与 `git diff --check` PASS。详细 evidence 见 `handoffs/post-wave-platform-extensibility-e4-audit-closure-20260816.md`
-- **Audit findings and disposition:** E0～E3 findings 均已关闭；E4 Primary Audit 的 F1 asset 可 structured-clone/bytes 可变、F2 metadata 与 ImagePlan 尺寸边界不一致均已最小修复，bounded re-audit PASS，无 deferred finding
-- **Unrun acceptance and reasons:** full `npm test`、bridge/Renderer gate 与实际 package smoke 留给 E6 最终组合 gate；真实登录/发布/上传/付费/迁移未授权且本工作包禁止执行
-- **Remaining risks:** full suite、bridge/Renderer/build 与实际 package smoke 留给 E6 combined closure；E4 无 deferred finding
-- **Final Git status:** clean implementation HEAD `4f8f452`；E4 production/test/audit evidence 已 commit，closure 文档由独立 provenance commit 固化；未 merge/push，未进入 E5 implementation
+- **Current gate:** `E5 COMMIT READY`
+- **Implementation source state:** `7d1cc155098a4f64427dcdad978f1d753cef4185 + E5 dirty implementation/audit diff`
+- **Completed packages:** `E0, E1, E2, E3, E4`；E5 implementation、定向验证与 Primary Audit 已完成，待 implementation commit / final clean-HEAD provenance closure
+- **Commands and results:** E5 reference public behavior `3 passed / 0 failed / 0 skipped`；Primary Audit 精确直接矩阵 `120 passed / 0 failed / 0 skipped`；packaging contracts `49 passed / 0 failed / 0 skipped`；main/bridge/Renderer typecheck、Renderer build、定向 ESLint、新增文件 Prettier、测试发现与 `git diff --check` PASS。详细 evidence 见 `handoffs/post-wave-platform-extensibility-e5-implementation-20260816.md`
+- **Audit findings and disposition:** E0～E4 findings 均已关闭；E5 Primary Audit PASS，无 P0～P3、无 blocking/deferred finding、无需 remediation/bounded re-audit，未触发 escalation
+- **Unrun acceptance and reasons:** full `npm test` 与实际 package smoke 留给 E6 最终组合 gate；main/bridge/Renderer typecheck、Renderer build 和 packaging contracts 已在 E5 运行；真实登录/发布/上传/付费/迁移未授权且本工作包禁止执行
+- **Remaining risks:** E5 production/test/docs 仍需 implementation commit 与 final clean-HEAD provenance closure；full `npm test` 与实际 package smoke 留给 E6 combined closure
+- **Final Git status:** HEAD `7d1cc15`，工作树包含 E5 fixture/acceptance/doc/audit evidence diff；未 commit/merge/push，未进入 E6
