@@ -1,8 +1,8 @@
 # Renderer 冷启动主导航收敛修复计划
 
-**Status:** `READY_FOR_IMPLEMENTATION`
+**Status:** `COMPLETE`
 
-**更新时间：** 2026-08-17
+**更新时间：** 2026-08-18
 
 **职责：**修复软件冷启动后快速点击主导航时，左侧导航高亮与右侧实际可见页面永久分叉的问题。本计划只处理 Renderer 页面切换收敛，不改变文章、投稿、订单、媒体资源、设置等业务事实和命令语义。
 
@@ -159,6 +159,29 @@
 
 永久测试在点击 A 后，以“出现旧 fallback 或到达固定约 180ms 边界，二者先到就点击 B”触发；fallback 只是修复前的可选诊断信号，不能成为必经条件或断言。两个场景各用全新 Electron 进程执行 3 轮：修复前每个场景至少 2/3 轮复现才进入 N2，修复后同一测试必须 6/6 收敛。若 180ms 在测试环境不能稳定复现，只允许在 150–220ms 内做一次有界校准并在改实现前冻结，禁止失败后无限重试。
 
+#### N0 执行记录（2026-08-17）
+
+N0 已在 clean 工作树、分支 `codex/导航修复`、HEAD `24dbf8787c8919f0c7cc1b5051a0a627c1dec729` 上完成。计划证据基线 `ba4fd442dcf90c68c64499e56cccb7d5176418a1` 到当前 HEAD 之间只有计划文档提交；`App.tsx`、`Sidebar.tsx`、`vite.config.ts`、Renderer 测试基础设施和 `package.json` 没有相关源码变化，原根因前提仍成立。
+
+冻结的自动回归合同如下，N1 不得自行改变：
+
+| 观察 | 冻结方式 |
+| ---- | -------- |
+| 导航输入 | 从 `#nav-item-<ViewMode>` 取得按钮边界，以中心点调用 `page.mouse.click(x, y)`；不使用 locator `click()` 发送快速导航输入 |
+| 最后意图 | 场景 A 为 `resources → orders`；场景 B 为 `orders → settings` |
+| 高亮投影 | 最后意图按钮最终具有 `aria-current="page"`，其余五个主导航按钮均无该属性；当前源码尚未输出此属性，由 N2 按计划补齐 |
+| 可见页面 | `resources` 使用可见 heading `媒体资源`；`orders` 使用可见 heading `订单`；`settings` 使用可见 heading `设置`；均按公开可访问角色和精确名称观察 |
+| 第二次点击时机 | 点击 A 后，以旧 fallback `正在加载工作台…` 首次可见或自 A 点击起 180ms 到期二者先到为准，立即点击 B；fallback 超时不得阻塞或失败 |
+| 收敛 | B 点击后最多 1 秒内，唯一 `aria-current="page"` 与 B 一致，且 B 的公开 heading 可见、A 的独有页面观察点不再可见 |
+| 明确失败 | 高亮已变为 B、右侧仍停留 A 并超过 1 秒；之后点击 A 能恢复也仍记本轮失败 |
+| 副作用边界 | 每轮使用新 Electron 进程、临时 fixture 和最小合成 preload bridge；所有 mutation 计数必须保持 0，禁止真实用户目录、凭据、认证和外部 transport |
+
+轮次固定为：修复前两个场景各 3 轮，每个场景至少 2/3 复现才允许进入 N2；修复后以相同触发方式重跑两个场景各 3 轮，必须 6/6 收敛。若且仅若修复前某场景低于 2/3，可在写生产修复前把固定延迟在 `150–220ms` 内校准一次并记录最终值；一经记录，红灯和绿灯必须共用该值，不增加重试轮次。
+
+现有 `tests/helpers/renderer-harness.js` 是 Renderer 构建锁 owner；N1 应复用其中的 `ensureBuild()`，不得另建并行 `dist` writer。现有 settings Electron 测试证明了真实 Renderer、临时 main/preload 和 `finally` 清理 seam 可行，但它由环境变量显式启用；N1 新测试不得复制这种默认 skip 机制，必须被 root discovery 默认收集。
+
+N1 fixture 实测确认两个场景进入订单页时都会按现有公开行为触发一次 `openOrders() → syncAllOrders()`。这项既有自动订单同步必须单独记录并断言每轮恰好一次，不能混入“用户 mutation 为 0”的计数，也不能为满足 fixture 安全断言而禁用；发布、取消、保存、配置或其他用户写命令仍必须全部为 0。
+
 ### N1 — 建立当前代码必红的行为回归
 
 **推荐文件：**`auto—publish/tests/renderer-cold-start-navigation-convergence.electron.test.js`
@@ -185,6 +208,27 @@ node --test --test-concurrency=1 tests/renderer-cold-start-navigation-convergenc
 
 该文件由现有 discovery 收集并进入串行池，Windows required CI 必须默认执行。现有 root runner 会拒绝 skip/todo/cancelled，因此新测试不得用默认 `describe.skip` 或手工环境变量隐藏。
 
+#### N1 执行记录（2026-08-17）
+
+已新增 `tests/renderer-cold-start-navigation-convergence.electron.test.js`，复用 `tests/helpers/renderer-harness.js` 的 `ensureBuild()` 和 build lock。每轮创建独立临时 main/preload 与新 Electron 进程，使用真实 Renderer、`page.mouse.click` 坐标输入、公开 heading 和 `aria-current` 观察，并在 `finally` 中关闭进程和删除 fixture。
+
+在尚未修改 `App.tsx` / `Sidebar.tsx` 的当前代码上执行：
+
+```powershell
+node --test --test-concurrency=1 tests/renderer-cold-start-navigation-convergence.electron.test.js
+```
+
+结果符合预期红灯：`tests 1 / pass 0 / fail 1 / skipped 0 / todo 0 / cancelled 0`。固定 180ms 触发无需校准，观察矩阵为：
+
+| 场景 | 轮次 | 永久停留旧页 | 最终页收敛 | 用户 mutation | 既有订单同步 | page error |
+| ---- | ---- | ------------ | ---------- | ------------- | ------------ | ---------- |
+| `resources → orders` | 3 | 3/3 为 `媒体资源` | 0/3 | 0 | 每轮 1 次 | 0 |
+| `orders → settings` | 3 | 3/3 为 `订单` | 0/3 | 0 | 每轮 1 次 | 0 |
+
+两个场景均超过进入 N2 所需的 `2/3` 红灯阈值。当前 Sidebar 尚未提供 `aria-current`，所以六轮的 `currentViewIds` 均为空；这与旧页 heading 3/3 持续可见分别记录，没有用可访问性缺口替代竞态复现证据。
+
+`node scripts/run-tests.js --list` 共收集 268 个测试文件并包含该新文件；`node --check tests/renderer-cold-start-navigation-convergence.electron.test.js` 与 `git diff --check` 通过。
+
 ### N2 — 实施最小根因修复
 
 **允许修改：**
@@ -210,6 +254,22 @@ node --test --test-concurrency=1 tests/renderer-cold-start-navigation-convergenc
 5. 保持 `currentView`、Sidebar 回调、页面 key、现有动画参数和页面 props 不变；
 6. 立即运行 N1 红灯测试，确认同一命令 6/6 转绿；
 7. 若仍红，只做根因所需的一个备选变量实验；不得同时改动画、状态和页面拆分。
+
+#### N2 执行记录（2026-08-17）
+
+已按首选方案完成最小根因修复：`App.tsx` 的五个页面级 `React.lazy` 已替换为静态 import，顶层 `Suspense` 与“正在加载工作台…” fallback 已移除；`AnimatePresence mode="wait"`、页面 key、150ms transition、页面 props、Sidebar 回调和唯一导航 state `currentView` 均保持不变。`Sidebar.tsx` 当前主导航按钮新增由 `currentView` 直接计算的 `aria-current="page"`，未新增页面 state 或恢复逻辑。
+
+首次绿灯运行发现设置页内部导航也合法使用 `aria-current="page"`，原测试对整个 document 做唯一性查询，因而把已收敛的设置页误判为失败。该观察与 N0 冻结的“六个主导航按钮唯一高亮”范围不符，测试已最小收窄到 `#app-sidebar [aria-current="page"]`；未改变 timing、场景、轮次、可见页面断言或生产行为。
+
+在最终 N2 代码上执行：
+
+```powershell
+node --check tests/renderer-cold-start-navigation-convergence.electron.test.js
+node --test --test-concurrency=1 tests/renderer-cold-start-navigation-convergence.electron.test.js
+git diff --check
+```
+
+结果：语法检查通过；导航回归 `tests 1 / pass 1 / fail 0 / skipped 0 / todo 0 / cancelled 0`，两个场景各 3 轮、共 6/6 收敛，用户 mutation 均为 0，既有订单同步每轮恰好 1 次，page error 均为 0；`git diff --check` 通过，仅输出既有 Windows 行尾转换 warning。首选方案已闭合回归，未进入动画备选。
 
 ### N3 — Renderer 定向验证
 
@@ -239,11 +299,29 @@ git diff --check
 
 如 `typecheck:bridge` 或其他命令在当前基线本来就失败，必须先区分 pre-existing 与 introduced；不得修改无关业务代码换绿灯。
 
+#### N3 执行记录（2026-08-17）
+
+已在最终 N3 源码状态上执行计划要求的全部定向门禁：
+
+```powershell
+npm run typecheck:renderer
+npm run typecheck:bridge
+node --test --test-concurrency=1 tests/renderer-cold-start-navigation-convergence.electron.test.js
+node --test --test-concurrency=1 tests/renderer-generation-batch-navigation.test.js
+$env:RUN_ELECTRON_FOCUS_TESTS='1'; node --test --test-concurrency=1 tests/renderer-settings-window-focus.electron.test.js
+npm run build:renderer
+git diff --check
+```
+
+结果全部通过：Renderer `tsc --noEmit` 与 bridge strict typecheck 均退出 0；冷启动导航回归 `1/1` 通过并保持两个场景共 6/6 收敛、用户 mutation 为 0、订单页每轮恰好一次既有同步、page error 为 0；generation batch 跨页 intent 回归 `1/1` 通过；设置窗口首次保存、确认取消、成功、失败和清除交互回归 `1/1` 通过；Renderer build 完成 2167 个模块转换并生成单个 `index-CbY69udY.js`（764,793 bytes）。
+
+构建后的 `dist/index.html` 继续使用相对 `./assets/index-CbY69udY.js`，script 无 `type="module"` 与 `crossorigin`；`vite.config.ts` 的 IIFE 输出合同未改变。Vite 仅报告既有的单 bundle 超过 500kB warning，不影响退出状态，也未据此扩大到代码拆分。`git diff --check` 通过，仅有 Windows 行尾转换 warning；`dist/` 未出现在 Git 状态中，未手工修改或纳入提交范围。
+
 ### N4 — 最新解包版冷启动验收
 
 Renderer 源码验证通过后，通过正式 alpha 构建流程生成新的 `release-alpha/win-unpacked`，再对生成物执行压力测试。不得复用旧 `app.asar` 证明新源码已修复。
 
-本节的“20 轮”是最终解包版的人工 smoke，只启动应用和点击主导航，不触发发布、付费、取消、保存或外部刷新。优先使用临时/合成环境；若必须打开真实账号或真实用户工作区，执行前取得当次授权。若未来自动化该验收，必须使用合成数据和假 transport，不能控制真实环境。
+本节的“20 轮”是最终解包版自动集成 smoke：直接启动正式 `win-unpacked/ETO—001.exe`，使用临时用户目录，在应用进程内以已校验的 production IPC contract fixture 临时替换 handler，再通过 production preload/registry 和包内 Renderer 执行主导航输入。不得触发发布、付费、取消、保存或外部刷新，也不得使用真实账号、真实用户工作区或真实 transport。
 
 建议构建命令由当时 Git/执行授权决定：clean worktree 使用正式 clean gate；若仍处于经允许的实施 dirty 状态，只能使用项目已有的 `pack:alpha:dirty`，不得绕过构建脚本手改包。
 
@@ -260,6 +338,47 @@ Renderer 源码验证通过后，通过正式 alpha 构建流程生成新的 `re
 
 至少执行 20 轮冷启动快速导航。判定按轮计算：任何一轮出现“高亮 B、页面 A”且超过 1 秒不收敛即失败，不允许通过点击 A 恢复后把该轮记为通过。
 
+#### N4 执行记录与 N5 remediation（2026-08-18）
+
+使用计划指定的 dirty 正式入口执行：
+
+```powershell
+npm run pack:alpha:dirty
+```
+
+首次封装仅进入 packaging 阶段便因 Electron Builder 访问外部下载地址 `20.205.243.166:443` 超时退出；随后只读检查确认 exe 与 `app.asar` 仍是 20:31 的旧时间戳，没有生成可验证的新产物。对同一正式命令做了一次有界重试后完成当时 N4 包；Primary Review remediation 又在最终 `mode="sync"` production source 上重新执行同一正式命令并成功。最终产物时间为：
+
+- `release-alpha/win-unpacked/ETO—001.exe`：2026-08-18 00:00:35，225,485,824 bytes
+- `release-alpha/win-unpacked/resources/app.asar`：2026-08-18 00:00:35，14,262,215 bytes
+- `release-alpha/ETO—001-Alpha-1.0.1-portable.exe`：2026-08-18 00:02:04，115,224,431 bytes
+
+包内 `media-workbench/dist/assets/index-BfAveAUz.js` 与最终 Renderer build 的同名 bundle SHA-256 均为 `3A5EA33353E56A2BB4BB124BC57E34829192E5DC0C2DBDCEF8E4C62DE7C490F9`；该对应关系通过 `@electron/asar.extractFile` 读取包内字节后计算 hash 验证。包内 `dist/index.html` 继续使用相对 bundle 路径，未改变 Electron `file://` 加载合同。`node scripts/verify-alpha-package.js release-alpha/win-unpacked/resources` 返回 `Alpha package contents OK`。
+
+Primary Review 确认原先“提取 `app.asar` Renderer 后用开发 Electron/临时 main”的证据不足以证明正式 main、sandboxed production preload 与 IPC registry 的集成行为。测试已改为仅在 `RUN_UNPACKED_NAVIGATION_SMOKE=1` 时读取 `AUTO_PUBLISH_UNPACKED_EXECUTABLE` 并直接启动指定真实 EXE；仅设置 artifact path 不会改变默认 N1。每轮使用独立临时 `--user-data-dir`，production main、production preload、production IPC registry、包内 Renderer 和 `file://` 加载均实际参与；应用进程内临时 handler 返回由 `phase-06-production-ipc-contract-fixtures.js` 和正式 registry 生成并校验的 envelope。所有 command channel 必须为 0，既有 `media:sync-all-orders` 另行计数；production main/preload 未为测试增加后门。
+
+真实 EXE 首次 20 轮运行使用当时静态 import + `AnimatePresence mode="wait"` 的包，得到 19/20：六入口 30ms 场景第 1 轮最终 Sidebar 高亮为设置、可见页面却停在媒体资源。该结果证明静态 import 单独不足以保证最后意图收敛，因此按本计划既定备选只把 `AnimatePresence` 切换为 `mode="sync"`，未增加第二导航 state、watchdog、reload、debounce 或点击锁。同步进退场允许旧页在 150ms exit 动画内短暂存在，测试等待条件相应明确为：最终 heading 可见、所有 stale heading 消失、Sidebar 唯一 `aria-current` 指向最终页，且总计不超过 1 秒；最终判定没有放宽。
+
+在最终 `mode="sync"` 源码重新构建正式包后，以如下显式命令运行固定矩阵：
+
+```powershell
+$env:RUN_UNPACKED_NAVIGATION_SMOKE='1'
+$env:AUTO_PUBLISH_UNPACKED_EXECUTABLE='F:\官媒投稿-refactor\auto—publish\release-alpha\win-unpacked\ETO—001.exe'
+node --test --test-concurrency=1 tests/renderer-cold-start-navigation-convergence.electron.test.js
+```
+
+固定矩阵共 20 轮，结果如下：
+
+| 场景 | 轮次 | 收敛 |
+| ---- | ---- | ---- |
+| 冷启动：媒体资源 → 订单 | 4 | 4/4 |
+| 冷启动：订单 → 设置 | 4 | 4/4 |
+| 冷启动：内容生产 → 投稿中心 → 媒体资源 | 3 | 3/3 |
+| 冷启动：六入口快速往返 | 3 | 3/3 |
+| 页面预热后：订单 → 媒体资源 | 3 | 3/3 |
+| 点击中伴随查询完成：媒体资源 → 订单 | 3 | 3/3 |
+
+最终真实 EXE smoke 输出：`rounds: 20`、`converged: 20`、`mutationCalls: 0`、`pageErrors: 0`，矩阵轮次为 `4/4/3/3/3/3`。随后默认 N1 命令再次通过（`tests 1 / pass 1 / fail 0`），证明显式 artifact 模式没有污染默认 CI 路径；临时用户目录均在 `finally` 中清理。
+
 ### N5 — Primary Review
 
 Primary Review 只检查本修复直接风险：
@@ -270,9 +389,19 @@ Primary Review 只检查本修复直接风险：
 4. `currentView` 是否仍是唯一导航 owner，`aria-current` 是否只是它的投影；
 5. 是否删除伪懒加载而没有新增平行状态机或恢复 watchdog；
 6. 页面 import 是否影响冷启动交互、打包或 Electron `file://`；
-7. 原有跨页 intent、订单打开、设置首次交互及解包版人工 smoke 是否通过。
+7. 原有跨页 intent、订单打开、设置首次交互及解包版自动集成 smoke 是否通过。
 
 Finding 按项目 `AGENTS.md` 分类。P0/P1 阻塞；P2 只有直接影响当前导航正确性、测试可信度、打包合同或公开 UI 行为才阻塞。
+
+#### N5 Primary Review 记录（2026-08-18）
+
+Primary Review 发现 3 个直接阻塞当前证据可信度或默认测试合同的 P2：
+
+1. `PROCESS_EVIDENCE_GAP`：原 N4 只使用包内 Renderer 字节配合开发 Electron/临时 main，不能证明真实解包应用集成；已改为直接启动最终 `ETO—001.exe`，并保留 production main/preload/registry/`file://` 路径。
+2. `INTRODUCED_BY_CHANGE`：原 `AUTO_PUBLISH_RENDERER_ENTRY` 可单独改变默认 CI 测试输入；该覆盖已删除，artifact 模式现在必须由 `RUN_UNPACKED_NAVIGATION_SMOKE=1` 显式开启，路径变量仅在该模式读取。
+3. `PROCESS_EVIDENCE_GAP`：计划曾把第一次失败 packaging 写成已生成新 `win-unpacked`；现已按时间戳检查结果纠正为“未生成可验证的新产物”。
+
+修复真实 EXE evidence seam 后还暴露了 `mode="wait"` 的一次真实收敛失败；按计划备选改为 `mode="sync"` 并重新执行源码门禁、正式封装、包内容校验和真实 EXE 20 轮矩阵。三个 finding 的 remediation 均已完成，进入 N6 bounded re-review，不重开 fresh full review。
 
 ### N6 — Bounded Re-review 与 Closure
 
@@ -284,11 +413,27 @@ Finding 按项目 `AGENTS.md` 分类。P0/P1 阻塞；P2 只有直接影响当�
 - 修复后同一命令的绿灯输出；
 - 红绿阶段的固定轮次和最终观察结果；
 - Renderer typecheck/build 结果；
-- 最新解包版人工 20 轮冷启动矩阵结果，或未运行及授权/环境原因；
+- 最新解包版自动集成 20 轮冷启动矩阵结果，或未运行及授权/环境原因；
 - 实际改动文件；
 - 未运行的重要验收及原因；
 - Primary Review finding 与 bounded closure；
 - 最终 Git status、HEAD/commit（如获得提交授权）和生成物对应关系。
+
+#### N6 Bounded Re-review 与 Closure 记录（2026-08-18）
+
+N6 严格限定检查 N5 的 3 个 finding、对应修复 diff、导航收敛不变量、直接调用方、Renderer build 与最终真实 EXE 证据，没有重开 fresh full review。结论：3 个 finding 均已关闭，无 P0/P1/P2 blocking finding。
+
+本次实际 bounded re-review 在当前未提交工作树上重新执行，而不是直接采信此前记录：`typecheck:renderer`、`typecheck:bridge`、默认导航回归、generation batch、settings focus、Renderer build、package verification、bundle hash 对应和真实 EXE 20 轮矩阵均再次通过。另以不存在的 `AUTO_PUBLISH_UNPACKED_EXECUTABLE` 且不设置 `RUN_UNPACKED_NAVIGATION_SMOKE` 重跑默认测试，仍按默认 Renderer 路径通过，确认 artifact path 单独存在不会切换测试输入。production registry 公开清单中的全部 query fixture 与 72 个 command fixture 均有合成结果，未留下可落入真实 handler 的 command 缺口。
+
+- 默认测试仅在 `RUN_UNPACKED_NAVIGATION_SMOKE=1` 时读取 `AUTO_PUBLISH_UNPACKED_EXECUTABLE`；已删除 `AUTO_PUBLISH_RENDERER_ENTRY`，单独设置 artifact path 不会污染默认 CI 输入。
+- N4 直接由 Playwright 启动最终 `release-alpha/win-unpacked/ETO—001.exe`；production main、sandboxed production preload、production IPC registry、包内 Renderer 与 `file://` 均在链路内，main/preload production source 未修改。
+- production registry 中所有 command fixture 均有已定义结果并由临时 handler 拦截、计数；除既有 `media:sync-all-orders` 按场景精确计数外，其他 command 调用保持 0，未发现真实写副作用入口遗漏。
+- `currentView` 仍是唯一导航 owner；`aria-current` 只是 Sidebar 投影。`mode="sync"` 只改变 150ms 动画的进退场并发方式；最终等待要求最终 heading 可见、所有 stale heading 消失、Sidebar 唯一高亮一致，1 秒收敛合同未削弱。
+- production diff 未触碰业务事实、IPC 合同、schema、main/preload 或页面 props；直接 Renderer 回归与最终包证据绑定到最终 `mode="sync"` 源码。
+
+最终证据：`typecheck:renderer`、`typecheck:bridge`、默认导航回归 6/6、generation batch、settings focus 均通过；正式 alpha 封装及 package verification 通过；最终真实 EXE 固定矩阵 20/20 收敛，`mutationCalls: 0`、`pageErrors: 0`。N6 末尾再次执行 `node --check tests/renderer-cold-start-navigation-convergence.electron.test.js` 与 `git diff --check`，均退出 0（后者仅有 Windows 行尾转换 warning）。
+
+最终 HEAD 仍为 `24dbf8787c8919f0c7cc1b5051a0a627c1dec729`，分支 `codex/导航修复`。工作树仅包含本计划、`App.tsx`、`Sidebar.tsx` 的修改和新增导航回归测试；`release-alpha/` 与 Renderer `dist/` 生成物未进入 Git status。用户未授权 commit，因此本次 closure 保持未提交状态。
 
 ## 5. 完成定义
 

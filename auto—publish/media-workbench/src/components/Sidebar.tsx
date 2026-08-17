@@ -93,6 +93,7 @@ export default function Sidebar({
               id={`nav-item-${item.id}`}
               onClick={() => onViewChange(item.id)}
               aria-label={item.label}
+              aria-current={isActive ? "page" : undefined}
               className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 relative group ${
                 isActive
                   ? "bg-blue-600/10 text-blue-400 border border-blue-500/20 font-semibold"

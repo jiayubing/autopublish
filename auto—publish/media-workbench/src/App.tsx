@@ -1,6 +1,11 @@
-import React, { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import type { ViewMode } from "./types/view";
 import Sidebar from "./components/Sidebar";
+import ContentWorkbench from "./components/ContentWorkbench";
+import OrdersView from "./components/OrdersView";
+import PlatformWorkbench from "./components/PlatformWorkbench";
+import ResourceLibrary from "./components/ResourceLibrary";
+import SettingsView from "./components/SettingsView";
 import { useWorkspaceRuntimeIdentity } from "./features/workspace/workspace-coordinator-context";
 import { PlatformFeatureProvider } from "./features/platform/platform-feature-context";
 import ConfirmationHost from "./components/ConfirmationHost";
@@ -13,11 +18,6 @@ import { useContentWorkbenchFeature } from "./features/content/use-content-workb
 import { SettingsFeatureProvider } from "./features/settings/settings-context";
 import { useSubmissionCenterFeature } from "./features/submission-center/use-submission-center-feature";
 
-const ResourceLibrary = lazy(() => import("./components/ResourceLibrary"));
-const OrdersView = lazy(() => import("./components/OrdersView"));
-const SettingsView = lazy(() => import("./components/SettingsView"));
-const PlatformWorkbench = lazy(() => import("./components/PlatformWorkbench"));
-const ContentWorkbench = lazy(() => import("./components/ContentWorkbench"));
 export default function App() {
   return (
     <PlatformFeatureProvider>
@@ -150,14 +150,7 @@ function AppContent() {
         </header>
         {/* Scrollable Main Viewport */}
         <main className="flex-1 overflow-y-auto p-3 sm:p-6 min-h-0 relative select-none">
-          <Suspense
-            fallback={
-              <div className="flex h-full items-center justify-center text-sm text-slate-500">
-                正在加载工作台…
-              </div>
-            }
-          >
-            <AnimatePresence mode="wait">
+          <AnimatePresence mode="sync">
               {currentView === "content-production" && (
                 <motion.div
                   key="content-production-view"
@@ -348,8 +341,7 @@ function AppContent() {
                   <SettingsView />
                 </motion.div>
               )}
-            </AnimatePresence>
-          </Suspense>
+          </AnimatePresence>
         </main>
       </div>
     </div>
