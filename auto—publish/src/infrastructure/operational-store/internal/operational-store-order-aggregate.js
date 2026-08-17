@@ -65,6 +65,7 @@ function createOrderAggregate(context, activeTarget) {
     if (
       ![
         "order_creation_uncertain",
+        "system_rejected",
         "order_creation_conflict",
         "order_created",
         "order_creation_no_order",
@@ -91,15 +92,18 @@ function createOrderAggregate(context, activeTarget) {
       !value.resourceId ||
       typeof value.title !== "string" ||
       !value.title ||
-      typeof value.systemSubmissionId !== "string" ||
-      !value.systemSubmissionId
+      (value.systemSubmissionId !== undefined &&
+        (typeof value.systemSubmissionId !== "string" ||
+          !value.systemSubmissionId))
     )
       throw fail("PAID_ORDER_RESOLUTION_EVIDENCE_INSUFFICIENT");
     const normalized = Object.freeze({
       orderId: value.orderId,
       resourceId: value.resourceId,
       title: value.title,
-      systemSubmissionId: value.systemSubmissionId,
+      ...(value.systemSubmissionId
+        ? { systemSubmissionId: value.systemSubmissionId }
+        : {}),
       status: typeof value.status === "string" ? value.status : "unknown",
     });
     return Object.freeze({
@@ -831,9 +835,13 @@ function createOrderAggregate(context, activeTarget) {
             : "PAID_ORDER_RESOLUTION_OPPOSITE",
         );
       if (
-        row.intent.detail.phase !== "order_creation_uncertain" ||
         row.state !== "manual_check" ||
-        row.item_status !== "uncertain"
+        !(
+          (row.intent.detail.phase === "order_creation_uncertain" &&
+            row.item_status === "uncertain") ||
+          (row.intent.detail.phase === "system_rejected" &&
+            row.item_status === "blocked")
+        )
       )
         throw fail("PAID_ORDER_RESOLUTION_NOT_AVAILABLE");
       const prepared = row.intent.orderCreationPrepared;
@@ -845,7 +853,8 @@ function createOrderAggregate(context, activeTarget) {
         observation &&
         (observation.resourceId !== prepared.targetIdentityV1.mediaResourceId ||
           observation.title !== prepared.submittedTitle ||
-          observation.systemSubmissionId !== prepared.systemSubmissionCode)
+          (observation.systemSubmissionId !== undefined &&
+            observation.systemSubmissionId !== prepared.systemSubmissionCode))
       )
         throw fail("PAID_ORDER_RESOLUTION_EVIDENCE_MISMATCH");
       const binding = paidResolutionBinding(row, action, observation);
@@ -1167,7 +1176,7 @@ function createOrderAggregate(context, activeTarget) {
         stamp,
       });
       db.prepare(
-        "UPDATE submission_items SET status='completed',claim_token=NULL,claim_until=NULL,revision=revision+1,payload_json=? WHERE item_id=? AND status='uncertain'",
+        "UPDATE submission_items SET status='completed',claim_token=NULL,claim_until=NULL,revision=revision+1,payload_json=? WHERE item_id=? AND status=?",
       ).run(
         text(
           Object.assign({}, fromText(row.item_payload) || {}, {
@@ -1178,6 +1187,7 @@ function createOrderAggregate(context, activeTarget) {
           }),
         ),
         row.item_id,
+        row.item_status,
       );
       manualResolutionFact(
         row,
@@ -1279,7 +1289,7 @@ function createOrderAggregate(context, activeTarget) {
         attemptId: row.attempt_id,
       });
       db.prepare(
-        "UPDATE submission_items SET status='failed',claim_token=NULL,claim_until=NULL,revision=revision+1,payload_json=? WHERE item_id=? AND status='uncertain'",
+        "UPDATE submission_items SET status='failed',claim_token=NULL,claim_until=NULL,revision=revision+1,payload_json=? WHERE item_id=? AND status=?",
       ).run(
         text(
           Object.assign({}, fromText(row.item_payload) || {}, {
@@ -1287,6 +1297,7 @@ function createOrderAggregate(context, activeTarget) {
           }),
         ),
         row.item_id,
+        row.item_status,
       );
       const next = Object.assign({}, row.intent, {
         detail: Object.assign({}, row.intent.detail, {

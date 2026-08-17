@@ -77,7 +77,10 @@ function createPaidOrderCreationResolutionService(options) {
         orderId,
         resourceId: order.resourceId,
         title: order.title,
-        systemSubmissionId: order.systemSubmissionId,
+        ...(typeof order.systemSubmissionId === "string" &&
+        order.systemSubmissionId
+          ? { systemSubmissionId: order.systemSubmissionId }
+          : {}),
         status: order.status,
       },
     });

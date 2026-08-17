@@ -578,6 +578,9 @@ function createArticleAttentionQuery(options) {
                   : "REGULAR_PLATFORM_UNCERTAIN"
                 : null,
             hasPublishedEvidence: Boolean(item.remoteId && item.remoteUrl),
+            resolutionActions: Array.isArray(item.resolutionActions)
+              ? item.resolutionActions
+              : undefined,
           },
           resolveArticle,
         );

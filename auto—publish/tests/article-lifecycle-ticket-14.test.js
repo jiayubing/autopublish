@@ -186,6 +186,53 @@ function makeUncertain(value, batchId, claimToken) {
   return { claim, prepared, started };
 }
 
+function makeSystemRejected(value, batchId, claimToken) {
+  value.transitions.setPaidSubmissionBatchRunIntent({
+    batchId,
+    running: true,
+  });
+  const claim = value.transitions.claimPaidSubmissionBatchItem({
+    batchId,
+    claimToken,
+    leaseMs: 30000,
+  });
+  const submittedTitle = claim.publicationSnapshot.title.trim();
+  const submittedBody = claim.publicationSnapshot.body;
+  const prepared = {
+    version: 1,
+    articleIdentityV1: claim.articleIdentityV1,
+    targetIdentityV1: claim.targetIdentityV1,
+    orderCreationAttemptId: claim.orderCreationAttemptId,
+    mediaName: claim.mediaName,
+    quotedPrice: claim.quotedPrice,
+    estimatedTotal: claim.estimatedTotal,
+    systemSubmissionCode: claim.systemSubmissionCode,
+    submittedTitle,
+    submittedBody,
+    contentFingerprint: domain.contentFingerprint(
+      submittedTitle,
+      submittedBody,
+    ),
+    preparedAt: claim.preparedAt,
+  };
+  const started = value.transitions.beginOrderCreationRemoteCall({
+    batchId,
+    batchItemId: claim.batchItemId,
+    orderCreationAttemptId: claim.orderCreationAttemptId,
+    claimToken,
+    orderCreationPrepared: prepared,
+  });
+  value.transitions.recordPaidOrderCreationSystemRejection({
+    batchId,
+    batchItemId: claim.batchItemId,
+    orderCreationAttemptId: claim.orderCreationAttemptId,
+    claimToken,
+    scope: "service",
+    reasonCode: "MEDIA_SUPPLIER_REJECTED",
+  });
+  return { claim, prepared, started };
+}
+
 function lateSuccessInput(uncertain, orderId) {
   const snapshot = domain.parseOrderSnapshotV1({
     version: 1,
@@ -356,6 +403,108 @@ test("uncertain order creation stays frozen and can bind only a fully matched qu
           confirmationToken: prepared.confirmationToken,
         }),
       { code: "PAID_ORDER_RESOLUTION_EVIDENCE_MISMATCH" },
+    );
+  } finally {
+    value.close();
+  }
+});
+
+test("a blocked service rejection can bind a matching queried order when the supplier omits third_id", async () => {
+  const value = fixture();
+  try {
+    const admitted = await admitArticle(value, "article-a");
+    const rejected = makeSystemRejected(
+      value,
+      admitted.batchId,
+      "claim-system-rejected-bind",
+    );
+    const resolution = service(value, async () => ({
+      kind: "order_details",
+      orders: [
+        {
+          orderId: "order-system-rejected",
+          status: "published",
+          resourceId: rejected.prepared.targetIdentityV1.mediaResourceId,
+          title: rejected.prepared.submittedTitle,
+        },
+      ],
+    }));
+
+    assert.equal(
+      value.transitions.listPaidSubmissionBatchSnapshots({
+        batchId: admitted.batchId,
+      })[0].items[0].status,
+      "blocked",
+    );
+
+    const prepared = await resolution.prepareBindOrderNumber({
+      orderCreationAttemptId: rejected.claim.orderCreationAttemptId,
+      orderId: "order-system-rejected",
+    });
+    const bound = resolution.bindOrderNumber({
+      orderCreationAttemptId: rejected.claim.orderCreationAttemptId,
+      orderId: "order-system-rejected",
+      confirmationToken: prepared.confirmationToken,
+    });
+
+    assert.equal(bound.status, "order_bound");
+    assert.equal(value.store.listRemoteOrders()[0].orderId, "order-system-rejected");
+    assert.equal(
+      value.transitions.listPaidSubmissionBatchSnapshots({
+        batchId: admitted.batchId,
+      })[0].items[0].status,
+      "completed",
+    );
+    assert.equal(
+      value.store.listArticleLifecycleFacts({ articleIds: ["article-a"] })
+        .publications[0].status,
+      "remote_started",
+    );
+  } finally {
+    value.close();
+  }
+});
+
+test("a blocked service rejection can be confirmed as no-order without leaving an active target", async () => {
+  const value = fixture();
+  try {
+    const admitted = await admitArticle(value, "article-a");
+    const rejected = makeSystemRejected(
+      value,
+      admitted.batchId,
+      "claim-system-rejected-no-order",
+    );
+    const resolution = service(value, async () => {
+      throw new Error("confirm-no-order must not query the supplier");
+    });
+
+    const prepared = resolution.prepareConfirmNoOrder({
+      orderCreationAttemptId: rejected.claim.orderCreationAttemptId,
+    });
+    const confirmed = resolution.confirmNoOrder({
+      orderCreationAttemptId: rejected.claim.orderCreationAttemptId,
+      confirmationToken: prepared.confirmationToken,
+    });
+
+    assert.equal(confirmed.status, "no_order");
+    assert.equal(value.store.listRemoteOrders().length, 0);
+    assert.equal(
+      value.transitions.listPaidSubmissionBatchSnapshots({
+        batchId: admitted.batchId,
+      })[0].items[0].status,
+      "failed",
+    );
+    assert.equal(
+      value.store.listArticleLifecycleFacts({ articleIds: ["article-a"] })
+        .publications[0].status,
+      "failed",
+    );
+    const nextBatch = await admitArticle(value, "article-a", "media-15");
+    assert.equal(
+      value.transitions.listPaidSubmissionBatchSnapshots({
+        batchId: nextBatch.batchId,
+      })[0].items[0].status,
+      "queued",
     );
   } finally {
     value.close();

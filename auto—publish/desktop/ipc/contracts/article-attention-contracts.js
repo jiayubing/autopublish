@@ -15,6 +15,34 @@ const {
   projectFields,
   text,
 } = require("./content-core-contract-shared");
+const { mediaContractErrors } = require("./media-contracts");
+
+const PAID_ORDER_RESOLUTION_ERROR_CODES = Object.freeze([
+  "PAID_ORDER_RESOLUTION_QUERY_FAILED",
+  "PAID_ORDER_RESOLUTION_EVIDENCE_INSUFFICIENT",
+  "PAID_ORDER_RESOLUTION_EVIDENCE_MISMATCH",
+  "PAID_ORDER_RESOLUTION_TOKEN_STALE",
+  "PAID_ORDER_RESOLUTION_STATE_STALE",
+  "PAID_ORDER_RESOLUTION_OPPOSITE",
+  "PAID_ORDER_SUCCESS_WINS",
+  "PAID_ORDER_NEW_TARGET_CONFLICT",
+  "PAID_ORDER_RESOLUTION_NOT_AVAILABLE",
+  "PAID_ORDER_RESOLUTION_ALREADY_COMPLETED",
+  "PAID_ORDER_ATTEMPT_INVALID",
+  "PAID_ORDER_ATTEMPT_NOT_FOUND",
+  "PAID_ORDER_ID_INVALID",
+  "PAID_ORDER_EVIDENCE_CONFLICT",
+  "PAID_ORDER_PHASE_INVALID",
+  "OPERATIONAL_ORDER_CONFLICT",
+]);
+const PAID_ORDER_RESOLUTION_ERRORS = Object.freeze(
+  Object.fromEntries(
+    PAID_ORDER_RESOLUTION_ERROR_CODES.map((code) => [
+      code,
+      mediaContractErrors[code],
+    ]),
+  ),
+);
 
 const attentionResolutionInput = exactObject({
   orderId: optionalField(id),
@@ -151,7 +179,7 @@ const articleAttentionContracts = Object.freeze([
     }),
     fromArgs: (args) => args[0] || {},
     toArgs: (payload) => [payload],
-  }),
+  }, PAID_ORDER_RESOLUTION_ERRORS),
   contentContract({
     capability: "attention.resolveArticleAttention",
     channel: "content:resolve-article-attention",
@@ -173,7 +201,7 @@ const articleAttentionContracts = Object.freeze([
     }),
     fromArgs: (args) => args[0] || {},
     toArgs: (payload) => [payload],
-  }),
+  }, PAID_ORDER_RESOLUTION_ERRORS),
 ]);
 
 function projectArticleAttentionItem(input) {

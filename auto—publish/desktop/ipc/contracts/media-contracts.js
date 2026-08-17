@@ -942,6 +942,7 @@ const mediaLifecycleContracts = Object.freeze([
 module.exports = {
   mediaContracts,
   mediaLifecycleContracts,
+  mediaContractErrors: COMMON_ERRORS,
   finiteMediaPrice,
   projectMediaResource,
   projectMediaDraft,

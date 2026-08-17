@@ -260,6 +260,51 @@ test("article attention preview exposes only the confirmation decision DTO", asy
   });
 });
 
+test("article attention preview preserves paid-order resolution failures as safe typed errors", async function () {
+  const handlers = new Map();
+  const ipcMain = createAuthenticatedIpcMain(
+    {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      },
+    },
+    async function () {},
+  );
+  registerArticleAttentionIpc({
+    ipcMain,
+    articleAttentionQuery: { list() {}, get() {} },
+    articleAttentionResolver: {
+      preview() {
+        const error = new Error("private supplier failure");
+        error.code = "PAID_ORDER_RESOLUTION_QUERY_FAILED";
+        throw error;
+      },
+      resolve() {},
+    },
+  });
+
+  const result = await handlers.get("content:preview-article-attention")(null, {
+    schemaVersion: 1,
+    payload: {
+      attentionId: "attention-paid-order",
+      action: "bind-paid-order-number",
+      resolutionInput: { orderId: "order-1" },
+    },
+  });
+
+  assert.deepEqual(result, {
+    schemaVersion: 1,
+    ok: false,
+    error: {
+      code: "PAID_ORDER_RESOLUTION_QUERY_FAILED",
+      category: "transport",
+      retryability: "manual-check",
+      userMessage: "订单核对查询失败，文章仍保持冻结。",
+    },
+  });
+  assert.doesNotMatch(JSON.stringify(result), /private supplier failure/);
+});
+
 test("article attention resolution does not expose the domain command result", async function () {
   const handlers = new Map();
   const ipcMain = createAuthenticatedIpcMain(

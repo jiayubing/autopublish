@@ -116,13 +116,13 @@ function isResourceFailureCode(value) {
 }
 
 function parseCreatedOrderResponse(response) {
-  const payload = requireSuccess(response);
+  const payload = requireSuccess(response, undefined, isOrderCreationSuccessCode);
   const orderId = findOrderId(payload);
   return orderId ? { orderId } : null;
 }
 
 function parseOrderDetailsResponse(response) {
-  const payload = requireSuccess(response);
+  const payload = requireSuccess(response, undefined, isOrderDetailsSuccessCode);
   return extractItems(payload)
     .map(normalizeOrder)
     .filter((order) => order !== null);
@@ -142,35 +142,38 @@ function parseCancelledOrderResponse(response) {
   return true;
 }
 
-function requireSuccess(response, defaultScope) {
+function requireSuccess(response, defaultScope, successCode) {
+  const accepts = successCode || isSuccessCode;
   if (!response || typeof response !== "object" || Array.isArray(response)) {
     throw new MediaSupplierProtocolError();
   }
-  if (hasExplicitFailure(response)) {
+  if (hasExplicitFailure(response, accepts)) {
     throw new MediaSupplierRejectedError(responseScope(response, defaultScope));
   }
-  if (!hasExplicitSuccess(response)) {
+  if (!hasExplicitSuccess(response, accepts)) {
     throw new MediaSupplierProtocolError();
   }
   return unwrapData(response);
 }
 
-function hasExplicitSuccess(response) {
+function hasExplicitSuccess(response, successCode) {
+  const accepts = successCode || isSuccessCode;
   if (response.success === true || response.ok === true) return true;
-  return isSuccessCode(response.code) || isSuccessCode(response.status);
+  return accepts(response.code) || accepts(response.status);
 }
 
-function hasExplicitFailure(response) {
+function hasExplicitFailure(response, successCode) {
+  const accepts = successCode || isSuccessCode;
   if (response.success === false || response.ok === false) return true;
   if (response.data && typeof response.data === "object") {
     if (response.data.success === false || response.data.ok === false)
       return true;
   }
-  if (response.code !== undefined && !isSuccessCode(response.code)) return true;
+  if (response.code !== undefined && !accepts(response.code)) return true;
   if (
     response.status !== undefined &&
     isResponseStatus(response.status) &&
-    !isSuccessCode(response.status)
+    !accepts(response.status)
   )
     return true;
   return false;
@@ -178,6 +181,14 @@ function hasExplicitFailure(response) {
 
 function isSuccessCode(value) {
   return value === 0 || value === "0" || value === 200 || value === "200";
+}
+
+function isOrderCreationSuccessCode(value) {
+  return value === 1 || value === "1" || isSuccessCode(value);
+}
+
+function isOrderDetailsSuccessCode(value) {
+  return value === 1 || value === "1" || isSuccessCode(value);
 }
 
 function isResponseStatus(value) {

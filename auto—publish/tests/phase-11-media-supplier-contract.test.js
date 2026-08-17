@@ -170,6 +170,90 @@ test("createOrder maps the canonical application input and returns an order only
   assert.equal(Object.hasOwn(result, "thirdId"), false);
 });
 
+test("createOrder accepts the supplier code-1 success envelope when it carries an order id", async () => {
+  const adapter = createMediaSupplierAdapter({
+    client: {
+      createOrder: async () =>
+        resourceSuccessful({ order_nid: "order-provider-1" }),
+    },
+  });
+
+  assert.deepEqual(
+    await adapter.createOrder({
+      mediaResourceId: "resource-1",
+      title: "标题",
+      htmlBody: "<p>正文</p>",
+      systemSubmissionId: "system-submission-1",
+    }),
+    { kind: "order_created", orderId: "order-provider-1" },
+  );
+});
+
+test("createOrder keeps code-1 responses without an order id uncertain and explicit failure dominant", async () => {
+  const responses = [
+    resourceSuccessful({ accepted: true }),
+    {
+      code: 1,
+      success: false,
+      data: { order_nid: "must-not-bind" },
+    },
+  ];
+  const adapter = createMediaSupplierAdapter({
+    client: {
+      createOrder: async () => responses.shift(),
+    },
+  });
+  const input = {
+    mediaResourceId: "resource-1",
+    title: "标题",
+    htmlBody: "<p>正文</p>",
+    systemSubmissionId: "system-submission-1",
+  };
+
+  assert.deepEqual(await adapter.createOrder(input), {
+    kind: "uncertain",
+    reason: "missing-order-id",
+  });
+  assert.deepEqual(await adapter.createOrder(input), {
+    kind: "order_rejected",
+    scope: "service",
+  });
+});
+
+test("code-1 success is accepted for order details but does not relax cancellation", async () => {
+  const adapter = createMediaSupplierAdapter({
+    client: {
+      getOrderDetails: async () =>
+        resourceSuccessful([
+          {
+            order_nid: "order-1",
+            status: 2,
+            resource_id: "resource-1",
+            title: "已发布标题",
+          },
+        ]),
+      cancelOrder: async () => resourceSuccessful({ cancelled: true }),
+    },
+  });
+
+  assert.deepEqual(await adapter.getOrderDetails(["order-1"]), {
+    kind: "order_details",
+    orders: [
+      {
+        orderId: "order-1",
+        status: "published",
+        resourceId: "resource-1",
+        title: "已发布标题",
+      },
+    ],
+  });
+  assert.deepEqual(await adapter.cancelOrder("order-1"), {
+    kind: "cancel_rejected",
+    orderId: "order-1",
+    scope: "order",
+  });
+});
+
 test("createOrder turns a missing order id into an uncertain result instead of inventing an order", async () => {
   const adapter = createMediaSupplierAdapter({
     client: {

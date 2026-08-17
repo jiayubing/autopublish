@@ -109,12 +109,18 @@ const multiline = (max) => multilineStringField({ min: 0, max });
 const boolean = "boolean";
 const timestamp = text(64);
 
-function contentContract(input) {
+function contentContract(input, additionalErrors) {
   const event = input.kind === "event";
+  const errors = event
+    ? {}
+    : Object.freeze({
+        ...contentCoreErrors,
+        ...(additionalErrors || {}),
+      });
   return defineContract({
     ...input,
-    errorCodes: event ? [] : contentCoreErrorCodes,
-    errors: event ? {} : contentCoreErrors,
+    errorCodes: event ? [] : Object.freeze(Object.keys(errors)),
+    errors,
   });
 }
 

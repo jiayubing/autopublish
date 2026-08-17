@@ -235,18 +235,26 @@ function deriveAttentionPolicy(input, capabilities) {
       ACTIONS.OPEN_PUBLICATION,
     );
 
-  if (kind === ATTENTION_KINDS.PAID_ORDER_CREATION_UNCERTAIN)
+  if (kind === ATTENTION_KINDS.PAID_ORDER_CREATION_UNCERTAIN) {
+    const resolutionActions = Array.isArray(facts.resolutionActions)
+      ? facts.resolutionActions.filter((action) =>
+          [
+            ACTIONS.BIND_PAID_ORDER_NUMBER,
+            ACTIONS.CONFIRM_PAID_ORDER_ABSENT,
+          ].includes(action),
+        )
+      : [ACTIONS.BIND_PAID_ORDER_NUMBER, ACTIONS.CONFIRM_PAID_ORDER_ABSENT];
     return policy(
       kind,
       facts,
       caps,
       [
-        ACTIONS.BIND_PAID_ORDER_NUMBER,
-        ACTIONS.CONFIRM_PAID_ORDER_ABSENT,
+        ...resolutionActions,
         ACTIONS.INSPECT,
       ],
       ACTIONS.INSPECT,
     );
+  }
 
   if (kind === ATTENTION_KINDS.ORDER_STATUS_ANOMALY)
     return policy(

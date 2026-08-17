@@ -14,8 +14,11 @@ function projectPaidOrderResolutionAttention(intent) {
       typeof value.orderCreationAttemptId === "string"
         ? value.orderCreationAttemptId
         : null,
-    resolutionActions:
-      detail.phase === "order_creation_uncertain" ? ACTIONS : Object.freeze([]),
+    resolutionActions: ["order_creation_uncertain", "system_rejected"].includes(
+      detail.phase,
+    )
+      ? ACTIONS
+      : Object.freeze([]),
   });
 }
 
