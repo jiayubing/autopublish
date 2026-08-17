@@ -211,10 +211,10 @@ function generationCounts(value) {
 }
 
 function generationTask(value) {
-  const allowed = ["id", "clientId", "platform", "templateId", "materialIds", "researchQueryIds", "status", "attempts", "error", "articleId"];
+  const allowed = Object.keys(task.fields);
   exactKeys(value, allowed, ["id", "clientId", "platform", "templateId", "materialIds", "researchQueryIds", "status", "attempts"]);
   if (!GENERATION_STATUSES.has(value.status) || !Number.isSafeInteger(value.attempts) || value.attempts < 0 || value.attempts > 1000) generationEventError();
-  const task = {
+  const output = {
     id: generationText(value.id, 200),
     clientId: generationText(value.clientId, 200),
     platform: generationText(value.platform, 100),
@@ -224,20 +224,20 @@ function generationTask(value) {
     status: value.status,
     attempts: value.attempts,
   };
-  if (value.articleId !== undefined) task.articleId = generationOptionalText(value.articleId, 200);
+  if (value.articleId !== undefined) output.articleId = generationOptionalText(value.articleId, 200);
   if (value.error !== undefined && value.error !== null) {
     exactKeys(value.error, ["code", "message"], []);
-    task.error = {
+    output.error = {
       code: generationText(typeof value.error.code === "string" ? value.error.code : "GENERATION_TASK_FAILED", 128),
       message: "生成任务失败，请检查诊断信息。",
     };
-  } else if (value.error === null) task.error = null;
-  return task;
+  } else if (value.error === null) output.error = null;
+  return output;
 }
 
 function generationBatch(value) {
   if (value === undefined || value === null) return value;
-  const allowed = ["id", "status", "clientSources", "templates", "tasks", "counts", "excludedClients", "aiConfigFingerprint", "updatedAt", "taskCount", "taskOffset", "tasksTruncated"];
+  const allowed = Object.keys(batch.fields);
   exactKeys(value, allowed, ["id", "status", "clientSources", "templates", "tasks", "counts"]);
   if (!GENERATION_STATUSES.has(value.status) || !Array.isArray(value.clientSources) || value.clientSources.length > 1000 ||
       !Array.isArray(value.templates) || value.templates.length > 1000 || !Array.isArray(value.tasks) || value.tasks.length > GENERATION_TASK_PAGE_SIZE) generationEventError();

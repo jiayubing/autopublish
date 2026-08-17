@@ -14,7 +14,8 @@ import { useConfirmation, useConfirmationScope } from "../confirmation";
 import type { ContentWorkbenchFeature } from "../features/content/use-content-workbench-feature";
 import { reportRuntimeDiagnostic } from "../features/workspace/runtime-diagnostic-sink";
 
-type RefreshState = "idle" | "refreshing" | "success" | "error";
+type RefreshState = "idle" | "refreshing" | "error";
+const REFRESH_CONFIRMATION_MS = 3000;
 
 interface ContentWorkbenchProps {
   content: ContentWorkbenchFeature;
@@ -84,6 +85,8 @@ export default function ContentWorkbench({
   >(null);
   const [articleIntentId, setArticleIntentId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [refreshConfirmationVisible, setRefreshConfirmationVisible] =
+    useState(false);
   const historyDirtyRef = useRef(false);
   const [historyDirtyArticleId, setHistoryDirtyArticleId] = useState<
     string | null
@@ -109,6 +112,15 @@ export default function ContentWorkbench({
   useEffect(() => {
     setTab(mode === "library" ? "history" : "questions");
   }, [mode]);
+
+  useEffect(() => {
+    if (!refreshConfirmationVisible) return;
+    const timeout = window.setTimeout(
+      () => setRefreshConfirmationVisible(false),
+      REFRESH_CONFIRMATION_MS,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [refreshConfirmationVisible]);
 
   useEffect(() => {
     if (!articleIntent) return;
@@ -222,6 +234,11 @@ export default function ContentWorkbench({
     });
   }
 
+  async function refreshClientsAndTemplates() {
+    setRefreshConfirmationVisible(false);
+    if (await content.refresh("manual")) setRefreshConfirmationVisible(true);
+  }
+
   function changeTab(nextTab: "questions" | "generate" | "history") {
     if (nextTab === tab) return;
     requestHistoryLeave(() => {
@@ -255,9 +272,7 @@ export default function ContentWorkbench({
     ? "refreshing"
     : query.error
       ? "error"
-      : query.reason && query.reason !== "initial"
-        ? "success"
-        : "idle";
+      : "idle";
   const visibleError = error || query.error?.userMessage || "";
   const tabs = mode === "production"
     ? (["questions", "generate"] as const)
@@ -307,7 +322,7 @@ export default function ContentWorkbench({
           </select>
           <button
             type="button"
-            onClick={() => void content.refresh("manual")}
+            onClick={() => void refreshClientsAndTemplates()}
             disabled={refreshState === "refreshing"}
             className="inline-flex h-9 items-center gap-1 rounded-md border border-slate-300 px-2 text-xs text-slate-600 disabled:opacity-50"
             aria-label="刷新客户与模板"
@@ -320,7 +335,7 @@ export default function ContentWorkbench({
           </button>
         </div>
       </div>
-      {refreshState === "success" && (
+      {refreshConfirmationVisible && (
         <div
           role="status"
           aria-live="polite"

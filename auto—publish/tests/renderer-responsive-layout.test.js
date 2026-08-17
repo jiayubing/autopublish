@@ -530,6 +530,68 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
   });
   after(closeRenderer);
 
+  it("dismisses the manual client and template refresh confirmation", async () => {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+    try {
+      page.setDefaultTimeout(5000);
+      await installDesktopFixture(page);
+      await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
+      await page.clock.install();
+      await page.evaluate(() => {
+        const result = (data) => Promise.resolve({ ok: true, data });
+        window.desktopConsole.content.listTemplateCatalog = () =>
+          result({ revision: "refresh-confirmation", platforms: [], templates: [], diagnostics: [] });
+        window.desktopConsole.content.listPaidMediaBatches = () => result({ items: [] });
+      });
+
+      await page.getByRole("button", { name: "刷新客户与模板" }).click();
+      await page.getByText("客户与模板已刷新。", { exact: true }).waitFor();
+      await page.clock.fastForward(3100);
+
+      assert.equal(
+        await page.getByText("客户与模板已刷新。", { exact: true }).count(),
+        0,
+      );
+    } finally {
+      await page.close();
+    }
+  });
+
+  it("enables single article generation with the visible default template", async () => {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+    try {
+      page.setDefaultTimeout(5000);
+      await installDesktopFixture(page);
+      await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
+      await page.evaluate(() => {
+        const result = (data) => Promise.resolve({ ok: true, data });
+        const client = {
+          id: "layout-smoke",
+          name: "布局测试客户",
+          knowledgeFiles: [{ id: "facts.md", name: "facts.md", content: "客户事实", status: "ready" }],
+        };
+        window.desktopConsole.content.listClients = () => result({ clients: [client] });
+        window.desktopConsole.content.listResearch = () => result({
+          research: [{ id: "research-1", clientId: client.id, question: "客户问题", answerText: "完整回答", isAnswerComplete: true }],
+        });
+        window.desktopConsole.content.listTemplateCatalog = () => result({
+          revision: "single-default-template",
+          platforms: [{ id: "fixture", displayName: "测试平台", description: "", order: 1 }],
+          templates: [{ id: "template-1", platform: "fixture", name: "模板一", scenario: "默认模板", body: "模板正文", bodyHash: "fixture", source: "custom" }],
+          diagnostics: [],
+        });
+      });
+
+      await page.getByRole("button", { name: "刷新客户与模板" }).click();
+      await page.getByRole("button", { name: "文章生成" }).click();
+      await page.getByText(/资料 1 份 · 回答 1 条/).waitFor();
+
+      assert.equal(await page.getByRole("button", { name: "生成文章" }).isEnabled(), true);
+    } finally {
+      await page.close();
+    }
+  });
+
   it("keeps content production free of paid-media submission controls", async () => {
     const page = await browser.newPage({
       viewport: { width: 1280, height: 720 },

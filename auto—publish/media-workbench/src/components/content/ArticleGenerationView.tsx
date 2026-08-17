@@ -163,9 +163,9 @@ export default function ArticleGenerationView({ clientId, client, clients = [], 
       if (resolvedTemplateId && resolvedTemplateId !== currentArticle.templateId) onArticleChange({ ...currentArticle, templateId: resolvedTemplateId });
     } else {
       setTemplateId((current) => {
-        if (!current || nextTemplates.some((item) => item.id === current)) return current;
-        setError('当前模板已被隐藏，请打开“显示内置模板”后重新选择。');
-        return '';
+        if (current && nextTemplates.some((item) => item.id === current)) return current;
+        if (current) setError('当前模板已被隐藏，请打开“显示内置模板”后重新选择。');
+        return resolvedTemplateId;
       });
     }
   }, [catalogTemplates, platform, selectedArticle, onArticleChange, showBuiltinTemplates]);

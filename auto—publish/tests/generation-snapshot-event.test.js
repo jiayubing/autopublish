@@ -13,11 +13,28 @@ function createEventFixture(options) {
   let batchFileReads = 0;
   let runnerListener;
   const batch = {
+    version: 1,
     id: 'batch-1',
+    concurrency: 1,
     status: 'running',
+    createdAt: '2026-07-21T00:00:00.000Z',
+    updatedAt: '2026-07-21T00:00:00.000Z',
     clientSources: [],
     templates: [],
-    tasks: [],
+    tasks: [{
+      id: 'task-1',
+      clientId: 'client-1',
+      platform: 'fixture',
+      templateId: 'template-1',
+      materialIds: [],
+      researchQueryIds: [],
+      status: 'pending',
+      attempts: 0,
+      error: null,
+      articleId: null,
+      createdAt: '2026-07-21T00:00:00.000Z',
+      updatedAt: '2026-07-21T00:00:00.000Z',
+    }],
     counts: { total: 100, succeeded: 0, failed: 0, pending: 100, interrupted: 0, cancelled: 0 },
   };
   const batchStore = {
