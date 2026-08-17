@@ -375,6 +375,7 @@ async function createWorkspaceRuntimeComposition(deps) {
     } = require("../../src/platforms/media/media-draft-store");
     const {
       createMediaResourceService,
+      matchesPaidQuote,
     } = require("../services/media-resource-service");
     const mediaResourceStore = new MediaResourceStore({ paths });
     const mediaPoolStore = new MediaPoolStore({ paths });
@@ -403,14 +404,10 @@ async function createWorkspaceRuntimeComposition(deps) {
       } catch (_) {
         return { reasonCode: "PAID_ORDER_PRECHECK_FAILED" };
       }
-      if (
-        !resource ||
-        resource.resourceId !== (target && target.mediaResourceId) ||
-        resource.available !== true ||
-        resource.price !== claim.quotedPrice ||
-        (claim.resourceFingerprint &&
-          resource.fingerprint !== claim.resourceFingerprint)
-      )
+      if (!matchesPaidQuote(resource, {
+        resourceId: target && target.mediaResourceId,
+        price: claim.quotedPrice,
+      }))
         return { reasonCode: "PAID_MEDIA_CONFIRMATION_STALE" };
       let article;
       try {

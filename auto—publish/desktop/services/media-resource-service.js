@@ -46,6 +46,16 @@ function canonicalResourceFingerprint(resource) {
     .digest("hex");
 }
 
+function matchesPaidQuote(resource, expected) {
+  const current = resource || {};
+  const quote = expected || {};
+  return Boolean(
+    current.resourceId === quote.resourceId &&
+      current.available === true &&
+      current.price === quote.price,
+  );
+}
+
 function createMediaResourceService(opts) {
   opts = opts || {};
   var resourceStore = opts.resourceStore || new MediaResourceStore({ filePath: opts.resourceStorePath });
@@ -286,6 +296,25 @@ function createMediaResourceService(opts) {
     throw serviceError("MEDIA_RESOURCE_NOT_FOUND", "Media resource is unavailable");
   }
 
+  function getFavoriteResource(resourceId) {
+    var requestedId = firstText(resourceId);
+    if (!requestedId || requestedId.length > 128) {
+      throw serviceError("MEDIA_RESOURCE_ID_INVALID", "Media resource identity is invalid");
+    }
+    var entry = readPoolEntries(poolStore).find(function(candidate) {
+      return poolEntryId(candidate) === requestedId;
+    });
+    if (!entry) {
+      throw serviceError("MEDIA_RESOURCE_NOT_FOUND", "Favorite media resource is unavailable");
+    }
+    var resource = Object.assign({}, normalizePoolEntry(entry), {
+      available: true,
+    });
+    return Object.freeze(Object.assign({}, resource, {
+      fingerprint: canonicalResourceFingerprint(resource),
+    }));
+  }
+
   async function fetchResourcePage(client, page, pageSize) {
     if (!supplierProvider) {
       if (!client || typeof client.mediaList !== "function")
@@ -373,6 +402,7 @@ function createMediaResourceService(opts) {
     searchResourcePage: searchResourcePage,
     refreshResources: refreshResources,
     queryCurrentResource: queryCurrentResource,
+    getFavoriteResource: getFavoriteResource,
     getPoolPage: getPoolPage,
     addToPool: addToPool,
     removeFromPool: removeFromPool,
@@ -522,4 +552,8 @@ function safeErrorCode(error, fallback) {
   return MEDIA_ERROR_DEFINITIONS[code] ? code : fallback;
 }
 
-module.exports = { createMediaResourceService, resourceFingerprint: canonicalResourceFingerprint };
+module.exports = {
+  createMediaResourceService,
+  matchesPaidQuote,
+  resourceFingerprint: canonicalResourceFingerprint,
+};

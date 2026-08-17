@@ -1120,7 +1120,7 @@ export default function GeneratedArticlesView({
                     disabled={!intake.mediaResourceId || intake.paidPreviewBusy}
                     className="justify-self-end rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
                   >
-                    {intake.paidPreviewBusy ? "检查中…" : "检查费用与文章"}
+                    {intake.paidPreviewBusy ? "检查中…" : "确认投稿信息"}
                   </button>
                 )}
               </div>

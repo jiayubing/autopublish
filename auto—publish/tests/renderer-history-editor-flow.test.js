@@ -443,9 +443,10 @@ describe("renderer history editor flow", { concurrency: false }, () => {
       assert.equal(await selector.getByText("第二付费媒体", { exact: true }).count(), 1);
       assert.equal(await selector.getByText("未收藏媒体", { exact: true }).count(), 0);
       await selector.getByRole("button", { name: "选择收藏媒体 测试付费媒体" }).click();
-      await intake.getByRole("button", { name: "检查费用与文章" }).click();
-      const preflight = page.getByRole("dialog", { name: "付费媒体费用确认" });
+      await intake.getByRole("button", { name: "确认投稿信息" }).click();
+      const preflight = page.getByRole("dialog", { name: "付费投稿信息确认" });
       await preflight.waitFor();
+      assert.match(await preflight.innerText(), /缓存单价.*参考预计费用/);
       assert.equal(await preflight.getByText("¥12.00 / ¥12.00", { exact: true }).count(), 1);
       await preflight.getByRole("button", { name: "确认付费投稿" }).evaluate((button) => {
         button.click();
@@ -471,7 +472,7 @@ describe("renderer history editor flow", { concurrency: false }, () => {
       const selector = page.getByRole("dialog", { name: "选择收藏媒体" });
       await selector.getByText("还没有收藏媒体", { exact: true }).waitFor();
       assert.match(await selector.innerText(), /媒体资源.*收藏常用媒体/);
-      assert.equal(await intake.getByRole("button", { name: "检查费用与文章" }).isDisabled(), true);
+      assert.equal(await intake.getByRole("button", { name: "确认投稿信息" }).isDisabled(), true);
     } finally {
       await page.close();
     }
@@ -502,7 +503,7 @@ describe("renderer history editor flow", { concurrency: false }, () => {
       await selector.getByText(/第 3\/3 页/).waitFor();
       await selector.getByRole("button", { name: "选择收藏媒体 收藏媒体 101" }).click();
       assert.match(await intake.innerText(), /收藏媒体 101/);
-      assert.equal(await intake.getByRole("button", { name: "检查费用与文章" }).isDisabled(), false);
+      assert.equal(await intake.getByRole("button", { name: "确认投稿信息" }).isDisabled(), false);
     } finally {
       await page.close();
     }
@@ -549,18 +550,18 @@ describe("renderer history editor flow", { concurrency: false }, () => {
       await intake.getByRole("tab", { name: "付费媒体" }).click();
       await intake.getByRole("button", { name: "选择收藏媒体" }).click();
       await page.getByRole("dialog", { name: "选择收藏媒体" }).getByRole("button", { name: "选择收藏媒体 测试付费媒体" }).click();
-      await intake.getByRole("button", { name: "检查费用与文章" }).evaluate((button) => {
+      await intake.getByRole("button", { name: "确认投稿信息" }).evaluate((button) => {
         button.click();
         button.click();
       });
-      const preflight = page.getByRole("dialog", { name: "付费媒体费用确认" });
+      const preflight = page.getByRole("dialog", { name: "付费投稿信息确认" });
       await preflight.waitFor();
-      await preflight.getByRole("button", { name: "关闭付费媒体预检" }).click();
+      await preflight.getByRole("button", { name: "关闭付费投稿信息确认" }).click();
       await intake.getByRole("button", { name: "更换收藏媒体" }).click();
       await page.getByRole("dialog", { name: "选择收藏媒体" }).getByRole("button", { name: "选择收藏媒体 第二付费媒体" }).click();
-      assert.equal(await page.getByRole("dialog", { name: "付费媒体费用确认" }).count(), 0);
+      assert.equal(await page.getByRole("dialog", { name: "付费投稿信息确认" }).count(), 0);
       assert.deepEqual(await page.evaluate(() => window.__historyEditorFlow.calls.submission), []);
-      await intake.getByRole("button", { name: "检查费用与文章" }).click();
+      await intake.getByRole("button", { name: "确认投稿信息" }).click();
       await preflight.waitFor();
       assert.deepEqual(await page.evaluate(() => window.__historyEditorFlow.calls.paidPreview), ["fixture-resource", "fixture-resource-2"]);
     } finally {
@@ -579,7 +580,7 @@ describe("renderer history editor flow", { concurrency: false }, () => {
       await intake.getByRole("tab", { name: "付费媒体" }).click();
       await intake.getByRole("button", { name: "选择收藏媒体" }).click();
       await page.getByRole("dialog", { name: "选择收藏媒体" }).getByRole("button", { name: "选择收藏媒体 测试付费媒体" }).click();
-      await intake.getByRole("button", { name: "检查费用与文章" }).click();
+      await intake.getByRole("button", { name: "确认投稿信息" }).click();
       await page.getByLabel("当前客户").selectOption("history-editor-other", { force: true });
       await page.waitForTimeout(400);
       assert.equal(
@@ -587,7 +588,7 @@ describe("renderer history editor flow", { concurrency: false }, () => {
         "true",
       );
       assert.equal(await page.getByRole("dialog", { name: "发起投稿" }).count(), 0);
-      assert.equal(await page.getByRole("dialog", { name: "付费媒体费用确认" }).count(), 0);
+      assert.equal(await page.getByRole("dialog", { name: "付费投稿信息确认" }).count(), 0);
       assert.deepEqual(await page.evaluate(() => window.__historyEditorFlow.calls.submission), []);
     } finally {
       await page.close();

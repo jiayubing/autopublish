@@ -208,8 +208,8 @@ function createPaidMediaPreflightService(options) {
     typeof value.queryResource === "function"
       ? value.queryResource
       : resourceService &&
-          typeof resourceService.queryCurrentResource === "function"
-        ? resourceService.queryCurrentResource.bind(resourceService)
+          typeof resourceService.getFavoriteResource === "function"
+        ? resourceService.getFavoriteResource.bind(resourceService)
         : null;
   if (!queryResource)
     throw preflightError("PAID_MEDIA_RESOURCE_QUERY_REQUIRED");
@@ -474,7 +474,7 @@ function createPaidMediaPreflightService(options) {
     } catch (_) {
       throw preflightError(
         "PAID_MEDIA_RESOURCE_QUERY_FAILED",
-        "媒体资源状态读取失败，请重新预检",
+        "收藏媒体信息读取失败，请重新选择",
       );
     }
     const safeResource = resourceForConfirmation(resource);
@@ -564,7 +564,7 @@ function createPaidMediaPreflightService(options) {
       confirmations.delete(token);
       throw preflightError(
         "PAID_MEDIA_RESOURCE_RECHECK_FAILED",
-        "媒体资源状态复核失败，请重新预检",
+        "收藏媒体信息复核失败，请重新确认",
       );
     }
     if (
@@ -576,7 +576,7 @@ function createPaidMediaPreflightService(options) {
       confirmations.delete(token);
       throw preflightError(
         "PAID_MEDIA_CONFIRMATION_STALE",
-        "媒体资源价格或接单状态已变化，请重新预检",
+        "收藏媒体参考信息已变化，请重新确认",
       );
     }
 

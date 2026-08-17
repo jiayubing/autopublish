@@ -25,7 +25,7 @@ export default function FavoriteMediaSelectorDialog({
           <div>
             <h3 className="text-base font-semibold text-slate-800">选择收藏媒体</h3>
             <p className="mt-1 text-xs leading-5 text-slate-500">
-              仅显示媒体资源页中已收藏的媒体；缓存价格仅供参考，最终费用以预检结果为准。
+              仅显示媒体资源页中已收藏的媒体；缓存价格仅供参考，实际创建订单前会复核价格和接单状态。
             </p>
           </div>
           <button

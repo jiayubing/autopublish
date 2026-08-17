@@ -145,7 +145,7 @@ function readLegacyMigrationState(database) {
 
 test("paid selection is an in-memory preflight session and confirmation admits directly", async () => {
   let currentArticle = article();
-  let currentResource = {
+  let cachedFavorite = {
     resourceId: "media-1",
     name: "媒体一",
     remarks: "人工确认风险",
@@ -169,7 +169,7 @@ test("paid selection is an in-memory preflight session and confirmation admits d
       },
     },
     mediaPoolStore: { contains: async () => true },
-    queryResource: async () => ({ ...currentResource }),
+    queryResource: async () => ({ ...cachedFavorite }),
     lifecycleFacts: {
       listArticleLifecycleFacts: () => ({
         publications: [],
@@ -201,7 +201,7 @@ test("paid selection is an in-memory preflight session and confirmation admits d
   assert.equal(admissionCalls[0].articleRefs[0].articleId, "article-1");
 
   const staleResourceModel = await service.preflight(input);
-  currentResource = { ...currentResource, price: 13.5 };
+  cachedFavorite = { ...cachedFavorite, price: 13.5 };
   await assert.rejects(
     () =>
       service.confirm({
@@ -211,7 +211,7 @@ test("paid selection is an in-memory preflight session and confirmation admits d
   );
   assert.equal(admissionCalls.length, 1);
 
-  currentResource = { ...currentResource, price: 12.5 };
+  cachedFavorite = { ...cachedFavorite, price: 12.5 };
   const staleArticleModel = await service.preflight(input);
   currentArticle = { ...currentArticle, content: "正文已修改" };
   await assert.rejects(

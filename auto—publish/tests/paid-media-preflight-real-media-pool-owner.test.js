@@ -82,7 +82,7 @@ test("paid preflight application uses the real MediaPoolStore owner for prefligh
       }),
       systemSubmissionCodeProvider: () => "system-submission-owner",
       mediaResourceService: {
-        async queryCurrentResource(resourceId) {
+        getFavoriteResource(resourceId) {
           assert.equal(resourceId, "media-owner");
           return {
             resourceId,
@@ -91,6 +91,9 @@ test("paid preflight application uses the real MediaPoolStore owner for prefligh
             price: 12.5,
             available: true,
           };
+        },
+        async queryCurrentResource() {
+          throw new Error("remote media query must not run during intake");
         },
       },
       lifecycleFacts: transitionPorts.paidAdmissionTransitions,

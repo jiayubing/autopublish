@@ -7,6 +7,8 @@ const { performance } = require("node:perf_hooks");
 
 const {
   createMediaResourceService,
+  matchesPaidQuote,
+  resourceFingerprint,
 } = require("../desktop/services/media-resource-service");
 
 describe("media-resource-service", function () {
@@ -250,9 +252,97 @@ describe("media-resource-service", function () {
       publishTime: undefined,
       caseLink: undefined,
       available: true,
-      fingerprint: require("node:crypto").createHash("sha256").update(JSON.stringify({ resourceId: "target", name: "目标媒体", price: 12.5, available: true, remarks: "备注", publishRate: null, publishTime: null, caseLink: null })).digest("hex"),
+      fingerprint: resourceFingerprint({
+        resourceId: "target",
+        name: "目标媒体",
+        price: 12.5,
+        available: true,
+        remarks: "备注",
+      }),
     });
     await assert.rejects(current.queryCurrentResource("missing"), { code: "MEDIA_RESOURCE_NOT_FOUND" });
+  });
+
+  it("reads one favorite quote locally without calling the supplier", function () {
+    let remoteCalls = 0;
+    const service = createMediaResourceService({
+      poolStore: {
+        getAll: function () {
+          return [
+            {
+              resourceId: "favorite-target",
+              name: "收藏媒体",
+              price: 17,
+              note: "收藏时备注",
+            },
+          ];
+        },
+      },
+      supplierProvider: function () {
+        remoteCalls += 1;
+        throw new Error("supplier must not be called");
+      },
+    });
+
+    assert.deepEqual(service.getFavoriteResource("favorite-target"), {
+      resourceId: "favorite-target",
+      name: "收藏媒体",
+      price: 17,
+      remarks: "收藏时备注",
+      publishRate: undefined,
+      publishTime: undefined,
+      caseLink: undefined,
+      available: true,
+      fingerprint: resourceFingerprint({
+        resourceId: "favorite-target",
+        name: "收藏媒体",
+        price: 17,
+        available: true,
+        remarks: "收藏时备注",
+      }),
+    });
+    assert.equal(remoteCalls, 0);
+    assert.throws(() => service.getFavoriteResource("missing"), {
+      code: "MEDIA_RESOURCE_NOT_FOUND",
+    });
+  });
+
+  it("matches a confirmed paid quote by identity, price, and current availability", function () {
+    const expected = { resourceId: "media-quote", price: 17 };
+    assert.equal(
+      matchesPaidQuote(
+        {
+          resourceId: "media-quote",
+          name: "远端新名称",
+          remarks: "远端新备注",
+          price: 17,
+          available: true,
+        },
+        expected,
+      ),
+      true,
+    );
+    assert.equal(
+      matchesPaidQuote(
+        { resourceId: "media-quote", price: 18, available: true },
+        expected,
+      ),
+      false,
+    );
+    assert.equal(
+      matchesPaidQuote(
+        { resourceId: "media-quote", price: 17, available: false },
+        expected,
+      ),
+      false,
+    );
+    assert.equal(
+      matchesPaidQuote(
+        { resourceId: "other-media", price: 17, available: true },
+        expected,
+      ),
+      false,
+    );
   });
 
   it("refreshes all pages until the api returns a short page and writes the cache", async function () {

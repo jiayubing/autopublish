@@ -75,17 +75,17 @@ export default function PaidMediaPreflightDialog({
               id="paid-media-preflight-title"
               className="text-base font-semibold text-slate-800"
             >
-              付费媒体费用确认
+              付费投稿信息确认
             </h2>
             <p className="mt-1 text-xs leading-5 text-slate-500">
-              预检令牌仅对应当前文章集合和一个媒体资源，确认前服务端会再次复核资源和文章。
+              此处使用收藏缓存信息并检查文章；实际创建订单前会复核价格和接单状态，发生变化时不会下单。
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
             disabled={busy}
-            aria-label="关闭付费媒体预检"
+            aria-label="关闭付费投稿信息确认"
             className="rounded p-1 text-slate-400 hover:bg-slate-100 disabled:opacity-40"
           >
             <X className="h-5 w-5" />
@@ -114,7 +114,7 @@ export default function PaidMediaPreflightDialog({
               <div className="mt-1 font-semibold">{model.articleCount} 篇</div>
             </div>
             <div className="rounded border border-slate-200 bg-slate-50 p-3">
-              <div className="text-xs text-slate-500">最新单价 / 预计费用</div>
+              <div className="text-xs text-slate-500">缓存单价 / 参考预计费用</div>
               <div className="mt-1 font-semibold">
                 {model.quotedPrice === null
                   ? "报价无效"

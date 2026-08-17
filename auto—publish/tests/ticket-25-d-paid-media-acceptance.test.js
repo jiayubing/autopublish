@@ -174,6 +174,11 @@ function createFixture(options) {
       orderCreationPort,
     });
     const resourceService = {
+      getFavoriteResource(resourceId) {
+        if (resourceId !== state.resource.resourceId)
+          throw new Error("synthetic favorite missing");
+        return { ...state.resource };
+      },
       queryCurrentResource(resourceId) {
         if (resourceId !== state.resource.resourceId)
           throw new Error("synthetic resource missing");
