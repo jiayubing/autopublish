@@ -140,19 +140,73 @@ function builtinPlatformModules(enabledIds) {
   });
 }
 
+function duplicateDefinitionValues(definitions, key, include) {
+  const seen = new Set();
+  const duplicates = new Set();
+  definitions.forEach(function (definition) {
+    if (!definition || (include && !include(definition))) return;
+    const value = definition[key];
+    if (seen.has(value)) duplicates.add(value);
+    seen.add(value);
+  });
+  return duplicates;
+}
+
+function reportDefinitionConflicts(definitions, include) {
+  const duplicateIds = duplicateDefinitionValues(definitions, "id", include);
+  const duplicateScanDirs = duplicateDefinitionValues(definitions, "scanDir", include);
+  duplicateIds.forEach(function (platformId) {
+    safeDiagnostic(
+      platformError("PLATFORM_DEFINITION_ID_DUPLICATE", { platformId }),
+      platformId,
+      "definition-parse",
+    );
+  });
+  duplicateScanDirs.forEach(function (scanDir) {
+    const definition = definitions.find(function (item) {
+      return item && (!include || include(item)) && item.scanDir === scanDir;
+    });
+    safeDiagnostic(
+      platformError("PLATFORM_DEFINITION_SCAN_DIR_DUPLICATE", {
+        platformId: definition && definition.id,
+      }),
+      definition && definition.id,
+      "definition-parse",
+    );
+  });
+  return { duplicateIds, duplicateScanDirs };
+}
+
 function loadEnabledPlatformDefinitions(options) {
   const enabledIds = readEnabledPlatformIds(options);
-  const definitions = [];
-  enabledIds.forEach(function (platformId) {
+  const parsed = enabledIds.map(function (platformId) {
     try {
-      definitions.push(
-        parsePlatformDefinitionV1(
-          require(path.resolve(__dirname, "../platforms", platformId, "definition")),
-        ),
+      return parsePlatformDefinitionV1(
+        require(path.resolve(__dirname, "../platforms", platformId, "definition")),
       );
     } catch (error) {
       safeDiagnostic(error, platformId, "definition-load");
+      return null;
     }
+  });
+  const conflicts = reportDefinitionConflicts(parsed);
+  const definitions = parsed.filter(function (definition, index) {
+    if (!definition) return false;
+    const expectedPlatformId = enabledIds[index];
+    if (definition.id !== expectedPlatformId) {
+      safeDiagnostic(
+        platformError("PLATFORM_DEFINITION_ID_MISMATCH", {
+          platformId: expectedPlatformId,
+        }),
+        expectedPlatformId,
+        "definition-parse",
+      );
+      return false;
+    }
+    return (
+      !conflicts.duplicateIds.has(definition.id) &&
+      !conflicts.duplicateScanDirs.has(definition.scanDir)
+    );
   });
   if (definitions.length === 0) throw platformError("PLATFORM_MODULE_LOAD_FAILED");
   return Object.freeze(definitions);
@@ -161,12 +215,11 @@ function loadEnabledPlatformDefinitions(options) {
 function loadPlatformModules(options) {
   var opts = options || {};
   const enabledIds = readEnabledPlatformIds(opts);
-  const modules = Array.isArray(opts.platformModules) ? opts.platformModules.slice() : builtinPlatformModules(enabledIds);
+  const usesBuiltinModules = !Array.isArray(opts.platformModules);
+  const modules = usesBuiltinModules ? builtinPlatformModules(enabledIds) : opts.platformModules.slice();
   const enabled = new Set(enabledIds);
   const selected = Array.isArray(opts.platformIds) ? new Set(opts.platformIds) : null;
   const definitions = [];
-  const seen = new Set();
-  const duplicateIds = new Set();
   modules.forEach(function (moduleValue, index) {
     if (moduleValue === BUILTIN_MODULE_LOAD_FAILED) {
       definitions[index] = null;
@@ -174,25 +227,33 @@ function loadPlatformModules(options) {
     }
     try {
       const definition = parsePlatformDefinitionV1(moduleValue && moduleValue.definition);
-      if (seen.has(definition.id)) duplicateIds.add(definition.id);
-      seen.add(definition.id);
       definitions[index] = definition;
     } catch (error) {
       safeDiagnostic(error, null, "definition-parse");
       definitions[index] = null;
     }
   });
-  duplicateIds.forEach(function (platformId) {
-    safeDiagnostic(
-      platformError("PLATFORM_DEFINITION_ID_DUPLICATE", { platformId }),
-      platformId,
-      "definition-parse",
-    );
+  const conflicts = reportDefinitionConflicts(definitions, function (definition) {
+    return enabled.has(definition.id);
   });
   const platforms = [];
   modules.forEach(function (moduleValue, index) {
     const definition = definitions[index];
-    if (!definition || duplicateIds.has(definition.id)) return;
+    if (!definition) return;
+    if (usesBuiltinModules && definition.id !== enabledIds[index]) {
+      safeDiagnostic(
+        platformError("PLATFORM_DEFINITION_ID_MISMATCH", {
+          platformId: enabledIds[index],
+        }),
+        enabledIds[index],
+        "definition-parse",
+      );
+      return;
+    }
+    if (
+      conflicts.duplicateIds.has(definition.id) ||
+      conflicts.duplicateScanDirs.has(definition.scanDir)
+    ) return;
     if (!enabled.has(definition.id) || (selected && !selected.has(definition.id))) return;
     try { platforms.push(normalizePlatformModule(moduleValue, definition, opts.runtimeContext)); }
     catch (error) { safeDiagnostic(error, definition.id, "load"); }

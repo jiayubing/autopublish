@@ -16,6 +16,9 @@ const {
   readEnabledPlatformIds,
 } = require("../src/core/platforms");
 const { setDiagnosticReporter } = require("../src/diagnostics/diagnostic-producer");
+const {
+  createPlatformWorkbenchService,
+} = require("../desktop/services/platform-workbench-service");
 
 function definition(id, overrides) {
   const base = {
@@ -137,6 +140,81 @@ test("loader quarantines every module that shares a duplicate platform id", () =
     assert.equal(diagnostics.filter((record) => record.code === "PLATFORM_DEFINITION_ID_DUPLICATE").length, 1);
   } finally {
     restore();
+  }
+});
+
+test("loader quarantines every enabled platform that shares a scan directory", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "platform-scan-dir-"));
+  const diagnostics = [];
+  const restore = setDiagnosticReporter((record) => { diagnostics.push(record); return true; });
+  try {
+    const loaded = loadPlatformModules({
+      platformModules: [
+        moduleFor(definition("alpha", { scanDir: "shared" })),
+        moduleFor(definition("beta", { scanDir: "shared" })),
+        moduleFor(definition("valid")),
+      ],
+      enabledIds: ["alpha", "beta", "valid"],
+    });
+    assert.deepEqual(loaded.map((platform) => platform.definition.id), ["valid"]);
+    assert.equal(diagnostics.filter((record) => record.code === "PLATFORM_DEFINITION_SCAN_DIR_DUPLICATE").length, 1);
+
+    const workbench = createPlatformWorkbenchService({
+      rootDir: root,
+      platforms: loaded.map((platform) => platform.submissionDirectoryEntry),
+    });
+    assert.deepEqual(workbench.scanQueue().map((group) => group.platformId), ["valid"]);
+  } finally {
+    restore();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("enabled definition security projection rejects folder identity mismatches and duplicate identities", () => {
+  const definitionPaths = ["toutiao", "lieju"].map((id) =>
+    require.resolve(`../src/platforms/${id}/definition`),
+  );
+  const originals = definitionPaths.map((filename) => require.cache[filename]);
+  const diagnostics = [];
+  const restore = setDiagnosticReporter((record) => { diagnostics.push(record); return true; });
+  try {
+    require.cache[definitionPaths[0]] = {
+      id: definitionPaths[0],
+      filename: definitionPaths[0],
+      loaded: true,
+      exports: definition("lieju", {
+        scanDir: "shared",
+        externalHosts: ["unexpected.example"],
+      }),
+    };
+    require.cache[definitionPaths[1]] = {
+      id: definitionPaths[1],
+      filename: definitionPaths[1],
+      loaded: true,
+      exports: definition("lieju", {
+        scanDir: "shared",
+        externalHosts: ["duplicate.example"],
+      }),
+    };
+
+    const definitions = loadEnabledPlatformDefinitions({
+      enabledIds: ["toutiao", "lieju", "hepan"],
+    });
+    const { createExternalLinkPolicy } = require("../desktop/security/external-links");
+    const policy = createExternalLinkPolicy({ definitions });
+
+    assert.deepEqual(definitions.map((item) => item.id), ["hepan"]);
+    assert.equal(policy.hosts.includes("unexpected.example"), false);
+    assert.equal(policy.hosts.includes("duplicate.example"), false);
+    assert.equal(diagnostics.some((record) => record.code === "PLATFORM_DEFINITION_ID_MISMATCH"), true);
+    assert.equal(diagnostics.some((record) => record.code === "PLATFORM_DEFINITION_ID_DUPLICATE"), true);
+    assert.equal(diagnostics.some((record) => record.code === "PLATFORM_DEFINITION_SCAN_DIR_DUPLICATE"), true);
+  } finally {
+    restore();
+    definitionPaths.forEach((filename, index) => {
+      if (originals[index]) require.cache[filename] = originals[index];
+      else delete require.cache[filename];
+    });
   }
 });
 
