@@ -174,6 +174,7 @@ function publicationSummary(records, orders, submissionItems) {
   if (values.every((status) => status === "failed" || status === "cancelled" || status === "4" || status === "9")) return result("failed");
   if (values.includes("remote_started")) return result("queued");
   if (values.includes("queued")) return result("queued");
+  if (values.includes("claimed")) return result("queued");
   return result("failed");
 }
 

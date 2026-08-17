@@ -235,6 +235,28 @@ test("projection keeps attention and order summaries independent from the articl
   ].sort());
 });
 
+test("claimed regular work is shown as queued instead of failed", () => {
+  const workflow = deriveArticleLifecycle(facts({
+    publications: [
+      { articleId: "article-1", status: "queued", targetKey: "platform:p1" },
+    ],
+    submissionItems: [
+      { articleId: "article-1", status: "claimed", targetKey: "platform:p1" },
+    ],
+  }));
+
+  assert.equal(workflow.stage, "in_submission");
+  assert.deepEqual(workflow.publicationSummary, {
+    status: "queued",
+    label: "已入队",
+    records: 1,
+    published: 0,
+    uncertain: false,
+  });
+  assert.equal(workflow.operations.submit.allowed, false);
+  assert.equal(workflow.operations.trash.allowed, false);
+});
+
 test("trash conflicts stay in the trash category and fail closed", () => {
   const workflow = deriveArticleLifecycle(facts({
     article: article({ status: "trashed" }),

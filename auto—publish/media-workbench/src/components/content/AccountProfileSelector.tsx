@@ -63,7 +63,7 @@ export default function AccountProfileSelector({ platforms, platformId, value, o
   const candidates = profiles.filter((profile) => profile.platformId === target.id);
   const login = snapshot.loginByPlatformId[target.id];
   return <div className="grid w-full gap-2 border-t border-slate-200 pt-2">
-    <p className="text-xs text-slate-500">为当前投稿平台选择一个已确认的账号；换号时请新建档案，旧队列不会自动改投。</p>
+    <p className="text-xs text-slate-500">账号档案是本地账号标签；首次开始投稿时核验并关联当前登录账号。换号时请新建档案，旧队列不会自动改投。</p>
     <div className="grid min-w-0 gap-2 rounded border border-slate-200 bg-white p-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
       <label className="grid gap-1 text-xs text-slate-600">{target.displayName || target.id}账号档案
         <select aria-label={`${target.displayName || target.id}账号档案`} value={value || ''} onChange={(event) => onChange(event.target.value)} className="h-9 min-w-0 rounded border border-slate-300 px-2">
@@ -71,13 +71,13 @@ export default function AccountProfileSelector({ platforms, platformId, value, o
           {candidates.map((profile) => <option key={profile.accountProfileId} value={profile.accountProfileId}>{profile.displayName}</option>)}
         </select>
       </label>
-      <label className="grid gap-1 text-xs text-slate-600">确认新的当前登录账号
+      <label className="grid gap-1 text-xs text-slate-600">创建本地账号档案
         <input aria-label={`${target.displayName || target.id}新账号名称`} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="例如：机构主账号" maxLength={128} className="h-9 min-w-0 rounded border border-slate-300 px-2" />
       </label>
       <div className="flex flex-wrap gap-1">
         <button type="button" disabled={snapshot.commands.openLogin.busy || login?.busy} onClick={() => void feature.openLogin(target.id)} className="h-9 rounded border border-slate-300 px-2 text-xs disabled:opacity-40">打开登录页</button>
         <button type="button" disabled={snapshot.commands.checkLogin.busy || login?.busy} onClick={() => void feature.checkLogin(target.id)} className="h-9 rounded border border-slate-300 px-2 text-xs disabled:opacity-40">检查登录</button>
-        <button type="button" disabled={busy || !draft.trim()} onClick={() => void confirm()} className="h-9 rounded border border-blue-300 px-3 text-xs text-blue-700 disabled:opacity-40">{busy ? '确认中…' : '确认账号'}</button>
+        <button type="button" disabled={busy || !draft.trim()} onClick={() => void confirm()} className="h-9 rounded border border-blue-300 px-3 text-xs text-blue-700 disabled:opacity-40">{busy ? '创建中…' : '创建档案'}</button>
       </div>
       {login?.message && <p className="text-xs text-slate-500 sm:col-span-3">{login.message}</p>}
     </div>

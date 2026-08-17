@@ -1313,6 +1313,61 @@ test("recoverable group-blocked releases the queue item and allows the same atte
   }
 });
 
+test("missing client publication profile pauses the group and releases the item before remote submission", async () => {
+  const f = fixture();
+  try {
+    const admitted = admitForOrchestrator(
+      f,
+      "article-client-publication-profile-incomplete",
+    );
+    const orchestrator = createRegularQueueGroupOrchestrator({
+      regularQueueGroupTransitions: f.groupTransitions,
+      platformSubmissionExecutor: {
+        async preparePlatformSubmission() {
+          const error = new Error("client publication profile incomplete");
+          error.code = "REGULAR_CLIENT_PROFILE_INCOMPLETE";
+          throw error;
+        },
+      },
+      regularPlatformOutcomeService: createRegularPlatformOutcomeService({
+        regularOutcomeTransitions: f.transitions,
+        clock: () => new Date("2026-08-07T01:00:00.000Z"),
+      }),
+    });
+
+    const result = await orchestrator.startGroup({
+      queueGroupId: admitted.queueGroupId,
+    });
+
+    assert.equal(result.observation.status, "group_blocked");
+    assert.equal(
+      result.observation.errorCode,
+      "REGULAR_CLIENT_PROFILE_INCOMPLETE",
+    );
+    const outcome = f.transitions.getRegularOutcomeSnapshot({
+      regularPublicationAttemptId: admitted.attemptId,
+    });
+    assert.equal(outcome.publicationStatus, "queued");
+    assert.equal(outcome.itemStatus, "queued");
+    assert.equal(outcome.activeTargetState, "queued");
+    assert.equal(outcome.pauseIntent, "system");
+    assert.equal(outcome.observation, null);
+    const group = f.groupTransitions.listRegularQueueGroupSnapshots({})[0];
+    assert.equal(group.current, null);
+    assert.equal(group.remaining.length, 1);
+    assert.equal(
+      group.remaining[0].regularPublicationAttemptId,
+      admitted.attemptId,
+    );
+    assert.equal(
+      group.actions.reasonCode,
+      "REGULAR_CLIENT_PROFILE_INCOMPLETE",
+    );
+  } finally {
+    f.close();
+  }
+});
+
 test("non-recoverable group-blocked remains frozen for manual resolution", () => {
   const f = fixture();
   try {
