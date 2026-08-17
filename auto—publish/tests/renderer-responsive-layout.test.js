@@ -583,6 +583,7 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
       });
 
       await page.getByRole("button", { name: "刷新客户与模板" }).click();
+      await page.locator("#nav-item-content-production").click();
       await page.getByRole("button", { name: "文章生成" }).click();
       await page.getByText(/资料 1 份 · 回答 1 条/).waitFor();
 
@@ -803,7 +804,46 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
               trash: [],
               publicationRecords: [],
               submissionPlatforms: [],
-              workflowItems: [],
+              workflowItems: items.map((article) => ({
+                articleId: article.id,
+                workflow: {
+                  version: 1,
+                  stage: "pending_submission",
+                  label: "待投稿",
+                  primaryAction: "submit",
+                  allowedBulkActions: ["submit", "trash"],
+                  locks: {
+                    canEdit: true,
+                    canSubmit: true,
+                    canCancel: false,
+                    canTrash: true,
+                  },
+                  operations: {
+                    edit: { allowed: true, reasonCodes: [] },
+                    submit: { allowed: true, reasonCodes: [] },
+                    trash: { allowed: true, reasonCodes: [] },
+                    restore: { allowed: false, reasonCodes: [] },
+                    purge: { allowed: false, reasonCodes: [] },
+                  },
+                  publicationSummary: {
+                    status: "not_submitted",
+                    label: "未投稿",
+                    records: 0,
+                    published: 0,
+                    uncertain: false,
+                  },
+                  attentionCount: 0,
+                  orderSummary: { total: 0, pending: 0, unresolved: 0 },
+                },
+              })),
+              lifecycleCounts: {
+                pending_submission: items.length,
+                needs_completion: 0,
+                in_submission: 0,
+                published: 0,
+                trash: 0,
+                total: items.length,
+              },
             });
           window.desktopConsole.content.listTemplateCatalog = () =>
             response({

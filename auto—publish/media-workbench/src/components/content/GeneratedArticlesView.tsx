@@ -23,6 +23,7 @@ import type { MediaResource } from "../../types/media";
 import { type ArticleWorkflowFilter } from "../../article-workflow";
 import type {
   ArticleManagementReadModel,
+  FavoriteMediaPage,
   GeneratedArticlesViewProps as GeneratedArticlesViewPropsBase,
 } from "./GeneratedArticlesView.types";
 import { formatBeijingTime } from "../../time-format";
@@ -32,6 +33,7 @@ import GeneratedArticlesList from "./GeneratedArticlesList";
 import ArticleTrashPanel from "./ArticleTrashPanel";
 import ClientLiejuPublicationProfileEditor from "./ClientLiejuPublicationProfileEditor";
 import PaidMediaPreflightDialog from "./PaidMediaPreflightDialog";
+import FavoriteMediaSelectorDialog from "./FavoriteMediaSelectorDialog";
 import { useConfirmation } from "../../confirmation";
 import { isContentCommandStaleResult } from "../../content-command-result";
 import { useSubmissionIntakeSession } from "./use-submission-intake-session";
@@ -39,6 +41,16 @@ import { useSubmissionIntakeSession } from "./use-submission-intake-session";
 type GeneratedArticlesViewProps = {
   management: ArticleManagementReadModel;
 } & Omit<GeneratedArticlesViewPropsBase, "management">;
+
+const EMPTY_FAVORITE_MEDIA_PAGE: FavoriteMediaPage = {
+  items: [],
+  total: 0,
+  page: 1,
+  totalPages: 0,
+  hasPrev: false,
+  hasNext: false,
+  loading: false,
+};
 
 function selectionKey(article: GeneratedContentArticle) {
   return articleSelectionKey(article);
@@ -86,7 +98,8 @@ export default function GeneratedArticlesView({
   onClearGenerationBatchFilter,
   onGenerationBatchFilterChange,
   dirtyArticleId,
-  mediaResources = [],
+  favoriteMediaPage = EMPTY_FAVORITE_MEDIA_PAGE,
+  onFavoriteMediaPageChange,
   onArticleSelect,
   onStageFilterChange,
   onOpenOrders,
@@ -112,10 +125,6 @@ export default function GeneratedArticlesView({
       allSubmissionPlatforms.filter((platform) => platform.contentQueueImport),
     [allSubmissionPlatforms],
   );
-  const quotedMediaResources = useMemo(
-    () => mediaResources.filter((resource) => typeof resource.price === "number"),
-    [mediaResources],
-  );
   const [drawerArticle, setDrawerArticle] =
     useState<GeneratedContentArticle | null>(null);
   const clientIdRef = useRef(clientId);
@@ -124,6 +133,9 @@ export default function GeneratedArticlesView({
     stageFilter === "trash" ? "all" : stageFilter,
   );
   const [selected, setSelected] = useState<string[]>([]);
+  const [favoriteSelectorOpen, setFavoriteSelectorOpen] = useState(false);
+  const [selectedFavoriteMedia, setSelectedFavoriteMedia] =
+    useState<MediaResource | null>(null);
   const [error, setError] = useState("");
   const visibleError = error || query.error?.userMessage || "";
   const [trashPreview, setTrashPreview] = useState<ArticleTrashPreview | null>(
@@ -309,6 +321,11 @@ export default function GeneratedArticlesView({
   });
   const intake = submissionSession.snapshot;
   const intakeIntents = submissionSession.intents;
+  useEffect(() => {
+    if (intake.open) return;
+    setFavoriteSelectorOpen(false);
+    setSelectedFavoriteMedia(null);
+  }, [intake.open]);
   const removalStatus = transactionStatusOf(removalTransaction);
   const removalTransactionOpen =
     removalStatus === "pending_auto_recovery" ||
@@ -349,12 +366,26 @@ export default function GeneratedArticlesView({
 
   function openSubmissionIntake() {
     if (!selectedSubmittableArticles.length || selectedDirtyArticle) return;
+    setFavoriteSelectorOpen(false);
+    setSelectedFavoriteMedia(null);
     intakeIntents.open(
       selectedSubmittableArticles.map((article) => ({
         clientId: article.clientId,
         articleId: article.id,
       })),
     );
+  }
+
+  function openFavoriteMediaSelector() {
+    if (intake.mutationBusy) return;
+    setFavoriteSelectorOpen(true);
+    onFavoriteMediaPageChange?.(1);
+  }
+
+  function selectFavoriteMedia(resource: MediaResource) {
+    setSelectedFavoriteMedia(resource);
+    intakeIntents.setMediaResource(resource.resourceId);
+    setFavoriteSelectorOpen(false);
   }
 
   function openArticle(
@@ -811,7 +842,7 @@ export default function GeneratedArticlesView({
         )}
 
         <div className="rounded-md border border-slate-200 bg-slate-50 p-2 text-xs text-slate-500">
-          选择文章后点击“发起投稿”，在确认面板中选择普通平台目标或已报价的媒体资源。
+          选择文章后点击“发起投稿”，在确认面板中选择普通平台目标或收藏媒体。
         </div>
       </div>
       {visibleError && (
@@ -1040,27 +1071,48 @@ export default function GeneratedArticlesView({
               </div>
             ) : (
               <div className="mt-4 grid gap-3">
-                <label className="grid gap-1 text-xs text-slate-600">
-                  媒体资源
-                  <select
-                    aria-label="付费媒体资源"
-                    value={intake.mediaResourceId}
-                    disabled={!quotedMediaResources.length || intake.mutationBusy}
-                    onChange={(event) => intakeIntents.setMediaResource(event.target.value)}
-                    className="h-9 rounded border border-slate-300 px-2 text-sm"
-                  >
-                    <option value="">
-                      {quotedMediaResources.length
-                        ? "请选择已报价媒体资源"
-                        : "暂无已报价媒体资源"}
-                    </option>
-                    {quotedMediaResources.map((resource: MediaResource) => (
-                      <option key={resource.resourceId} value={resource.resourceId}>
-                        {resource.name} {resource.price === null ? "" : `· ¥${resource.price.toFixed(2)}`}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <div className="rounded border border-slate-200 bg-slate-50 p-3">
+                  {selectedFavoriteMedia && intake.mediaResourceId ? (
+                    <div className="flex min-w-0 items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-slate-800">
+                          {selectedFavoriteMedia.name || selectedFavoriteMedia.resourceId}
+                        </p>
+                        <p className="mt-1 truncate text-xs text-slate-500">
+                          资源码：{selectedFavoriteMedia.resourceId}
+                          {typeof selectedFavoriteMedia.price === "number"
+                            ? ` · 缓存参考价 ¥${selectedFavoriteMedia.price.toFixed(2)}`
+                            : ""}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={openFavoriteMediaSelector}
+                        disabled={intake.mutationBusy}
+                        className="shrink-0 rounded border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-40"
+                      >
+                        更换收藏媒体
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">从收藏媒体中选择</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          收藏池共 {favoriteMediaPage.total} 个媒体，不加载媒体资源总库。
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={openFavoriteMediaSelector}
+                        disabled={intake.mutationBusy}
+                        className="rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
+                      >
+                        选择收藏媒体
+                      </button>
+                    </div>
+                  )}
+                </div>
                 {!intake.paidPreflight && (
                   <button
                     type="button"
@@ -1084,6 +1136,14 @@ export default function GeneratedArticlesView({
           error={intake.error}
           onClose={intakeIntents.closePaidPreflight}
           onConfirm={intakeIntents.confirmPaid}
+        />
+      )}
+      {favoriteSelectorOpen && intake.open && (
+        <FavoriteMediaSelectorDialog
+          page={favoriteMediaPage}
+          onPageChange={(page) => onFavoriteMediaPageChange?.(page)}
+          onSelect={selectFavoriteMedia}
+          onClose={() => setFavoriteSelectorOpen(false)}
         />
       )}
     </div>

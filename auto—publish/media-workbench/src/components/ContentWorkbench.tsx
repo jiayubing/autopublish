@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { LoaderCircle, RefreshCw } from "lucide-react";
 import type { ContentClient, ContentTemplateCatalog, LiejuPublicationProfile } from "../types/content";
-import type { MediaResource } from "../types/media";
 import type { GeneratedContentArticle } from "../types/generation";
 import type { ArticleEditorSnapshot } from "../bridge/content";
 import ArticleGenerationView from "./content/ArticleGenerationView";
@@ -13,6 +12,7 @@ import ArticleLibraryFilters from "./content/ArticleLibraryFilters";
 import { useConfirmation, useConfirmationScope } from "../confirmation";
 import type { ContentWorkbenchFeature } from "../features/content/use-content-workbench-feature";
 import { reportRuntimeDiagnostic } from "../features/workspace/runtime-diagnostic-sink";
+import type { FavoriteMediaPage } from "./content/GeneratedArticlesView.types";
 
 type RefreshState = "idle" | "refreshing" | "error";
 const REFRESH_CONFIRMATION_MS = 3000;
@@ -31,7 +31,8 @@ interface ContentWorkbenchProps {
     generationBatchId?: string;
     clientId?: string;
   }) => void;
-  mediaResources?: MediaResource[];
+  favoriteMediaPage?: FavoriteMediaPage;
+  onFavoriteMediaPageChange?: (page: number) => void;
   onOpenOrders?: () => void;
 }
 
@@ -41,7 +42,8 @@ export default function ContentWorkbench({
   articleIntent,
   onArticleIntentConsumed,
   onOpenArticleLibrary,
-  mediaResources = [],
+  favoriteMediaPage,
+  onFavoriteMediaPageChange,
   onOpenOrders,
 }: ContentWorkbenchProps) {
   const { confirm } = useConfirmation();
@@ -79,7 +81,7 @@ export default function ContentWorkbench({
   );
   const [articleStageFilter, setArticleStageFilter] = useState<
     ArticleWorkflowFilter
-  >("all");
+  >(mode === "library" ? "pending_submission" : "all");
   const [generationBatchFilter, setGenerationBatchFilter] = useState<
     string | null
   >(null);
@@ -230,7 +232,9 @@ export default function ContentWorkbench({
       content.selectClient(nextClientId);
       setError("");
       setGenerationBatchFilter(null);
-      setArticleStageFilter("all");
+      setArticleStageFilter(
+        mode === "library" ? "pending_submission" : "all",
+      );
     });
   }
 
@@ -415,7 +419,8 @@ export default function ContentWorkbench({
                   onGenerationBatchFilterChange={setGenerationBatchFilter}
                   dirtyArticleId={historyDirtyArticleId}
                   articleId={articleIntentId}
-                  mediaResources={mediaResources}
+                  favoriteMediaPage={favoriteMediaPage}
+                  onFavoriteMediaPageChange={onFavoriteMediaPageChange}
                   onArticleSelect={openHistoryEditor}
                   onStageFilterChange={setArticleStageFilter}
                   onOpenOrders={onOpenOrders}

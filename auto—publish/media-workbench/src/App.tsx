@@ -40,7 +40,7 @@ export function WorkspaceScopedConfirmationHost({
 }
 
 function AppContent() {
-  const [currentView, setCurrentView] = useState<ViewMode>("content-production");
+  const [currentView, setCurrentView] = useState<ViewMode>("article-library");
   const [articleLibraryIntent, setArticleLibraryIntent] = useState<{
     articleId?: string;
     generationBatchId?: string;
@@ -82,12 +82,20 @@ function AppContent() {
     : null;
 
   const navigationBadges = useMemo(() => {
-    const lifecycleCount = content.snapshot.management.lifecycleCounts?.total;
+    const lifecycleCount =
+      content.snapshot.management.lifecycleCounts?.pending_submission;
     const articleLibrary =
       typeof lifecycleCount === "number"
         ? lifecycleCount
-        : content.snapshot.management.articles.length +
-          content.snapshot.management.trash.length;
+        : Object.values(content.snapshot.management.workflowByArticle).filter(
+            (workflow) =>
+              Boolean(
+                workflow &&
+                  typeof workflow === "object" &&
+                  "stage" in workflow &&
+                  workflow.stage === "pending_submission",
+              ),
+          ).length;
     return {
       articleLibrary,
       submissionCenter: submissionCenter.snapshot.data.counts.total,
@@ -162,7 +170,6 @@ function AppContent() {
                   <ContentWorkbench
                     content={content}
                     mode="production"
-                    mediaResources={resources}
                     onOpenArticleLibrary={openArticleLibrary}
                     onOpenOrders={() => setCurrentView("orders")}
                   />
@@ -230,7 +237,20 @@ function AppContent() {
                   <ContentWorkbench
                     content={content}
                     mode="library"
-                    mediaResources={resources}
+                    favoriteMediaPage={{
+                      items: mediaSnapshot.pool.items,
+                      total: mediaSnapshot.pool.total,
+                      page: mediaSnapshot.pool.page,
+                      totalPages: mediaSnapshot.pool.totalPages,
+                      hasPrev: mediaSnapshot.pool.hasPrev,
+                      hasNext: mediaSnapshot.pool.hasNext,
+                      loading: mediaSnapshot.pool.query.loading,
+                      errorMessage:
+                        mediaSnapshot.pool.query.error?.userMessage,
+                    }}
+                    onFavoriteMediaPageChange={(page) => {
+                      void mediaFeature.loadPoolPage(page, "manual");
+                    }}
                     articleIntent={articleLibraryIntent}
                     onArticleIntentConsumed={consumeArticleLibraryIntent}
                     onOpenArticleLibrary={openArticleLibrary}

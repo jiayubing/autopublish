@@ -19,6 +19,17 @@ import type {
   ArticleWorkflowStage,
 } from "../../article-workflow";
 
+export interface FavoriteMediaPage {
+  items: MediaResource[];
+  total: number;
+  page: number;
+  totalPages: number;
+  hasPrev: boolean;
+  hasNext: boolean;
+  loading: boolean;
+  errorMessage?: string;
+}
+
 export type ArticleManagementReadModel = {
   articles: GeneratedContentArticle[];
   trash: ArticleTrashRecord[];
@@ -107,7 +118,8 @@ export interface GeneratedArticlesViewProps {
   onClearGenerationBatchFilter?: () => void;
   onGenerationBatchFilterChange?: (batchId: string | null) => void;
   dirtyArticleId?: string | null;
-  mediaResources?: MediaResource[];
+  favoriteMediaPage?: FavoriteMediaPage;
+  onFavoriteMediaPageChange?: (page: number) => void;
   onArticleSelect: (
     article: GeneratedContentArticle,
     source?: HTMLElement | null,

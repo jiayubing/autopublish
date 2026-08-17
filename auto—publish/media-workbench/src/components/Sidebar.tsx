@@ -45,7 +45,7 @@ export default function Sidebar({
       label: "文章库",
       icon: BookOpen,
       badge: badges.articleLibrary,
-      badgeTitle: "文章库文章数",
+      badgeTitle: "当前客户待投稿文章数",
     },
     {
       id: "submission-center" as ViewMode,
