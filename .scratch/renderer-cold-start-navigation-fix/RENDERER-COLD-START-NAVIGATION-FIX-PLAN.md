@@ -433,7 +433,7 @@ N6 严格限定检查 N5 的 3 个 finding、对应修复 diff、导航收敛不
 
 最终证据：`typecheck:renderer`、`typecheck:bridge`、默认导航回归 6/6、generation batch、settings focus 均通过；正式 alpha 封装及 package verification 通过；最终真实 EXE 固定矩阵 20/20 收敛，`mutationCalls: 0`、`pageErrors: 0`。N6 末尾再次执行 `node --check tests/renderer-cold-start-navigation-convergence.electron.test.js` 与 `git diff --check`，均退出 0（后者仅有 Windows 行尾转换 warning）。
 
-最终 HEAD 仍为 `24dbf8787c8919f0c7cc1b5051a0a627c1dec729`，分支 `codex/导航修复`。工作树仅包含本计划、`App.tsx`、`Sidebar.tsx` 的修改和新增导航回归测试；`release-alpha/` 与 Renderer `dist/` 生成物未进入 Git status。用户未授权 commit，因此本次 closure 保持未提交状态。
+N6 复核时 HEAD 为 `24dbf8787c8919f0c7cc1b5051a0a627c1dec729`，分支 `codex/导航修复`。用户随后明确授权继续完成，本计划、`App.tsx`、`Sidebar.tsx` 与新增导航回归测试已提交为 `f5a14a3`（`fix(renderer): 收敛冷启动快速导航`）；`release-alpha/` 与 Renderer `dist/` 生成物未进入提交。本段为提交后的纯文档 evidence 修正，不改变已经验证的 production source、测试或生成物。
 
 ## 5. 完成定义
 
