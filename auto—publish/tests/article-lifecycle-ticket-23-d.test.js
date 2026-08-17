@@ -610,6 +610,46 @@ it("does not construct normal or remote composition while migration is blocked",
   assert.equal(normalConstructions, 0);
 });
 
+it("starts an old workspace whose generated content predates batch provenance", async () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "migration-23-d-old-generated-workspace-"),
+  );
+  let normalConstructions = 0;
+  try {
+    const generatedDirectory = path.join(root, "generated", "畅速");
+    fs.mkdirSync(generatedDirectory, { recursive: true });
+    fs.writeFileSync(
+      path.join(generatedDirectory, "legacy-article.json"),
+      JSON.stringify({
+        id: "legacy-article",
+        clientId: "畅速",
+        status: "generated",
+        title: "旧工作区文章",
+        content: "标题和正文完整，但早期版本没有生成批次标识。",
+      }),
+      "utf8",
+    );
+
+    const composition = await createWorkspaceStartupComposition({
+      bootstrapState: {
+        workspacePath: root,
+        workspaceIdentity: "old-generated-workspace",
+      },
+      options: {
+        createNormalWorkspaceRuntimeComposition() {
+          normalConstructions += 1;
+          return { dispose() {} };
+        },
+      },
+    });
+
+    assert.equal(normalConstructions, 1);
+    assert.equal(typeof composition.dispose, "function");
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 it("requests explicit production confirmation and retries the isolated gate before normal composition", async () => {
   const expected = "a".repeat(64);
   const calls = [];

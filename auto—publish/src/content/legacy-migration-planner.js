@@ -95,6 +95,50 @@ const VARIANT_NAMES = Object.freeze([
   "needsAttentionConflict",
   "deletionRecoveryConflict",
 ]);
+const OPERATIONAL_EVIDENCE_FIELDS = Object.freeze([
+  "publicationEvidenceV1",
+  "terminalTargetV1",
+  "closedTargetV1",
+  "targetIdentityV1",
+  "targetSnapshotV1",
+  "target",
+  "orderIdentityV1",
+  "orderSnapshotV1",
+  "orderObservationV1",
+  "orderHistoryV1",
+  "paidTargetV1",
+  "legacyQueueEvidenceV1",
+  "restoreEligibilityV1",
+  "tombstoneIdentityV1",
+  "deletionTransactionIdentityV1",
+  "migrationConflictEvidenceV1",
+  "migrationDeletionEvidenceV1",
+  "queueState",
+  "remoteBoundaryCrossed",
+  "statusCode",
+  "supplierStatusCode",
+  "publicationStatus",
+  "outcomeStatus",
+  "orderId",
+  "orderNid",
+  "orderNumber",
+  "targetPlatformId",
+  "targetPlatform",
+  "platformId",
+  "accountProfileId",
+  "accountId",
+  "mediaResourceId",
+  "resourceId",
+  "resource_id",
+  "selectedMediaResourceId",
+  "published",
+  "accepted",
+  "uncertain",
+  "deleted",
+  "trashed",
+  "permanentlyDeleted",
+  "state",
+]);
 
 function plannerError(code, message) {
   const error = new Error(message || code);
@@ -104,6 +148,13 @@ function plannerError(code, message) {
 
 function isObject(value) {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function hasOperationalEvidence(record, collection, sourceKind) {
+  if (collection !== "articles" || sourceKind !== "ARTICLE_RECORD") return true;
+  return OPERATIONAL_EVIDENCE_FIELDS.some((field) =>
+    Object.prototype.hasOwnProperty.call(record, field),
+  );
 }
 
 function clone(value) {
@@ -349,6 +400,8 @@ function targetInfoFromRecord(record) {
     firstValue(record && record.accountProfileId, record && record.accountId),
   );
   let explicitTarget = null;
+  if (mediaResourceId && !validId(mediaResourceId))
+    return { target: null, invalid: true };
   if (mediaResourceId && validId(mediaResourceId))
     explicitTarget = parseTarget({
       version: 1,
@@ -1431,6 +1484,7 @@ function groupsFromEvidence(evidence) {
         invalidIdentity: false,
         invalidTarget: false,
         invalidOrder: false,
+        hasOperationalEvidence: false,
       };
       groups.set(key, group);
     }
@@ -1445,6 +1499,8 @@ function groupsFromEvidence(evidence) {
     group.invalidIdentity ||= parsedArticle.invalid;
     group.invalidTarget ||= fact.invalidTarget;
     group.invalidOrder ||= fact.invalidOrder;
+    group.hasOperationalEvidence ||=
+      hasOperationalEvidence(record, collection, sourceKind);
     group.facts.push(fact);
     addStateCodes(group.stateCodes, record, sourceKind);
     contentFingerprintsOf(record).forEach((item) =>
@@ -1538,6 +1594,30 @@ function classifyGroup(group) {
   group.activeFacts.sort(factSort);
   group.deletionFacts.sort(factSort);
   group.recoveryFacts.sort(factSort);
+  const contentOnly =
+    group.stateCodes.size > 0 &&
+    [...group.stateCodes].every((code) =>
+      ["REVIEW_PENDING", "REVIEW_APPROVED", "GENERATED", "SAVED"].includes(
+        code,
+      ),
+    ) &&
+    group.facts.every((fact) => !fact.target && !fact.order) &&
+    !group.invalidTarget &&
+    !group.invalidOrder &&
+    !group.hasOperationalEvidence &&
+    group.successFacts.length === 0 &&
+    group.uncertainFacts.length === 0 &&
+    group.pendingFacts.length === 0 &&
+    group.trackableFacts.length === 0 &&
+    group.terminalFacts.length === 0 &&
+    group.activeFacts.length === 0 &&
+    group.deletionFacts.length === 0 &&
+    group.recoveryFacts.length === 0 &&
+    !group.missingOrder;
+  // Content records are reprojected by the current article library and never
+  // imported as operational evidence. Their historical display-name client
+  // ids therefore do not need to satisfy migration identity constraints.
+  if (contentOnly) return { kind: "ignored", code: "CONTENT_ONLY_RECORD" };
   if (!group.identity) return { kind: "unplanned", code: "IDENTITY_CONFLICT" };
   const successTargets = new Set(
     group.successFacts.map((fact) => targetKey(fact.target)).filter(Boolean),
@@ -1584,15 +1664,8 @@ function classifyGroup(group) {
       return { kind: "attention", code: "UNKNOWN_FACT_COMBINATION" };
     return { kind: "terminal", fact: chooseFact(group.terminalFacts) };
   }
-  if (
-    group.stateCodes.size &&
-    [...group.stateCodes].every((code) =>
-      ["REVIEW_PENDING", "REVIEW_APPROVED", "GENERATED", "SAVED"].includes(
-        code,
-      ),
-    )
-  )
-    return { kind: "ignored", code: "CONTENT_ONLY_RECORD" };
+  if (group.hasOperationalEvidence)
+    return { kind: "attention", code: "IDENTITY_CONFLICT" };
   return { kind: "unplanned", code: "UNKNOWN_FACT_COMBINATION" };
 }
 

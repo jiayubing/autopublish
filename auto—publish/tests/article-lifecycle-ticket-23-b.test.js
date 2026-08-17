@@ -114,6 +114,88 @@ test("23-B ignores current generated content and batch files during legacy evide
   }
 });
 
+test("23-B ignores legacy generated content without batch provenance or migration-safe client ids", () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "ticket-23-b-legacy-generated-content-"),
+  );
+  try {
+    const generatedDirectory = path.join(root, "generated", "畅速");
+    fs.mkdirSync(generatedDirectory, { recursive: true });
+    fs.writeFileSync(
+      path.join(generatedDirectory, "legacy-article.json"),
+      JSON.stringify({
+        id: "legacy-article",
+        clientId: "畅速",
+        status: "generated",
+        title: "旧工作区文章",
+        content: "标题和正文完整，但早期版本没有生成批次标识。",
+      }) + "\n",
+      "utf8",
+    );
+
+    const result = createLegacyMigrationPlanner({
+      workspaceRoot: root,
+    }).planResult();
+
+    assert.equal(result.report.counts.ignored, 1);
+    assert.equal(result.report.counts.unplanned, 0);
+    assert.equal(result.report.counts.corrupt, 0);
+    assert.deepEqual(result.plan.entries, []);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("23-B never ignores malformed operational evidence on generated content", () => {
+  const records = [
+    article("generated-bad-target", {
+      status: "generated",
+      targetIdentityV1: {
+        version: 1,
+        kind: "platform",
+        platformId: "toutiao",
+      },
+    }),
+    article("generated-bad-order", {
+      status: "generated",
+      orderIdentityV1: { version: 1, orderId: "" },
+    }),
+    article("generated-incomplete-publication", {
+      status: "generated",
+      publicationEvidenceV1: {
+        version: 1,
+        resultCode: "REGULAR_ACCEPTED",
+      },
+    }),
+    article("generated-bad-resource-id", {
+      status: "generated",
+      resourceId: "非法 id!",
+    }),
+    article("generated-bad-resource-snake-id", {
+      status: "generated",
+      resource_id: "非法 id!",
+    }),
+  ];
+
+  for (const record of records) {
+    const result = createLegacyMigrationPlanner({
+      legacySource: {
+        workspaceFingerprint: FINGERPRINT,
+        articles: [record],
+      },
+    }).planResult();
+
+    assert.equal(result.report.counts.ignored, 0, record.articleId);
+    assert.equal(result.report.counts.needsAttentionConflict, 1, record.articleId);
+    assert.equal(result.plan.entries.length, 1, record.articleId);
+    assert.equal(result.plan.entries[0].variant, "needsAttentionConflict");
+    assert.equal(
+      result.plan.entries[0].payload.conflictKind,
+      "IDENTITY_CONFLICT",
+    );
+  }
+});
+
 function completeSource() {
   return {
     workspaceFingerprint: FINGERPRINT,
