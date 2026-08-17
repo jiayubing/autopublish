@@ -269,6 +269,49 @@ function createMediaWorkbenchApplication(options) {
         },
       );
     },
+    startAllPaidMediaBatches: (input) => {
+      if (
+        !paidMediaBatchOrchestrator ||
+        typeof paidMediaBatchOrchestrator.startAll !== "function"
+      ) {
+        const error = new Error("Paid media execution is unavailable");
+        error.code = "PAID_MEDIA_EXECUTION_UNAVAILABLE";
+        throw error;
+      }
+      const clientId = input && input.clientId;
+      if (typeof clientId !== "string" || !clientId.trim()) {
+        const error = new Error("Paid media client scope is invalid");
+        error.code = "PAID_EXECUTION_CLIENT_INVALID";
+        throw error;
+      }
+      const execution = paidMediaBatchOrchestrator.startAll({ clientId });
+      if (invalidateData) invalidateData("PAID_BATCH_EXECUTION_CHANGED");
+      return Promise.resolve(execution).then(
+        (result) => {
+          if (invalidateData) invalidateData("PAID_BATCH_EXECUTION_CHANGED");
+          const results = Array.isArray(result && result.results)
+            ? result.results.map((item) => ({
+                batchId: item.batchId,
+                executionStatus:
+                  typeof item.status === "string" ? item.status : "idle",
+              }))
+            : [];
+          return {
+            executionStatus:
+              result && typeof result.status === "string"
+                ? result.status
+                : results.length > 0
+                  ? "paid_batches_started"
+                  : "no_eligible_paid_batches",
+            results,
+          };
+        },
+        (error) => {
+          if (invalidateData) invalidateData("PAID_BATCH_EXECUTION_CHANGED");
+          throw error;
+        },
+      );
+    },
     pausePaidMediaBatch: (input) => {
       if (
         !paidMediaBatchOrchestrator ||

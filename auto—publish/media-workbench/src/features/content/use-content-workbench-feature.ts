@@ -23,6 +23,7 @@ import {
   confirmPaidMediaBatch,
   listPaidMediaBatches,
   startPaidMediaBatch,
+  startAllPaidMediaBatches,
   pausePaidMediaBatch,
   cancelRemainingPaidMediaBatchItems,
   getCachedDoubaoLoginState,
@@ -90,6 +91,7 @@ export function useContentWorkbenchFeature() {
       confirmPaidMediaBatch,
       listPaidMediaBatches,
       startPaidMediaBatch,
+      startAllPaidMediaBatches,
       pausePaidMediaBatch,
       cancelRemainingPaidMediaBatchItems,
       previewContentArticleRemoval: (input: {

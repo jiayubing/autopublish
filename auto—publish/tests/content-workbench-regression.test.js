@@ -18,6 +18,7 @@ test("content workbench public feature owns client, template, and refresh state"
     loadManagement: async () => ({ articles: [] }),
     listPaidMediaBatches: async () => [],
     startPaidMediaBatch: async () => ({}),
+    startAllPaidMediaBatches: async () => ({}),
     pausePaidMediaBatch: async () => ({}),
     cancelRemainingPaidMediaBatchItems: async () => ({}),
   });

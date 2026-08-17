@@ -445,11 +445,12 @@ it("waits for paid-media rejection and maps it without an orphaned background ef
   assert.equal(completed, 1);
 });
 
-it("exposes paid-media batch snapshot, start, and pause as independent commands", async function () {
+it("exposes paid-media batch snapshot, single start, and client-scoped start all", async function () {
   const handlers = new Map();
   let finishStart;
   let pauseCalls = 0;
   let cancelCalls = 0;
+  let startAllCalls = 0;
   const batch = {
     batchId: "paid-batch-1",
     mediaResourceId: "media-1",
@@ -486,6 +487,13 @@ it("exposes paid-media batch snapshot, start, and pause as independent commands"
         new Promise((resolve) => {
           finishStart = () => resolve({ executionStatus: "submitted", batch });
         }),
+      startAll: async ({ clientId }) => {
+        startAllCalls += 1;
+        return {
+          executionStatus: "paid_batches_started",
+          results: [{ batchId: `${clientId}-paid-batch`, executionStatus: "order_created" }],
+        };
+      },
       pause: async () => {
         pauseCalls += 1;
         return { batch };
@@ -522,6 +530,16 @@ it("exposes paid-media batch snapshot, start, and pause as independent commands"
   );
   assert.equal(paused.ok, true, JSON.stringify(paused));
   assert.equal(pauseCalls, 1);
+  const startedAll = await handlers.get("content:start-all-paid-media-batches")(
+    {},
+    { clientId: "client-1" },
+  );
+  assert.equal(startedAll.ok, true, JSON.stringify(startedAll));
+  assert.deepEqual(startedAll.data, {
+    executionStatus: "paid_batches_started",
+    results: [{ batchId: "client-1-paid-batch", executionStatus: "order_created" }],
+  });
+  assert.equal(startAllCalls, 1);
   const cancelled = await handlers.get(
     "content:cancel-remaining-paid-media-batch-items",
   )({}, { batchId: batch.batchId });

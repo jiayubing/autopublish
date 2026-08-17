@@ -394,6 +394,9 @@ const api = {
     startPaidMediaBatch: function (input) {
       return ipcRenderer.invoke("content:start-paid-media-batch", input);
     },
+    startAllPaidMediaBatches: function (input) {
+      return ipcRenderer.invoke("content:start-all-paid-media-batches", input);
+    },
     pausePaidMediaBatch: function (input) {
       return ipcRenderer.invoke("content:pause-paid-media-batch", input);
     },

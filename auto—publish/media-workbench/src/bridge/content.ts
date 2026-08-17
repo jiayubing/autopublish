@@ -4,6 +4,7 @@ import type {
   PaidMediaAdmissionResult,
   PaidMediaConfirmationInput,
   PaidMediaExecutionBatch,
+  PaidMediaBatchStartAllResult,
   PaidMediaExecutionResult,
   PaidMediaPreflight,
   PaidMediaPreflightInput,
@@ -182,6 +183,9 @@ type SubmissionContentApi = {
   startPaidMediaBatch: (input: {
     batchId: string;
   }) => Promise<ContentIpcResponse<PaidMediaExecutionResult>>;
+  startAllPaidMediaBatches: (input: {
+    clientId: string;
+  }) => Promise<ContentIpcResponse<PaidMediaBatchStartAllResult>>;
   pausePaidMediaBatch: (input: {
     batchId: string;
   }) => Promise<ContentIpcResponse<PaidMediaExecutionResult>>;
@@ -632,6 +636,15 @@ export async function startPaidMediaBatch(input: {
   return callSubmission(
     (api) => requireBridgeMethod(api.startPaidMediaBatch)(input),
     "paid media batch start failed",
+  );
+}
+
+export async function startAllPaidMediaBatches(input: {
+  clientId: string;
+}): Promise<PaidMediaBatchStartAllResult> {
+  return callSubmission(
+    (api) => requireBridgeMethod(api.startAllPaidMediaBatches)(input),
+    "all paid media batches start failed",
   );
 }
 

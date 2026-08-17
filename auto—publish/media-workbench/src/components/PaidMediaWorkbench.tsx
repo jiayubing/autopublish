@@ -7,6 +7,7 @@ import type { useSubmissionCenterFeature } from "../features/submission-center/u
 export interface PaidMediaWorkbenchProps {
   content: ContentWorkbenchFeature;
   onStartPaidMediaBatch: ContentWorkbenchFeature["commands"]["startPaidMediaBatch"];
+  onStartAllPaidMediaBatches: ContentWorkbenchFeature["commands"]["startAllPaidMediaBatches"];
   onPausePaidMediaBatch: ContentWorkbenchFeature["commands"]["pausePaidMediaBatch"];
   onCancelRemainingPaidMediaBatchItems: ContentWorkbenchFeature["commands"]["cancelRemainingPaidMediaBatchItems"];
   submissionCenter?: ReturnType<typeof useSubmissionCenterFeature>;
@@ -42,6 +43,7 @@ function itemLabel(batch: PaidMediaExecutionBatchView): string {
 export default function PaidMediaWorkbench({
   content,
   onStartPaidMediaBatch,
+  onStartAllPaidMediaBatches,
   onPausePaidMediaBatch,
   onCancelRemainingPaidMediaBatchItems,
   submissionCenter,
@@ -56,6 +58,13 @@ export default function PaidMediaWorkbench({
       : [];
   const paidQuery = submissionCenter?.snapshot.query || paidMediaExecution.query;
   const queryError = paidQuery.error?.userMessage;
+  const clientId = content.snapshot.selectedClientId || "";
+  const canStartAll = clientId !== "" && batches.some(
+    (batch) => batch.actions.canStart === true,
+  );
+  const paidStartBusy =
+    commandStates.startPaidMediaBatch?.busy === true ||
+    commandStates.startAllPaidMediaBatches?.busy === true;
 
   const refresh = async () => {
     setActionError("");
@@ -85,18 +94,42 @@ export default function PaidMediaWorkbench({
             这里只展示已确认并冻结的批次；文章集合、报价和费用不会在此修改。
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => void refresh()}
-          disabled={paidQuery.loading}
-          aria-label="刷新已确认付费批次"
-          className="inline-flex h-9 items-center gap-1 rounded-md border border-slate-300 px-2 text-xs text-slate-600 disabled:opacity-50"
-        >
-          <RefreshCw
-            className={`h-3.5 w-3.5 ${paidQuery.loading ? "animate-spin" : ""}`}
-          />
-          {paidQuery.loading ? "刷新中…" : "刷新批次"}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          {canStartAll && (
+            <button
+              type="button"
+              onClick={() => {
+                setActionError("");
+                void onStartAllPaidMediaBatches({ clientId })
+                  .then((result) => {
+                    if (result.executionStatus === "paid_execution_busy")
+                      setActionError("已有付费投稿批次正在执行，请稍后重试。");
+                  })
+                  .catch((value) =>
+                    setActionError(
+                      messageOf(value, "一起开始付费投稿批次失败。"),
+                    ),
+                  );
+              }}
+              disabled={paidQuery.loading || paidStartBusy}
+              className="rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
+            >
+              一起开始
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            disabled={paidQuery.loading}
+            aria-label="刷新已确认付费批次"
+            className="inline-flex h-9 items-center gap-1 rounded-md border border-slate-300 px-2 text-xs text-slate-600 disabled:opacity-50"
+          >
+            <RefreshCw
+              className={`h-3.5 w-3.5 ${paidQuery.loading ? "animate-spin" : ""}`}
+            />
+            {paidQuery.loading ? "刷新中…" : "刷新批次"}
+          </button>
+        </div>
       </div>
 
       {(queryError || actionError) && (
@@ -150,7 +183,7 @@ export default function PaidMediaWorkbench({
                               );
                             }
                           }}
-                          disabled={commandStates.startPaidMediaBatch?.busy}
+                          disabled={paidStartBusy}
                           className="rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
                         >
                           继续执行

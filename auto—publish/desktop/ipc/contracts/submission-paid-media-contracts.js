@@ -123,6 +123,16 @@ const paidExecutionResult = exactObject({
   skippedCount: optionalField(count),
   batch: paidExecutionBatch,
 });
+const paidExecutionBatchStartAllResult = exactObject({
+  executionStatus: safeText(64, 1),
+  results: arrayField(
+    exactObject({
+      batchId: id,
+      executionStatus: safeText(64, 1),
+    }),
+    { max: 20000 },
+  ),
+});
 
 const submissionPaidMediaContracts = Object.freeze([
   submissionContract({
@@ -166,6 +176,15 @@ const submissionPaidMediaContracts = Object.freeze([
     kind: "command",
     request: exactObject({ batchId: id }),
     success: paidExecutionResult,
+    fromArgs: directArgs,
+    toArgs: directInput,
+  }),
+  submissionContract({
+    capability: "content.startAllPaidMediaBatches",
+    channel: "content:start-all-paid-media-batches",
+    kind: "command",
+    request: exactObject({ clientId: id }),
+    success: paidExecutionBatchStartAllResult,
     fromArgs: directArgs,
     toArgs: directInput,
   }),
@@ -325,6 +344,18 @@ function projectPaidExecutionResult(value) {
   return result;
 }
 
+function projectPaidExecutionBatchStartAllResult(value) {
+  return {
+    executionStatus: value.executionStatus,
+    results: Array.isArray(value.results)
+      ? value.results.map((item) => ({
+          batchId: item.batchId,
+          executionStatus: item.executionStatus,
+        }))
+      : [],
+  };
+}
+
 const paidExecutionBatchFixture = {
   batchId: "paid-batch-1",
   mediaResourceId: "media-1",
@@ -436,6 +467,18 @@ const submissionPaidMediaContractFixtures = Object.freeze([
     result: { executionStatus: "paid_processing", batch: paidExecutionBatchFixture },
   },
   {
+    channel: "content:start-all-paid-media-batches",
+    owner: "content",
+    productionCaller: "desktopConsole.content.startAllPaidMediaBatches",
+    request: { clientId: "client-1" },
+    result: {
+      executionStatus: "paid_batches_started",
+      results: [
+        { batchId: "paid-batch-1", executionStatus: "order_created" },
+      ],
+    },
+  },
+  {
     channel: "content:pause-paid-media-batch",
     owner: "content",
     productionCaller: "desktopConsole.content.pausePaidMediaBatch",
@@ -466,4 +509,5 @@ module.exports = {
   projectPaidAdmission,
   projectPaidMediaBatchList,
   projectPaidExecutionResult,
+  projectPaidExecutionBatchStartAllResult,
 };

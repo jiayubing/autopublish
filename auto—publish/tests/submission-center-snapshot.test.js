@@ -133,6 +133,55 @@ test("combines badge and all sections at one revision and reuses the scoped cach
   assert.deepEqual(calls, { revision: 3, regular: 1, paid: 1, attention: 1, transport: 0 });
 });
 
+test("omits terminal paid batches while keeping batches that need attention", async () => {
+  const cancelled = paidBatch("client-1");
+  cancelled.batchId = "paid-cancelled";
+  cancelled.status = "completed";
+  cancelled.actions = {
+    canStart: false,
+    canPause: false,
+    canCancelRemaining: false,
+  };
+  cancelled.remainingCount = 0;
+  cancelled.currentItem = null;
+  cancelled.items[0].status = "cancelled";
+
+  const failed = paidBatch("client-1");
+  failed.batchId = "paid-failed";
+  failed.status = "completed";
+  failed.actions = {
+    canStart: false,
+    canPause: false,
+    canCancelRemaining: false,
+  };
+  failed.remainingCount = 0;
+  failed.currentItem = null;
+  failed.items[0].status = "failed";
+
+  const needsAttention = paidBatch("client-1");
+  needsAttention.batchId = "paid-needs-attention";
+  needsAttention.status = "needs_attention";
+  needsAttention.actions = {
+    canStart: false,
+    canPause: false,
+    canCancelRemaining: false,
+  };
+  needsAttention.remainingCount = 0;
+  needsAttention.currentItem = null;
+  needsAttention.items[0].status = "uncertain";
+
+  const { service } = fixture({
+    paid: [cancelled, failed, needsAttention],
+  });
+  const snapshot = await service.get({ clientId: "client-1" });
+
+  assert.deepEqual(
+    snapshot.paid.batches.map((batch) => batch.batchId),
+    ["paid-needs-attention"],
+  );
+  assert.equal(snapshot.counts.paidBatches, 1);
+});
+
 test("re-reads once when revision changes and fails closed when it changes again", async () => {
   const retrying = fixture({ revisions: [1, 2, 2, 2] });
   const snapshot = await retrying.service.get({ clientId: "client-1" });

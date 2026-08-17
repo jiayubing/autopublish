@@ -18,6 +18,7 @@ test("content generation reads the template catalog independently of client rese
     loadManagement: async () => ({}),
     listPaidMediaBatches: async () => [],
     startPaidMediaBatch: async () => ({}),
+    startAllPaidMediaBatches: async () => ({}),
     pausePaidMediaBatch: async () => ({}),
     cancelRemainingPaidMediaBatchItems: async () => ({}),
   });

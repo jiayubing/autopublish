@@ -14,6 +14,7 @@ function deferred() {
 const paidExecutionAdapters = Object.freeze({
   listPaidMediaBatches: async () => [],
   startPaidMediaBatch: async ({ batchId }) => ({ batch: { batchId } }),
+  startAllPaidMediaBatches: async () => ({}),
   pausePaidMediaBatch: async ({ batchId }) => ({ batch: { batchId } }),
   cancelRemainingPaidMediaBatchItems: async ({ batchId }) => ({ batch: { batchId } }),
 });
@@ -252,6 +253,10 @@ test("content workspace owns paid-media execution snapshots and independent star
       calls.push(["start", input]);
       return { executionStatus: "submitted", batch };
     },
+    startAllPaidMediaBatches: async (input) => {
+      calls.push(["startAll", input]);
+      return { executionStatus: "paid_batches_started", results: [] };
+    },
     pausePaidMediaBatch: async (input) => {
       calls.push(["pause", input]);
       return { batch };
@@ -269,12 +274,14 @@ test("content workspace owns paid-media execution snapshots and independent star
   );
 
   await feature.commands.startPaidMediaBatch({ batchId: "paid-batch-1" });
+  await feature.commands.startAllPaidMediaBatches({ clientId: "client-1" });
   await feature.commands.pausePaidMediaBatch({ batchId: "paid-batch-1" });
   await feature.commands.cancelRemainingPaidMediaBatchItems({ batchId: "paid-batch-1" });
   assert.deepEqual(
     calls.filter((entry) => Array.isArray(entry)),
     [
       ["start", { batchId: "paid-batch-1" }],
+      ["startAll", { clientId: "client-1" }],
       ["pause", { batchId: "paid-batch-1" }],
       ["cancel", { batchId: "paid-batch-1" }],
     ],

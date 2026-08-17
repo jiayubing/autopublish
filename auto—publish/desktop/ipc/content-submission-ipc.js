@@ -12,6 +12,7 @@ const {
   projectPaidAdmission,
   projectPaidMediaBatchList,
   projectPaidExecutionResult,
+  projectPaidExecutionBatchStartAllResult,
 } = require("./contracts/submission-paid-media-contracts");
 
 function bind(service, name) {
@@ -103,6 +104,24 @@ function paidMediaBatchInput(input) {
   ) {
     const error = new Error("Invalid paid-media batch input");
     error.code = "PAID_EXECUTION_BATCH_INVALID";
+    throw error;
+  }
+  return input;
+}
+
+function paidMediaClientInput(input) {
+  if (
+    !input ||
+    typeof input !== "object" ||
+    Array.isArray(input) ||
+    Object.keys(input).some(function (key) {
+      return key !== "clientId";
+    }) ||
+    typeof input.clientId !== "string" ||
+    !input.clientId.trim()
+  ) {
+    const error = new Error("Invalid paid-media client input");
+    error.code = "PAID_EXECUTION_CLIENT_INVALID";
     throw error;
   }
   return input;
@@ -363,6 +382,22 @@ function registerContentSubmissionIpc(deps) {
           }
           const result = await paidExecution.start(paidMediaBatchInput(input));
           return projectPaidExecutionResult(result);
+        });
+      },
+    );
+    deps.ipcMain.handle(
+      "content:start-all-paid-media-batches",
+      function (event, input) {
+        return wrap(async function () {
+          if (typeof paidExecution.startAll !== "function") {
+            const error = new Error("Paid-media execution is unavailable");
+            error.code = "PAID_MEDIA_EXECUTION_UNAVAILABLE";
+            throw error;
+          }
+          const result = await paidExecution.startAll(
+            paidMediaClientInput(input),
+          );
+          return projectPaidExecutionBatchStartAllResult(result);
         });
       },
     );

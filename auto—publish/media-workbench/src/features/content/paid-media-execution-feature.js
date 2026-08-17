@@ -32,6 +32,7 @@ export function createPaidMediaExecutionFeature(adapters = {}) {
   for (const name of [
     "listPaidMediaBatches",
     "startPaidMediaBatch",
+    "startAllPaidMediaBatches",
     "pausePaidMediaBatch",
     "cancelRemainingPaidMediaBatchItems",
   ]) {
@@ -49,6 +50,10 @@ export function createPaidMediaExecutionFeature(adapters = {}) {
     startPaidMediaBatch: createCommandOwner({
       feature: "content",
       command: "startPaidMediaBatch",
+    }),
+    startAllPaidMediaBatches: createCommandOwner({
+      feature: "content",
+      command: "startAllPaidMediaBatches",
     }),
     pausePaidMediaBatch: createCommandOwner({
       feature: "content",
@@ -153,6 +158,8 @@ export function createPaidMediaExecutionFeature(adapters = {}) {
     refresh,
     commands: Object.freeze({
       startPaidMediaBatch: (input) => runCommand("startPaidMediaBatch", input),
+      startAllPaidMediaBatches: (input) =>
+        runCommand("startAllPaidMediaBatches", input),
       pausePaidMediaBatch: (input) => runCommand("pausePaidMediaBatch", input),
       cancelRemainingPaidMediaBatchItems: (input) =>
         runCommand("cancelRemainingPaidMediaBatchItems", input),

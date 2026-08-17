@@ -17,6 +17,7 @@ function fixture(overrides = {}) {
   return createPaidMediaExecutionFeature({
     listPaidMediaBatches: async () => [],
     startPaidMediaBatch: async () => ({}),
+    startAllPaidMediaBatches: async () => ({}),
     pausePaidMediaBatch: async () => ({}),
     cancelRemainingPaidMediaBatchItems: async () => ({}),
     ...overrides,

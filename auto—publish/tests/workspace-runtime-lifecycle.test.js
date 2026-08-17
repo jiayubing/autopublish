@@ -361,6 +361,7 @@ it("workspace paid-media configuration provider preserves storage read failures"
           confirmPaidMedia: function() {},
           getPaidMediaBatches: function() {},
           startPaidMediaBatch: function() {},
+          startAllPaidMediaBatches: function() {},
           pausePaidMediaBatch: function() {}
         };
       }

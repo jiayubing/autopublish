@@ -544,6 +544,14 @@ export interface PaidMediaExecutionResult {
   batch: PaidMediaExecutionBatch;
 }
 
+export interface PaidMediaBatchStartAllResult {
+  executionStatus: string;
+  results: Array<{
+    batchId: string;
+    executionStatus: string;
+  }>;
+}
+
 export interface PendingQueueRemovalItemInput {
   articleRef: ArticleSelection;
   itemId: string;

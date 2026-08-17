@@ -297,6 +297,9 @@ export default function PlatformWorkbench({
             onStartPaidMediaBatch={(input) =>
               content.commands.startPaidMediaBatch(input)
             }
+            onStartAllPaidMediaBatches={(input) =>
+              content.commands.startAllPaidMediaBatches(input)
+            }
             onPausePaidMediaBatch={(input) =>
               content.commands.pausePaidMediaBatch(input)
             }

@@ -202,6 +202,7 @@ function installDesktopFixture(page, fixture) {
       },
       listPaidMediaBatches: () => ok({ items: [] }),
       startPaidMediaBatch: () => ok({}),
+      startAllPaidMediaBatches: () => ok({}),
       pausePaidMediaBatch: () => ok({}),
       previewRegularQueueAdmission: (input) => {
         state.calls.regularPreview.push(input);

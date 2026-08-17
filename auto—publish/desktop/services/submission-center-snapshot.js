@@ -208,6 +208,13 @@ function projectPaid(raw, clientId) {
   });
 }
 
+function isPaidWorkbenchBatch(batch) {
+  return batch.status === "needs_attention" ||
+    batch.actions.canStart === true ||
+    batch.actions.canPause === true ||
+    batch.actions.canCancelRemaining === true;
+}
+
 function projectAttention(raw, clientId) {
   if (!raw || !Array.isArray(raw.items))
     throw fail("SUBMISSION_CENTER_SNAPSHOT_INVALID");
@@ -248,17 +255,14 @@ function createSubmissionCenterSnapshot(options) {
     ]);
     const revisionAfter = Number(opts.getRevision());
     const regularGroups = projectRegular(regularRaw, clientId);
-    const paidBatches = projectPaid(paidRaw, clientId);
+    const paidBatches = projectPaid(paidRaw, clientId).filter(
+      isPaidWorkbenchBatch,
+    );
     const attentionItems = projectAttention(attentionRaw, clientId);
     const regularItems = regularGroups.reduce(function (total, group) {
       return total + (group.current ? 1 : 0) + group.remaining.length;
     }, 0);
-    const paidBatchesCount = paidBatches.filter(function (batch) {
-      return batch.status === "needs_attention" ||
-        batch.actions.canStart === true ||
-        batch.actions.canPause === true ||
-        batch.actions.canCancelRemaining === true;
-    }).length;
+    const paidBatchesCount = paidBatches.length;
     const counts = {
       regularItems,
       paidBatches: paidBatchesCount,

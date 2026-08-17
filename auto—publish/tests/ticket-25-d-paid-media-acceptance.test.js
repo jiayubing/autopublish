@@ -621,6 +621,76 @@ test("separate paid batches share one global execution lock", async () => {
   }
 });
 
+test("starts all eligible paid batches for the current client in sequence", async () => {
+  const fixture = createFixture({
+    articles: [article("start-all-a"), article("start-all-b")],
+  });
+  try {
+    const first = await confirmBatch(fixture, ["start-all-a"]);
+    const second = await confirmBatch(fixture, ["start-all-b"]);
+    const result = await fixture.application.startAllPaidMediaBatches({
+      clientId: "client-d",
+    });
+
+    assert.equal(result.executionStatus, "paid_batches_started");
+    assert.deepEqual(
+      new Set(result.results.map((item) => item.batchId)),
+      new Set([first.batchId, second.batchId]),
+    );
+    assert.ok(
+      result.results.every((item) => item.executionStatus === "order_created"),
+    );
+    assert.equal(fixture.createCalls.length, 2);
+  } finally {
+    fixture.close();
+  }
+});
+
+test("start all reports busy while another paid batch owns the global lock", async () => {
+  let firstStarted;
+  let releaseFirst;
+  const firstCall = new Promise((resolve) => {
+    firstStarted = resolve;
+  });
+  const firstRelease = new Promise((resolve) => {
+    releaseFirst = resolve;
+  });
+  const fixture = createFixture({
+    articles: [article("start-all-busy-a"), article("start-all-busy-b")],
+  });
+  fixture.state.onCreateOrder = async (_input, count) => {
+    if (count === 1) {
+      firstStarted();
+      await firstRelease;
+    }
+  };
+  let running;
+  try {
+    const first = await confirmBatch(fixture, ["start-all-busy-a"]);
+    const second = await confirmBatch(fixture, ["start-all-busy-b"]);
+    running = fixture.application.startPaidMediaBatch({
+      batchId: first.batchId,
+    });
+    await firstCall;
+
+    const result = await fixture.application.startAllPaidMediaBatches({
+      clientId: "client-d",
+    });
+
+    assert.equal(result.executionStatus, "paid_execution_busy");
+    assert.deepEqual(result.results, []);
+    assert.equal(fixture.createCalls.length, 1);
+    const secondSnapshot = fixture.application
+      .getPaidMediaBatches({ clientId: "client-d" })
+      .items.find((batch) => batch.batchId === second.batchId);
+    assert.equal(secondSnapshot.actions.canStart, true);
+  } finally {
+    releaseFirst();
+    if (running) await running;
+    fixture.close();
+  }
+});
+
 test("paid order views refresh through the application and preserve facts on transport failure", async () => {
   const fixture = createFixture({ articles: [article("refresh-d")] });
   try {

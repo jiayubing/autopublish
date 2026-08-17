@@ -356,7 +356,28 @@ function createPaidMediaBatchOrchestrator(options) {
     return transitions.cancelRemainingPaidSubmissionBatchItems(input || {});
   }
 
-  async function startAll() {
+  async function startAll(input) {
+    const clientId = input && input.clientId;
+    if (typeof clientId === "string" && clientId.trim()) {
+      if (globalRun)
+        return Object.freeze({
+          status: "paid_execution_busy",
+          results: Object.freeze([]),
+        });
+      const batches = snapshot({ clientId });
+      const results = [];
+      for (const batch of batches) {
+        if (batch.actions && batch.actions.canStart === true)
+          results.push(await startBatch({ batchId: batch.batchId }));
+      }
+      return Object.freeze({
+        status:
+          results.length > 0
+            ? "paid_batches_started"
+            : "no_eligible_paid_batches",
+        results: Object.freeze(results),
+      });
+    }
     transitions.startAllPaidSubmissionBatches();
     const batches = snapshot({});
     const results = [];

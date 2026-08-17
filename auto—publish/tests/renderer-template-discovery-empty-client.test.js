@@ -43,6 +43,7 @@ describe("empty-client template discovery", function() {
       loadManagement: async () => ({}),
       listPaidMediaBatches: async () => [],
       startPaidMediaBatch: async () => ({}),
+      startAllPaidMediaBatches: async () => ({}),
       pausePaidMediaBatch: async () => ({}),
       cancelRemainingPaidMediaBatchItems: async () => ({}),
     });

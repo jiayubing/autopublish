@@ -1393,6 +1393,21 @@ const PRODUCTION_CALLERS = Object.freeze({
     application: "paidExecution.start",
     featureBinding: "startPaidMediaBatch",
   }),
+  "content.startAllPaidMediaBatches": Object.freeze({
+    view: "media-workbench/src/components/PaidMediaWorkbench.tsx",
+    viewSymbol: "PaidMediaWorkbench",
+    feature:
+      "media-workbench/src/features/content/use-content-workbench-feature.ts",
+    featureSymbol: "useContentWorkbenchFeature",
+    bridge: "media-workbench/src/bridge/content.ts",
+    bridgeSymbol: "startAllPaidMediaBatches",
+    preloadMethod: "startAllPaidMediaBatches",
+    command: "content.startAllPaidMediaBatches",
+    channel: "content:start-all-paid-media-batches",
+    registrar: "desktop/ipc/content-submission-ipc.js",
+    application: "paidExecution.startAll",
+    featureBinding: "startAllPaidMediaBatches",
+  }),
   "content.pausePaidMediaBatch": Object.freeze({
     view: "media-workbench/src/components/PaidMediaWorkbench.tsx",
     viewSymbol: "PaidMediaWorkbench",
@@ -2216,6 +2231,11 @@ const PRODUCTION_CONSUMERS = Object.freeze({
     "media-workbench/src/components/PlatformWorkbench.tsx",
     "startPaidMediaBatch",
   ],
+  "content.startAllPaidMediaBatches": [
+    "direct",
+    "media-workbench/src/components/PlatformWorkbench.tsx",
+    "startAllPaidMediaBatches",
+  ],
   "content.pausePaidMediaBatch": [
     "direct",
     "media-workbench/src/components/PlatformWorkbench.tsx",
@@ -2431,6 +2451,11 @@ const PRODUCTION_STATE_CONSUMERS = Object.freeze({
     "media-workbench/src/components/PaidMediaWorkbench.tsx",
     "content.snapshot",
     "paidMediaExecution",
+  ],
+  "content.startAllPaidMediaBatches": [
+    "media-workbench/src/components/PaidMediaWorkbench.tsx",
+    "content.commands",
+    "startAllPaidMediaBatches",
   ],
   "content.cancelRemainingPaidMediaBatchItems": [
     "media-workbench/src/components/PaidMediaWorkbench.tsx",
@@ -2659,6 +2684,7 @@ const PRODUCTION_NESTED_COMMAND_FEATURES = Object.freeze(
         "createPaidMediaExecutionFeature",
         [
           "content.startPaidMediaBatch",
+          "content.startAllPaidMediaBatches",
           "content.pausePaidMediaBatch",
           "content.cancelRemainingPaidMediaBatchItems",
         ],
@@ -2802,6 +2828,7 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
           "content.permanentlyDeleteArticle",
           "content.retryArticleRemovalTransaction",
           "content.startPaidMediaBatch",
+          "content.startAllPaidMediaBatches",
           "content.pausePaidMediaBatch",
           "content.cancelRemainingPaidMediaBatchItems",
           "content.createQuestion",
@@ -4599,6 +4626,19 @@ const rawProductionIpcContractFixtures = [
     result: {
       executionStatus: "submitted",
       batch: paidExecutionBatchFixture(),
+    },
+  },
+  {
+    capability: "content.startAllPaidMediaBatches",
+    channel: "content:start-all-paid-media-batches",
+    owner: "content",
+    productionCaller: "desktop/preload.js:content:start-all-paid-media-batches",
+    request: { clientId: "fixture-1" },
+    result: {
+      executionStatus: "paid_batches_started",
+      results: [
+        { batchId: "fixture-1", executionStatus: "order_created" },
+      ],
     },
   },
   {

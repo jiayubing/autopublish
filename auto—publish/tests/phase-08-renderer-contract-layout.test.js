@@ -115,6 +115,7 @@ const domainTypeSymbols = {
     "PaidMediaExecutionItem",
     "PaidMediaExecutionBatch",
     "PaidMediaExecutionResult",
+    "PaidMediaBatchStartAllResult",
     "PendingQueueRemovalItemInput",
     "PendingQueueRemovalInput",
     "PendingQueueRemovalResult",
@@ -227,7 +228,7 @@ test("renderer shared types have one domain owner and no legacy barrel", () => {
     }
   }
 
-  assert.equal(expectedOwners.size, 142);
+  assert.equal(expectedOwners.size, 143);
 
   const actualDeclarations = new Map();
   const expectedOwnerFiles = Object.keys(domainTypeSymbols)
@@ -259,7 +260,7 @@ test("renderer shared types have one domain owner and no legacy barrel", () => {
     }
   }
 
-  assert.equal(actualDeclarations.size, 142);
+  assert.equal(actualDeclarations.size, 143);
   assert.deepEqual(
     [...actualDeclarations.keys()].sort(),
     [...expectedOwners.keys()].sort(),
