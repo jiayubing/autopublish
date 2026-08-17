@@ -418,3 +418,14 @@ loader 只向调用者暴露其需要的角色，不暴露完整实现对象：
 - **Unrun acceptance and reasons:** 未执行真实登录、投稿、图片上传、付费、取消、订单核对、生产数据库或迁移；这些操作未获逐次授权且不属于本计划自动 gate。Hepan Python smoke 为 `SKIPPED_OPTIONAL (optional-python-not-supplied)`，不代表真实河畔验收
 - **Remaining risks:** 无已知 blocking/deferred finding；真实平台外部协议仍只由已有合成测试与 package contract 覆盖，后续真实验收需另行逐次授权
 - **Final Git status:** final clean-gate HEAD `e49b9b2`；本 closure record 与 handoff 由独立 docs-only commit 固化；未 merge/push
+
+## 13. Post-closure bounded remediation（2026-08-17）
+
+- **Status:** `COMPLETE`；后续架构评估发现的两个 blocking P2 已按 Finding Remediation → Bounded Re-audit → Closure 收敛，未重新开启 full review。
+- **Implementation HEAD:** `e505be576f3a3be2d82bada97056e3f2bae0349b`（base `444993ea81c9bbd9e5f87547cfce35b13f54f73b`）。
+- **Closed findings:** enabled definition 目录 ID 与 `definition.id` 未绑定，可能把错误 `externalHosts` 投影到安全策略；启用平台间重复 `scanDir` 未 fail-closed，可能让 queue directory 产生跨平台歧义。两类冲突现在都由 `src/core/platforms.js` 的 definition collection owner 整体隔离。
+- **Bounded re-audit:** loader、external-link policy、queue reader、reference platform、worker/cleanup 直接矩阵 `60 passed / 0 failed / 0 skipped`；packaging contracts `49 passed / 0 failed / 0 skipped`；定向 ESLint 与 `git diff --check` PASS；未触发 schema、公开合同、事实 owner、事务或远端副作用 escalation。
+- **Final clean-HEAD gate:** 在 clean implementation HEAD `e505be5` 上设置 Electron focus fixture 后运行完整 `npm test`，`1937 passed / 0 failed / 0 skipped`，runner lifecycle `CLOSED`、`allFilesReported=true`、`noSkippedTodo=true`；`npm run pack:production:smoke` PASS，manifest 记录 clean source state 与 commit `e505be5`。
+- **Unsigned NSIS:** production 强制签名配置未修改；通过既有 Alpha unsigned route 重建 `release-alpha/ETO—001-Alpha-1.0.1-x64.exe`，package verifier PASS，Authenticode=`NotSigned`，SHA-256=`AB5CC5C61673659806A431A471A78D5C4A8764206578963B93594EA63B57B34D`。首次 `npm run dist:alpha` 在原生 7-Zip 压缩阶段异常退出；同工具、同目录、同参数的最小复现随后 PASS，重跑失败的 NSIS stage PASS，未修改代码或 package 配置。
+- **Evidence:** `handoffs/post-wave-platform-extensibility-post-closure-remediation-20260817.md`。
+- **External acceptance:** 未执行真实登录、投稿、图片上传、付费、取消、订单核对、生产数据库或迁移；Hepan optional Python smoke 仍不代表真实平台验收。
