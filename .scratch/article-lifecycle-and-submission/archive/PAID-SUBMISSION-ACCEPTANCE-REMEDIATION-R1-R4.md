@@ -1,4 +1,5 @@
 # Paid Submission Acceptance Remediation Plan — R1 to R4
+> **历史文档警告（2026-08-18）：** 本文件保留为旧 paid staging / acceptance 路线的历史证据，不是当前产品规格或执行入口。当前行为以根 `ARTICLE-LIFECYCLE-AND-SUBMISSION-SPEC.md`、当前源码、测试和 Git 状态为准；不要从本文件恢复已退役的持久 staging 概念。
 
 > **用途**：针对当前 Alpha/实际操作验收暴露出的 4 个 blocking findings 做一次严格 bounded remediation。  
 > **当前基线**：以当前真实源码为准；已知当前集成提交为：

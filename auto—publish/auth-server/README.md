@@ -1,5 +1,7 @@
 # AutoPublish J4125 auth service
 
+> **阅读边界：** 本文是鉴权服务入口和运维合同。局部任务只读取文件头及与任务直接相关的小节；详细阅读边界以本目录 `AGENTS.md` 和根 `docs/AI-ENTRY.md` 为准。
+
 This directory is a deployment fixture and contract for the separately managed
 J4125 service. It is not part of the Electron installer and is not connected to
 the real server by local tests.

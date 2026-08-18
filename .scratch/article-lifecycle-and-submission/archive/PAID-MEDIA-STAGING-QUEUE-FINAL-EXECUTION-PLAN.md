@@ -1,4 +1,5 @@
 # Paid Media Staging Queue Remediation Plan — Final Execution Plan
+> **历史文档警告（2026-08-18）：** 本文件保留为旧 paid staging 路线的历史证据，不是当前产品规格或执行入口。当前行为以根 `ARTICLE-LIFECYCLE-AND-SUBMISSION-SPEC.md`、当前源码、测试和 Git 状态为准；不要从本文件恢复已退役的持久 staging 概念。
 
 > **状态**：最终执行稿  
 > **适用仓库**：当前真实仓库 HEAD，必须包含已完成的媒体资源刷新修复、Phase 1、Phase 2。  
