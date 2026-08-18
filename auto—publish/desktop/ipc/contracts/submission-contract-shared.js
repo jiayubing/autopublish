@@ -221,6 +221,16 @@ const COMMON_ERRORS = Object.freeze({
     retryability: "never",
     userMessage: "平台账号档案不存在。",
   },
+  ACCOUNT_PROFILE_NOT_BOUND: {
+    category: "validation",
+    retryability: "never",
+    userMessage: "平台账号档案尚未绑定远端账号，请先完成绑定。",
+  },
+  ACCOUNT_PROFILE_BINDING_INVALID: {
+    category: "conflict",
+    retryability: "manual-check",
+    userMessage: "平台账号档案绑定数据异常，请检查账号档案后重试。",
+  },
   ACCOUNT_PROFILE_PLATFORM_MISMATCH: {
     category: "validation",
     retryability: "never",

@@ -21,6 +21,7 @@ const {
 } = require("../desktop/services/platform-account-binding-store");
 const {
   createPlatformAccountInspector,
+  fingerprint,
 } = require("../desktop/services/platform-account-inspector");
 const {
   createPlatformSessionService,
@@ -161,12 +162,18 @@ function createHarness(options) {
     platformId: PLATFORM_ID,
     displayName: "合成平台账号",
   });
+  const bindingStore = createPlatformAccountBindingStore({
+    localStateRoot: path.join(root, "local-state"),
+  });
+  bindingStore.bind({
+    accountProfileId: accountProfile.accountProfileId,
+    platformId: PLATFORM_ID,
+    remoteFingerprint: fingerprint(PLATFORM_ID, "reference-account-1"),
+  });
   const accountInspector = createPlatformAccountInspector({
     adapters: { [PLATFORM_ID]: platform.accountInspection },
     operationalStore,
-    bindingStore: createPlatformAccountBindingStore({
-      localStateRoot: path.join(root, "local-state"),
-    }),
+    bindingStore,
   });
   const imageSelectionPort = Object.freeze({
     select(input) {
@@ -318,7 +325,7 @@ test("reference standard platform reaches the public regular submission chain wi
       platformId: PLATFORM_ID,
       authenticated: true,
     });
-    assert.deepEqual(harness.state.sessionCalls, ["open", "check", "save"]);
+    assert.deepEqual(harness.state.sessionCalls, ["open", "check", "save", "close"]);
 
     const admitted = admit(
       harness,

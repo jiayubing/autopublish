@@ -12,7 +12,14 @@ function createPlatformSessionService(options) {
   function adapterFor(platformId) {
     if (typeof platformId !== "string" || !platformId || platformId.trim() !== platformId) throw invalid("PLATFORM_LOGIN_INPUT_INVALID");
     const adapter = adapters[platformId];
-    if (!adapter || typeof adapter.open !== "function" || typeof adapter.check !== "function" || typeof adapter.save !== "function") throw invalid("PLATFORM_LOGIN_UNAVAILABLE");
+    if (
+      !adapter ||
+      typeof adapter.open !== "function" ||
+      typeof adapter.check !== "function" ||
+      typeof adapter.save !== "function" ||
+      typeof adapter.close !== "function"
+    )
+      throw invalid("PLATFORM_LOGIN_UNAVAILABLE");
     return adapter;
   }
   function assertCapability() {
@@ -25,7 +32,20 @@ function createPlatformSessionService(options) {
       assertCapability();
       const adapter = adapterFor(platformId);
       const authenticated = (await adapter.check()) === true;
-      if (authenticated) await adapter.save();
+      if (authenticated) {
+        let saveError = null;
+        try {
+          await adapter.save();
+        } catch (error) {
+          saveError = error;
+        }
+        try {
+          await adapter.close();
+        } catch (closeError) {
+          if (!saveError) throw closeError;
+        }
+        if (saveError) throw saveError;
+      }
       return { platformId, authenticated };
     },
   });

@@ -79,6 +79,56 @@ const COMMON_ERRORS = {
     retryability: "never",
     userMessage: "平台账号档案查询无效。",
   },
+  ACCOUNT_PROFILE_BIND_CONFIRMATION_REQUIRED: {
+    category: "validation",
+    retryability: "never",
+    userMessage: "确认后才能绑定当前平台账号。",
+  },
+  ACCOUNT_PROFILE_DELETE_CONFIRMATION_REQUIRED: {
+    category: "validation",
+    retryability: "never",
+    userMessage: "确认删除平台账号档案后才能继续。",
+  },
+  ACCOUNT_PROFILE_NOT_FOUND: {
+    category: "conflict",
+    retryability: "safe",
+    userMessage: "平台账号档案已不存在，请刷新后重试。",
+  },
+  ACCOUNT_PROFILE_IN_USE: {
+    category: "conflict",
+    retryability: "never",
+    userMessage: "该账号档案仍有投稿队列或活动发布目标，不能删除。",
+  },
+  ACCOUNT_PROFILE_REMOTE_MISMATCH: {
+    category: "authentication",
+    retryability: "never",
+    userMessage: "当前登录账号与该档案已绑定账号不一致，请切换回原账号或新建档案。",
+  },
+  PLATFORM_ACCOUNT_IDENTITY_UNAVAILABLE: {
+    category: "authentication",
+    retryability: "manual-check",
+    userMessage: "无法读取当前平台登录身份，请先检查登录并保存会话。",
+  },
+  PLATFORM_ACCOUNT_IDENTITY_UNVERIFIED: {
+    category: "authentication",
+    retryability: "manual-check",
+    userMessage: "当前平台登录身份未通过验证，请重新登录后检查。",
+  },
+  PLATFORM_ACCOUNT_BINDING_STORAGE_UNAVAILABLE: {
+    category: "storage",
+    retryability: "manual-check",
+    userMessage: "账号绑定存储当前不可用，请检查本机数据目录。",
+  },
+  PLATFORM_ACCOUNT_BINDING_STORAGE_INVALID: {
+    category: "storage",
+    retryability: "manual-check",
+    userMessage: "账号绑定数据异常，请先检查诊断信息。",
+  },
+  ACCOUNT_PROFILE_CREATE_NEEDS_REPAIR: {
+    category: "storage",
+    retryability: "manual-check",
+    userMessage: "账号档案创建未能完整回滚，请刷新并检查诊断信息。",
+  },
   PUBLICATION_WORKFLOW_UNAVAILABLE: {
     category: "transport",
     retryability: "manual-check",
@@ -143,6 +193,7 @@ const accountProfile = exactObject({
   platformId: identifier,
   displayName: safeText(256, 1),
   createdAt: optionalField(safeText(64)),
+  bindingStatus: enumField(["bound", "unbound"]),
 });
 
 const platformContracts = [
@@ -207,7 +258,56 @@ const platformContracts = [
       fromArgs: (args) => args[0],
       toArgs: (payload) => [payload],
     },
-    ["ACCOUNT_PROFILE_CONFIRMATION_REQUIRED"],
+    [
+      "ACCOUNT_PROFILE_CONFIRMATION_REQUIRED",
+      "PLATFORM_ACCOUNT_IDENTITY_UNAVAILABLE",
+      "PLATFORM_ACCOUNT_IDENTITY_UNVERIFIED",
+      "PLATFORM_ACCOUNT_BINDING_STORAGE_UNAVAILABLE",
+      "PLATFORM_ACCOUNT_BINDING_STORAGE_INVALID",
+      "ACCOUNT_PROFILE_CREATE_NEEDS_REPAIR",
+    ],
+  ),
+  contract(
+    {
+      capability: "platform.bindAccountProfile",
+      channel: "platforms:bind-account-profile",
+      kind: "command",
+      request: exactObject({
+        accountProfileId: identifier,
+        confirmed: literalField(true),
+      }),
+      success: exactObject({ profile: accountProfile }),
+      fromArgs: (args) => args[0],
+      toArgs: (payload) => [payload],
+    },
+    [
+      "ACCOUNT_PROFILE_BIND_CONFIRMATION_REQUIRED",
+      "ACCOUNT_PROFILE_NOT_FOUND",
+      "ACCOUNT_PROFILE_REMOTE_MISMATCH",
+      "PLATFORM_ACCOUNT_IDENTITY_UNAVAILABLE",
+      "PLATFORM_ACCOUNT_IDENTITY_UNVERIFIED",
+      "PLATFORM_ACCOUNT_BINDING_STORAGE_UNAVAILABLE",
+      "PLATFORM_ACCOUNT_BINDING_STORAGE_INVALID",
+    ],
+  ),
+  contract(
+    {
+      capability: "platform.deleteAccountProfile",
+      channel: "platforms:delete-account-profile",
+      kind: "command",
+      request: exactObject({
+        accountProfileId: identifier,
+        confirmed: literalField(true),
+      }),
+      success: exactObject({ accountProfileId: identifier }),
+      fromArgs: (args) => args[0],
+      toArgs: (payload) => [payload],
+    },
+    [
+      "ACCOUNT_PROFILE_DELETE_CONFIRMATION_REQUIRED",
+      "ACCOUNT_PROFILE_NOT_FOUND",
+      "ACCOUNT_PROFILE_IN_USE",
+    ],
   ),
   contract(
     {

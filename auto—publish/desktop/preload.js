@@ -284,6 +284,12 @@ const api = {
     confirmAccountProfile: function (input) {
       return ipcRenderer.invoke("platforms:confirm-account-profile", input);
     },
+    bindAccountProfile: function (input) {
+      return ipcRenderer.invoke("platforms:bind-account-profile", input);
+    },
+    deleteAccountProfile: function (input) {
+      return ipcRenderer.invoke("platforms:delete-account-profile", input);
+    },
     openLogin: function (platformId) {
       return ipcRenderer.invoke("platforms:open-login", platformId);
     },

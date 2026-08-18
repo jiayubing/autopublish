@@ -58,9 +58,33 @@ function createPlatformAccountBindingStore(options) {
       typeof parsed.bindings !== "object" ||
       Array.isArray(parsed.bindings)
     ) {
-      throw new Error("Platform account binding storage is invalid");
+      throw bindingError(
+        "PLATFORM_ACCOUNT_BINDING_STORAGE_INVALID",
+        "Platform account binding storage is invalid",
+      );
     }
     return parsed.bindings;
+  }
+
+  function parseBindingEntry(bindings, accountProfileId) {
+    if (!Object.prototype.hasOwnProperty.call(bindings, accountProfileId))
+      return null;
+    const entry = bindings[accountProfileId];
+    if (
+      !entry ||
+      typeof entry !== "object" ||
+      Array.isArray(entry) ||
+      !valid(entry.platformId, /^[a-z][a-z0-9-]{0,63}$/) ||
+      !valid(entry.remoteFingerprint, /^[a-f0-9]{64}$/)
+    )
+      throw bindingError(
+        "PLATFORM_ACCOUNT_BINDING_STORAGE_INVALID",
+        "Platform account binding storage is invalid",
+      );
+    return Object.freeze({
+      platformId: entry.platformId,
+      remoteFingerprint: entry.remoteFingerprint,
+    });
   }
   function assertDestinationSafe() {
     try {
@@ -113,16 +137,8 @@ function createPlatformAccountBindingStore(options) {
   }
   return Object.freeze({
     get: function (accountProfileId) {
-      let entry;
-      entry = read()[accountProfileId];
-      return entry &&
-        valid(entry.platformId, /^[a-z][a-z0-9-]{0,63}$/) &&
-        valid(entry.remoteFingerprint, /^[a-f0-9]{64}$/)
-        ? Object.freeze({
-            platformId: entry.platformId,
-            remoteFingerprint: entry.remoteFingerprint,
-          })
-        : null;
+      const bindings = read();
+      return parseBindingEntry(bindings, accountProfileId);
     },
     bind: function (input) {
       const item = input || {};
@@ -136,6 +152,9 @@ function createPlatformAccountBindingStore(options) {
           "Platform account binding is invalid",
         );
       const bindings = read();
+      // Validate an existing entry before writing. A corrupt historical binding
+      // must fail closed rather than being silently repaired/rebound.
+      parseBindingEntry(bindings, item.accountProfileId);
       bindings[item.accountProfileId] = {
         platformId: item.platformId,
         remoteFingerprint: item.remoteFingerprint,
@@ -145,6 +164,19 @@ function createPlatformAccountBindingStore(options) {
         platformId: item.platformId,
         remoteFingerprint: item.remoteFingerprint,
       });
+    },
+    remove: function (accountProfileId) {
+      if (!valid(accountProfileId, /^account-[a-z0-9-]{1,128}$/))
+        throw bindingError(
+          "PLATFORM_ACCOUNT_BINDING_INVALID",
+          "Platform account binding is invalid",
+        );
+      const bindings = read();
+      const existing = bindings[accountProfileId];
+      if (!existing) return false;
+      delete bindings[accountProfileId];
+      write(bindings);
+      return true;
     },
   });
 }

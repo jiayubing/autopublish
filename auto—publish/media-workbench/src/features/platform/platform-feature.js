@@ -7,6 +7,8 @@ const COMMAND_NAMES = Object.freeze([
   'openLogin',
   'checkLogin',
   'confirmAccountProfile',
+  'bindAccountProfile',
+  'deleteAccountProfile',
   'startGroup',
   'pauseGroup',
   'startAllGroups',
@@ -696,7 +698,7 @@ export function createPlatformFeature(bridge = {}) {
         owners.confirmAccountProfile,
         commandScope,
         () => bridge.confirmAccountProfile(input),
-        '确认平台账号档案失败',
+        '创建并绑定平台账号档案失败',
         (profile) => {
           const byId = new Map(accountProfiles.items.map((item) => [item.accountProfileId, item]));
           if (profile?.accountProfileId) byId.set(profile.accountProfileId, profile);
@@ -706,6 +708,44 @@ export function createPlatformFeature(bridge = {}) {
           });
         },
       );
+    },
+    bindAccountProfile(accountProfileId) {
+      const commandScope = { ...requireScope(), accountProfileId: accountProfileId || 'unknown' };
+      return ownedCommand(
+        owners.bindAccountProfile,
+        commandScope,
+        () => bridge.bindAccountProfile(accountProfileId),
+        '绑定当前平台账号失败',
+        (profile) => {
+          const byId = new Map(accountProfiles.items.map((item) => [item.accountProfileId, item]));
+          if (profile?.accountProfileId) byId.set(profile.accountProfileId, profile);
+          accountProfiles = Object.freeze({
+            items: Object.freeze([...byId.values()]),
+            query: Object.freeze({ loading: false, error: null }),
+          });
+        },
+      );
+    },
+    deleteAccountProfile(accountProfileId) {
+      const commandScope = { ...requireScope(), accountProfileId: accountProfileId || 'unknown' };
+      return ownedCommand(
+        owners.deleteAccountProfile,
+        commandScope,
+        () => bridge.deleteAccountProfile(accountProfileId),
+        '删除平台账号档案失败',
+        (deletedAccountProfileId) => {
+          accountProfiles = Object.freeze({
+            items: Object.freeze(accountProfiles.items.filter((item) => item.accountProfileId !== deletedAccountProfileId)),
+            query: Object.freeze({ loading: false, error: null }),
+          });
+        },
+      );
+    },
+    clearAccountProfileFeedback() {
+      ['confirmAccountProfile', 'bindAccountProfile', 'deleteAccountProfile'].forEach((name) => {
+        if (!owners[name].getSnapshot().busy) owners[name].invalidate();
+      });
+      publish();
     },
     setError(next) { error = next; publish(); },
     dispose() {

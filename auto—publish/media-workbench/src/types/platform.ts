@@ -5,6 +5,7 @@ export interface AccountProfile {
   platformId: string;
   displayName: string;
   createdAt?: string;
+  bindingStatus: "bound" | "unbound";
 }
 
 export interface PlatformArticle {

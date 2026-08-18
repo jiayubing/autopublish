@@ -8,18 +8,7 @@ const {
   canonicalArticleRefs,
   normalizeArticleRef,
 } = require("../article-ref");
-
-const ACTIVE_TARGET_STATUSES = new Set([
-  "queued",
-  "claimed",
-  "reserving",
-  "remote_started",
-  "paid_processing",
-  "uncertain",
-  "unknown",
-  "0",
-  "1",
-]);
+const { ACTIVE_TARGET_STATUSES } = require("../article-lifecycle-facts");
 
 function createArticleMutationAdmission(kernel) {
   const regularQueueTransitions = kernel.ports.regularQueueTransitions;

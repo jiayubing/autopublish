@@ -1,6 +1,9 @@
 "use strict";
 
-const crypto = require("node:crypto");
+const {
+  createPlatformAccountIdentityService,
+  fingerprint,
+} = require("./platform-account-identity-service");
 
 function safeText(value, maximum) {
   if (typeof value !== "string") return "";
@@ -8,38 +11,26 @@ function safeText(value, maximum) {
   return normalized && normalized.length <= maximum ? normalized : "";
 }
 
-function fingerprint(platformId, remoteAccountId) {
-  return crypto
-    .createHash("sha256")
-    .update(`${platformId}\0${remoteAccountId}`, "utf8")
-    .digest("hex");
-}
-
-async function ensureAccountInspectionReady(adapter, task) {
-  const input = task || {};
-  if (typeof adapter.prepare === "function") {
-    await adapter.prepare(
-      Object.freeze({
-        targetPlatformId: input.targetPlatformId,
-        accountProfileId: input.accountProfileId,
-        preserveCurrentPage: input.preserveCurrentPage === true,
-      }),
-    );
-    return;
-  }
+function safeCode(value) {
+  return typeof value === "string" && /^[A-Z][A-Z0-9_]{1,127}$/.test(value)
+    ? value
+    : null;
 }
 
 function createPlatformAccountInspector(options) {
   const value = options || {};
-  const adapters = value.adapters || {};
   const operationalStore = value.operationalStore;
   const bindingStore = value.bindingStore;
+  const identityService =
+    value.identityService ||
+    createPlatformAccountIdentityService({ adapters: value.adapters || {} });
   if (
     !operationalStore ||
     typeof operationalStore.listAccountProfiles !== "function" ||
     !bindingStore ||
     typeof bindingStore.get !== "function" ||
-    typeof bindingStore.bind !== "function"
+    !identityService ||
+    typeof identityService.inspect !== "function"
   ) {
     throw new Error("Platform account inspector requires account profiles");
   }
@@ -48,35 +39,11 @@ function createPlatformAccountInspector(options) {
     inspect: async function (task) {
       const platformId = safeText(task && task.targetPlatformId, 64);
       const expectedProfileId = safeText(task && task.accountProfileId, 160);
-      const adapter = adapters[platformId];
-      if (
-        !platformId ||
-        !expectedProfileId ||
-        !adapter ||
-        typeof adapter.inspect !== "function"
-      ) {
-        return Object.freeze({ verified: false });
-      }
-      let evidence;
-      try {
-        await ensureAccountInspectionReady(adapter, task);
-        evidence = await adapter.inspect();
-      } catch (_) {
-        return Object.freeze({ verified: false });
-      }
-      const displayName = safeText(evidence && evidence.displayName, 128);
-      const remoteAccountId = safeText(
-        evidence && evidence.remoteAccountId,
-        128,
-      );
-      if (
-        !evidence ||
-        evidence.verified !== true ||
-        !displayName ||
-        !remoteAccountId
-      ) {
-        return Object.freeze({ verified: false });
-      }
+      if (!platformId || !expectedProfileId)
+        return Object.freeze({
+          verified: false,
+          reasonCode: "ACCOUNT_PROFILE_INPUT_INVALID",
+        });
       const matching = operationalStore
         .listAccountProfiles()
         .filter(function (profile) {
@@ -86,30 +53,72 @@ function createPlatformAccountInspector(options) {
             profile.platformId === platformId
           );
         });
-      if (matching.length !== 1) return Object.freeze({ verified: false });
-      const remoteFingerprint = fingerprint(platformId, remoteAccountId);
-      const binding = bindingStore.get(expectedProfileId);
-      if (
-        binding &&
-        (binding.platformId !== platformId ||
-          binding.remoteFingerprint !== remoteFingerprint)
-      )
-        return Object.freeze({ verified: false });
-      if (!binding) {
-        try {
-          bindingStore.bind({
-            accountProfileId: expectedProfileId,
-            platformId,
-            remoteFingerprint,
-          });
-        } catch (_) {
-          return Object.freeze({ verified: false });
-        }
+      if (matching.length !== 1)
+        return Object.freeze({
+          verified: false,
+          reasonCode: "ACCOUNT_PROFILE_NOT_FOUND",
+        });
+      let binding;
+      try {
+        binding = bindingStore.get(expectedProfileId);
+      } catch (error) {
+        return Object.freeze({
+          verified: false,
+          reasonCode: "ACCOUNT_PROFILE_BINDING_UNAVAILABLE",
+          ...(safeCode(error && error.code)
+            ? { causeCode: safeCode(error.code) }
+            : {}),
+        });
       }
+      if (!binding)
+        return Object.freeze({
+          verified: false,
+          reasonCode: "ACCOUNT_PROFILE_NOT_BOUND",
+        });
+      if (binding.platformId !== platformId)
+        return Object.freeze({
+          verified: false,
+          reasonCode: "ACCOUNT_PROFILE_BINDING_INVALID",
+        });
+      let identity;
+      try {
+        identity = await identityService.inspect({
+          platformId,
+          accountProfileId: expectedProfileId,
+          preserveCurrentPage: task && task.preserveCurrentPage === true,
+        });
+      } catch (error) {
+        return Object.freeze({
+          verified: false,
+          reasonCode: "ACCOUNT_PROFILE_IDENTITY_UNAVAILABLE",
+          ...(safeCode(error && error.code)
+            ? { causeCode: safeCode(error.code) }
+            : {}),
+          ...(safeCode(error && error.causeCode)
+            ? { transportCauseCode: safeCode(error.causeCode) }
+            : {}),
+        });
+      }
+      if (
+        !identity ||
+        identity.verified !== true ||
+        identity.platformId !== platformId ||
+        typeof identity.remoteFingerprint !== "string" ||
+        !identity.remoteFingerprint
+      )
+        return Object.freeze({
+          verified: false,
+          reasonCode: "ACCOUNT_PROFILE_IDENTITY_UNAVAILABLE",
+        });
+      if (identity.remoteFingerprint !== binding.remoteFingerprint)
+        return Object.freeze({
+          verified: false,
+          reasonCode: "ACCOUNT_PROFILE_REMOTE_MISMATCH",
+        });
       return Object.freeze({
         verified: true,
         accountProfileId: expectedProfileId,
-        remoteFingerprint,
+        remoteFingerprint: identity.remoteFingerprint,
       });
     },
   });

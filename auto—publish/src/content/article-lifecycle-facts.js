@@ -11,6 +11,17 @@ const ACTIVE_SUBMISSION_STATUSES = new Set([
   "reserving",
   "paid_processing",
 ]);
+const ACTIVE_TARGET_STATUSES = new Set([
+  "queued",
+  "claimed",
+  "reserving",
+  "remote_started",
+  "paid_processing",
+  "uncertain",
+  "unknown",
+  "0",
+  "1",
+]);
 const FAILURE_STATUSES = new Set(["failed", "uncertain", "conflict"]);
 const KNOWN_PUBLICATION_STATUSES = new Set([
   "queued",
@@ -267,6 +278,7 @@ function targetFactsFor(records, submissionItems, orders) {
 module.exports = {
   ACTIVE_PUBLICATION_STATUSES,
   ACTIVE_SUBMISSION_STATUSES,
+  ACTIVE_TARGET_STATUSES,
   FAILURE_STATUSES,
   KNOWN_PUBLICATION_STATUSES,
   KNOWN_SUBMISSION_STATUSES,

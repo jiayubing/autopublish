@@ -248,12 +248,14 @@ describe("Phase 08 platform/media/settings/workspace renderer slice", () => {
           accountProfileId: "profile-a",
           platformId: "toutiao",
           displayName: "机构主账号",
+          bindingStatus: "bound",
         },
       ],
       confirmAccountProfile: async () => ({
         accountProfileId: "profile-b",
         platformId: "toutiao",
         displayName: "机构备用账号",
+        bindingStatus: "bound",
       }),
       startAllRegularQueueGroups: async () => {
         startAllCalls += 1;

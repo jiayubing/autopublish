@@ -11,7 +11,7 @@ import {
 } from '../../bridge/content-removal';
 import { useWorkspaceScope } from '../workspace/workspace-coordinator-context';
 import { reportRuntimeDiagnostic } from '../workspace/runtime-diagnostic-sink';
-import { confirmAccountProfile, listAccountProfiles } from '../../bridge/account-profile';
+import { bindAccountProfile, confirmAccountProfile, deleteAccountProfile, listAccountProfiles } from '../../bridge/account-profile';
 import {
   listRegularQueueGroups,
   updateRegularQueueGroupImageCount,
@@ -36,6 +36,8 @@ function createProductionPlatformFeature(): PlatformFeature {
     checkLogin: checkPlatformLogin,
     listAccountProfiles,
     confirmAccountProfile,
+    bindAccountProfile,
+    deleteAccountProfile,
     listRegularQueueGroups,
     updateRegularQueueGroupImageCount,
     removePendingQueueItems,
