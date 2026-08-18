@@ -476,6 +476,15 @@ function assertInsideViewport(box, viewport) {
   );
 }
 
+const SIDEBAR_NAVIGATION = [
+  { viewMode: "content-production", label: "内容生产" },
+  { viewMode: "article-library", label: "文章库" },
+  { viewMode: "submission-center", label: "投稿中心" },
+  { viewMode: "orders", label: "订单" },
+  { viewMode: "resources", label: "媒体资源" },
+  { viewMode: "settings", label: "设置" },
+];
+
 async function assertHistoryLayout(width, height) {
   const page = await openRenderer(width, height);
   try {
@@ -529,6 +538,97 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
     ({ browser } = await startRenderer({ port: 4173 }));
   });
   after(closeRenderer);
+
+  it("keeps six explicit ViewMode navigation items selectable in the compact sidebar", async () => {
+    const page = await browser.newPage({
+      viewport: { width: 720, height: 720 },
+    });
+    try {
+      page.setDefaultTimeout(5000);
+      await installDesktopFixture(page);
+      await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
+      await page.locator("#app-sidebar").waitFor();
+
+      assert.equal(
+        await page
+          .locator(".app-sidebar-header[data-sidebar-section='header']")
+          .count(),
+        1,
+      );
+      assert.equal(
+        await page
+          .locator(".app-sidebar-navigation[data-sidebar-section='navigation']")
+          .count(),
+        1,
+      );
+      assert.equal(
+        await page
+          .locator(".app-sidebar-footer[data-sidebar-section='footer']")
+          .count(),
+        1,
+      );
+      assert.deepEqual(
+        await page
+          .locator("[data-sidebar-navigation-item='true']")
+          .evaluateAll((items) =>
+            items.map((item) => ({
+              id: item.id,
+              label: item.getAttribute("aria-label"),
+              viewMode: item.getAttribute("data-view-mode"),
+            })),
+          ),
+        SIDEBAR_NAVIGATION.map(({ viewMode, label }) => ({
+          id: `nav-item-${viewMode}`,
+          label,
+          viewMode,
+        })),
+      );
+
+      for (const { viewMode, label } of SIDEBAR_NAVIGATION) {
+        await page.locator(`#nav-item-${viewMode}`).click();
+        await page.waitForFunction(
+          (view) => {
+            const current = document.querySelectorAll(
+              "#app-sidebar [aria-current='page']",
+            );
+            return current.length === 1 && current[0].id === `nav-item-${view}`;
+          },
+          viewMode,
+        );
+        if (viewMode === "content-production") {
+          await page.locator("#questions").waitFor();
+        } else {
+          await page
+            .getByRole("heading", { name: label, exact: true })
+            .first()
+            .waitFor();
+        }
+      }
+    } finally {
+      await page.close();
+    }
+  });
+
+  it("keeps sidebar layout independent of child-order selectors and routing frameworks", () => {
+    const sidebarSource = fs.readFileSync(
+      path.join(rootDir, "media-workbench", "src", "components", "Sidebar.tsx"),
+      "utf8",
+    );
+    const sidebarStyles = fs.readFileSync(
+      path.join(rootDir, "media-workbench", "src", "index.css"),
+      "utf8",
+    );
+
+    assert.doesNotMatch(
+      sidebarStyles,
+      /#app-sidebar\s+(?:nav\s*>\s*button|>\s*div:(?:first-child|last-child))/,
+    );
+    assert.doesNotMatch(
+      sidebarSource,
+      /\b(?:react-router|ReactRouter|createBrowserRouter|useNavigate)\b/,
+    );
+    assert.doesNotMatch(sidebarSource, /\b(?:navigation|route)Registry\b/);
+  });
 
   it("dismisses the manual client and template refresh confirmation", async () => {
     const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });

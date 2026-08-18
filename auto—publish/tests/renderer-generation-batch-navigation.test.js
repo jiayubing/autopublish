@@ -267,7 +267,7 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
     try {
       await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
       assert.deepEqual(
-        await page.locator("#app-sidebar nav > button").evaluateAll((buttons) => buttons.map((button) => button.id)),
+        await page.locator("[data-sidebar-navigation-item='true']").evaluateAll((buttons) => buttons.map((button) => button.id)),
         [
           "nav-item-content-production",
           "nav-item-article-library",

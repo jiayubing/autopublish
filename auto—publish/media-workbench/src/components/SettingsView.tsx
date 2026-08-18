@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ExternalLink, FolderOpen, Info, RefreshCw } from "lucide-react";
 import type { RuntimeCapability, RuntimeDiagnostics } from "../types/workspace";
 import { getSettingsCommandState } from "../workspace-ui-logic.js";
@@ -264,7 +264,10 @@ function StorageSettings() {
 }
 
 function SettingsViewContent() {
-  useSettingsFeature();
+  const { feature } = useSettingsFeature();
+  useEffect(() => {
+    void feature.ensureLoaded();
+  }, [feature]);
   const [active, setActive] = useState<SettingsSection>("overview");
   const content =
     active === "overview" ? (

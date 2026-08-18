@@ -19,6 +19,41 @@ export interface NavigationBadges {
   orders: number;
 }
 
+interface SidebarNavigationItem {
+  id: ViewMode;
+  label: string;
+  icon: typeof PenLine;
+  badgeKey?: keyof NavigationBadges;
+  badgeTitle?: string;
+}
+
+const NAVIGATION_ITEMS: readonly SidebarNavigationItem[] = [
+  { id: "content-production", label: "内容生产", icon: PenLine },
+  {
+    id: "article-library",
+    label: "文章库",
+    icon: BookOpen,
+    badgeKey: "articleLibrary",
+    badgeTitle: "当前客户待投稿文章数",
+  },
+  {
+    id: "submission-center",
+    label: "投稿中心",
+    icon: Send,
+    badgeKey: "submissionCenter",
+    badgeTitle: "待执行投稿与需处理事项",
+  },
+  {
+    id: "orders",
+    label: "订单",
+    icon: ClipboardList,
+    badgeKey: "orders",
+    badgeTitle: "真实订单数",
+  },
+  { id: "resources", label: "媒体资源", icon: FolderOpen },
+  { id: "settings", label: "设置", icon: Settings },
+];
+
 interface SidebarProps {
   currentView: ViewMode;
   onViewChange: (view: ViewMode) => void;
@@ -38,39 +73,15 @@ export default function Sidebar({
 }: SidebarProps) {
   const [showWalletDetails, setShowWalletDetails] = useState(false);
 
-  const menuItems = [
-    { id: "content-production" as ViewMode, label: "内容生产", icon: PenLine },
-    {
-      id: "article-library" as ViewMode,
-      label: "文章库",
-      icon: BookOpen,
-      badge: badges.articleLibrary,
-      badgeTitle: "当前客户待投稿文章数",
-    },
-    {
-      id: "submission-center" as ViewMode,
-      label: "投稿中心",
-      icon: Send,
-      badge: badges.submissionCenter,
-      badgeTitle: "待执行投稿与需处理事项",
-    },
-    {
-      id: "orders" as ViewMode,
-      label: "订单",
-      icon: ClipboardList,
-      badge: badges.orders,
-      badgeTitle: "真实订单数",
-    },
-    { id: "resources" as ViewMode, label: "媒体资源", icon: FolderOpen },
-    { id: "settings" as ViewMode, label: "设置", icon: Settings },
-  ];
-
   return (
     <aside
       id="app-sidebar"
       className="w-64 shrink-0 bg-slate-900 border-r border-slate-800 flex flex-col h-screen text-slate-300 select-none"
     >
-      <div className="p-6 border-b border-slate-800 flex items-center space-x-3">
+      <div
+        className="app-sidebar-header p-6 border-b border-slate-800 flex items-center space-x-3"
+        data-sidebar-section="header"
+      >
         <div className="w-9 h-9 shrink-0 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-lg shadow-blue-500/30">
           <Sparkles className="w-5 h-5" />
         </div>
@@ -80,27 +91,33 @@ export default function Sidebar({
         </div>
       </div>
 
-      <nav className="flex-1 p-4 space-y-1.5 overflow-y-auto">
-        <div className="sidebar-label px-3 mb-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+      <nav
+        className="app-sidebar-navigation flex-1 p-4 space-y-1.5 overflow-y-auto"
+        data-sidebar-section="navigation"
+      >
+        <div className="app-sidebar-navigation-label sidebar-label px-3 mb-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
           主导航
         </div>
-        {menuItems.map((item) => {
+        {NAVIGATION_ITEMS.map((item) => {
           const Icon = item.icon;
           const isActive = currentView === item.id;
+          const badge = item.badgeKey ? badges[item.badgeKey] : undefined;
           return (
             <button
               key={item.id}
               id={`nav-item-${item.id}`}
+              data-sidebar-navigation-item="true"
+              data-view-mode={item.id}
               onClick={() => onViewChange(item.id)}
               aria-label={item.label}
               aria-current={isActive ? "page" : undefined}
-              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 relative group ${
+              className={`app-sidebar-navigation-item w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 relative group ${
                 isActive
                   ? "bg-blue-600/10 text-blue-400 border border-blue-500/20 font-semibold"
                   : "hover:bg-slate-800/60 text-slate-400 hover:text-slate-200 border border-transparent"
               }`}
             >
-              <div className="flex min-w-0 items-center space-x-3">
+              <div className="app-sidebar-navigation-item-content flex min-w-0 items-center space-x-3">
                 <Icon
                   className={`w-4.5 h-4.5 shrink-0 transition-transform duration-200 group-hover:scale-110 ${
                     isActive ? "text-blue-400" : "text-slate-400"
@@ -108,7 +125,7 @@ export default function Sidebar({
                 />
                 <span className="sidebar-label truncate">{item.label}</span>
               </div>
-              {item.badge !== undefined && item.badge > 0 && (
+              {badge !== undefined && badge > 0 && (
                 <span
                   className={`sidebar-badge text-xs px-2 py-0.5 rounded-full font-semibold transition-all ${
                     isActive
@@ -117,7 +134,7 @@ export default function Sidebar({
                   }`}
                   title={item.badgeTitle}
                 >
-                  {item.badge}
+                  {badge}
                 </span>
               )}
               {isActive && (
@@ -131,10 +148,13 @@ export default function Sidebar({
         })}
       </nav>
 
-      <div className="p-4 border-t border-slate-800 bg-slate-950/50">
+      <div
+        className="app-sidebar-footer p-4 border-t border-slate-800 bg-slate-950/50"
+        data-sidebar-section="footer"
+      >
         <div
           onClick={() => setShowWalletDetails((current) => !current)}
-          className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition-all cursor-pointer group"
+          className="app-sidebar-wallet p-3.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition-all cursor-pointer group"
         >
           <div className="flex items-center justify-between mb-1.5">
             <div className="flex items-center space-x-2 text-xs text-slate-400 group-hover:text-slate-200">

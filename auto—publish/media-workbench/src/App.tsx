@@ -1,10 +1,10 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import type { ViewMode } from "./types/view";
 import Sidebar from "./components/Sidebar";
 import ContentWorkbench from "./components/ContentWorkbench";
-import OrdersView from "./components/OrdersView";
+import OrdersPage from "./components/OrdersPage";
 import PlatformWorkbench from "./components/PlatformWorkbench";
-import ResourceLibrary from "./components/ResourceLibrary";
+import ResourceLibraryPage from "./components/ResourceLibraryPage";
 import SettingsView from "./components/SettingsView";
 import { useWorkspaceRuntimeIdentity } from "./features/workspace/workspace-coordinator-context";
 import { PlatformFeatureProvider } from "./features/platform/platform-feature-context";
@@ -51,12 +51,8 @@ function AppContent() {
   const submissionCenter = useSubmissionCenterFeature(
     content.snapshot.selectedClientId || "",
   );
-  const resources = mediaSnapshot.resources.items;
   const orders = mediaSnapshot.orders.items;
   const balance = mediaSnapshot.balance.value;
-  useEffect(() => {
-    if (currentView === "orders") void mediaFeature.openOrders();
-  }, [currentView, mediaFeature, mediaSnapshot.scope]);
   const dataLoaded =
     Boolean(mediaSnapshot.scope) &&
     [
@@ -71,16 +67,6 @@ function AppContent() {
     !content.snapshot.managementQuery.loading &&
     !submissionCenter.snapshot.query.loading;
   const isCheckingBalance = mediaSnapshot.commands.checkBalance.busy;
-  const mediaRefreshResult = mediaSnapshot.commands.refreshResources.result as {
-    truncated?: boolean;
-    resourceCount?: number;
-  } | null;
-  const mediaRefreshMessage = mediaRefreshResult
-    ? mediaRefreshResult.truncated
-      ? `资源刷新达到安全上限，已加载 ${mediaRefreshResult.resourceCount || 0} 项，结果已截断。`
-      : `资源库已刷新，共 ${mediaRefreshResult.resourceCount || 0} 项。`
-    : null;
-
   const navigationBadges = useMemo(() => {
     const lifecycleCount =
       content.snapshot.management.lifecycleCounts?.pending_submission;
@@ -179,42 +165,10 @@ function AppContent() {
                   transition={{ duration: 0.15 }}
                   className="max-w-4xl mx-auto h-full"
                 >
-                  <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm">
-                    <ResourceLibrary
-                      resources={resources}
-                      selectedResourceIds={[]}
-                      mode="management"
-                      activeArticleLabel=""
-                      poolResourceIds={mediaSnapshot.pool.memberResourceIds}
-                      onTogglePool={(resource) => {
-                        void mediaFeature.togglePool(resource);
-                      }}
-                      onRefreshResources={() => {
-                        void mediaFeature.refreshResources();
-                      }}
-                      isRefreshingResources={
-                        mediaSnapshot.commands.refreshResources.busy
-                      }
-                      onPickResource={() => {}}
-                      totalResources={mediaSnapshot.resources.total}
-                      resourcePage={mediaSnapshot.resources.page}
-                      resourcePageSize={mediaSnapshot.resources.pageSize}
-                      resourceSearch={mediaSnapshot.resources.search}
-                      onResourceSearch={(query) => {
-                        void mediaFeature.searchResources(query);
-                      }}
-                      onResourcePageChange={(page) => {
-                        void mediaFeature.loadResourcePage(page, "manual");
-                      }}
-                      errorMessage={
-                        mediaSnapshot.commands.refreshResources.error
-                          ?.userMessage ||
-                        mediaSnapshot.commands.togglePool.error?.userMessage ||
-                        mediaSnapshot.resources.query.error?.userMessage
-                      }
-                      statusMessage={mediaRefreshMessage}
-                    />
-                  </div>
+                  <ResourceLibraryPage
+                    snapshot={mediaSnapshot}
+                    feature={mediaFeature}
+                  />
                 </motion.div>
               )}
 
@@ -280,51 +234,7 @@ function AppContent() {
                   transition={{ duration: 0.15 }}
                     className="max-w-5xl mx-auto h-full"
                 >
-                  <OrdersView
-                    orders={orders}
-                    onSyncOrder={(orderNid) => mediaFeature.syncOrder(orderNid)}
-                    onSyncAllOrders={() => mediaFeature.syncAllOrders()}
-                    onPrepareCancellation={(orderNid) => mediaFeature.prepareOrderCancellation(orderNid)}
-                    onCancelOrder={(input) => mediaFeature.cancelOrder(input)}
-                    onPrepareCancellationResolution={(attemptId) => mediaFeature.prepareCancellationResolution(attemptId)}
-                    onResolveCancellation={(action, input) => action === "succeeded" ? mediaFeature.confirmCancellationSucceeded(input) : mediaFeature.confirmCancellationNotApplied(input)}
-                    onPrepareAnomaly={(orderNid) =>
-                      mediaFeature.prepareOrderStatusAnomalyResolution(orderNid)
-                    }
-                    onResolveAnomaly={(orderNid, action) =>
-                      action === "resumeOrderTracking"
-                        ? mediaFeature.resumeOrderTracking(orderNid)
-                        : action === "confirmOrderPublished"
-                          ? mediaFeature.confirmOrderPublished(orderNid)
-                          : mediaFeature.confirmOrderNotPublished(orderNid)
-                    }
-                    onOpenPublishedUrl={(orderNid) =>
-                      mediaFeature.openPublishedUrl(orderNid)
-                    }
-                    syncingOrderNid={mediaSnapshot.orders.syncingOrderNid}
-                    syncingAll={mediaSnapshot.commands.syncAllOrders.busy}
-                    orderActionsBusy={mediaSnapshot.orders.mutationBusy}
-                    syncFailures={mediaSnapshot.orders.syncFailures}
-                    anomalyPreparations={
-                      mediaSnapshot.orders.anomalyPreparations
-                    }
-                    errorMessage={
-                      mediaSnapshot.commands.openPublishedUrl.error
-                        ?.userMessage ||
-                      mediaSnapshot.commands.syncOrder.error?.userMessage ||
-                      mediaSnapshot.commands.syncAllOrders.error?.userMessage ||
-                      mediaSnapshot.commands
-                        .prepareOrderStatusAnomalyResolution.error
-                        ?.userMessage ||
-                      mediaSnapshot.commands.resumeOrderTracking.error
-                        ?.userMessage ||
-                      mediaSnapshot.commands.confirmOrderPublished.error
-                        ?.userMessage ||
-                      mediaSnapshot.commands.confirmOrderNotPublished.error
-                        ?.userMessage ||
-                      mediaSnapshot.orders.query.error?.userMessage
-                    }
-                  />
+                  <OrdersPage snapshot={mediaSnapshot} feature={mediaFeature} />
                 </motion.div>
               )}
 

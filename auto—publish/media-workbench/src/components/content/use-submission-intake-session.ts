@@ -1,12 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ConfirmationOptions } from "../../confirmation";
 import { isContentCommandStaleResult } from "../../content-command-result";
-import type { PaidMediaPreflight } from "../../types/publication";
-import type { GeneratedArticlesCommands } from "./GeneratedArticlesView.types";
+import type { ContentCommandStaleResult } from "../../types/content";
+import type {
+  ArticleSelection,
+  PaidMediaAdmissionResult,
+  PaidMediaConfirmationInput,
+  PaidMediaPreflight,
+  PaidMediaPreflightInput,
+  RegularQueueAdmissionInput,
+  RegularQueueAdmissionPreview,
+  RegularQueueAdmissionResult,
+} from "../../types/publication";
 
-type ArticleRef = { clientId: string; articleId: string };
-type IntakeMode = "regular" | "paid";
-type Feedback = { kind: "status" | "error"; text: string };
+export type SubmissionIntakeMode = "regular" | "paid";
+export type SubmissionIntakeFeedback = {
+  kind: "status" | "error";
+  text: string;
+};
 type PendingOperation =
   | "regular_preview"
   | "regular_admit"
@@ -15,19 +26,82 @@ type PendingOperation =
 
 type SessionState = {
   open: boolean;
-  mode: IntakeMode;
-  articleRefs: ArticleRef[];
+  mode: SubmissionIntakeMode;
+  articleRefs: ArticleSelection[];
   selectionKey: string;
   platformId: string;
   accountProfileId: string;
   mediaResourceId: string;
   paidPreflight: PaidMediaPreflight | null;
   error: string;
-  feedback: Feedback | null;
+  feedback: SubmissionIntakeFeedback | null;
   pending: PendingOperation | null;
 };
 
-function initialState(feedback: Feedback | null = null): SessionState {
+export type SubmissionIntakeCommandResult<T> =
+  | T
+  | ContentCommandStaleResult;
+
+export type SubmissionIntakeCommands = {
+  previewRegularQueueAdmission: (
+    input: RegularQueueAdmissionInput,
+  ) => Promise<SubmissionIntakeCommandResult<RegularQueueAdmissionPreview>>;
+  admitRegularQueueItems: (
+    input: RegularQueueAdmissionInput,
+  ) => Promise<SubmissionIntakeCommandResult<RegularQueueAdmissionResult>>;
+  previewPaidMediaPreflight: (
+    input: PaidMediaPreflightInput,
+  ) => Promise<SubmissionIntakeCommandResult<PaidMediaPreflight>>;
+  confirmPaidMediaBatch: (
+    input: PaidMediaConfirmationInput,
+  ) => Promise<SubmissionIntakeCommandResult<PaidMediaAdmissionResult>>;
+};
+
+export type SubmissionIntakeSnapshot = {
+  open: boolean;
+  mode: SubmissionIntakeMode;
+  articleCount: number;
+  platformId: string;
+  accountProfileId: string;
+  mediaResourceId: string;
+  paidPreflight: PaidMediaPreflight | null;
+  error: string;
+  feedback: SubmissionIntakeFeedback | null;
+  regularBusy: boolean;
+  paidPreviewBusy: boolean;
+  paidConfirmBusy: boolean;
+  mutationBusy: boolean;
+};
+
+export type SubmissionIntakeIntents = {
+  open: (articleRefs: ReadonlyArray<ArticleSelection>) => void;
+  close: () => void;
+  setMode: (mode: SubmissionIntakeMode) => void;
+  setRegularPlatform: (platformId: string) => void;
+  setAccountProfile: (accountProfileId: string) => void;
+  setMediaResource: (mediaResourceId: string) => void;
+  closePaidPreflight: () => void;
+  submitRegular: () => Promise<void>;
+  previewPaid: () => Promise<void>;
+  confirmPaid: () => Promise<void>;
+};
+
+export type SubmissionIntakeSession = {
+  snapshot: SubmissionIntakeSnapshot;
+  intents: SubmissionIntakeIntents;
+};
+
+export type SubmissionIntakeSessionOptions = SubmissionIntakeCommands & {
+  scopeKey: string;
+  availableArticleRefs: ReadonlyArray<ArticleSelection>;
+  commandStates: Record<string, { busy: boolean }>;
+  confirm: (options: ConfirmationOptions) => Promise<boolean>;
+  onCommitted: () => void;
+};
+
+function initialState(
+  feedback: SubmissionIntakeFeedback | null = null,
+): SessionState {
   return {
     open: false,
     mode: "regular",
@@ -43,7 +117,7 @@ function initialState(feedback: Feedback | null = null): SessionState {
   };
 }
 
-function keyOf(articleRefs: ArticleRef[]): string {
+function keyOf(articleRefs: ReadonlyArray<ArticleSelection>): string {
   return articleRefs
     .map((article) => `${article.clientId}:${article.articleId}`)
     .sort()
@@ -64,17 +138,7 @@ export function useSubmissionIntakeSession({
   commandStates,
   confirm,
   onCommitted,
-}: {
-  scopeKey: string;
-  availableArticleRefs: ArticleRef[];
-  previewRegularQueueAdmission: GeneratedArticlesCommands["previewRegularQueueAdmission"];
-  admitRegularQueueItems: GeneratedArticlesCommands["admitRegularQueueItems"];
-  previewPaidMediaPreflight: GeneratedArticlesCommands["previewPaidMediaPreflight"];
-  confirmPaidMediaBatch: GeneratedArticlesCommands["confirmPaidMediaBatch"];
-  commandStates: Record<string, { busy: boolean }>;
-  confirm: (options: ConfirmationOptions) => Promise<boolean>;
-  onCommitted: () => void;
-}) {
+}: SubmissionIntakeSessionOptions): SubmissionIntakeSession {
   const [state, setState] = useState<SessionState>(() => initialState());
   const mountedRef = useRef(true);
   const scopeRef = useRef(scopeKey);
@@ -144,7 +208,7 @@ export function useSubmissionIntakeSession({
   ]);
 
   const open = useCallback(
-    (articleRefs: ArticleRef[]) => {
+    (articleRefs: ReadonlyArray<ArticleSelection>) => {
       if (!articleRefs.length || mutationPending()) return;
       invalidateAsync();
       setState({
@@ -164,7 +228,7 @@ export function useSubmissionIntakeSession({
   }, [invalidateAsync, mutationPending]);
 
   const setMode = useCallback(
-    (mode: IntakeMode) => {
+    (mode: SubmissionIntakeMode) => {
       if (mutationPending()) return;
       invalidateAsync();
       setState((current) => ({
@@ -338,7 +402,7 @@ export function useSubmissionIntakeSession({
       pendingRef.current = null;
       setState((current) => ({
         ...current,
-        paidPreflight: result as PaidMediaPreflight,
+        paidPreflight: result,
         pending: null,
       }));
     } catch (value) {

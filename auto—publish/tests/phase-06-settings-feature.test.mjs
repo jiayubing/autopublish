@@ -88,6 +88,126 @@ function adapters(overrides = {}) {
 }
 
 describe("Phase 06 settings feature", () => {
+  it("loads settings details on first activation only and refreshes explicitly", async () => {
+    const firstAi = deferred();
+    const calls = {
+      ai: 0,
+      media: 0,
+      hepan: 0,
+      legacy: 0,
+      runtime: 0,
+      storage: 0,
+    };
+    const feature = createSettingsFeature(
+      adapters({
+        getAiStatus: () => {
+          calls.ai += 1;
+          return calls.ai === 1 ? firstAi.promise : Promise.resolve({});
+        },
+        getMediaStatus: async () => {
+          calls.media += 1;
+          const error = new Error("safe media read failure");
+          error.code = "MEDIA_SETTINGS_QUERY_FAILED";
+          throw error;
+        },
+        getHepanStatus: async () => {
+          calls.hepan += 1;
+          return {};
+        },
+        getLegacyStatus: async () => {
+          calls.legacy += 1;
+          return {};
+        },
+        getRuntimeDiagnostics: async () => {
+          calls.runtime += 1;
+          return {};
+        },
+        getStorageUsage: async () => {
+          calls.storage += 1;
+          return {};
+        },
+      }),
+    );
+    feature.setScope({ installationId: "desktop" });
+
+    assert.deepEqual(calls, {
+      ai: 0,
+      media: 0,
+      hepan: 0,
+      legacy: 0,
+      runtime: 0,
+      storage: 0,
+    });
+
+    const initial = feature.ensureLoaded();
+    const concurrent = feature.ensureLoaded();
+    assert.equal(concurrent, initial);
+    assert.deepEqual(calls, {
+      ai: 1,
+      media: 1,
+      hepan: 1,
+      legacy: 1,
+      runtime: 1,
+      storage: 1,
+    });
+
+    firstAi.resolve({ configured: true, model: "first-load" });
+    await initial;
+    await feature.ensureLoaded();
+    assert.deepEqual(calls, {
+      ai: 1,
+      media: 1,
+      hepan: 1,
+      legacy: 1,
+      runtime: 1,
+      storage: 1,
+    });
+    assert.equal(
+      feature.getSnapshot().media.query.error.code,
+      "MEDIA_SETTINGS_QUERY_FAILED",
+    );
+
+    await feature.refresh("manual");
+    assert.deepEqual(calls, {
+      ai: 2,
+      media: 2,
+      hepan: 2,
+      legacy: 2,
+      runtime: 2,
+      storage: 2,
+    });
+  });
+
+  it("clears the initial-load cache across installation scopes and ignores stale results", async () => {
+    const desktopAi = deferred();
+    const otherAi = deferred();
+    let calls = 0;
+    const feature = createSettingsFeature(
+      adapters({
+        getAiStatus: () => {
+          calls += 1;
+          return calls === 1 ? desktopAi.promise : otherAi.promise;
+        },
+      }),
+    );
+    feature.setScope({ installationId: "desktop" });
+    const desktopLoad = feature.ensureLoaded();
+    feature.setScope({ installationId: "desktop-next" });
+    assert.equal(feature.getSnapshot().ai.data, null);
+
+    const nextLoad = feature.ensureLoaded();
+    otherAi.resolve({ configured: true, model: "next-scope" });
+    await nextLoad;
+    desktopAi.resolve({ configured: true, model: "stale-scope" });
+    await desktopLoad;
+
+    assert.equal(calls, 2);
+    assert.equal(feature.getSnapshot().scope.installationId, "desktop-next");
+    assert.equal(feature.getSnapshot().ai.data.model, "next-scope");
+    await feature.ensureLoaded();
+    assert.equal(calls, 2);
+  });
+
   it("does not consume or reinterpret the generation runtime event", () => {
     let generationReads = 0;
     const dependencies = adapters();
@@ -209,6 +329,7 @@ describe("Phase 06 settings feature", () => {
     feature.setScope({ installationId: "desktop" });
     const methods = [
       "refresh",
+      "ensureLoaded",
       "refreshAi",
       "refreshMedia",
       "refreshHepan",

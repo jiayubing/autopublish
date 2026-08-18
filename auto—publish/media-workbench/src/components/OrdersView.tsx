@@ -1,4 +1,5 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
+import type { OrderAnomalyPreparation } from "../bridge/media";
 import type { RealOrder } from "../types/media";
 import {
   ClipboardList,
@@ -18,15 +19,12 @@ import {
   ORDER_FILTERS,
   projectOrderList,
 } from "../features/media/order-list-projection.js";
+import type { OrderActionSession } from "./use-order-action-session";
 
 interface OrdersViewProps {
   orders: RealOrder[];
   onSyncOrder: (orderNid: string) => Promise<unknown>;
   onSyncAllOrders: () => Promise<unknown>;
-  onPrepareCancellation: (orderNid: string) => Promise<any>;
-  onCancelOrder: (input: { orderId: string; confirmationToken: string }) => Promise<unknown>;
-  onPrepareCancellationResolution: (cancellationAttemptId: string) => Promise<any>;
-  onResolveCancellation: (action: "succeeded" | "not_applied", input: any) => Promise<unknown>;
   onPrepareAnomaly: (orderNid: string) => Promise<unknown>;
   onResolveAnomaly: (
     orderNid: string,
@@ -35,20 +33,16 @@ interface OrdersViewProps {
       | "confirmOrderPublished"
       | "confirmOrderNotPublished",
   ) => Promise<unknown>;
-  onOpenPublishedUrl: (orderNid: string) => Promise<unknown>;
+  orderActions: OrderActionSession;
   syncingOrderNid?: string | null;
   syncingAll?: boolean;
   orderActionsBusy?: boolean;
   syncFailures?: Array<{ orderNid: string; errorCode: string | null }>;
-  anomalyPreparations?: Record<
-    string,
-    {
-      classification: string;
-      allowedActions: string[];
-    }
-  >;
+  anomalyPreparations?: Record<string, OrderAnomalyPreparation>;
   errorMessage?: string | null;
 }
+
+const ENTRY_DELAYS = [0, 0.03, 0.06, 0.09, 0.12, 0.15] as const;
 
 const STATUS_MAP: Record<
   string,
@@ -120,13 +114,9 @@ export default function OrdersView({
   orders,
   onSyncOrder,
   onSyncAllOrders,
-  onPrepareCancellation,
-  onCancelOrder,
-  onPrepareCancellationResolution,
-  onResolveCancellation,
   onPrepareAnomaly,
   onResolveAnomaly,
-  onOpenPublishedUrl,
+  orderActions,
   syncingOrderNid = null,
   syncingAll = false,
   orderActionsBusy = false,
@@ -137,10 +127,8 @@ export default function OrdersView({
   const [activeTab, setActiveTab] = useState<string>("0");
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedOrderNid, setExpandedOrderNid] = useState<string | null>(null);
-  const [openingOrderNid, setOpeningOrderNid] = useState<string | null>(null);
-  const [openPublishedUrlError, setOpenPublishedUrlError] = useState<string | null>(null);
-  const [cancellationPreparations, setCancellationPreparations] = useState<Record<string, any>>({});
-  const [cancellationResolutions, setCancellationResolutions] = useState<Record<string, any>>({});
+  const actionSnapshot = orderActions.snapshot;
+  const actionIntents = orderActions.intents;
 
   const orderList = projectOrderList(orders, {
     status: activeTab,
@@ -153,19 +141,6 @@ export default function OrdersView({
     await onSyncOrder(orderNid);
   };
 
-  const handleOpenPublishedUrl = async (orderNid: string) => {
-    if (!orderNid) return;
-    setOpeningOrderNid(orderNid);
-    setOpenPublishedUrlError(null);
-    try {
-      await onOpenPublishedUrl(orderNid);
-    } catch (_) {
-      setOpenPublishedUrlError("打开发布链接失败，请检查订单状态或诊断信息。");
-    } finally {
-      setOpeningOrderNid(null);
-    }
-  };
-
   const tabs = ORDER_FILTERS;
 
   return (
@@ -173,9 +148,7 @@ export default function OrdersView({
       {/* Top action block */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-bold text-slate-800">
-            订单
-          </h2>
+          <h2 className="text-lg font-bold text-slate-800">订单</h2>
           <p className="text-xs text-slate-500 mt-1">
             这里只处理已经形成的真实订单及其状态核对。
           </p>
@@ -210,15 +183,6 @@ export default function OrdersView({
           刷新失败；已保留原订单事实。
         </div>
       )}
-      {openPublishedUrlError && (
-        <div
-          role="alert"
-          className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-700"
-        >
-          {openPublishedUrlError}
-        </div>
-      )}
-
       {/* Orders Filter Toolbar */}
       <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center space-x-2 flex-wrap gap-y-2">
@@ -266,6 +230,10 @@ export default function OrdersView({
             const statusInfo = getStatusInfo(order.statusCode);
             const isExpanded = expandedOrderNid === order.orderNid;
             const isSyncing = syncingOrderNid === order.orderNid;
+            const cancellationPreparation =
+              actionSnapshot.cancellationPreparations[order.orderNid];
+            const cancellationResolution =
+              actionSnapshot.cancellationResolutions[order.orderNid];
 
             return (
               <motion.div
@@ -273,7 +241,10 @@ export default function OrdersView({
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.12, delay: index * 0.03 }}
+                transition={{
+                  duration: 0.12,
+                  delay: ENTRY_DELAYS[Math.min(index, ENTRY_DELAYS.length - 1)],
+                }}
                 className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden"
               >
                 {/* Header row */}
@@ -356,18 +327,50 @@ export default function OrdersView({
                         )}
                       </div>
                     )}
-                    {order.cancellation?.manualResolutionRequired && order.cancellation.cancellationAttemptId && (
-                      <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-                        <p className="font-semibold">取消结果不确定，订单继续冻结</p>
-                        {!cancellationResolutions[order.orderNid] ? (
-                          <button type="button" disabled={orderActionsBusy} className="mt-2 rounded border border-amber-300 bg-white px-2 py-1 font-semibold" onClick={() => void onPrepareCancellationResolution(order.cancellation!.cancellationAttemptId!).then((prepared) => setCancellationResolutions((current) => ({ ...current, [order.orderNid]: prepared })))}>核对取消结果</button>
-                        ) : cancellationResolutions[order.orderNid].classification === "inconclusive" ? (
-                          <p className="mt-2">证据不足；不提供收口或重试操作。</p>
-                        ) : (
-                          <button type="button" disabled={orderActionsBusy} className="mt-2 rounded border border-amber-300 bg-white px-2 py-1 font-semibold" onClick={() => { const prepared = cancellationResolutions[order.orderNid]; const action = prepared.classification === "verified_cancelled" ? "succeeded" : "not_applied"; void onResolveCancellation(action, { cancellationAttemptId: prepared.cancellationAttemptId, confirmationToken: prepared.confirmationToken, evidenceFingerprint: prepared.evidenceFingerprint }); }}>{cancellationResolutions[order.orderNid].classification === "verified_cancelled" ? "确认已取消" : "确认取消未生效"}</button>
-                        )}
-                      </div>
-                    )}
+                    {order.cancellation?.manualResolutionRequired &&
+                      order.cancellation.cancellationAttemptId && (
+                        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                          <p className="font-semibold">
+                            取消结果不确定，订单继续冻结
+                          </p>
+                          {!cancellationResolution ? (
+                            <button
+                              type="button"
+                              disabled={orderActionsBusy}
+                              className="mt-2 rounded border border-amber-300 bg-white px-2 py-1 font-semibold"
+                              onClick={() =>
+                                void actionIntents.prepareCancellationResolution(
+                                  order.orderNid,
+                                  order.cancellation.cancellationAttemptId,
+                                )
+                              }
+                            >
+                              核对取消结果
+                            </button>
+                          ) : cancellationResolution.classification ===
+                            "inconclusive" ? (
+                            <p className="mt-2">
+                              证据不足；不提供收口或重试操作。
+                            </p>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={orderActionsBusy}
+                              className="mt-2 rounded border border-amber-300 bg-white px-2 py-1 font-semibold"
+                              onClick={() =>
+                                void actionIntents.resolveCancellation(
+                                  order.orderNid,
+                                )
+                              }
+                            >
+                              {cancellationResolution.classification ===
+                              "verified_cancelled"
+                                ? "确认已取消"
+                                : "确认取消未生效"}
+                            </button>
+                          )}
+                        </div>
+                      )}
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-500">
                       {order.resourceName && (
                         <span className="flex items-center space-x-1">
@@ -407,13 +410,35 @@ export default function OrdersView({
                       </span>
                     </div>
                     <div className="flex items-center space-x-1.5">
-                      {order.cancellation?.actionLabel && (
-                        cancellationPreparations[order.orderNid] ? (
-                          <button type="button" disabled={orderActionsBusy} onClick={() => { const prepared = cancellationPreparations[order.orderNid]; void onCancelOrder({ orderId: order.orderNid, confirmationToken: prepared.confirmationToken }); }} className="px-3 py-1.5 bg-rose-50 text-rose-700 font-semibold rounded-lg border border-rose-200 text-xs">确认{order.cancellation.actionLabel}</button>
+                      {order.cancellation?.actionLabel &&
+                        (cancellationPreparation ? (
+                          <button
+                            type="button"
+                            disabled={orderActionsBusy}
+                            onClick={() =>
+                              void actionIntents.cancel(order.orderNid)
+                            }
+                            className="px-3 py-1.5 bg-rose-50 text-rose-700 font-semibold rounded-lg border border-rose-200 text-xs"
+                          >
+                            确认{order.cancellation.actionLabel}
+                          </button>
                         ) : (
-                          <button type="button" disabled={orderActionsBusy} onClick={() => void onPrepareCancellation(order.orderNid).then((prepared) => setCancellationPreparations((current) => ({ ...current, [order.orderNid]: prepared })))} className="px-3 py-1.5 bg-rose-50 text-rose-700 font-semibold rounded-lg border border-rose-200 text-xs">{order.cancellation.actionLabel}{order.cancellation.riskCode ? "（可能被拒绝）" : ""}</button>
-                        )
-                      )}
+                          <button
+                            type="button"
+                            disabled={orderActionsBusy}
+                            onClick={() =>
+                              void actionIntents.prepareCancellation(
+                                order.orderNid,
+                              )
+                            }
+                            className="px-3 py-1.5 bg-rose-50 text-rose-700 font-semibold rounded-lg border border-rose-200 text-xs"
+                          >
+                            {order.cancellation.actionLabel}
+                            {order.cancellation.riskCode
+                              ? "（可能被拒绝）"
+                              : ""}
+                          </button>
+                        ))}
                       <button
                         onClick={() =>
                           setExpandedOrderNid(
@@ -498,15 +523,21 @@ export default function OrdersView({
                             <div className="pt-2 border-t border-slate-800 mt-2">
                               <button
                                 type="button"
-                                disabled={openingOrderNid === order.orderNid}
+                                disabled={
+                                  actionSnapshot.openingOrderNid ===
+                                  order.orderNid
+                                }
                                 onClick={() =>
-                                  void handleOpenPublishedUrl(order.orderNid)
+                                  void actionIntents.openPublishedUrl(
+                                    order.orderNid,
+                                  )
                                 }
                                 className="flex items-center space-x-1.5 text-blue-400 hover:text-blue-300 transition-colors disabled:opacity-50"
                               >
                                 <ExternalLink className="w-3 h-3" />
                                 <span>
-                                  {openingOrderNid === order.orderNid
+                                  {actionSnapshot.openingOrderNid ===
+                                  order.orderNid
                                     ? "正在打开…"
                                     : "打开发布链接"}
                                 </span>

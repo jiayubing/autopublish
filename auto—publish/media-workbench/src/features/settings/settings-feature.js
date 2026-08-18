@@ -121,6 +121,8 @@ export function createSettingsFeature(adapters = {}) {
   );
   let disposed = false;
   let scope = null;
+  let loadedScope = null;
+  let initialLoad = null;
   const values = Object.fromEntries(
     Object.keys(QUERY_DEFINITIONS).map((query) => [
       query,
@@ -228,6 +230,45 @@ export function createSettingsFeature(adapters = {}) {
     publish();
   }
 
+  function refresh(reason = "manual") {
+    return Promise.all([
+      runQuery("ai", reason),
+      runQuery("media", reason),
+      runQuery("hepan", reason),
+      runQuery("legacy", reason),
+      runQuery("runtime", reason),
+      runQuery("storage", reason),
+    ]);
+  }
+
+  function ensureLoaded() {
+    if (disposed || !scope || loadedScope === scope)
+      return Promise.resolve(undefined);
+    if (initialLoad?.scope === scope) return initialLoad.promise;
+
+    const loadScope = scope;
+    const result = refresh("initial");
+    let promise;
+    const settle = () => {
+      if (!disposed && scope === loadScope && initialLoad?.promise === promise) {
+        loadedScope = loadScope;
+        initialLoad = null;
+      }
+    };
+    promise = result.then(
+      (value) => {
+        settle();
+        return value;
+      },
+      (error) => {
+        settle();
+        throw error;
+      },
+    );
+    initialLoad = Object.freeze({ scope: loadScope, promise });
+    return promise;
+  }
+
   const feature = {
     getSnapshot: () => snapshot,
     subscribe(listener) {
@@ -244,22 +285,16 @@ export function createSettingsFeature(adapters = {}) {
         throw new TypeError("Settings scope is invalid");
       if (scope?.installationId === nextScope.installationId) return;
       scope = Object.freeze({ installationId: nextScope.installationId });
+      loadedScope = null;
+      initialLoad = null;
       for (const identity of Object.values(queries)) identity.setScope(scope);
       for (const owner of Object.values(owners)) owner.invalidate();
       for (const name of Object.keys(values))
         values[name] = { data: null, query: emptyQuery() };
       publish();
     },
-    refresh(reason = "manual") {
-      return Promise.all([
-        runQuery("ai", reason),
-        runQuery("media", reason),
-        runQuery("hepan", reason),
-        runQuery("legacy", reason),
-        runQuery("runtime", reason),
-        runQuery("storage", reason),
-      ]);
-    },
+    ensureLoaded,
+    refresh,
     refreshAi: (reason = "manual") => runQuery("ai", reason),
     refreshMedia: (reason = "manual") => runQuery("media", reason),
     refreshHepan: (reason = "manual") => runQuery("hepan", reason),
@@ -393,6 +428,8 @@ export function createSettingsFeature(adapters = {}) {
     dispose() {
       if (disposed) return;
       disposed = true;
+      loadedScope = null;
+      initialLoad = null;
       for (const identity of Object.values(queries)) identity.dispose();
       for (const owner of Object.values(owners)) owner.dispose();
       publish();

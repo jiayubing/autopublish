@@ -1,5 +1,12 @@
 import type {
+  ArticlePermanentDeleteConfirmation,
+  ArticlePermanentDeleteRequest,
+  ArticlePermanentDeleteResult,
   ArticleRemovalTransaction,
+  ArticleSelection,
+  ArticleTrashCommitInput,
+  ArticleTrashPreview,
+  ArticleTrashResult,
   ArticleTrashRecord,
   ContentSubmissionPlatform,
   PublicationHistoryRecord,
@@ -13,6 +20,7 @@ import type {
   ContentCommandStaleResult,
   LiejuPublicationProfile,
 } from "../../types/content";
+import type { SubmissionIntakeCommands } from "./use-submission-intake-session";
 import type {
   ArticleOperation,
   ArticleWorkflowFilter,
@@ -73,23 +81,39 @@ export type ArticleManagementReadModel = {
   };
 };
 
-export type GeneratedArticlesCommandName =
-  | "admitRegularQueueItems"
-  | "previewPaidMediaPreflight"
-  | "confirmPaidMediaBatch"
-  | "getContentArticleRemovalTransaction"
-  | "permanentlyDeleteContentArticle"
-  | "preparePermanentDeleteContentArticle"
-  | "previewContentArticleRemoval"
-  | "previewRegularQueueAdmission"
-  | "restoreContentArticle"
-  | "retryContentArticleRemovalTransaction"
-  | "trashContentArticles";
+export type ArticleRemovalCommandResult<T> = T | ContentCommandStaleResult;
 
-export type GeneratedArticlesCommands = Record<
-  GeneratedArticlesCommandName,
-  (input?: any) => Promise<any>
->;
+export type ArticleRemovalSessionCommands = {
+  previewContentArticleRemoval: (input: {
+    selections: ArticleSelection[];
+  }) => Promise<ArticleRemovalCommandResult<ArticleTrashPreview>>;
+  trashContentArticles: (
+    input: ArticleTrashCommitInput,
+  ) => Promise<ArticleRemovalCommandResult<ArticleTrashResult>>;
+  retryContentArticleRemovalTransaction: (input: {
+    transactionId: string;
+  }) => Promise<ArticleRemovalCommandResult<ArticleRemovalTransaction>>;
+  restoreContentArticle: (
+    input: ArticleSelection,
+  ) => Promise<ArticleRemovalCommandResult<GeneratedContentArticle>>;
+  preparePermanentDeleteContentArticle: (
+    input: ArticleSelection,
+  ) => Promise<
+    ArticleRemovalCommandResult<ArticlePermanentDeleteConfirmation>
+  >;
+  permanentlyDeleteContentArticle: (
+    input: ArticlePermanentDeleteRequest,
+  ) => Promise<ArticleRemovalCommandResult<ArticlePermanentDeleteResult>>;
+};
+
+export type GeneratedArticlesCommands = SubmissionIntakeCommands &
+  ArticleRemovalSessionCommands;
+
+export type ArticleRemovalFeatureSnapshot = {
+  transactionId: string | null;
+  transaction: ArticleRemovalTransaction | null;
+  query: { loading: boolean; error?: { userMessage?: string } | null };
+};
 
 export interface GeneratedArticlesViewProps {
   clientId: string;
@@ -106,12 +130,8 @@ export interface GeneratedArticlesViewProps {
     string,
     { busy: boolean; error?: { userMessage?: string } | null }
   >;
-  removal: {
-    transactionId: string | null;
-    transaction: ArticleRemovalTransaction | null;
-    query: { loading: boolean; error?: { userMessage?: string } | null };
-  };
-  watchRemovalTransaction: (transactionId: string) => Promise<unknown>;
+  removal: ArticleRemovalFeatureSnapshot;
+  watchRemovalTransaction: (transactionId: string) => Promise<boolean>;
   stageFilter?: ArticleWorkflowFilter;
   generationBatchId?: string | null;
   articleId?: string | null;

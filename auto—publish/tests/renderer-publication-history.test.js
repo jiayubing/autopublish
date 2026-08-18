@@ -55,12 +55,25 @@ function renderPresentation() {
       totalResources: 51, resourcePage: 1, resourcePageSize: 50,
       resourceSearch: '', onResourceSearch() {}, onResourcePageChange() {},
     }));
+    const orderActions = {
+      snapshot: {
+        openingOrderNid: null,
+        cancellationPreparations: {},
+        cancellationResolutions: {},
+        busy: false,
+      },
+      intents: {
+        openPublishedUrl: noop,
+        prepareCancellation: noop,
+        cancel: noop,
+        prepareCancellationResolution: noop,
+        resolveCancellation: noop,
+      },
+    };
     const orders = renderToStaticMarkup(React.createElement(OrdersView, {
       orders: [{ orderNid: 'order-1', title: '待核对订单', resourceName: '中央媒体资源', statusCode: '0', createdAt: '2026-08-08T00:00:00.000Z', anomaly: {} }],
-      onSyncOrder: noop, onSyncAllOrders: noop, onPrepareCancellation: noop,
-      onCancelOrder: noop, onPrepareCancellationResolution: noop,
-      onResolveCancellation: noop, onPrepareAnomaly: noop, onResolveAnomaly: noop,
-      onOpenPublishedUrl: noop,
+      onSyncOrder: noop, onSyncAllOrders: noop, onPrepareAnomaly: noop,
+      onResolveAnomaly: noop, orderActions,
       anomalyPreparations: { 'order-1': { classification: 'inconclusive', allowedActions: [] } },
     }));
     console.log(JSON.stringify({ publication, resources, orders }));

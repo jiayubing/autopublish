@@ -67,12 +67,13 @@ export function SettingsFeatureProvider({
   children: React.ReactNode;
 }) {
   const featureRef = useRef<SettingsFeature | null>(null);
-  if (!featureRef.current)
-    featureRef.current = createProductionSettingsFeature();
+  if (!featureRef.current) {
+    const feature = createProductionSettingsFeature();
+    feature.setScope({ installationId: "desktop" });
+    featureRef.current = feature;
+  }
   const feature = featureRef.current;
   useEffect(() => {
-    feature.setScope({ installationId: "desktop" });
-    void feature.refresh("initial");
     return () => feature.dispose();
   }, [feature]);
   return (

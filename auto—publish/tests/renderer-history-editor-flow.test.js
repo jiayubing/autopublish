@@ -80,7 +80,9 @@ function makePublicationRecord(articleId) {
 function createFixture({
   missingWorkflowArticleId = null,
   delayedPaidPreview = false,
+  delayedRemovalPreview = false,
   favoriteResources,
+  trashEntries = [],
 } = {}) {
   const longPrefix = "编辑上下文 长标题回归文章";
   const selectedArticle = makeArticle(
@@ -111,8 +113,10 @@ function createFixture({
     publishedArticleId,
     missingWorkflowArticleId,
     delayedPaidPreview,
+    delayedRemovalPreview,
     resources,
     favoriteResources: favoriteResources === undefined ? resources.slice(0, 2) : favoriteResources,
+    trashEntries,
     publicationRecords: [makePublicationRecord(publishedArticle.id)]
   };
 }
@@ -121,12 +125,13 @@ function installDesktopFixture(page, fixture) {
   return page.addInitScript((input) => {
     const state = {
       articles: input.articles,
+      trash: input.trashEntries,
       publicationRecords: input.publicationRecords,
       submittedArticleIds: [],
       removalTransaction: null,
       removalPolls: 0,
       removalListeners: [],
-      calls: { saveArticle: [], submission: [], paidPreview: [], regularPreview: [], regularAdmission: [], removalRetries: 0 }
+      calls: { saveArticle: [], submission: [], paidPreview: [], regularPreview: [], regularAdmission: [], removalRetries: 0, removalApply: [], permanentDelete: [] }
     };
     const ok = (data) => Promise.resolve({ ok: true, data });
     const client = { id: "history-editor-fixture", name: "历史文章编辑测试客户", knowledgeFiles: [] };
@@ -178,10 +183,12 @@ function installDesktopFixture(page, fixture) {
           counts.total += 1;
           return counts;
         }, { pending_submission: 0, needs_completion: 0, in_submission: 0, published: 0, trash: 0, total: 0 });
-        return ok({ clientId: client.id, revision: 1, articles: state.articles, trash: [], publicationRecords: state.publicationRecords, submissionPlatforms: [{ id: "fixture-platform", displayName: "测试投稿平台", contentQueueImport: true }], workflowItems, lifecycleCounts });
+        lifecycleCounts.trash += state.trash.length;
+        lifecycleCounts.total += state.trash.length;
+        return ok({ clientId: client.id, revision: 1, articles: state.articles, trash: state.trash, publicationRecords: state.publicationRecords, submissionPlatforms: [{ id: "fixture-platform", displayName: "测试投稿平台", contentQueueImport: true }], workflowItems, lifecycleCounts });
       },
       listSubmissionBatches: () => ok({ batches: [] }),
-      listArticleTrash: () => ok({ trash: [] }),
+      listArticleTrash: () => ok({ trash: state.trash }),
       listResearch: () => ok({ research: [] }),
       listQuestions: () => ok({ questions: [] }),
       getDoubaoLoginState: () => ok({ loginState: { status: "unknown" } }),
@@ -246,8 +253,14 @@ function installDesktopFixture(page, fixture) {
         state.submittedArticleIds.push("selected-article-09");
         return ok({ batchId: "paid-batch-fixture", targetKey: "media:fixture-resource", mediaResourceId: "fixture-resource", status: "queued", articleCount: 1, idempotent: false, items: [], articleRefs: [{ clientId: "history-editor-fixture", articleId: "selected-article-09" }], confirmationFingerprint: "paid-fingerprint", quotedPrice: 12, estimatedTotal: 12 });
       },
-      previewArticleRemovalImpact: (input) => ok({ articleCount: input.selections.length, blockedItems: [], canCommit: true, selections: input.selections }),
+      previewArticleRemovalImpact: (input) => {
+        const preview = { articleCount: input.selections.length, blockedItems: [], canCommit: true, selections: input.selections };
+        return input.delayedRemovalPreview
+          ? new Promise((resolve) => window.setTimeout(() => resolve({ ok: true, data: preview }), 250))
+          : ok(preview);
+      },
       applyArticleRemovalImpact: (input) => {
+        state.calls.removalApply.push(input);
         const transaction = { transactionId: "removal-fixture-1", status: "needs_repair", phase: "needs_repair", errorCode: "PUBLICATION_ATTEMPT_MISMATCH", reasonCode: "PUBLICATION_ATTEMPT_MISMATCH", updatedAt: "2026-07-18T00:30:00.000Z" };
         state.removalTransaction = transaction;
         return ok({ transactionId: transaction.transactionId, status: transaction.status, phase: transaction.phase, errorCode: transaction.errorCode, reasonCode: transaction.reasonCode, articleCount: input.selections.length });
@@ -267,9 +280,16 @@ function installDesktopFixture(page, fixture) {
         }, 300);
         return ok({ transaction: state.removalTransaction });
       },
-      restoreArticle: () => ok({}),
-      preparePermanentDeleteArticle: () => ok({ token: "fixture-token" }),
-      permanentlyDeleteArticle: () => ok({ deleted: true })
+      restoreArticle: ({ articleId }) => {
+        state.trash = state.trash.filter((entry) => entry.articleId !== articleId);
+        return ok({ article: { id: articleId, clientId: client.id }, restored: true, queueRestored: false, message: "restored" });
+      },
+      preparePermanentDeleteArticle: ({ articleId }) => ok({ token: "fixture-token", clientId: client.id, articleId, deletedAt: "2026-07-18T00:40:00.000Z", status: "prepared" }),
+      permanentlyDeleteArticle: ({ articleId, token }) => {
+        state.calls.permanentDelete.push({ articleId, token });
+        state.trash = state.trash.filter((entry) => entry.articleId !== articleId);
+        return ok({ clientId: client.id, articleId, deleted: true, deletedAt: "2026-07-18T00:40:01.000Z" });
+      }
     };
     const runtime = { get: () => ok({ ok: true, buildInfo: { version: "1.0.1", commit: "history-editor-flow", dirty: false }, browserChannel: { channel: "chromium", configured: true, state: "ready", probed: true, source: "fixture", errorCode: null, lastCheckedAt: null }, capabilities: { playwrightNode: { state: "ready", source: "fixture", errorCode: null, lastCheckedAt: null }, playwrightCli: { state: "ready", source: "fixture", errorCode: null, lastCheckedAt: null }, browserChannel: { state: "ready", source: "fixture", errorCode: null, lastCheckedAt: null }, docx: { state: "ready", source: "fixture", errorCode: null, lastCheckedAt: null }, hepan: { state: "optional_unconfigured", source: "fixture", errorCode: "HEPAN_PYTHON_UNAVAILABLE", lastCheckedAt: null } }, errors: [], warnings: [] }), browserSmoke: () => ok({ ok: true, browserChannel: "chromium", session: "fixture" }) };
     const workspace = { getBootstrapState: () => ok({ state: "ready", workspacePath: "fixture", envOverride: false }), getCurrent: () => ok({ workspacePath: "fixture", envOverride: false, validation: { ok: true, errors: [], warnings: [] } }), openCurrent: () => ok(undefined), requestSwitch: () => ok({ state: "ready", workspacePath: "fixture", envOverride: false }), chooseDirectory: () => ok({ state: "ready", workspacePath: "fixture", envOverride: false }), confirmSelection: () => ok({ state: "ready" }), cancelSelection: () => ok({ state: "ready", workspacePath: "fixture", envOverride: false }) };
@@ -638,6 +658,63 @@ describe("renderer history editor flow", { concurrency: false }, () => {
       await page.getByRole("status").filter({ hasText: "删除事务正在自动恢复" }).waitFor();
       await page.getByRole("status").filter({ hasText: "删除事务已完成" }).waitFor({ timeout: 4000 });
       assert.equal(await page.evaluate(() => window.__historyEditorFlow.calls.removalRetries), 1);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it("keeps permanent deletion in the removal session after a fresh preflight", async () => {
+    const trashEntry = {
+      version: 1,
+      clientId,
+      articleId: "trash-article-01",
+      titleSnapshot: "待永久删除的回收站文章",
+      status: "trashed",
+      deletedAt: "2026-07-18T00:35:00.000Z",
+      references: [],
+    };
+    const { page } = await openHistory(1128, 527, { trashEntries: [trashEntry] });
+    try {
+      await page.getByRole("tab", { name: "回收站 (1)" }).click();
+      await page.getByRole("heading", { name: "文章回收站" }).waitFor();
+      await page.getByRole("button", { name: "永久删除正文" }).click();
+      const confirmation = page.getByRole("dialog").filter({
+        has: page.getByRole("heading", { name: "确认永久删除文章" }),
+      });
+      await confirmation.getByRole("button", { name: "永久删除" }).click();
+      await page.waitForFunction(
+        () => !document.body.textContent?.includes("待永久删除的回收站文章"),
+      );
+      assert.deepEqual(
+        await page.evaluate(() => window.__historyEditorFlow.calls.permanentDelete),
+        [{ articleId: "trash-article-01", token: "fixture-token" }],
+      );
+      assert.equal(
+        await page.getByText("待永久删除的回收站文章", { exact: true }).count(),
+        0,
+      );
+    } finally {
+      await page.close();
+    }
+  });
+
+  it("drops a late removal preflight when the client scope changes", async () => {
+    const { page, fixture } = await openHistory(1128, 527, { delayedRemovalPreview: true });
+    try {
+      await page.getByRole("button", { name: /fixture-platform.*历史文章超长模板名称/ }).click();
+      await page.getByRole("checkbox", { name: `选择 ${fixture.selectedArticle.title}` }).check();
+      await page.getByRole("button", { name: /移入回收站 \(1\)/ }).click();
+      await page.getByLabel("当前客户").selectOption("history-editor-other", { force: true });
+      await page.waitForTimeout(400);
+      assert.equal(await page.getByRole("dialog", { name: "移入回收站预检" }).count(), 0);
+      assert.equal(
+        await page
+          .getByRole("dialog")
+          .filter({ has: page.getByRole("heading", { name: "确认移入回收站" }) })
+          .count(),
+        0,
+      );
+      assert.deepEqual(await page.evaluate(() => window.__historyEditorFlow.calls.removalApply), []);
     } finally {
       await page.close();
     }
