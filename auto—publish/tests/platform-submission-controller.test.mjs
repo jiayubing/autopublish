@@ -208,7 +208,7 @@ it("open-login and check-login have independent owners and project login state",
 it("platform feature owns account profile query and confirmation independently", async () => {
   let finishConfirm;
   const controller = createPlatformSubmissionController({
-    listAccountProfiles: async () => [{ accountProfileId: "profile-1", platformId: "toutiao", displayName: "主账号" }],
+    listAccountProfiles: async () => [{ accountProfileId: "profile-1", platformId: "toutiao", displayName: "主账号", bindingStatus: "bound" }],
     confirmAccountProfile: () => new Promise((resolve) => { finishConfirm = resolve; }),
   }, () => {});
   await controller.refreshAccountProfiles("initial");
@@ -216,10 +216,33 @@ it("platform feature owns account profile query and confirmation independently",
   const pending = controller.confirmAccountProfile({ platformId: "toutiao", displayName: "新账号" });
   assert.equal(controller.getSnapshot().commands.confirmAccountProfile.busy, true);
   assert.equal(controller.getSnapshot().accountProfiles.query.loading, false);
-  finishConfirm({ accountProfileId: "profile-2", platformId: "toutiao", displayName: "新账号" });
+  finishConfirm({ accountProfileId: "profile-2", platformId: "toutiao", displayName: "新账号", bindingStatus: "bound" });
   await pending;
   assert.deepEqual(controller.getSnapshot().accountProfiles.items.map((item) => item.accountProfileId), ["profile-1", "profile-2"]);
   assert.equal(controller.getSnapshot().commands.confirmAccountProfile.busy, false);
+});
+
+it("platform feature updates binding status and removes a deleted account profile", async () => {
+  const controller = createPlatformSubmissionController({
+    listAccountProfiles: async () => [{
+      accountProfileId: "profile-legacy",
+      platformId: "toutiao",
+      displayName: "旧档案",
+      bindingStatus: "unbound",
+    }],
+    bindAccountProfile: async (accountProfileId) => ({
+      accountProfileId,
+      platformId: "toutiao",
+      displayName: "旧档案",
+      bindingStatus: "bound",
+    }),
+    deleteAccountProfile: async (accountProfileId) => accountProfileId,
+  }, () => {});
+  await controller.refreshAccountProfiles("initial");
+  await controller.bindAccountProfile("profile-legacy");
+  assert.equal(controller.getSnapshot().accountProfiles.items[0].bindingStatus, "bound");
+  await controller.deleteAccountProfile("profile-legacy");
+  assert.deepEqual(controller.getSnapshot().accountProfiles.items, []);
 });
 
 it("account profile confirmation failure settles busy and exposes a safe command error", async () => {
@@ -236,6 +259,23 @@ it("account profile confirmation failure settles busy and exposes a safe command
   assert.equal(controller.getSnapshot().commands.confirmAccountProfile.busy, false);
   assert.deepEqual(controller.getSnapshot().commands.confirmAccountProfile.error, {
     code: "ACCOUNT_PROFILE_CONFIRM_FAILED",
-    userMessage: "确认平台账号档案失败",
+    userMessage: "创建并绑定平台账号档案失败",
   });
+});
+
+it("account profile command feedback can be cleared when its UI surface closes", async () => {
+  const controller = createPlatformSubmissionController({
+    deleteAccountProfile: async () => {
+      const failure = new Error("该账号档案仍有投稿队列或活动发布目标，不能删除。");
+      failure.code = "ACCOUNT_PROFILE_IN_USE";
+      throw failure;
+    },
+  }, () => {});
+
+  await assert.rejects(controller.deleteAccountProfile("profile-in-use"));
+  assert.equal(controller.getSnapshot().commands.deleteAccountProfile.error?.code, "ACCOUNT_PROFILE_IN_USE");
+  controller.clearAccountProfileFeedback();
+  assert.equal(controller.getSnapshot().commands.deleteAccountProfile.error, null);
+  assert.equal(controller.getSnapshot().commands.confirmAccountProfile.error, null);
+  assert.equal(controller.getSnapshot().commands.bindAccountProfile.error, null);
 });

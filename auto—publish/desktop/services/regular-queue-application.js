@@ -6,6 +6,7 @@ const {
   normalizeArticleRef,
 } = require("../../src/content/article-ref");
 const { deriveArticleLifecycle } = require("../../src/content/article-lifecycle-projection");
+const { ACTIVE_TARGET_STATUSES } = require("../../src/content/article-lifecycle-facts");
 const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
 function fail(code, message) {
@@ -256,7 +257,9 @@ function createRegularQueueApplication(options) {
         attentionItems: facts.attentionItems,
         removalTransactions: facts.removalTransactions || [],
       });
-      const activeTargetKeys = Object.keys(workflow.targetFacts || {});
+      const activeTargetKeys = Object.entries(workflow.targetFacts || {})
+        .filter(([, fact]) => ACTIVE_TARGET_STATUSES.has(fact && fact.status))
+        .map(([activeTargetKey]) => activeTargetKey);
       if (activeTargetKeys.some(function (activeTargetKey) { return activeTargetKey !== key; })) {
         return Object.freeze({
           articleRef: ref,

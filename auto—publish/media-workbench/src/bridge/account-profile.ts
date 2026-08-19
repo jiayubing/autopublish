@@ -15,6 +15,14 @@ type AccountProfileApi = {
     displayName: string;
     confirmed: true;
   }) => Promise<IpcResponse<{ profile: AccountProfile }>>;
+  bindAccountProfile: (input: {
+    accountProfileId: string;
+    confirmed: true;
+  }) => Promise<IpcResponse<{ profile: AccountProfile }>>;
+  deleteAccountProfile: (input: {
+    accountProfileId: string;
+    confirmed: true;
+  }) => Promise<IpcResponse<{ accountProfileId: string }>>;
 };
 
 const accountProfileApi = () => requirePlatformsApi<AccountProfileApi>();
@@ -42,4 +50,22 @@ export async function confirmAccountProfile(input: {
   if (!result.ok || !result.data)
     throw ipcError(result.error, "确认平台账号档案失败");
   return result.data.profile;
+}
+
+export async function bindAccountProfile(accountProfileId: string): Promise<AccountProfile> {
+  const result = await requireBridgeMethod(
+    accountProfileApi().bindAccountProfile,
+  )({ accountProfileId, confirmed: true });
+  if (!result.ok || !result.data?.profile)
+    throw ipcError(result.error, "绑定平台账号档案失败");
+  return result.data.profile;
+}
+
+export async function deleteAccountProfile(accountProfileId: string): Promise<string> {
+  const result = await requireBridgeMethod(
+    accountProfileApi().deleteAccountProfile,
+  )({ accountProfileId, confirmed: true });
+  if (!result.ok || !result.data?.accountProfileId)
+    throw ipcError(result.error, "删除平台账号档案失败");
+  return result.data.accountProfileId;
 }

@@ -161,6 +161,7 @@ function createOperationalStore(options) {
       databasePath: runtime.filename,
       createAccountProfile: pub.createAccountProfile,
       listAccountProfiles: pub.listAccountProfiles,
+      deleteAccountProfile: pub.deleteAccountProfile,
       assertExecutableAccountProfile: pub.assertExecutableAccountProfile,
       reservePublicationTarget: pub.reservePublicationTarget,
       commitRemoteOutcome: pub.commitRemoteOutcome,

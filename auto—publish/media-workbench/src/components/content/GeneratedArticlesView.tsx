@@ -366,7 +366,7 @@ export default function GeneratedArticlesView({
     );
 
   return (
-    <div className="relative h-full w-full min-w-0 overflow-y-auto p-4">
+    <div className="relative h-full w-full min-w-0 overflow-x-hidden overflow-y-auto p-4">
       <div className="mb-4 grid min-w-0 gap-3">
         <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">

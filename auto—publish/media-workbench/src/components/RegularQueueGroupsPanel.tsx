@@ -21,6 +21,18 @@ function imageCountFrom(value: string) {
   return Number(value);
 }
 
+const SYSTEM_PAUSE_REASON_LABELS: Record<string, string> = {
+  REGULAR_ACCOUNT_PROFILE_NOT_BOUND: "账号档案尚未绑定当前平台账号，请先完成绑定。",
+  REGULAR_ACCOUNT_PROFILE_MISMATCH: "当前登录账号与该账号档案不一致，请切换回原账号或新建档案。",
+  REGULAR_ACCOUNT_IDENTITY_UNAVAILABLE: "无法读取当前平台登录身份，请检查登录并保存会话。",
+  REGULAR_ACCOUNT_BINDING_UNAVAILABLE: "账号绑定数据当前不可用，请检查诊断信息。",
+  REGULAR_ACCOUNT_PROFILE_UNVERIFIED: "账号档案未通过验证，请检查登录与绑定状态。",
+};
+
+function systemPauseReason(code: string) {
+  return SYSTEM_PAUSE_REASON_LABELS[code] || code;
+}
+
 function QueueGroupImageCountControl({
   group,
   busy,
@@ -149,7 +161,7 @@ export default function RegularQueueGroupsPanel({
             <h3 className="text-sm font-semibold text-slate-800">{group.platformLabel}</h3>
             {group.showAccount && <p className="mt-1 text-xs text-slate-500">账号：{group.accountLabel}</p>}
             <p className="mt-2 text-xs text-slate-600">状态：{group.stateLabel}</p>
-            {group.pauseIntent === "system" && group.actions.reasonCode && group.actions.reasonCode !== "REGULAR_QUEUE_GROUP_EMPTY" && <p className="mt-1 text-xs text-rose-700">暂停原因：{group.actions.reasonCode}</p>}
+            {group.pauseIntent === "system" && group.actions.reasonCode && group.actions.reasonCode !== "REGULAR_QUEUE_GROUP_EMPTY" && <p className="mt-1 text-xs text-rose-700">暂停原因：{systemPauseReason(group.actions.reasonCode)}</p>}
           </div>
           <div className="flex gap-2">
             <button type="button" disabled={startBusy || !group.actions.canStart} onClick={() => onStart(group.queueGroupId)} className="rounded bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">开始</button>

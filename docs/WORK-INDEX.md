@@ -4,7 +4,7 @@
 
 ## 当前执行入口
 
-目前没有在本索引中指定的持续实施计划。新的复杂任务在开始实施前，应在这里登记一个唯一的当前计划链接；小型、明确的局部修改可以直接执行，不必为了形式创建计划。
+当前没有持续实施中的计划。新的复杂任务开始前仍应保持本区只有一个当前计划；小型、明确的局部修改可以直接执行。
 
 ## 等待用户明确外部授权
 
@@ -18,6 +18,7 @@
 
 以下计划保留为历史 evidence，不是默认执行入口：
 
+- [平台账号档案 P1 收敛](../.scratch/platform-account-profile-p1/PLATFORM-ACCOUNT-PROFILE-P1-PLAN.md)
 - [Renderer 冷启动导航修复](../.scratch/archive/renderer-cold-start-navigation-fix/RENDERER-COLD-START-NAVIGATION-FIX-PLAN.md)
 - [Renderer UI 解耦与扩展性](../.scratch/archive/ui-decoupling-and-extensibility/UI-DECOUPLING-AND-EXTENSIBILITY-PLAN.md)
 - [投稿架构收尾](../.scratch/article-lifecycle-and-submission/archive/POST-WAVE-SUBMISSION-ARCHITECTURE-CLOSEOUT-PLAN.md)

@@ -67,6 +67,13 @@ function defaultTargetLabel(item: ArticleAttentionItem): string {
   return `${platform} / 账号未记录`;
 }
 
+const ARTICLE_NAVIGATION_ACTIONS = new Set([
+  "open-submission",
+  "open-publication",
+  "open-article",
+  "trash-article",
+]);
+
 function actionError(value: unknown): string {
   const error = value as {
     code?: unknown;
@@ -268,19 +275,26 @@ export default function ArticleAttentionPanel({
             .map((item) => item.updatedAt)
             .filter((value): value is string => Boolean(value))
             .sort();
+          const navigationActions = new Set<string>();
           const actions = card.items.flatMap((item) => {
             const itemActions = [
               ...item.allowedActions,
               ...(getAdditionalActions?.(item) || []),
             ];
-            return [...new Set(itemActions)].map((action) => ({
-              action,
-              item,
-              label:
-                card.items.length > 1
-                  ? `${actionLabel(action)} · ${labelFor(item)}`
-                  : actionLabel(action),
-            }));
+            return [...new Set(itemActions)].flatMap((action) => {
+              if (ARTICLE_NAVIGATION_ACTIONS.has(action)) {
+                if (navigationActions.has(action)) return [];
+                navigationActions.add(action);
+              }
+              return [{
+                action,
+                item,
+                label:
+                  card.items.length > 1 && !ARTICLE_NAVIGATION_ACTIONS.has(action)
+                    ? `${actionLabel(action)} · ${labelFor(item)}`
+                    : actionLabel(action),
+              }];
+            });
           });
           return (
             <div

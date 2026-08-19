@@ -330,7 +330,7 @@ function installDesktopFixture(page, fixture) {
       storageMaintenance,
       media,
       orders,
-      platforms: { getQueue: () => ok({ platforms: [], queue: [] }), listAccountProfiles: () => ok({ profiles: [{ accountProfileId: "fixture-account-1", platformId: "fixture-platform", displayName: "测试账号" }] }), confirmAccountProfile: () => ok({ profile: { accountProfileId: "fixture-account-1", platformId: "fixture-platform", displayName: "测试账号" } }) },
+      platforms: { getQueue: () => ok({ platforms: [], queue: [] }), listAccountProfiles: () => ok({ profiles: [{ accountProfileId: "fixture-account-1", platformId: "fixture-platform", displayName: "测试账号", bindingStatus: "bound" }] }), confirmAccountProfile: () => ok({ profile: { accountProfileId: "fixture-account-1", platformId: "fixture-platform", displayName: "测试账号", bindingStatus: "bound" } }), bindAccountProfile: () => ok({ profile: { accountProfileId: "fixture-account-1", platformId: "fixture-platform", displayName: "测试账号", bindingStatus: "bound" } }), deleteAccountProfile: () => ok({ accountProfileId: "fixture-account-1" }) },
       content
     };
   }, fixture);

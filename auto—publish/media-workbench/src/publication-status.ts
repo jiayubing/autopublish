@@ -94,6 +94,19 @@ export function summarizePublicationRecords(
       published,
       uncertain: true,
     };
+  const nonPublishedStatuses = statuses.filter((status) => status !== "published");
+  if (
+    published > 0 &&
+    nonPublishedStatuses.length > 0 &&
+    nonPublishedStatuses.every((status) => BLOCKING_STATUSES.has(status))
+  )
+    return {
+      status: "published",
+      label: `${PUBLICATION_STATUS_LABELS.published} · 含失败历史`,
+      records: records.length,
+      published,
+      uncertain: false,
+    };
   if (published > 0 && published < records.length)
     return {
       status: "partial",

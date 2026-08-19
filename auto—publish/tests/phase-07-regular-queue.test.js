@@ -865,6 +865,76 @@ test("attention selects only the latest failed attempt and a new admission can r
   }
 });
 
+test("a newer account target supersedes an older failed attention without deleting publication history", () => {
+  const fixture = makeFixture();
+  try {
+    fixture.add(article("article-a"));
+    const firstProfile = fixture.store.createAccountProfile({
+      platformId: "toutiao",
+      displayName: "头条账号 A",
+    });
+    const secondProfile = fixture.store.createAccountProfile({
+      platformId: "toutiao",
+      displayName: "头条账号 B",
+    });
+    const first = fixture.application.admitRegularQueueItems({
+      articleRefs: [ref("article-a")],
+      platformId: "toutiao",
+      accountProfileId: firstProfile.accountProfileId,
+    });
+    const firstDurable = fixture.store.getSubmissionBatch(first.batchId).items[0];
+    const firstClaim = fixture.store.claimSubmissionItemById({
+      itemId: first.items[0].itemId,
+      batchId: first.batchId,
+      revision: firstDurable.revision,
+      claimToken: "first-account-failure",
+    });
+    fixture.store.commitRemoteOutcome({
+      attemptId: first.items[0].attemptId,
+      batchItemId: first.items[0].itemId,
+      batchClaimToken: firstClaim.claimToken,
+      outcome: { status: "failed" },
+    });
+    assert.equal(fixture.store.listPublicationAttention().length, 1);
+
+    const second = fixture.application.admitRegularQueueItems({
+      articleRefs: [ref("article-a")],
+      platformId: "toutiao",
+      accountProfileId: secondProfile.accountProfileId,
+    });
+    assert.equal(second.admittedCount, 1);
+    assert.deepEqual(fixture.store.listPublicationAttention(), []);
+
+    const secondDurable = fixture.store.getSubmissionBatch(second.batchId).items[0];
+    const secondClaim = fixture.store.claimSubmissionItemById({
+      itemId: second.items[0].itemId,
+      batchId: second.batchId,
+      revision: secondDurable.revision,
+      claimToken: "second-account-failure",
+    });
+    fixture.store.commitRemoteOutcome({
+      attemptId: second.items[0].attemptId,
+      batchItemId: second.items[0].itemId,
+      batchClaimToken: secondClaim.claimToken,
+      outcome: { status: "failed" },
+    });
+
+    const attention = fixture.store.listPublicationAttention();
+    assert.equal(attention.length, 1);
+    assert.equal(attention[0].publicationId, second.items[0].publicationId);
+    const history = fixture.store.listPublicationRecords({
+      articleIds: ["article-a"],
+    });
+    assert.equal(history.length, 2);
+    assert.deepEqual(
+      history.map((record) => record.status).sort(),
+      ["failed", "failed"],
+    );
+  } finally {
+    fixture.close();
+  }
+});
+
 test("pending removal binds the caller batch id and leaves the real queue item untouched on mismatch", () => {
   const fixture = makeFixture();
   try {

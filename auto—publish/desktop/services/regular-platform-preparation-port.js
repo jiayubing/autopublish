@@ -6,10 +6,27 @@ const {
   unavailablePlan,
 } = require("./regular-image-plan-service");
 
-function fail(code) {
+function fail(code, causeCode) {
   const error = new Error(code);
   error.code = code;
+  if (typeof causeCode === "string" && /^[A-Z][A-Z0-9_]{1,127}$/.test(causeCode))
+    error.causeCode = causeCode;
   return error;
+}
+
+function accountInspectionFailure(inspection) {
+  const reason = inspection && inspection.reasonCode;
+  const mapping = {
+    ACCOUNT_PROFILE_NOT_BOUND: "REGULAR_ACCOUNT_PROFILE_NOT_BOUND",
+    ACCOUNT_PROFILE_REMOTE_MISMATCH: "REGULAR_ACCOUNT_PROFILE_MISMATCH",
+    ACCOUNT_PROFILE_IDENTITY_UNAVAILABLE: "REGULAR_ACCOUNT_IDENTITY_UNAVAILABLE",
+    ACCOUNT_PROFILE_BINDING_UNAVAILABLE: "REGULAR_ACCOUNT_BINDING_UNAVAILABLE",
+    ACCOUNT_PROFILE_BINDING_INVALID: "REGULAR_ACCOUNT_BINDING_UNAVAILABLE",
+  };
+  return fail(
+    mapping[reason] || "REGULAR_ACCOUNT_PROFILE_UNVERIFIED",
+    (inspection && (inspection.transportCauseCode || inspection.causeCode)) || null,
+  );
 }
 
 function requestedImageCount(claim) {
@@ -66,7 +83,7 @@ function createRegularPlatformPreparationPort(options) {
         typeof inspection.remoteFingerprint !== "string" ||
         !inspection.remoteFingerprint
       )
-        throw fail("REGULAR_ACCOUNT_PROFILE_UNVERIFIED");
+        throw accountInspectionFailure(inspection);
       const imageCount = requestedImageCount(input);
       let imagePlan;
       try {
@@ -119,7 +136,7 @@ function createRegularPlatformPreparationPort(options) {
         finalInspection.accountProfileId !== input.accountProfileId ||
         finalInspection.remoteFingerprint !== inspection.remoteFingerprint
       )
-        throw fail("REGULAR_ACCOUNT_PROFILE_UNVERIFIED");
+        throw accountInspectionFailure(finalInspection);
       return domain.createPreparedSubmission({
         preparedSubmissionEvidenceV1: prepared.preparedSubmissionEvidenceV1,
         submitPreparedPublication: prepared.submitPreparedPublication,

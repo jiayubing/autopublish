@@ -107,18 +107,28 @@ function renderAccountProfileSelector() {
           import React from './media-workbench/node_modules/react/index.js';
           import { renderToStaticMarkup } from './media-workbench/node_modules/react-dom/server.js';
           import { PlatformFeatureProvider } from './media-workbench/src/features/platform/platform-feature-context.tsx';
+          import { ConfirmationContext } from './media-workbench/src/confirmation.tsx';
           import AccountProfileSelector from './media-workbench/src/components/content/AccountProfileSelector.tsx';
           globalThis.React = React;
 
+          const confirmation = {
+            request: async () => true,
+            cancelRequester() {},
+            setScopeKey() {},
+          };
           const element = React.createElement(
             PlatformFeatureProvider,
             null,
-            React.createElement(AccountProfileSelector, {
-              platforms: [{ id: 'lieju', displayName: '列举网' }],
-              platformId: 'lieju',
-              value: '',
-              onChange() {},
-            }),
+            React.createElement(
+              ConfirmationContext.Provider,
+              { value: confirmation },
+              React.createElement(AccountProfileSelector, {
+                platforms: [{ id: 'lieju', displayName: '列举网' }],
+                platformId: 'lieju',
+                value: '',
+                onChange() {},
+              }),
+            ),
           );
           console.log(JSON.stringify({ markup: renderToStaticMarkup(element) }));
         `,
@@ -139,10 +149,11 @@ test("article management presents the current customer's Lieju profile", () => {
   assert.match(rendered, /保存到客户档案，不会修改任何文章标题或正文/);
 });
 
-test("account profile creation explains that remote identity is verified when submission starts", () => {
+test("account profile creation makes remote binding explicit before submission", () => {
   const rendered = renderAccountProfileSelector().markup;
-  assert.match(rendered, /本地账号标签/);
-  assert.match(rendered, /首次开始投稿时核验并关联当前登录账号/);
-  assert.match(rendered, /创建档案/);
-  assert.doesNotMatch(rendered, /确认新的当前登录账号/);
+  assert.match(rendered, /显式绑定当前平台登录身份/);
+  assert.match(rendered, /投稿时只核验已有绑定/);
+  assert.match(rendered, /创建并绑定/);
+  assert.match(rendered, /删除档案/);
+  assert.doesNotMatch(rendered, /首次开始投稿时核验并关联当前登录账号/);
 });

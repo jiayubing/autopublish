@@ -671,7 +671,7 @@ const PRODUCTION_CALLERS = Object.freeze({
     command: "platform.listAccountProfiles",
     channel: "platforms:list-account-profiles",
     registrar: "desktop/ipc/account-profile-ipc.js",
-    application: "store.listAccountProfiles",
+    application: "service.list",
     featureBinding: "listAccountProfiles",
   }),
   "platform.confirmAccountProfile": Object.freeze({
@@ -686,8 +686,38 @@ const PRODUCTION_CALLERS = Object.freeze({
     command: "platform.confirmAccountProfile",
     channel: "platforms:confirm-account-profile",
     registrar: "desktop/ipc/account-profile-ipc.js",
-    application: "store.createAccountProfile",
+    application: "service.createAndBind",
     featureBinding: "confirmAccountProfile",
+  }),
+  "platform.bindAccountProfile": Object.freeze({
+    view: "media-workbench/src/components/content/AccountProfileSelector.tsx",
+    viewSymbol: "AccountProfileSelector",
+    feature:
+      "media-workbench/src/features/platform/platform-feature-context.tsx",
+    featureSymbol: "usePlatformFeature",
+    bridge: "media-workbench/src/bridge/account-profile.ts",
+    bridgeSymbol: "bindAccountProfile",
+    preloadMethod: "bindAccountProfile",
+    command: "platform.bindAccountProfile",
+    channel: "platforms:bind-account-profile",
+    registrar: "desktop/ipc/account-profile-ipc.js",
+    application: "service.bindExisting",
+    featureBinding: "bindAccountProfile",
+  }),
+  "platform.deleteAccountProfile": Object.freeze({
+    view: "media-workbench/src/components/content/AccountProfileSelector.tsx",
+    viewSymbol: "AccountProfileSelector",
+    feature:
+      "media-workbench/src/features/platform/platform-feature-context.tsx",
+    featureSymbol: "usePlatformFeature",
+    bridge: "media-workbench/src/bridge/account-profile.ts",
+    bridgeSymbol: "deleteAccountProfile",
+    preloadMethod: "deleteAccountProfile",
+    command: "platform.deleteAccountProfile",
+    channel: "platforms:delete-account-profile",
+    registrar: "desktop/ipc/account-profile-ipc.js",
+    application: "service.delete",
+    featureBinding: "deleteAccountProfile",
   }),
   "platform.openLogin": Object.freeze({
     view: "media-workbench/src/components/content/AccountProfileSelector.tsx",
@@ -1985,6 +2015,16 @@ const PRODUCTION_CONSUMERS = Object.freeze({
     "media-workbench/src/components/content/AccountProfileSelector.tsx",
     "confirmAccountProfile",
   ],
+  "platform.bindAccountProfile": [
+    "direct",
+    "media-workbench/src/components/content/AccountProfileSelector.tsx",
+    "bindAccountProfile",
+  ],
+  "platform.deleteAccountProfile": [
+    "direct",
+    "media-workbench/src/components/content/AccountProfileSelector.tsx",
+    "deleteAccountProfile",
+  ],
   "platform.openLogin": [
     "direct",
     "media-workbench/src/components/content/AccountProfileSelector.tsx",
@@ -2759,6 +2799,8 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
           "platform.getQueue",
           "platform.listAccountProfiles",
           "platform.confirmAccountProfile",
+          "platform.bindAccountProfile",
+          "platform.deleteAccountProfile",
           "content.listClients",
           "content.listResearch",
           "content.listTemplateCatalog",
@@ -3047,6 +3089,8 @@ const PRODUCTION_OWNER_OVERRIDES = Object.freeze({
   "settings.storage.cleanCaches": "StorageSettings",
   "settings.runtime.browserSmoke": "RuntimeSettings",
   "platform.confirmAccountProfile": "confirmAccountProfileSelection",
+  "platform.bindAccountProfile": "bindSelected",
+  "platform.deleteAccountProfile": "deleteSelected",
 });
 
 const PRODUCTION_STATE_OWNERS = Object.freeze({
@@ -3826,7 +3870,39 @@ const rawProductionIpcContractFixtures = [
         accountProfileId: "fixture-1",
         platformId: "fixture-1",
         displayName: "fixture-1",
+        bindingStatus: "bound",
       },
+    },
+  },
+  {
+    capability: "platform.bindAccountProfile",
+    channel: "platforms:bind-account-profile",
+    owner: "platform",
+    productionCaller: "desktop/preload.js:platforms:bind-account-profile",
+    request: {
+      accountProfileId: "fixture-1",
+      confirmed: true,
+    },
+    result: {
+      profile: {
+        accountProfileId: "fixture-1",
+        platformId: "fixture-1",
+        displayName: "fixture-1",
+        bindingStatus: "bound",
+      },
+    },
+  },
+  {
+    capability: "platform.deleteAccountProfile",
+    channel: "platforms:delete-account-profile",
+    owner: "platform",
+    productionCaller: "desktop/preload.js:platforms:delete-account-profile",
+    request: {
+      accountProfileId: "fixture-1",
+      confirmed: true,
+    },
+    result: {
+      accountProfileId: "fixture-1",
     },
   },
   {

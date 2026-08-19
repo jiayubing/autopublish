@@ -119,7 +119,7 @@ contextBridge.exposeInMainWorld("desktopConsole", {
   platforms: {
     getQueue: () => ok({ platforms: [], queue: [] }), listAccountProfiles: () => ok({ profiles: [] }),
     getState: () => ok({ isPlatformRunning: false, isBatchRunning: false, isStopPending: false }), onState: () => () => {},
-    confirmAccountProfile: mutation({}), openLogin: mutation({}), checkLogin: mutation({}),
+    confirmAccountProfile: mutation({}), bindAccountProfile: mutation({}), deleteAccountProfile: mutation({ accountProfileId: "fixture-account" }), openLogin: mutation({}), checkLogin: mutation({}),
   },
   aiProvider: {
     getStatus: () => ok({ source: "application", configured: false, baseUrl: "", model: "", timeoutMs: 60000, hasApiKey: false, apiKeyMask: "", lastTest: null }),

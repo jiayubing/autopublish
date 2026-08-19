@@ -19,9 +19,13 @@ function createExternalLinkPolicy(options) {
     isAllowed(value) {
       try {
         const url = new URL(value);
+        const hostname = url.hostname.toLowerCase();
+        const allowedHost = Array.from(hosts).some(function (host) {
+          return hostname === host || hostname.endsWith(`.${host}`);
+        });
         return (
           (url.protocol === "https:" || url.protocol === "http:") &&
-          hosts.has(url.hostname) &&
+          allowedHost &&
           !url.username &&
           !url.password &&
           !url.port

@@ -149,6 +149,46 @@ function createPublicationAggregate(context, activeTarget) {
     );
   }
 
+  function deleteAccountProfile(input) {
+    open();
+    const value = input || {};
+    const accountProfileId = domain.AccountProfileId.serialize(
+      domain.AccountProfileId.parse(value.accountProfileId),
+    );
+    return transaction(() => {
+      const profile = db
+        .prepare(
+          "SELECT account_profile_id,platform_id,display_name,created_at FROM account_profiles WHERE account_profile_id=?",
+        )
+        .get(accountProfileId);
+      if (!profile) throw fail("ACCOUNT_PROFILE_NOT_FOUND");
+      const queued = db
+        .prepare(
+          "SELECT 1 FROM submission_queue_items q JOIN submission_queue_groups g ON g.queue_group_id=q.queue_group_id WHERE g.account_profile_id=? LIMIT 1",
+        )
+        .get(accountProfileId);
+      const activeTarget = db
+        .prepare(
+          "SELECT 1 FROM article_active_targets WHERE json_extract(target_json,'$.kind')='platform' AND json_extract(target_json,'$.accountProfileId')=? LIMIT 1",
+        )
+        .get(accountProfileId);
+      if (queued || activeTarget) throw fail("ACCOUNT_PROFILE_IN_USE");
+      db.prepare(
+        "DELETE FROM submission_queue_groups WHERE account_profile_id=? AND NOT EXISTS (SELECT 1 FROM submission_queue_items q WHERE q.queue_group_id=submission_queue_groups.queue_group_id)",
+      ).run(accountProfileId);
+      const deleted = db
+        .prepare("DELETE FROM account_profiles WHERE account_profile_id=?")
+        .run(accountProfileId).changes;
+      if (deleted !== 1) throw fail("ACCOUNT_PROFILE_DELETE_CONFLICT");
+      return Object.freeze({
+        accountProfileId: profile.account_profile_id,
+        platformId: profile.platform_id,
+        displayName: profile.display_name,
+        createdAt: profile.created_at,
+      });
+    });
+  }
+
   function assertExecutableAccountProfile(input) {
     open();
     const value = input || {};
@@ -630,6 +670,7 @@ function createPublicationAggregate(context, activeTarget) {
   return Object.freeze({
     createAccountProfile,
     listAccountProfiles,
+    deleteAccountProfile,
     assertExecutableAccountProfile,
     reservePublicationTarget,
     commitRemoteOutcome,

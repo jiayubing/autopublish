@@ -276,6 +276,28 @@ async function createWorkspaceRuntimeComposition(deps) {
         operationalStore.close();
       },
     });
+    const platformAccountBindingStore =
+      require("../services/platform-account-binding-store").createPlatformAccountBindingStore(
+        { localStateRoot: paths.localState },
+      );
+    const platformAccountIdentityService =
+      require("../services/platform-account-identity-service").createPlatformAccountIdentityService(
+        {
+          adapters: Object.fromEntries(
+            accountInspectionPorts.map(function (platform) {
+              return [platform.id, platform.port];
+            }),
+          ),
+        },
+      );
+    const platformAccountProfileService =
+      require("../services/platform-account-profile-service").createPlatformAccountProfileService(
+        {
+          operationalStore,
+          bindingStore: platformAccountBindingStore,
+          identityService: platformAccountIdentityService,
+        },
+      );
     const contentLifecycleComposition = ownService(
       require("./content-lifecycle-composition").createContentLifecycleComposition(
         {
@@ -321,7 +343,7 @@ async function createWorkspaceRuntimeComposition(deps) {
             operationalStoreTransitionPorts.regularQueueGroupImageCountTransitions,
           onDataInvalidated: invalidation.invalidate,
           accountProfileResolver:
-            operationalStore.assertExecutableAccountProfile,
+            platformAccountProfileService.assertBound,
           clientSnapshotResolver: function (clientId) {
             const client =
               require("../../src/content/client-knowledge").getClient(
@@ -502,16 +524,9 @@ async function createWorkspaceRuntimeComposition(deps) {
     accountInspector =
       require("../services/platform-account-inspector").createPlatformAccountInspector(
         {
-          adapters: Object.fromEntries(
-            accountInspectionPorts.map(function (platform) {
-              return [platform.id, platform.port];
-            }),
-          ),
           operationalStore: publicationRecoveryComposition.operationalStore,
-          bindingStore:
-            require("../services/platform-account-binding-store").createPlatformAccountBindingStore(
-              { localStateRoot: paths.localState },
-            ),
+          bindingStore: platformAccountBindingStore,
+          identityService: platformAccountIdentityService,
         },
       );
     if (
@@ -833,6 +848,7 @@ async function createWorkspaceRuntimeComposition(deps) {
       aiContentService,
       contentGenerationBatchService,
       platformWorkbenchService,
+      platformAccountProfileService,
       publicationRecoveryComposition,
       attentionPorts,
       submissionCenterSnapshot,
@@ -877,6 +893,7 @@ async function createWorkspaceRuntimeComposition(deps) {
       platformSessionService,
       regularPlatformOutcomeService,
       operationalStore: publicationRecoveryComposition.operationalStore,
+      platformAccountProfileService,
       publishedArchiveQueries:
         operationalStoreTransitionPorts.publishedArchiveQueries,
       articleMutationCoordinator,
