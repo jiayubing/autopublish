@@ -41,6 +41,9 @@ export function WorkspaceScopedConfirmationHost({
 
 function AppContent() {
   const [currentView, setCurrentView] = useState<ViewMode>("article-library");
+  const [submissionCenterSection, setSubmissionCenterSection] = useState<
+    "regular" | "paid" | "attention"
+  >("regular");
   const [articleLibraryIntent, setArticleLibraryIntent] = useState<{
     articleId?: string;
     generationBatchId?: string;
@@ -98,6 +101,16 @@ function AppContent() {
     setCurrentView("article-library");
   }
 
+  function changeView(view: ViewMode) {
+    if (view === "submission-center") setSubmissionCenterSection("regular");
+    setCurrentView(view);
+  }
+
+  function openAttention() {
+    setSubmissionCenterSection("attention");
+    setCurrentView("submission-center");
+  }
+
   const consumeArticleLibraryIntent = () => setArticleLibraryIntent(null);
 
   return (
@@ -105,7 +118,7 @@ function AppContent() {
       {/* 1. Fixed Left Sidebar */}
       <Sidebar
         currentView={currentView}
-        onViewChange={setCurrentView}
+        onViewChange={changeView}
         balance={balance}
         onCheckBalance={() => {
           void mediaFeature.checkBalance();
@@ -202,6 +215,7 @@ function AppContent() {
                     onArticleIntentConsumed={consumeArticleLibraryIntent}
                     onOpenArticleLibrary={openArticleLibrary}
                     onOpenOrders={() => setCurrentView("orders")}
+                    onOpenAttention={openAttention}
                   />
                 </motion.div>
               )}
@@ -218,6 +232,7 @@ function AppContent() {
                   <PlatformWorkbench
                     content={content}
                     submissionCenter={submissionCenter}
+                    initialSection={submissionCenterSection}
                     onOpenArticleLibrary={openArticleLibrary}
                     onOpenOrders={() => setCurrentView("orders")}
                   />

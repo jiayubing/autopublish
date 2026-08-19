@@ -124,6 +124,7 @@ function createFixture({
 function installDesktopFixture(page, fixture) {
   return page.addInitScript((input) => {
     const state = {
+      revision: 1,
       articles: input.articles,
       trash: input.trashEntries,
       publicationRecords: input.publicationRecords,
@@ -173,19 +174,34 @@ function installDesktopFixture(page, fixture) {
           : { status: "none", label: "未发布", records: 0, published: 0, uncertain: false }
       };
     };
+    const workflowForTrash = (entry) => ({
+      version: 1,
+      stage: "trash",
+      label: "回收站",
+      primaryAction: "restore",
+      allowedBulkActions: [],
+      locks: { canEdit: false, canSubmit: false, canCancel: false, canTrash: false },
+      operations: {
+        edit: { allowed: false, reasonCodes: [], safeMetadata: {} },
+        submit: { allowed: false, reasonCodes: [], safeMetadata: {} },
+        trash: { allowed: false, reasonCodes: [], safeMetadata: {} },
+        restore: { allowed: true, reasonCodes: [], safeMetadata: {} },
+        purge: { allowed: true, reasonCodes: [], safeMetadata: {} }
+      },
+      publicationSummary: { status: "none", label: "未发布", records: 0, published: 0, uncertain: false }
+    });
     const content = {
       listClients: () => ok({ clients: [client, otherClient] }),
       listGeneratedArticles: () => ok({ articles: state.articles }),
       getArticleManagementSnapshot: () => {
         const workflowItems = state.articles.reduce((items, article) => { const workflow = workflowFor(article); if (workflow) items.push({ articleId: article.id, workflow }); return items; }, []);
+        state.trash.forEach((entry) => workflowItems.push({ articleId: entry.articleId, workflow: workflowForTrash(entry) }));
         const lifecycleCounts = workflowItems.reduce((counts, item) => {
           counts[item.workflow.stage] += 1;
           counts.total += 1;
           return counts;
         }, { pending_submission: 0, needs_completion: 0, in_submission: 0, published: 0, trash: 0, total: 0 });
-        lifecycleCounts.trash += state.trash.length;
-        lifecycleCounts.total += state.trash.length;
-        return ok({ clientId: client.id, revision: 1, articles: state.articles, trash: state.trash, publicationRecords: state.publicationRecords, submissionPlatforms: [{ id: "fixture-platform", displayName: "测试投稿平台", contentQueueImport: true }], workflowItems, lifecycleCounts });
+        return ok({ clientId: client.id, revision: state.revision, articles: state.articles, trash: state.trash, publicationRecords: state.publicationRecords, submissionPlatforms: [{ id: "fixture-platform", displayName: "测试投稿平台", contentQueueImport: true }], workflowItems, lifecycleCounts });
       },
       listSubmissionBatches: () => ok({ batches: [] }),
       listArticleTrash: () => ok({ trash: state.trash }),
@@ -634,8 +650,36 @@ describe("renderer history editor flow", { concurrency: false }, () => {
       await page.getByRole("button", { name: "关闭文章编辑器" }).click();
       await page.getByRole("dialog").getByRole("button", { name: "放弃修改" }).click();
       assert.equal(await page.evaluate(() => window.__historyEditorFlow.calls.saveArticle.length), 0);
-      await page.getByText(fixture.publishedArticle.title, { exact: true }).locator("..").locator("..").getByRole("button", { name: "发布详情" }).click();
+      await page.getByText(fixture.publishedArticle.title, { exact: true }).click();
+      assert.equal(await page.getByLabel("文章标题", { exact: true }).isDisabled(), true);
+      await page.getByRole("button", { name: "关闭文章编辑器" }).click();
+      await page.getByText(fixture.publishedArticle.title, { exact: true })
+        .locator("xpath=ancestor::div[button[normalize-space()='发布详情']][1]")
+        .getByRole("button", { name: "发布详情" })
+        .click();
       assert.equal(await page.getByRole("button", { name: "复制为新版本" }).count(), 0);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it("updates an open editor to read-only after the management lifecycle changes", async () => {
+    const { page, fixture } = await openHistory();
+    try {
+      await page.getByRole("button", { name: /fixture-platform.*历史文章超长模板名称/ }).click();
+      await page.getByText(fixture.selectedArticle.title, { exact: true }).click();
+      const editorTitle = page.getByLabel("文章标题", { exact: true });
+      assert.equal(await editorTitle.isDisabled(), false);
+
+      await page.evaluate((articleId) => {
+        window.__historyEditorFlow.submittedArticleIds.push(articleId);
+        window.__historyEditorFlow.revision += 1;
+      }, fixture.selectedArticle.id);
+      await page.getByRole("button", { name: "刷新客户与模板" }).click();
+      await page.getByRole("status").filter({ hasText: "客户与模板已刷新" }).waitFor();
+
+      assert.equal(await editorTitle.isDisabled(), true);
+      assert.equal(await page.getByRole("button", { name: "保存文章" }).count(), 0);
     } finally {
       await page.close();
     }

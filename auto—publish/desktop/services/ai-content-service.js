@@ -358,6 +358,18 @@ function createAiContentService(opts) {
     return contentStore.listArticles(clientId);
   }
 
+  function restoreArticle(input) {
+    const result = articleTrashService.restoreArticle(input);
+    notifyAttentionChange("ARTICLE_RESTORED");
+    return result;
+  }
+
+  function permanentlyDeleteArticle(input) {
+    const result = articleTrashService.permanentlyDeleteArticle(input);
+    notifyAttentionChange("ARTICLE_PERMANENTLY_DELETED");
+    return result;
+  }
+
   function getGeneratedArticle(clientId, articleId) {
     assertId(clientId, "Client id");
     assertId(articleId, "Article id");
@@ -394,9 +406,9 @@ function createAiContentService(opts) {
     previewTrashArticles: articleTrashService.previewTrashArticles,
     previewArticleRemovalImpact: articleTrashService.previewArticleRemovalImpact,
     trashArticles: articleTrashService.trashArticles,
-    restoreArticle: articleTrashService.restoreArticle,
+    restoreArticle: restoreArticle,
     preparePermanentDelete: articleTrashService.preparePermanentDelete,
-    permanentlyDeleteArticle: articleTrashService.permanentlyDeleteArticle,
+    permanentlyDeleteArticle: permanentlyDeleteArticle,
     recoverPendingArticleRemovals: articleTrashService.recoverPendingRemovals,
     getArticleRemovalTransaction: articleTrashService.getArticleRemovalTransaction,
     listArticleRemovalTransactions: articleTrashService.listArticleRemovalTransactions,

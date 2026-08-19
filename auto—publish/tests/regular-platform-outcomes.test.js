@@ -1062,16 +1062,25 @@ test("orchestrator distinguishes transport failure before and after submission-s
         clock: () => new Date("2026-08-07T01:00:00.000Z"),
       }),
     });
-    await assert.rejects(
-      orchestrator.startGroup({ queueGroupId: admitted.queueGroupId }),
-      { code: "REGULAR_PREPARATION_TRANSPORT_FAILED" },
-    );
+    const result = await orchestrator.startGroup({
+      queueGroupId: admitted.queueGroupId,
+    });
+    assert.equal(result.observation.status, "group_blocked");
+    assert.equal(result.observation.errorCode, "REGULAR_PREPARATION_FAILED");
+    assert.equal(result.observation.articleRecoverable, true);
     const group = before.groupTransitions.listRegularQueueGroupSnapshots({})[0];
-    assert.equal(group.current.phase, "prepared");
+    assert.equal(group.pauseIntent, "system");
+    assert.equal(group.current, null);
+    assert.equal(group.remaining.length, 1);
+    assert.equal(group.actions.reasonCode, "REGULAR_PREPARATION_FAILED");
+    const snapshot = before.transitions.getRegularOutcomeSnapshot({
+      regularPublicationAttemptId: admitted.attemptId,
+    });
+    assert.equal(snapshot.publicationStatus, "queued");
+    assert.equal(snapshot.itemStatus, "queued");
+    assert.equal(snapshot.activeTargetState, "queued");
     assert.equal(
-      before.transitions.getRegularOutcomeSnapshot({
-        regularPublicationAttemptId: admitted.attemptId,
-      }).observation,
+      snapshot.observation,
       null,
     );
   } finally {

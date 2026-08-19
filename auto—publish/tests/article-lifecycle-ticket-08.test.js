@@ -729,6 +729,73 @@ test("preparation resolves the Lieju profile by the claimed article client and p
   assert.equal(claims[0].publicationSnapshot.body, "Body B");
 });
 
+test("missing client publication profile is normalized before the platform adapter runs", async () => {
+  let adapterCalls = 0;
+  const claim = {
+    platformId: "lieju",
+    accountProfileId: "account-a",
+    regularPublicationAttemptId: "attempt-missing-client-profile",
+    articleIdentityV1: {
+      version: 1,
+      clientId: "client-missing-profile",
+      articleId: "article-missing-profile",
+    },
+    targetIdentityV1: {
+      version: 1,
+      kind: "platform",
+      platformId: "lieju",
+      accountProfileId: "account-a",
+    },
+    publicationSnapshot: { title: "Title", body: "Body" },
+  };
+  const port = createRegularPlatformPreparationPort({
+    accountInspector: {
+      inspect: async () => ({
+        verified: true,
+        accountProfileId: "account-a",
+        remoteFingerprint: "fingerprint-a",
+      }),
+    },
+    regularImagePlanService: {
+      createPlan: async (request) => imagePlan(request.imageCount),
+    },
+    clientProfileReaders: [
+      {
+        id: "lieju",
+        requirement: {
+          profileKey: "lieju",
+          requiredFields: ["city", "contact", "phone"],
+        },
+        reader: {
+          read: async () => {
+            const error = new Error("client publication profile missing");
+            error.code = "CLIENT_PROFILE_NOT_FOUND";
+            throw error;
+          },
+        },
+      },
+    ],
+    regularSubmissionPorts: [
+      {
+        id: "lieju",
+        preparePlatformSubmission: async (input) => {
+          adapterCalls += 1;
+          return domain.createPreparedSubmission({
+            preparedSubmissionEvidenceV1:
+              domain.createTextOnlyPreparedSubmissionEvidenceV1(input),
+            submitPreparedPublication: async () => ({ status: "accepted" }),
+          });
+        },
+      },
+    ],
+  });
+
+  await assert.rejects(port.preparePlatformSubmission(claim), {
+    code: "REGULAR_CLIENT_PROFILE_INCOMPLETE",
+  });
+  assert.equal(adapterCalls, 0);
+});
+
 test("preparation obtains one image plan after account verification and passes it through the common adapter seam", async () => {
   const events = [];
   const planRequests = [];

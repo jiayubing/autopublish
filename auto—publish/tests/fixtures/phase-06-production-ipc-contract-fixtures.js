@@ -989,6 +989,22 @@ const PRODUCTION_CALLERS = Object.freeze({
     application: "snapshot.get",
     featureBinding: "loadManagement",
   }),
+  "content.openPublicationUrl": Object.freeze({
+    view:
+      "media-workbench/src/components/content/GeneratedArticlesView.tsx",
+    viewSymbol: "GeneratedArticlesView",
+    feature:
+      "media-workbench/src/features/content/use-content-workbench-feature.ts",
+    featureSymbol: "useContentWorkbenchFeature",
+    bridge: "media-workbench/src/bridge/content.ts",
+    bridgeSymbol: "openPublicationUrl",
+    preloadMethod: "openPublicationUrl",
+    command: "content.openPublicationUrl",
+    channel: "content:open-publication-url",
+    registrar: "desktop/ipc/article-management-ipc.js",
+    application: "publicationLinks.openPublicationUrl",
+    featureBinding: "openPublicationUrl",
+  }),
   "content.getSubmissionCenterSnapshot": Object.freeze({
     view: "media-workbench/src/App.tsx",
     viewSymbol: "useSubmissionCenterFeature",
@@ -2115,6 +2131,11 @@ const PRODUCTION_CONSUMERS = Object.freeze({
     "media-workbench/src/features/content/use-content-workbench-feature.ts",
     "refreshManagement",
   ],
+  "content.openPublicationUrl": [
+    "direct",
+    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
+    "openPublicationUrl",
+  ],
   "content.getSubmissionCenterSnapshot": [
     "lifecycle",
     "media-workbench/src/features/submission-center/use-submission-center-feature.ts",
@@ -2707,6 +2728,7 @@ const PRODUCTION_NESTED_COMMAND_FEATURES = Object.freeze(
         [
           "content.saveArticle",
           "content.getArticleEditor",
+          "content.openPublicationUrl",
           "content.previewArticleRemovalImpact",
           "content.trashArticles",
           "content.restoreArticle",
@@ -2863,6 +2885,7 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
           "content.saveClientLiejuPublicationProfile",
           "content.saveArticle",
           "content.getArticleEditor",
+          "content.openPublicationUrl",
           "content.previewArticleRemovalImpact",
           "content.trashArticles",
           "content.restoreArticle",
@@ -4122,6 +4145,14 @@ const rawProductionIpcContractFixtures = [
       "desktop/preload.js:content:get-article-management-snapshot",
     request: { clientId: "client-1" },
     result: contentManagementFixture(),
+  },
+  {
+    capability: "content.openPublicationUrl",
+    channel: "content:open-publication-url",
+    owner: "content",
+    productionCaller: "desktop/preload.js:content:open-publication-url",
+    request: { publicationId: "publication-1" },
+    result: { completed: true },
   },
   {
     capability: "content.getSubmissionCenterSnapshot",

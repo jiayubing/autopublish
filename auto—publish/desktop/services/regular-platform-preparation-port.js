@@ -34,6 +34,19 @@ function requestedImageCount(claim) {
   return imageCount === undefined ? 0 : imageCount;
 }
 
+async function readPublicationProfile(profileContribution, input) {
+  if (!profileContribution) return undefined;
+  try {
+    return await profileContribution.reader.read({
+      clientId: input.articleIdentityV1 && input.articleIdentityV1.clientId,
+    });
+  } catch (error) {
+    if (error && error.code === "CLIENT_PROFILE_NOT_FOUND")
+      throw fail("REGULAR_CLIENT_PROFILE_INCOMPLETE", error.code);
+    throw error;
+  }
+}
+
 function createRegularPlatformPreparationPort(options) {
   const value = options || {};
   const inspector = value.accountInspector;
@@ -96,11 +109,10 @@ function createRegularPlatformPreparationPort(options) {
         imagePlan = unavailablePlan(imageCount);
       }
       const profileContribution = profileReaders.get(input.platformId);
-      const publicationProfile = profileContribution
-        ? await profileContribution.reader.read({
-          clientId: input.articleIdentityV1 && input.articleIdentityV1.clientId,
-        })
-        : undefined;
+      const publicationProfile = await readPublicationProfile(
+        profileContribution,
+        input,
+      );
       if (
         profileContribution &&
         (!publicationProfile ||

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import {
   getArticleManagementSnapshot,
+  openPublicationUrl,
   getArticleEditor,
   createContentQuestion,
   deleteContentQuestion,
@@ -67,6 +68,7 @@ export function useContentWorkbenchFeature() {
       listQuestions: listContentQuestions,
       listResearch: listContentResearch,
       loadManagement: getArticleManagementSnapshot,
+      openPublicationUrl,
       createQuestion: createContentQuestion,
       updateQuestion: updateContentQuestion,
       deleteQuestion: deleteContentQuestion,

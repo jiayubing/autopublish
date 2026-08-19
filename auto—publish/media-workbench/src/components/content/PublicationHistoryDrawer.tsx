@@ -1,5 +1,5 @@
 import React from "react";
-import { AlertTriangle, Check, ExternalLink, X, XCircle } from "lucide-react";
+import { AlertTriangle, ExternalLink, X } from "lucide-react";
 import { formatBeijingTime } from "../../time-format";
 import type {
   PublicationArchiveEntry,
@@ -21,11 +21,10 @@ interface PublicationHistoryDrawerProps {
   archives?: PublicationArchiveEntry[];
   summary?: PublicationHistorySummary;
   onClose: () => void;
-  onReconcile?: (
-    record: PublicationHistoryRecord,
-    status: "published" | "failed",
-  ) => void;
-  busy?: boolean;
+  onOpenPublicationUrl?: (record: PublicationHistoryRecord) => void;
+  publicationUrlBusy?: boolean;
+  publicationUrlError?: string | null;
+  onOpenAttention?: () => void;
 }
 
 function safeRemoteUrl(value: string | null | undefined): string | null {
@@ -74,8 +73,10 @@ export default function PublicationHistoryDrawer({
   archives = [],
   summary: snapshotSummary,
   onClose,
-  onReconcile,
-  busy = false,
+  onOpenPublicationUrl,
+  publicationUrlBusy = false,
+  publicationUrlError,
+  onOpenAttention,
 }: PublicationHistoryDrawerProps) {
   if (!article) return null;
   const summary = snapshotSummary || null;
@@ -120,12 +121,31 @@ export default function PublicationHistoryDrawer({
           </button>
         </div>
         {summary?.uncertain && (
-          <div className="m-4 flex min-w-0 gap-2 rounded-md border border-rose-200 bg-rose-50 p-3 text-xs leading-5 text-rose-700">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span className="min-w-0 break-words">
-              <strong>存在待确认结果。</strong>
-              请先到远端核对；此处不提供直接重试，避免重复投稿。
-            </span>
+          <div className="m-4 grid min-w-0 gap-2 rounded-md border border-rose-200 bg-rose-50 p-3 text-xs leading-5 text-rose-700">
+            <div className="flex min-w-0 gap-2">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span className="min-w-0 break-words">
+                <strong>存在待确认结果。</strong>
+                请到“投稿中心 &gt; 需处理事项”核对远端结果；文章库只展示记录，不在这里执行人工确认或直接重试。
+              </span>
+            </div>
+            {onOpenAttention && (
+              <button
+                type="button"
+                onClick={onOpenAttention}
+                className="justify-self-start rounded border border-rose-300 bg-white px-2.5 py-1.5 font-semibold text-rose-700 hover:bg-rose-100"
+              >
+                前往需处理事项
+              </button>
+            )}
+          </div>
+        )}
+        {publicationUrlError && (
+          <div
+            role="alert"
+            className="mx-4 mt-4 rounded-md border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700"
+          >
+            {publicationUrlError}
           </div>
         )}
         <div className="min-w-0 flex-1 space-y-3 p-4">
@@ -145,8 +165,6 @@ export default function PublicationHistoryDrawer({
             );
             const remoteIdentity = evidence?.orderNumber || attempt.remoteId;
             const uncertain = record.status === "uncertain";
-            const regularUncertain =
-              uncertain && record.targetKey.startsWith("platform:");
             return (
               <section
                 key={record.publicationId}
@@ -182,8 +200,9 @@ export default function PublicationHistoryDrawer({
                       <dd className="min-w-0">
                         <button
                           type="button"
-                          onClick={() => window.open(remoteUrl, "_blank", "noopener,noreferrer")}
-                          className="inline-flex items-center gap-1.5 rounded border border-blue-200 px-2 py-1.5 font-semibold text-blue-700 hover:border-blue-400 hover:bg-blue-50"
+                          onClick={() => onOpenPublicationUrl?.(record)}
+                          disabled={publicationUrlBusy || !onOpenPublicationUrl}
+                          className="inline-flex items-center gap-1.5 rounded border border-blue-200 px-2 py-1.5 font-semibold text-blue-700 hover:border-blue-400 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           <ExternalLink className="h-3.5 w-3.5 shrink-0" />
                           <span>打开发布链接</span>
@@ -298,34 +317,8 @@ export default function PublicationHistoryDrawer({
                 {uncertain && (
                   <div className="mt-3 min-w-0 rounded border border-rose-200 bg-white/70 p-2.5">
                     <div className="text-xs font-semibold leading-5 text-rose-700">
-                      待确认状态会阻止直接重试，请先核对远端结果。
+                      待确认状态会冻结文章并阻止直接重试。请到“投稿中心 &gt; 需处理事项”完成具名核对。
                     </div>
-                    {regularUncertain ? (
-                      <div className="mt-2 flex min-w-0 flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => onReconcile?.(record, "published")}
-                          disabled={busy}
-                          className="inline-flex items-center gap-1 rounded border border-emerald-300 px-2 py-1.5 text-xs font-semibold text-emerald-700 disabled:opacity-40"
-                        >
-                          <Check className="h-3.5 w-3.5" />
-                          确认已发布
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => onReconcile?.(record, "failed")}
-                          disabled={busy}
-                          className="inline-flex items-center gap-1 rounded border border-rose-300 px-2 py-1.5 text-xs font-semibold text-rose-700 disabled:opacity-40"
-                        >
-                          <XCircle className="h-3.5 w-3.5" />
-                          确认未发布
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="mt-2 text-xs text-amber-700">
-                        付费订单结果请在订单页使用具名核对动作。
-                      </div>
-                    )}
                   </div>
                 )}
               </section>

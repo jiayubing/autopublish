@@ -34,6 +34,7 @@ interface ContentWorkbenchProps {
   favoriteMediaPage?: FavoriteMediaPage;
   onFavoriteMediaPageChange?: (page: number) => void;
   onOpenOrders?: () => void;
+  onOpenAttention?: () => void;
 }
 
 export default function ContentWorkbench({
@@ -45,6 +46,7 @@ export default function ContentWorkbench({
   favoriteMediaPage,
   onFavoriteMediaPageChange,
   onOpenOrders,
+  onOpenAttention,
 }: ContentWorkbenchProps) {
   const { confirm } = useConfirmation();
   const {
@@ -224,6 +226,17 @@ export default function ContentWorkbench({
       requestHistoryLeave(open);
     else open();
   }
+
+  useEffect(() => {
+    if (!historyEditingArticle) return;
+    const workflow = management.workflowByArticle[historyEditingArticle.id];
+    const published = workflow?.stage === "published";
+    const editable =
+      !published &&
+      (workflow?.operations?.edit?.allowed ?? workflow?.locks?.canEdit) === true;
+    setHistoryEditingPublished(published);
+    setHistoryEditingEditable(editable);
+  }, [historyEditingArticle, management.revision, management.workflowByArticle]);
 
   function handleClientChange(nextClientId: string) {
     if (nextClientId === clientId) return;
@@ -424,6 +437,7 @@ export default function ContentWorkbench({
                   onArticleSelect={openHistoryEditor}
                   onStageFilterChange={setArticleStageFilter}
                   onOpenOrders={onOpenOrders}
+                  onOpenAttention={onOpenAttention}
                 />
               </div>
               {historyEditingArticle && (

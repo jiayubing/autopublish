@@ -60,13 +60,14 @@ const CHANNELS = [
   "content:get-article-removal-transaction",
   "content:retry-article-removal-transaction",
   "content:get-article-management-snapshot",
+  "content:open-publication-url",
   "content:list-article-attention",
   "content:preview-article-attention",
   "content:resolve-article-attention",
   "content:article-removal-transaction",
 ].sort();
 
-test("content core declares exactly 20 versioned path-free capabilities", function () {
+test("content core declares exactly 21 versioned path-free capabilities", function () {
   const registry = createContractRegistry(contentCoreContracts);
   assert.deepEqual(
     contentCoreContracts.map((contract) => contract.channel).sort(),
@@ -668,6 +669,44 @@ test("article management exposes the narrow article-library wire contract", asyn
     "attentionCountItems",
     "orderSummaryItems",
   ]) assert.equal(retired in result.data, false, retired);
+});
+
+test("article publication links cross the authenticated IPC seam by persisted publication id only", async function () {
+  const handlers = new Map();
+  const opened = [];
+  registerArticleManagementIpc({
+    ipcMain: createAuthenticatedIpcMain(
+      {
+        handle(channel, handler) {
+          handlers.set(channel, handler);
+        },
+      },
+      async function () {},
+    ),
+    articleManagementSnapshot: {
+      get() {
+        throw new Error("snapshot should not be used");
+      },
+    },
+    publicationLinkService: {
+      async openPublicationUrl(input) {
+        opened.push(input);
+        return { completed: true };
+      },
+    },
+  });
+
+  const result = await handlers.get("content:open-publication-url")(null, {
+    schemaVersion: 1,
+    payload: { publicationId: "publication-1" },
+  });
+
+  assert.deepEqual(opened, [{ publicationId: "publication-1" }]);
+  assert.deepEqual(result, {
+    schemaVersion: 1,
+    ok: true,
+    data: { completed: true },
+  });
 });
 
 test("article management preserves a saved article when a legacy publication lacks enriched identity fields", async function () {

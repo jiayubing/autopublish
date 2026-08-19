@@ -89,6 +89,17 @@ function explicitPreparationOutcome(error) {
   return null;
 }
 
+function recoverablePreparationOutcome(error) {
+  return (
+    explicitPreparationOutcome(error) ||
+    Object.freeze({
+      status: "group_blocked",
+      errorCode: "REGULAR_PREPARATION_FAILED",
+      articleRecoverable: true,
+    })
+  );
+}
+
 function createRegularQueueGroupOrchestrator(options) {
   const value = options || {};
   const transitions = validateTransitions(value.regularQueueGroupTransitions);
@@ -169,8 +180,10 @@ function createRegularQueueGroupOrchestrator(options) {
       }
       prepared = domain.createPreparedSubmission(preparation);
     } catch (error) {
-      const preparationOutcome = explicitPreparationOutcome(error);
-      if (!preparationOutcome || !outcomeService) throw error;
+      if (!outcomeService) throw error;
+      const preparationOutcome = recoverablePreparationOutcome(error);
+      if (preparationOutcome.errorCode === "REGULAR_PREPARATION_FAILED")
+        diagnose("REGULAR_PREPARATION_FAILED", "prepare-platform-submission");
       return Object.freeze({
         ...preparationOutcome,
         transition: applyOutcome({
@@ -181,16 +194,30 @@ function createRegularQueueGroupOrchestrator(options) {
     } finally {
       clearTimer(timer);
     }
-    if (renewalError) throw fail("REGULAR_CLAIM_RENEWAL_FAILED");
-    const evidence = prepared.preparedSubmissionEvidenceV1;
-    if (
-      evidence.attemptId !== claim.regularPublicationAttemptId ||
-      JSON.stringify(evidence.articleIdentityV1) !==
-        JSON.stringify(claim.articleIdentityV1) ||
-      JSON.stringify(evidence.targetIdentityV1) !==
-        JSON.stringify(claim.targetIdentityV1)
-    )
-      throw fail("REGULAR_PREPARED_SUBMISSION_MISMATCH");
+    let evidence;
+    try {
+      if (renewalError) throw fail("REGULAR_CLAIM_RENEWAL_FAILED");
+      evidence = prepared.preparedSubmissionEvidenceV1;
+      if (
+        evidence.attemptId !== claim.regularPublicationAttemptId ||
+        JSON.stringify(evidence.articleIdentityV1) !==
+          JSON.stringify(claim.articleIdentityV1) ||
+        JSON.stringify(evidence.targetIdentityV1) !==
+          JSON.stringify(claim.targetIdentityV1)
+      )
+        throw fail("REGULAR_PREPARED_SUBMISSION_MISMATCH");
+    } catch (error) {
+      if (!outcomeService) throw error;
+      diagnose("REGULAR_PREPARATION_FAILED", "validate-prepared-submission");
+      const preparationOutcome = recoverablePreparationOutcome(error);
+      return Object.freeze({
+        ...preparationOutcome,
+        transition: applyOutcome({
+          regularPublicationAttemptId: claim.regularPublicationAttemptId,
+          outcome: preparationOutcome,
+        }),
+      });
+    }
     const boundary = transitions.beginRegularRemoteSubmission({
       regularPublicationAttemptId: claim.regularPublicationAttemptId,
       claimToken: claim.claimToken,

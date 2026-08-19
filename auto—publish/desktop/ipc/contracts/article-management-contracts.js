@@ -176,6 +176,29 @@ const managementSnapshot = exactObject({
   ),
 });
 
+const publicationLinkErrors = Object.freeze({
+  PUBLICATION_LINK_INPUT_INVALID: Object.freeze({
+    category: "validation",
+    retryability: "never",
+    userMessage: "发布链接请求无效，请刷新文章库后重试。",
+  }),
+  PUBLICATION_LINK_NOT_FOUND: Object.freeze({
+    category: "validation",
+    retryability: "never",
+    userMessage: "未找到对应发布记录，请刷新文章库后重试。",
+  }),
+  PUBLICATION_LINK_URL_UNAVAILABLE: Object.freeze({
+    category: "validation",
+    retryability: "never",
+    userMessage: "该发布记录没有可安全打开的发布链接。",
+  }),
+  PUBLICATION_LINK_OPEN_FAILED: Object.freeze({
+    category: "internal",
+    retryability: "safe",
+    userMessage: "发布链接打开失败，请稍后重试。",
+  }),
+});
+
 const articleManagementContracts = Object.freeze([
   contentContract({
     capability: "content.getArticleManagementSnapshot",
@@ -187,6 +210,19 @@ const articleManagementContracts = Object.freeze([
     fromArgs: directArgs,
     toArgs: directInput,
   }),
+  contentContract(
+    {
+      capability: "content.openPublicationUrl",
+      channel: "content:open-publication-url",
+      feature: "content",
+      kind: "command",
+      request: exactObject({ publicationId: id }),
+      success: exactObject({ completed: "boolean" }),
+      fromArgs: directArgs,
+      toArgs: directInput,
+    },
+    publicationLinkErrors,
+  ),
 ]);
 
 function projectPublicationSummary(value) {

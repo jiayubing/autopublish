@@ -81,6 +81,8 @@ export type ArticleManagementReadModel = {
   };
 };
 
+export type ArticleWorkflow = ArticleManagementReadModel["workflowByArticle"][string];
+
 export type ArticleRemovalCommandResult<T> = T | ContentCommandStaleResult;
 
 export type ArticleRemovalSessionCommands = {
@@ -107,7 +109,11 @@ export type ArticleRemovalSessionCommands = {
 };
 
 export type GeneratedArticlesCommands = SubmissionIntakeCommands &
-  ArticleRemovalSessionCommands;
+  ArticleRemovalSessionCommands & {
+    openPublicationUrl: (input: {
+      publicationId: string;
+    }) => Promise<{ completed: boolean } | ContentCommandStaleResult>;
+  };
 
 export type ArticleRemovalFeatureSnapshot = {
   transactionId: string | null;
@@ -147,4 +153,5 @@ export interface GeneratedArticlesViewProps {
   ) => void;
   onStageFilterChange?: (stage: ArticleWorkflowFilter) => void;
   onOpenOrders?: () => void;
+  onOpenAttention?: () => void;
 }

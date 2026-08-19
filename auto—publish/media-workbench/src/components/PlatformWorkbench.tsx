@@ -1,5 +1,5 @@
 import { RefreshCw } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePlatformFeature } from "../features/platform/platform-feature-context";
 import { useAttentionFeature } from "../features/attention/use-attention-feature";
 import { useConfirmation } from "../confirmation";
@@ -16,6 +16,7 @@ type SubmissionCenterSection = "regular" | "paid" | "attention";
 interface PlatformWorkbenchProps {
   content: ContentWorkbenchFeature;
   submissionCenter: ReturnType<typeof useSubmissionCenterFeature>;
+  initialSection?: SubmissionCenterSection;
   onOpenArticleLibrary: (intent?: {
     articleId?: string;
     clientId?: string;
@@ -26,6 +27,7 @@ interface PlatformWorkbenchProps {
 export default function PlatformWorkbench({
   content,
   submissionCenter,
+  initialSection = "regular",
   onOpenArticleLibrary,
   onOpenOrders,
 }: PlatformWorkbenchProps) {
@@ -51,7 +53,11 @@ export default function PlatformWorkbench({
         ).length,
       },
     });
-  const [section, setSection] = useState<SubmissionCenterSection>("regular");
+  const [section, setSection] =
+    useState<SubmissionCenterSection>(initialSection);
+  useEffect(() => {
+    setSection(initialSection);
+  }, [initialSection]);
   const [attentionDetail, setAttentionDetail] =
     useState<ArticleAttentionItem | null>(null);
   const [attentionError, setAttentionError] = useState("");

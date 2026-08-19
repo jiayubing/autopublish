@@ -15,6 +15,7 @@ const EMPTY_MANAGEMENT = Object.freeze({
 
 const COMMAND_SCOPES = Object.freeze({
   getArticleEditor: null,
+  openPublicationUrl: "client",
   saveArticle: "management",
   previewRegularQueueAdmission: null,
   admitRegularQueueItems: "management",
@@ -472,6 +473,7 @@ export function createArticleManagementFeature(adapters = {}) {
   // retain stable TypeChecker symbols for each management capability.
   const commands = Object.freeze({
     getArticleEditor: (input) => runCommand("getArticleEditor", input),
+    openPublicationUrl: (input) => runCommand("openPublicationUrl", input),
     saveArticle: (input) => runCommand("saveArticle", input),
     previewRegularQueueAdmission: (input) =>
       runCommand("previewRegularQueueAdmission", input),

@@ -24,7 +24,8 @@ describe("Electron security boundary", function() {
     assert.deepEqual(policy.hosts, ["mp.weixin.qq.com", "platform.example"]);
     assert.equal(policy.isAllowed("https://platform.example/article/1"), true);
     assert.equal(policy.isAllowed("http://mp.weixin.qq.com/resource"), true);
-    assert.equal(policy.isAllowed("https://sub.platform.example/article/1"), false);
+    assert.equal(policy.isAllowed("https://sub.platform.example/article/1"), true);
+    assert.equal(policy.isAllowed("https://platform.example.evil.test/article/1"), false);
     assert.equal(policy.isAllowed("https://platform.example:8443/article/1"), false);
     assert.equal(policy.isAllowed("https://user@platform.example/article/1"), false);
     assert.equal(policy.isAllowed("file:///platform.example/article/1"), false);

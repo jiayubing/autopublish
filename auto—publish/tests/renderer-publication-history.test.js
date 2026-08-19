@@ -46,7 +46,7 @@ function renderPresentation() {
     const publication = renderToStaticMarkup(React.createElement(PublicationHistoryDrawer, {
       article: { id: 'a1', title: '待核对文章' }, records: [record],
       summary: { status: 'uncertain', label: '待确认', records: 1, published: 0, uncertain: true },
-      onClose() {}, onReconcile() {}, busy: true,
+      onClose() {}, onOpenAttention() {}, onOpenPublicationUrl() {}, publicationUrlBusy: true,
     }));
     const resources = renderToStaticMarkup(React.createElement(ResourceLibrary, {
       resources: [{ resourceId: 'resource-1', name: '中央媒体资源', type: 'image', price: 120 }],
@@ -150,16 +150,13 @@ describe("publication history renderer boundary", async function () {
   it("renders target evidence and blocks direct retry while uncertain resolution is busy", function () {
     assert.match(presentation.publication, /待核对文章/);
     assert.match(presentation.publication, /头条主账号/);
-    assert.match(presentation.publication, /远端 URL/);
+    assert.match(presentation.publication, /发布链接/);
     assert.match(presentation.publication, /订单号\/远端 ID/);
     assert.match(presentation.publication, /PLATFORM_RESULT_UNCERTAIN/);
-    assert.match(presentation.publication, /不提供直接重试/);
-    assert.match(presentation.publication, /确认已发布/);
-    assert.match(presentation.publication, /确认未发布/);
-    assert.equal(
-      (presentation.publication.match(/disabled=""/g) || []).length,
-      2,
-    );
+    assert.match(presentation.publication, /不在这里执行人工确认或直接重试/);
+    assert.match(presentation.publication, /前往需处理事项/);
+    assert.doesNotMatch(presentation.publication, /确认已发布/);
+    assert.doesNotMatch(presentation.publication, /确认未发布/);
   });
 
   it("renders paged media and durable order actions from public read models", function () {

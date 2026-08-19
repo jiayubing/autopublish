@@ -71,6 +71,7 @@ export default function GeneratedArticlesView({
   onArticleSelect,
   onStageFilterChange,
   onOpenOrders,
+  onOpenAttention,
 }: GeneratedArticlesViewProps) {
   const { confirm } = useConfirmation();
   const {
@@ -158,12 +159,9 @@ export default function GeneratedArticlesView({
   const workflowByArticle = useMemo(
     () =>
       new Map(
-        articles.map((article) => [
-          article.id,
-          snapshotWorkflowByArticle[article.id],
-        ]),
+        Object.entries(snapshotWorkflowByArticle),
       ),
-    [articles, snapshotWorkflowByArticle],
+    [snapshotWorkflowByArticle],
   );
   const generationBatches = useMemo(
     () =>
@@ -344,14 +342,17 @@ export default function GeneratedArticlesView({
   if (selectedStage === "trash")
     return (
       <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3">
-        <ArticleRemovalDialog
-          snapshot={removalSnapshot}
-          intents={removalIntents}
-        />
+        <div className="grid min-w-0 gap-2">
+          <ArticleRemovalDialog
+            snapshot={removalSnapshot}
+            intents={removalIntents}
+          />
+        </div>
         <ArticleTrashPanel
           trash={trash}
           visibleError={visibleError}
           commandBusy={removalCommandBusy}
+          workflowByArticle={workflowByArticle}
           onBack={() => {
             const next = lastNonTrashStageRef.current;
             setSelectedStage(next);
@@ -547,6 +548,16 @@ export default function GeneratedArticlesView({
             ? workflowByArticle.get(drawerArticle.id)?.publicationSummary
             : undefined
         }
+        onOpenPublicationUrl={(record) => {
+          void commands
+            .openPublicationUrl({ publicationId: record.publicationId })
+            .catch(() => undefined);
+        }}
+        publicationUrlBusy={commandStates.openPublicationUrl?.busy === true}
+        publicationUrlError={
+          commandStates.openPublicationUrl?.error?.userMessage || null
+        }
+        onOpenAttention={onOpenAttention}
         onClose={() => setDrawerArticle(null)}
       />
       <SubmissionIntakeDialog

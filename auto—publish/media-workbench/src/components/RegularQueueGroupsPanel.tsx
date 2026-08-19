@@ -27,6 +27,8 @@ const SYSTEM_PAUSE_REASON_LABELS: Record<string, string> = {
   REGULAR_ACCOUNT_IDENTITY_UNAVAILABLE: "无法读取当前平台登录身份，请检查登录并保存会话。",
   REGULAR_ACCOUNT_BINDING_UNAVAILABLE: "账号绑定数据当前不可用，请检查诊断信息。",
   REGULAR_ACCOUNT_PROFILE_UNVERIFIED: "账号档案未通过验证，请检查登录与绑定状态。",
+  REGULAR_CLIENT_PROFILE_INCOMPLETE: "客户档案不完整，请先补充该客户的平台投稿资料后再开始。",
+  REGULAR_PREPARATION_FAILED: "投稿准备失败，任务已安全暂停；请检查资料或诊断信息后再开始。",
 };
 
 function systemPauseReason(code: string) {

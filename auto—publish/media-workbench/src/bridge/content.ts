@@ -81,6 +81,9 @@ type CoreContentApi = {
   getArticleManagementSnapshot: (input: {
     clientId: string;
   }) => Promise<ContentIpcResponse<ArticleManagementSnapshotWire>>;
+  openPublicationUrl: (input: {
+    publicationId: string;
+  }) => Promise<ContentIpcResponse<{ completed: boolean }>>;
   getSubmissionCenterSnapshot: (input: {
     clientId: string;
   }) => Promise<ContentIpcResponse<SubmissionCenterSnapshot>>;
@@ -502,6 +505,15 @@ export async function getArticleManagementSnapshot(
         ),
       };
     },
+  );
+}
+
+export async function openPublicationUrl(input: {
+  publicationId: string;
+}): Promise<{ completed: boolean }> {
+  return callCoreContent(
+    (api) => requireBridgeMethod(api.openPublicationUrl)(input),
+    "Unable to open publication URL",
   );
 }
 

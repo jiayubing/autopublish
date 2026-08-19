@@ -328,6 +328,9 @@ const api = {
         input,
       );
     },
+    openPublicationUrl: function (input) {
+      return ipcRenderer.invoke("content:open-publication-url", input);
+    },
     getSubmissionCenterSnapshot: function (input) {
       return ipcRenderer.invoke(
         "content:get-submission-center-snapshot",

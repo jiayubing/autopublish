@@ -149,7 +149,15 @@ it("maps every production workspace mutation reason explicitly without a broad f
   ].forEach(function(reasonCode) {
     assert.deepEqual(scopesForReason(reasonCode), ["contentSources"], reasonCode);
   });
-  ["GENERATION_BATCH_CREATED", "GENERATION_BATCH_TERMINAL", "GENERATION_PENDING_TASKS_CANCELLED", "GENERATION_BATCH_CHANGED", "ARTICLE_SAVED"].forEach(function(reasonCode) {
+  [
+    "GENERATION_BATCH_CREATED",
+    "GENERATION_BATCH_TERMINAL",
+    "GENERATION_PENDING_TASKS_CANCELLED",
+    "GENERATION_BATCH_CHANGED",
+    "ARTICLE_SAVED",
+    "ARTICLE_RESTORED",
+    "ARTICLE_PERMANENTLY_DELETED",
+  ].forEach(function(reasonCode) {
     assert.deepEqual(scopesForReason(reasonCode), ["articleManagement"], reasonCode);
   });
   assert.deepEqual(scopesForReason("PLATFORM_SUBMIT_UNMAPPED"), []);
