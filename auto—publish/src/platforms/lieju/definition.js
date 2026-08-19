@@ -7,5 +7,5 @@ module.exports = Object.freeze({
   scanDir: "lieju",
   capabilities: Object.freeze({ regularSubmission: true, legacyQueueImport: false, loginSession: true, accountInspection: true, imagePublishing: true }),
   contributions: Object.freeze({ settings: false, clientProfile: true, runtimeArtifacts: false }),
-  externalHosts: Object.freeze(["www.lieju.com"]),
+  externalHosts: Object.freeze(["lieju.com"]),
 });

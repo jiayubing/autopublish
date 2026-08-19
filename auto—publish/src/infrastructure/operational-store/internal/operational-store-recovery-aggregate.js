@@ -359,7 +359,7 @@ function createRecoveryAggregate(context, activeTarget) {
     return Object.freeze(
       db
         .prepare(
-          "SELECT p.publication_id,p.article_id,p.target_key,p.status,p.updated_at,a.attempt_id,e.remote_id,e.remote_url,i.payload_json AS intent_payload FROM publication_records p JOIN publication_attempts a ON a.rowid=(SELECT latest.rowid FROM publication_attempts latest WHERE latest.publication_id=p.publication_id ORDER BY latest.rowid DESC LIMIT 1) LEFT JOIN recovery_intents i ON i.attempt_id=a.attempt_id LEFT JOIN remote_evidence e ON e.attempt_id=a.attempt_id WHERE p.status IN('uncertain','failed') AND a.finished_at IS NOT NULL ORDER BY p.updated_at",
+          "SELECT p.publication_id,p.article_id,p.target_key,p.status,p.updated_at,a.attempt_id,e.remote_id,e.remote_url,i.payload_json AS intent_payload FROM publication_records p JOIN publication_attempts a ON a.rowid=(SELECT latest.rowid FROM publication_attempts latest WHERE latest.publication_id=p.publication_id ORDER BY latest.rowid DESC LIMIT 1) LEFT JOIN recovery_intents i ON i.attempt_id=a.attempt_id LEFT JOIN remote_evidence e ON e.attempt_id=a.attempt_id WHERE p.status IN('uncertain','failed') AND a.finished_at IS NOT NULL AND (p.status!='failed' OR NOT EXISTS (SELECT 1 FROM publication_records newer WHERE newer.article_id=p.article_id AND newer.rowid>p.rowid)) ORDER BY p.updated_at",
         )
         .all()
         .map((row) => {

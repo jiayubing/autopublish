@@ -114,6 +114,7 @@ describe("publication history renderer boundary", async function () {
       empty: summary([]),
       queued: summary([record('queued')]),
       partial: summary([record('published'), record('queued')]),
+      publishedWithFailedHistory: summary([record('failed'), record('published')]),
       uncertain: summary([record('published'), record('uncertain')]),
       failed: summary([record('failed')]),
       ordinarySubmitted: summary([record('submitted')]),
@@ -133,6 +134,8 @@ describe("publication history renderer boundary", async function () {
 
   it("summarizes independent targets without hiding partial or uncertain results", function () {
     assert.equal(status.partial.status, "partial");
+    assert.equal(status.publishedWithFailedHistory.status, "published");
+    assert.equal(status.publishedWithFailedHistory.label, "已发布 · 含失败历史");
     assert.equal(status.uncertain.status, "uncertain");
     assert.equal(status.failed.status, "failed");
     assert.equal(status.ordinarySubmitted.status, "manual_check");

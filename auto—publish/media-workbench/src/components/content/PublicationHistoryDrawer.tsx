@@ -178,17 +178,16 @@ export default function PublicationHistoryDrawer({
                   </div>
                   {remoteUrl && (
                     <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
-                      <dt className="text-slate-400">远端 URL</dt>
-                      <dd className="min-w-0 break-all">
-                        <a
-                          href={remoteUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex max-w-full items-center gap-1 text-blue-700 underline"
+                      <dt className="text-slate-400">发布链接</dt>
+                      <dd className="min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => window.open(remoteUrl, "_blank", "noopener,noreferrer")}
+                          className="inline-flex items-center gap-1.5 rounded border border-blue-200 px-2 py-1.5 font-semibold text-blue-700 hover:border-blue-400 hover:bg-blue-50"
                         >
-                          <span className="break-all">{remoteUrl}</span>
-                          <ExternalLink className="h-3 w-3 shrink-0" />
-                        </a>
+                          <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                          <span>打开发布链接</span>
+                        </button>
                       </dd>
                     </div>
                   )}

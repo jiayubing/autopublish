@@ -885,6 +885,8 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
     }));
 
     for (const [width, height] of [
+      [820, 620],
+      [960, 620],
       [1128, 527],
       [1424, 861],
     ]) {
