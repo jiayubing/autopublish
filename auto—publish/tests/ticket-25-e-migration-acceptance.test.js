@@ -259,6 +259,38 @@ test("E dry-run and import evidence cover all variants, unavailable history, con
   assert.equal(priorityPlan.entries[0].variant, "publishedEvidence");
 });
 
+test("legacy deletion evidence preserves Unicode client identities", () => {
+  const result = createLegacyMigrationPlanner({
+    legacySource: {
+      workspaceFingerprint: FINGERPRINT,
+      articles: [],
+      publications: [],
+      submissions: [],
+      queues: [],
+      orders: [],
+      recoveries: [],
+      deletions: [
+        {
+          version: 1,
+          clientId: "东爵",
+          articleId: "7a47ea72-ddcc-4bdb-b2db-fdaa212aa0f6",
+          status: "generated",
+          state: "TRASHED",
+          deleted: true,
+          deletedAt: "2026-08-19T13:17:07.150Z",
+          permanentlyDeleted: true,
+          purgedAt: "2026-08-19T13:17:09.635Z",
+          sourceRef: "record:unicode-client-deletion",
+        },
+      ],
+    },
+  }).planResult();
+
+  assert.equal(result.report.counts.unplanned, 0);
+  assert.equal(result.report.counts.planned, 1);
+  assert.equal(result.plan.entries[0].articleIdentityV1.clientId, "东爵");
+});
+
 test("E imports six variants atomically into the normal projection without queue, remote intent, or paid batch", () => {
   const root = tempRoot("ticket-25-e-six-variants");
   const planner = createLegacyMigrationPlanner({

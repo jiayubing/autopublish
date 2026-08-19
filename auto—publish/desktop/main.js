@@ -259,16 +259,19 @@ authenticatedRuntime = createAuthenticatedRuntime({
           typeof repair.confirmationFingerprint !== "string"
         )
           return null;
-        const choice = await dialog.showMessageBox({
-          type: "warning",
-          buttons: ["取消", "确认迁移"],
-          defaultId: 0,
-          cancelId: 0,
-          noLink: true,
-          title: "AutoPublish 内容库迁移",
-          message: "检测到需要安全迁移的旧投稿记录。",
-          detail: `系统已创建迁移前备份（${repair.backupIdentity}）。确认后将导入可信事实；冲突或不确定记录不会自动投稿。`,
-        });
+        const choice = await dialog.showMessageBox(
+          mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined,
+          {
+            type: "warning",
+            buttons: ["取消", "确认迁移"],
+            defaultId: 0,
+            cancelId: 0,
+            noLink: true,
+            title: "AutoPublish 内容库迁移",
+            message: "检测到需要安全迁移的旧投稿记录。",
+            detail: `系统已创建迁移前备份（${repair.backupIdentity}）。确认后将导入可信事实；冲突或不确定记录不会自动投稿。`,
+          },
+        );
         return choice.response === 1 ? repair.confirmationFingerprint : null;
       },
       openExternal: function (url) {
@@ -425,9 +428,9 @@ function failStartup() {
 async function startApplication() {
   try {
     process.env.AUTO_PUBLISH_PACKAGED = app.isPackaged ? "1" : "0";
-    initializeAuth();
     startupStatus = "ready";
     createMainWindow();
+    initializeAuth();
   } catch (error) {
     if (
       error &&

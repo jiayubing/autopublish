@@ -261,7 +261,7 @@ function parseArticle(value) {
   if (
     !isObject(value) ||
     value.version !== 1 ||
-    !validId(text(value.clientId)) ||
+    !validClientId(text(value.clientId)) ||
     !validId(text(value.articleId))
   )
     return null;
@@ -270,6 +270,12 @@ function parseArticle(value) {
     clientId: text(value.clientId),
     articleId: text(value.articleId),
   };
+}
+
+function validClientId(value) {
+  return domain.ClientId && typeof domain.ClientId.validate === "function"
+    ? domain.ClientId.validate(value).ok === true
+    : validId(value);
 }
 
 function parseTarget(value) {
