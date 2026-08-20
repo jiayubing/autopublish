@@ -46,3 +46,12 @@ node --test --test-concurrency=1 tests/platform-definition-loader.test.js tests/
 ## 工作树
 
 本次变更仅涉及 Toutiao capability 声明/port、对应合同测试和本 handoff。后续复审应限定在这些 diff、普通投稿目录/admission、平台加载和直接回归，不重新开启第二阶段全量审计。
+
+## 提交与主线集成
+
+- Base integration commit：`ced31e8d3ded25aed68a5f3e6dfda86b9d29b024`。
+- Implementation branch：`codex/第二阶段`。
+- Implementation commit：`0970c90 fix(submission): close phase-2 deferred gaps`。
+- Integration：`master` 从 `ced31e8` fast-forward 到 `0970c90`，未产生额外 merge commit。
+- 最终主线门禁：合并后的 `master@0970c90` 运行上述两组测试的合并集合，`119 passed, 0 failed`。
+- 最终验证后仅补充本 provenance evidence；生产源码、schema 和关键测试未再变化。
