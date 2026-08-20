@@ -1367,6 +1367,186 @@ test("orchestrator distinguishes transport failure before and after submission-s
   }
 });
 
+test("outcome commit failure becomes uncertain in the current process without replay", async () => {
+  let failAcceptedOnce = true;
+  const clockState = { value: "2026-08-07T01:00:00.000Z" };
+  const f = fixture({
+    clock: () => new Date(clockState.value),
+    internalRegularOutcomeTransitionFault(point) {
+      if (point === "after-publication-success" && failAcceptedOnce) {
+        failAcceptedOnce = false;
+        const error = new Error("forced accepted outcome transaction failure");
+        error.code = "REGULAR_OUTCOME_TRANSACTION_FAILED";
+        throw error;
+      }
+    },
+  });
+  try {
+    const admitted = admitForOrchestrator(f, "article-current-process-recovery");
+    let submissions = 0;
+    const outcomeService = createRegularPlatformOutcomeService({
+      regularOutcomeTransitions: f.transitions,
+      clock: () => new Date("2026-08-07T01:00:00.000Z"),
+    });
+    const composition = createRegularQueueGroupComposition({
+      regularQueueGroupTransitions: f.groupTransitions,
+      regularPlatformOutcomeService: outcomeService,
+      platformSubmissionExecutor: {
+        async preparePlatformSubmission(claim) {
+          return domain.createPreparedSubmission({
+            preparedSubmissionEvidenceV1:
+              domain.createTextOnlyPreparedSubmissionEvidenceV1(claim),
+            async submitPreparedPublication() {
+              submissions += 1;
+              return { status: "accepted", remoteId: "accepted-once" };
+            },
+          });
+        },
+      },
+    });
+
+    const result = await composition.orchestrator.startGroup({
+      queueGroupId: admitted.queueGroupId,
+    });
+    assert.equal(result.observation.status, "uncertain");
+    assert.equal(
+      result.observation.errorCode,
+      "REGULAR_OUTCOME_COMMIT_FAILED",
+    );
+    assert.equal(submissions, 1);
+
+    const snapshot = f.transitions.getRegularOutcomeSnapshot({
+      regularPublicationAttemptId: admitted.attemptId,
+    });
+    assert.equal(snapshot.publicationStatus, "uncertain");
+    assert.equal(snapshot.attemptStatus, "uncertain");
+    assert.equal(snapshot.itemStatus, "uncertain");
+    assert.equal(snapshot.activeTargetState, "uncertain");
+    assert.equal(snapshot.intentState, "manual_check");
+    assert.equal(snapshot.pauseIntent, "system");
+    assert.equal(snapshot.observation.code, "REGULAR_ORPHANED_REMOTE_ATTEMPT");
+    assert.equal(
+      createArticleAttentionQuery({ operationalStore: f.store }).list({
+        clientId: "client-1",
+      }).items.length,
+      1,
+    );
+
+    clockState.value = "2026-08-07T01:00:01.000Z";
+    const repeated = outcomeService.markOrphanedRegularAttemptUncertain({
+      regularPublicationAttemptId: admitted.attemptId,
+    });
+    assert.equal(repeated.status, "uncertain");
+    assert.equal(repeated.idempotent, true);
+    assert.equal(submissions, 1);
+
+    const lateAccepted = f.transitions.recordRegularAccepted(
+      accepted(admitted.attemptId),
+    );
+    assert.equal(lateAccepted.status, "published");
+    assert.equal(
+      f.transitions.getRegularOutcomeSnapshot({
+        regularPublicationAttemptId: admitted.attemptId,
+      }).publicationStatus,
+      "published",
+    );
+    assert.equal(
+      createArticleAttentionQuery({ operationalStore: f.store }).list({
+        clientId: "client-1",
+      }).items.length,
+      0,
+    );
+  } finally {
+    f.close();
+  }
+});
+
+test("a persistent immediate recovery failure preserves the original error for startup recovery", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "regular-outcome-27-b-"));
+  const f = fixture({
+    workspaceRoot: root,
+    removeWorkspaceRoot: false,
+    internalRegularOutcomeTransitionFault(point) {
+      if (["after-publication-success", "after-uncertain"].includes(point)) {
+        const error = new Error(`forced ${point} failure`);
+        error.code =
+          point === "after-publication-success"
+            ? "REGULAR_OUTCOME_TRANSACTION_FAILED"
+            : "REGULAR_OUTCOME_RECOVERY_TRANSACTION_FAILED";
+        throw error;
+      }
+    },
+  });
+  let admitted;
+  let submissions = 0;
+  try {
+    admitted = admitForOrchestrator(f, "article-startup-fallback");
+    const outcomeService = createRegularPlatformOutcomeService({
+      regularOutcomeTransitions: f.transitions,
+      clock: () => new Date("2026-08-07T01:00:00.000Z"),
+    });
+    const composition = createRegularQueueGroupComposition({
+      regularQueueGroupTransitions: f.groupTransitions,
+      regularPlatformOutcomeService: outcomeService,
+      platformSubmissionExecutor: {
+        async preparePlatformSubmission(claim) {
+          return domain.createPreparedSubmission({
+            preparedSubmissionEvidenceV1:
+              domain.createTextOnlyPreparedSubmissionEvidenceV1(claim),
+            async submitPreparedPublication() {
+              submissions += 1;
+              return { status: "accepted", remoteId: "accepted-once" };
+            },
+          });
+        },
+      },
+    });
+
+    await assert.rejects(
+      () =>
+        composition.orchestrator.startGroup({
+          queueGroupId: admitted.queueGroupId,
+        }),
+      { code: "REGULAR_OUTCOME_TRANSACTION_FAILED" },
+    );
+    assert.equal(submissions, 1);
+    assert.equal(
+      f.transitions.getRegularOutcomeSnapshot({
+        regularPublicationAttemptId: admitted.attemptId,
+      }).publicationStatus,
+      "remote_started",
+    );
+  } finally {
+    f.close();
+  }
+
+  const reopened = fixture({ workspaceRoot: root, removeWorkspaceRoot: false });
+  try {
+    const composition = createRegularQueueGroupComposition({
+      regularQueueGroupTransitions: reopened.groupTransitions,
+      regularPlatformOutcomeService: createRegularPlatformOutcomeService({
+        regularOutcomeTransitions: reopened.transitions,
+        clock: () => new Date("2026-08-07T01:00:00.000Z"),
+      }),
+      platformSubmissionExecutor: {
+        async preparePlatformSubmission() {
+          throw new Error("must not replay during startup recovery");
+        },
+      },
+    });
+    assert.equal(composition.orphanedOutcomes.length, 1);
+    assert.equal(
+      reopened.transitions.getRegularOutcomeSnapshot({
+        regularPublicationAttemptId: admitted.attemptId,
+      }).publicationStatus,
+      "uncertain",
+    );
+  } finally {
+    reopened.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("article rejection continues the same FIFO group while accepted closes the next item", async () => {
   const f = fixture();
   try {

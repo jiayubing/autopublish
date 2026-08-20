@@ -14,6 +14,15 @@ const TRANSITION_METHODS = Object.freeze([
   "setRegularQueueGroupRunIntent",
   "startAllRegularQueueGroups",
 ]);
+const OUTCOME_RECOVERY_METHODS = Object.freeze([
+  "markOrphanedRegularAttemptUncertain",
+]);
+const ADAPTER_OUTCOME_VALIDATION_CODES = new Set([
+  "REGULAR_ACCEPTED_REMOTE_IDENTITY_REQUIRED",
+  "REGULAR_OUTCOME_EVIDENCE_INVALID",
+  "REGULAR_OUTCOME_INVALID",
+  "REGULAR_OUTCOME_TIME_INVALID",
+]);
 const PREPARATION_GROUP_BLOCK_CODES = new Set([
   "HEPAN_CONFIG_NOT_SET",
   "LOGIN_REQUIRED",
@@ -67,6 +76,19 @@ function validateExecutor(value) {
   return value;
 }
 
+function validateOutcomeRecovery(value) {
+  if (
+    !value ||
+    Object.keys(value).sort().join("\u0000") !==
+      [...OUTCOME_RECOVERY_METHODS].sort().join("\u0000") ||
+    OUTCOME_RECOVERY_METHODS.some(
+      (method) => typeof value[method] !== "function",
+    )
+  )
+    throw fail("REGULAR_OUTCOME_RECOVERY_PORT_INVALID");
+  return value;
+}
+
 function uncertainObservation(claim, evidence) {
   return Object.freeze({
     status: "uncertain",
@@ -110,6 +132,16 @@ function createRegularQueueGroupOrchestrator(options) {
     typeof outcomeService.applyRegularOutcome !== "function"
   )
     throw fail("REGULAR_OUTCOME_SERVICE_INVALID");
+  const outcomeRecovery =
+    value.regularOutcomeRecovery ||
+    (outcomeService &&
+    typeof outcomeService.markOrphanedRegularAttemptUncertain === "function"
+      ? {
+          markOrphanedRegularAttemptUncertain:
+            outcomeService.markOrphanedRegularAttemptUncertain,
+        }
+      : null);
+  if (outcomeRecovery !== null) validateOutcomeRecovery(outcomeRecovery);
   const randomUUID = value.randomUUID || crypto.randomUUID;
   const setTimer = value.setInterval || setInterval;
   const clearTimer = value.clearInterval || clearInterval;
@@ -133,6 +165,58 @@ function createRegularQueueGroupOrchestrator(options) {
     const transition = outcomeService.applyRegularOutcome(input);
     notifyDataInvalidated("PUBLICATION_RECONCILED");
     return transition;
+  }
+
+  function recoverOutcomeCommitFailure(claim, error) {
+    diagnose("REGULAR_OUTCOME_COMMIT_FAILED", "outcome-commit");
+    if (!outcomeRecovery) throw error;
+    try {
+      const transition = outcomeRecovery.markOrphanedRegularAttemptUncertain({
+        regularPublicationAttemptId: claim.regularPublicationAttemptId,
+      });
+      notifyDataInvalidated("PUBLICATION_RECONCILED");
+      return Object.freeze({
+        status: "uncertain",
+        errorCode: "REGULAR_OUTCOME_COMMIT_FAILED",
+        transition,
+      });
+    } catch (_) {
+      diagnose("REGULAR_OUTCOME_RECOVERY_FAILED", "outcome-commit-recovery");
+      throw error;
+    }
+  }
+
+  function reconcileRemoteObservation(claim, observation) {
+    try {
+      return Object.freeze({
+        ...observation,
+        transition: applyOutcome({
+          regularPublicationAttemptId: claim.regularPublicationAttemptId,
+          outcome: observation,
+        }),
+      });
+    } catch (error) {
+      if (!error || error.code !== "REGULAR_ADAPTER_OUTCOME_INVALID") {
+        if (error && ADAPTER_OUTCOME_VALIDATION_CODES.has(error.code))
+          throw error;
+        return recoverOutcomeCommitFailure(claim, error);
+      }
+    }
+    const uncertain = Object.freeze({
+      status: "uncertain",
+      errorCode: "REGULAR_ADAPTER_OUTCOME_INVALID",
+    });
+    try {
+      return Object.freeze({
+        ...uncertain,
+        transition: applyOutcome({
+          regularPublicationAttemptId: claim.regularPublicationAttemptId,
+          outcome: uncertain,
+        }),
+      });
+    } catch (error) {
+      return recoverOutcomeCommitFailure(claim, error);
+    }
   }
 
   function snapshot() {
@@ -232,25 +316,7 @@ function createRegularQueueGroupOrchestrator(options) {
       observation = uncertainObservation(claim, evidence);
     }
     if (!outcomeService) return observation;
-    let transition;
-    try {
-      transition = applyOutcome({
-        regularPublicationAttemptId: claim.regularPublicationAttemptId,
-        outcome: observation,
-      });
-    } catch (error) {
-      if (!error || error.code !== "REGULAR_ADAPTER_OUTCOME_INVALID")
-        throw error;
-      observation = Object.freeze({
-        status: "uncertain",
-        errorCode: "REGULAR_ADAPTER_OUTCOME_INVALID",
-      });
-      transition = applyOutcome({
-        regularPublicationAttemptId: claim.regularPublicationAttemptId,
-        outcome: observation,
-      });
-    }
-    return Object.freeze({ ...observation, transition });
+    return reconcileRemoteObservation(claim, observation);
   }
 
   function runGroup(queueGroupId) {

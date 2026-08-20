@@ -419,7 +419,7 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
     });
   }
 
-  function recordTerminal(input, status) {
+  function recordTerminal(input, status, options) {
     open();
     const id = attemptId(input);
     const stamp = iso(clock);
@@ -440,7 +440,14 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
           firstWins: true,
         });
       if (row.intent.detail.observation) {
-        if (row.intent.detail.observation.fingerprint === observed.fingerprint)
+        if (
+          row.intent.detail.observation.fingerprint === observed.fingerprint ||
+          (options &&
+            options.idempotentExistingOrphanedUncertain === true &&
+            row.intent.detail.observation.status === "uncertain" &&
+            row.intent.detail.observation.code ===
+              "REGULAR_ORPHANED_REMOTE_ATTEMPT")
+        )
           return Object.freeze({ attemptId: id, status, idempotent: true });
         throw fail("REGULAR_OUTCOME_CONFLICT");
       }
@@ -816,6 +823,7 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
         },
       },
       "uncertain",
+      { idempotentExistingOrphanedUncertain: true },
     );
   }
 

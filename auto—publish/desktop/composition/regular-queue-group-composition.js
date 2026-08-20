@@ -6,10 +6,17 @@ const {
 
 function createRegularQueueGroupComposition(options) {
   const value = options || {};
+  const regularOutcomeRecovery = value.regularPlatformOutcomeService
+    ? Object.freeze({
+        markOrphanedRegularAttemptUncertain:
+          value.regularPlatformOutcomeService.markOrphanedRegularAttemptUncertain,
+      })
+    : null;
   const orchestrator = createRegularQueueGroupOrchestrator({
     regularQueueGroupTransitions: value.regularQueueGroupTransitions,
     platformSubmissionExecutor: value.platformSubmissionExecutor,
     regularPlatformOutcomeService: value.regularPlatformOutcomeService,
+    regularOutcomeRecovery,
     onDataInvalidated: value.onDataInvalidated,
     randomUUID: value.randomUUID,
   });
