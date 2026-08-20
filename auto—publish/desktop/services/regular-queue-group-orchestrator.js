@@ -17,12 +17,6 @@ const TRANSITION_METHODS = Object.freeze([
 const OUTCOME_RECOVERY_METHODS = Object.freeze([
   "markOrphanedRegularAttemptUncertain",
 ]);
-const ADAPTER_OUTCOME_VALIDATION_CODES = new Set([
-  "REGULAR_ACCEPTED_REMOTE_IDENTITY_REQUIRED",
-  "REGULAR_OUTCOME_EVIDENCE_INVALID",
-  "REGULAR_OUTCOME_INVALID",
-  "REGULAR_OUTCOME_TIME_INVALID",
-]);
 const PREPARATION_GROUP_BLOCK_CODES = new Set([
   "HEPAN_CONFIG_NOT_SET",
   "LOGIN_REQUIRED",
@@ -197,8 +191,6 @@ function createRegularQueueGroupOrchestrator(options) {
       });
     } catch (error) {
       if (!error || error.code !== "REGULAR_ADAPTER_OUTCOME_INVALID") {
-        if (error && ADAPTER_OUTCOME_VALIDATION_CODES.has(error.code))
-          throw error;
         return recoverOutcomeCommitFailure(claim, error);
       }
     }

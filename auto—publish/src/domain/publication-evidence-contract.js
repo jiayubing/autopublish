@@ -7,6 +7,9 @@ const {
   parseTargetIdentityV1,
   preparedContentFingerprint,
 } = require("./regular-publication-contract");
+const {
+  normalizePublishedArticleUrl,
+} = require("./published-article-url");
 
 const FINGERPRINT = /^[a-f0-9]{64}$/;
 const REMOTE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/u;
@@ -408,6 +411,12 @@ function parsePublicationEvidenceV2(input, options) {
   // V1 is deliberately closed.  V2 is the only online contract that can
   // preserve a regular platform's display-only remote identifier.
   const parsedRemoteId = remoteId(inputRemoteId);
+  const parsedRemoteUrl =
+    parsedV1.remoteUrl === null
+      ? null
+      : normalizePublishedArticleUrl(parsedV1.remoteUrl);
+  if (parsedV1.remoteUrl !== null && !parsedRemoteUrl)
+    invalid("PUBLICATION_EVIDENCE_V2_REMOTE_URL_INVALID");
   const manualPositive =
     parsedV1.firstPublishedAtSource === "manual_positive_evidence_time" &&
     parsedV1.safeEvidenceRefs.some(
@@ -416,7 +425,7 @@ function parsePublicationEvidenceV2(input, options) {
   if (
     parsedV1.resultCode === "REGULAR_ACCEPTED" &&
     !parsedRemoteId &&
-    !parsedV1.remoteUrl &&
+    !parsedRemoteUrl &&
     !manualPositive
   )
     invalid("REGULAR_ACCEPTED_REMOTE_IDENTITY_REQUIRED");
@@ -424,6 +433,7 @@ function parsePublicationEvidenceV2(input, options) {
     ...parsedV1,
     version: 2,
     remoteId: parsedRemoteId,
+    remoteUrl: parsedRemoteUrl,
   });
 }
 

@@ -1367,6 +1367,49 @@ test("orchestrator distinguishes transport failure before and after submission-s
   }
 });
 
+test("accepted validation failure becomes uncertain in the current process without replay", async () => {
+  const f = fixture();
+  try {
+    const admitted = admitForOrchestrator(f, "article-invalid-accepted-result");
+    let submissions = 0;
+    const composition = createRegularQueueGroupComposition({
+      regularQueueGroupTransitions: f.groupTransitions,
+      regularPlatformOutcomeService: createRegularPlatformOutcomeService({
+        regularOutcomeTransitions: f.transitions,
+        clock: () => new Date("2026-08-07T01:00:00.000Z"),
+      }),
+      platformSubmissionExecutor: {
+        async preparePlatformSubmission(claim) {
+          return domain.createPreparedSubmission({
+            preparedSubmissionEvidenceV1:
+              domain.createTextOnlyPreparedSubmissionEvidenceV1(claim),
+            async submitPreparedPublication() {
+              submissions += 1;
+              return { status: "accepted" };
+            },
+          });
+        },
+      },
+    });
+
+    const result = await composition.orchestrator.startGroup({
+      queueGroupId: admitted.queueGroupId,
+    });
+    assert.equal(result.observation.status, "uncertain");
+    assert.equal(result.observation.errorCode, "REGULAR_OUTCOME_COMMIT_FAILED");
+    assert.equal(submissions, 1);
+
+    const snapshot = f.transitions.getRegularOutcomeSnapshot({
+      regularPublicationAttemptId: admitted.attemptId,
+    });
+    assert.equal(snapshot.publicationStatus, "uncertain");
+    assert.equal(snapshot.intentState, "manual_check");
+    assert.equal(snapshot.observation.code, "REGULAR_ORPHANED_REMOTE_ATTEMPT");
+  } finally {
+    f.close();
+  }
+});
+
 test("outcome commit failure becomes uncertain in the current process without replay", async () => {
   let failAcceptedOnce = true;
   const clockState = { value: "2026-08-07T01:00:00.000Z" };

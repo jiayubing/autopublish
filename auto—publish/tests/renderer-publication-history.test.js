@@ -97,9 +97,9 @@ function renderPublicationArchiveFixtures() {
       targetSnapshotV1: { version: 1, kind: 'platform', platformId: 'fixture', platformName: '测试平台', accountProfileId: 'account-1', accountLabel: '测试账号' },
       resultCode: 'REGULAR_ACCEPTED',
       submittedAt: '2026-08-20T00:00:00.000Z',
-      submittedAtSource: 'remote_response_time',
+      submittedAtSource: 'regular_remote_call_started',
       firstPublishedAt: '2026-08-20T00:01:00.000Z',
-      firstPublishedAtSource: 'remote_response_time',
+      firstPublishedAtSource: 'first_positive_observation_time',
       imageSummaryV1: null,
       orderNumber: null,
       remoteId: null,
@@ -231,6 +231,9 @@ describe("publication history renderer boundary", async function () {
     assert.match(archiveFixtures.failure, /平台明确拒绝了这篇文章，请检查内容后从统一投稿入口重新发起。/);
     assert.match(archiveFixtures.failure, /结果代码/);
     assert.match(archiveFixtures.failure, /CONTENT_REJECTED/);
+    assert.match(archiveFixtures.failure, /最近更新时间/);
+    assert.doesNotMatch(archiveFixtures.failure, /最近确认时间/);
+    assert.match(archiveFixtures.idOnly, /平台接受结果/);
     assert.match(archiveFixtures.idOnly, /投稿内容快照/);
     assert.match(archiveFixtures.idOnly, /投稿处理与核对详情/);
   });

@@ -3,6 +3,7 @@
 const crypto = require("node:crypto");
 
 const { parseOrderIdentityV1 } = require("./paid-media-order-contract");
+const { normalizePublishedArticleUrl } = require("./published-article-url");
 const { dtoError, exact } = require("./safe-operational-error");
 
 const FINGERPRINT = /^[a-f0-9]{64}$/u;
@@ -18,8 +19,6 @@ const TERMINAL_KINDS = new Set([
   "CANCELLED",
   "OTHER_NON_PUBLISHED",
 ]);
-const SENSITIVE_QUERY_NAME =
-  /^(?:access_token|api[_-]?key|apikey|auth(?:orization)?|cookie|password|refresh_token|secret|session(?:id)?|token)$/iu;
 
 function invalid(code) {
   throw dtoError(code);
@@ -63,20 +62,6 @@ function amount(value, code) {
 function fingerprint(value, code) {
   if (typeof value !== "string" || !FINGERPRINT.test(value)) invalid(code);
   return value;
-}
-
-function normalizePublishedArticleUrl(value) {
-  if (typeof value !== "string" || !value || value.length > 2048) return null;
-  try {
-    const url = new URL(value);
-    if (url.protocol !== "https:" || url.username || url.password || url.hash)
-      return null;
-    for (const name of url.searchParams.keys())
-      if (SENSITIVE_QUERY_NAME.test(name)) return null;
-    return url.href;
-  } catch (_) {
-    return null;
-  }
 }
 
 function safeUrl(value, code) {

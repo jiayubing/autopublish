@@ -4,9 +4,7 @@
 
 ## 当前执行入口
 
-- [Ticket 27：投稿结果闭环整改](../.scratch/article-lifecycle-and-submission/issues/27-publication-attention-result-closure-remediation.md) — `PARTIAL`，27-A～27-C 均已 Closure；27-C 的审计与 evidence 见 [handoff](../.scratch/article-lifecycle-and-submission/handoffs/27-C-result-closure-renderer.md)。27-D combined audit/closure 须获用户另行授权。
-
-本区只登记上述一个当前计划。人工确认发布不强制填写 URL；详细产品边界、工作包、gate 和验收由 Ticket 27 合同拥有。
+当前没有默认复杂执行入口。新的复杂任务必须由用户指向具名计划，或先建立独立计划；不得从已完成 Ticket 自动续跑。
 
 ## 等待用户明确外部授权
 
@@ -20,6 +18,7 @@
 
 以下计划保留为历史 evidence，不是默认执行入口：
 
+- [Ticket 27：投稿结果闭环整改](../.scratch/article-lifecycle-and-submission/issues/27-publication-attention-result-closure-remediation.md) — `COMPLETE`；Combined Audit、remediation、final clean-HEAD gate 与最终边界见 [27-D handoff](../.scratch/article-lifecycle-and-submission/handoffs/27-D-result-closure-integration.md)。
 - [平台账号档案 P1 收敛](../.scratch/platform-account-profile-p1/PLATFORM-ACCOUNT-PROFILE-P1-PLAN.md)
 - [Renderer 冷启动导航修复](../.scratch/archive/renderer-cold-start-navigation-fix/RENDERER-COLD-START-NAVIGATION-FIX-PLAN.md)
 - [Renderer UI 解耦与扩展性](../.scratch/archive/ui-decoupling-and-extensibility/UI-DECOUPLING-AND-EXTENSIBILITY-PLAN.md)

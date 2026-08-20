@@ -96,6 +96,19 @@ test("publicationEvidenceV2 preserves a safe optional remote ID without changing
       }),
     { code: "PUBLICATION_EVIDENCE_V2_RESULT_INVALID" },
   );
+  for (const remoteUrl of [
+    "https://example.test/article/1#fragment",
+    "https://example.test/article/1?token=secret",
+  ]) {
+    assert.throws(
+      () =>
+        domain.parsePublicationEvidenceV2({
+          ...idOnly,
+          remoteUrl,
+        }),
+      { code: "PUBLICATION_EVIDENCE_V2_REMOTE_URL_INVALID" },
+    );
+  }
 });
 
 test("publication evidence treats a manual accepted result without a locator explicitly", () => {

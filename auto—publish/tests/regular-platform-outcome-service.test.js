@@ -112,6 +112,29 @@ test("accepted observations fail closed without one safe remote identity", () =>
       }),
     { code: "REGULAR_ADAPTER_OUTCOME_INVALID" },
   );
+  assert.throws(
+    () =>
+      f.service.applyRegularOutcome({
+        regularPublicationAttemptId: "attempt-sensitive-url",
+        outcome: {
+          status: "accepted",
+          remoteUrl: "https://example.test/article?token=secret",
+        },
+      }),
+    { code: "REGULAR_ADAPTER_OUTCOME_INVALID" },
+  );
+  assert.throws(
+    () =>
+      f.service.applyRegularOutcome({
+        regularPublicationAttemptId: "attempt-empty-url",
+        outcome: {
+          status: "accepted",
+          remoteId: "remote-1",
+          remoteUrl: "",
+        },
+      }),
+    { code: "REGULAR_ADAPTER_OUTCOME_INVALID" },
+  );
   assert.equal(f.calls.length, 0);
 });
 

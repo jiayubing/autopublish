@@ -2,7 +2,7 @@
 
 **What to build:** 修复第三阶段审计确认的 publication evidence、明确失败投影、运行期 uncertain 收敛和 Renderer 结果工作台问题，使成功、明确失败和不确定结果都能稳定、幂等、可理解地形成用户闭环。
 
-**Status:** `PARTIAL`；27-A 已在本地完成实现、定向验证、Primary Audit、blocking remediation 与 Bounded Re-audit，evidence 见 `handoffs/27-A-publication-evidence-and-failure-read-model.md`。27-B 已完成 implementation、定向验证、Primary Audit、P1 remediation、Bounded Re-audit 与 commit，evidence 见 `handoffs/27-B-runtime-uncertain-recovery.md`；27-C 已完成 implementation、Primary Audit、P2 remediation、Bounded Re-audit 与 commit，evidence 见 `handoffs/27-C-result-closure-renderer.md`。27-D 必须在用户另行授权后开始。
+**Status:** `COMPLETE`；27-A～27-D 的本地 implementation、Primary Audit、blocking remediation、Bounded Re-audit 与 final clean-HEAD gate 已闭合。各工作包 evidence 见 `handoffs/27-A-publication-evidence-and-failure-read-model.md`、`handoffs/27-B-runtime-uncertain-recovery.md`、`handoffs/27-C-result-closure-renderer.md` 与 `handoffs/27-D-result-closure-integration.md`。
 
 **Scheduling gate:** 基于 commit `7da7ec4` 的第三阶段只读审计结论启动。执行前必须重新确认当前 HEAD、clean/dirty 状态和本文件在 Wave Plan / `docs/WORK-INDEX.md` 中仍是唯一当前入口。27-A → 27-B → 27-C → 27-D 串行；不得并行修改 publication evidence、OperationalStore outcome/recovery 或共享 Renderer read model。
 
@@ -207,3 +207,11 @@
 - Attention 使用受控原因摘要和明确的发生/下一步/完成后文案；普通不确定的确认文案说明永久发布与 URL 非必填。三个导航动作分别进入统一投稿入口、发布档案和文章编辑。
 - Primary Audit 发现并修复 `P2 INTRODUCED_BY_CHANGE`：Renderer 曾将带非敏感 query 的安全发布 URL 错误隐藏，和主进程链接服务合同不一致；现已使用同一安全规则，覆盖 safe-query 与 sensitive-query fixture，Bounded Re-audit `PASS`。
 - Implementation commit：`fdaa1154abe0e0c6367e5f61e30e39737c7e61bb`。27-C 已 Closure；完整定向验证、审计和当前边界见 `handoffs/27-C-result-closure-renderer.md`。27-D 不得自动开始，须获用户另行授权。
+
+## 13. 27-D execution record
+
+- Base integration HEAD：`ccba097803a8e245d32263496c0d62d28584699f`；开始时工作树干净，27-A～27-C 均为当前分支已完成的祖先提交。
+- Combined Primary Audit 发现并关闭两个 P1：accepted 结果校验失败没有进入 27-B 当前运行期 orphaned recovery；V2 publication evidence / outcome 边界没有统一拒绝 fragment 与敏感 query URL。另关闭共享 Renderer 类型 owner 基线与发布档案时间/证据来源标签两个直接验收 P2。
+- Bounded Re-audit 发现 URL 修复把 `node:crypto` 间接带入 sandbox preload；已将安全发布 URL 规范化收敛为轻量单一 domain owner，并通过真实 bundled preload 回归。最终无未关闭 P0/P1 或直接违反本 Ticket acceptance 的 P2。
+- 27-A～27-C 定向矩阵、Ticket 09/22/26-F/26-H 相关回归、桌面 CI core、Renderer typecheck/lint/build 与受影响 Electron/browser 测试均通过；完整命令、finding 分类和边界见 `handoffs/27-D-result-closure-integration.md`。
+- Ticket 27 已 `COMPLETE`。没有执行真实外部操作；完成后停止，不自动进入其他 Ticket。

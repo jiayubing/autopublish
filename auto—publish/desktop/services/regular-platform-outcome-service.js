@@ -1,5 +1,7 @@
 "use strict";
 
+const domain = require("../../src/domain");
+
 const TRANSITION_METHODS = Object.freeze([
   "confirmRegularAccepted",
   "confirmRegularNotAccepted",
@@ -73,7 +75,11 @@ function createRegularPlatformOutcomeService(options) {
     )
       throw fail("REGULAR_ADAPTER_OUTCOME_INVALID");
     if (result.remoteId) observation.remoteId = result.remoteId;
-    if (result.remoteUrl) observation.remoteUrl = result.remoteUrl;
+    if (result.remoteUrl !== undefined && result.remoteUrl !== null) {
+      const remoteUrl = domain.normalizePublishedArticleUrl(result.remoteUrl);
+      if (!remoteUrl) throw fail("REGULAR_ADAPTER_OUTCOME_INVALID");
+      observation.remoteUrl = remoteUrl;
+    }
     if (
       result.status === "accepted" &&
       !observation.remoteId &&

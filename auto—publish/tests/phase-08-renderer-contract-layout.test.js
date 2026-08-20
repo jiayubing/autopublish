@@ -75,6 +75,8 @@ const domainTypeSymbols = {
     "PublicationHistoryRecord",
     "PublicationHistorySummary",
     "PublicationEvidenceV1",
+    "PublicationEvidenceV2",
+    "PublicationEvidence",
     "TerminalTargetV1",
     "ClosedTargetV1",
     "TombstoneIdentityV1",
@@ -180,6 +182,7 @@ const typeAliasSymbols = new Set([
   "PlatformProviderSource",
   "PlatformProviderStatus",
   "PublicationHistorySummaryStatus",
+  "PublicationEvidence",
   "PublicationRecordStatus",
   "RegularQueueItemStatus",
   "RuntimeCapabilityState",
@@ -228,7 +231,7 @@ test("renderer shared types have one domain owner and no legacy barrel", () => {
     }
   }
 
-  assert.equal(expectedOwners.size, 143);
+  assert.equal(expectedOwners.size, 145);
 
   const actualDeclarations = new Map();
   const expectedOwnerFiles = Object.keys(domainTypeSymbols)
@@ -260,7 +263,7 @@ test("renderer shared types have one domain owner and no legacy barrel", () => {
     }
   }
 
-  assert.equal(actualDeclarations.size, 143);
+  assert.equal(actualDeclarations.size, 145);
   assert.deepEqual(
     [...actualDeclarations.keys()].sort(),
     [...expectedOwners.keys()].sort(),

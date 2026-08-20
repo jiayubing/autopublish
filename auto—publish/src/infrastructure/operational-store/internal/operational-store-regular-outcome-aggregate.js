@@ -81,13 +81,11 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
       value.providerEventAt === undefined || value.providerEventAt === null
         ? null
         : safeTimestamp(value.providerEventAt, "REGULAR_OUTCOME_TIME_INVALID");
-    if (
-      value.remoteUrl !== undefined &&
-      value.remoteUrl !== null &&
-      (typeof value.remoteUrl !== "string" ||
-        value.remoteUrl.length > 2048 ||
-        !/^https:\/\//.test(value.remoteUrl))
-    )
+    const remoteUrl =
+      value.remoteUrl === undefined || value.remoteUrl === null
+        ? null
+        : domain.normalizePublishedArticleUrl(value.remoteUrl);
+    if (value.remoteUrl !== undefined && value.remoteUrl !== null && !remoteUrl)
       throw fail("REGULAR_OUTCOME_EVIDENCE_INVALID");
     const normalized = Object.freeze({
       status: value.status,
@@ -95,7 +93,7 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
       observedAt,
       providerEventAt,
       remoteId: value.remoteId || null,
-      remoteUrl: value.remoteUrl || null,
+      remoteUrl,
       ...(expectedStatus === "group_blocked"
         ? { articleRecoverable: value.articleRecoverable === true }
         : {}),
@@ -631,6 +629,12 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
     } catch (_) {
       throw fail("REGULAR_MANUAL_POSITIVE_EVIDENCE_REQUIRED");
     }
+    const remoteUrl =
+      value.remoteUrl === undefined || value.remoteUrl === null
+        ? null
+        : domain.normalizePublishedArticleUrl(value.remoteUrl);
+    if (value.remoteUrl !== undefined && value.remoteUrl !== null && !remoteUrl)
+      throw fail("REGULAR_MANUAL_POSITIVE_EVIDENCE_REQUIRED");
     const normalized = {
       observedAt: safeTimestamp(
         value.observedAt,
@@ -638,7 +642,7 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
       ),
       providerEventAt: null,
       remoteId,
-      remoteUrl: value.remoteUrl || null,
+      remoteUrl,
     };
     if (normalized.observedAt > stamp)
       throw fail("REGULAR_OUTCOME_TIME_INVALID");

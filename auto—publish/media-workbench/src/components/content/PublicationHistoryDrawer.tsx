@@ -92,8 +92,10 @@ function evidenceSourceLabel(evidence: PublicationEvidence | undefined): string 
   if (!evidence) return "执行记录";
   if (evidence.firstPublishedAtSource === "manual_positive_evidence_time")
     return "人工确认";
-  if (evidence.firstPublishedAtSource === "remote_response_time")
-    return "平台返回";
+  if (evidence.firstPublishedAtSource === "provider_event_time")
+    return "平台事件时间";
+  if (evidence.firstPublishedAtSource === "first_positive_observation_time")
+    return "平台接受结果";
   return "已归档发布证据";
 }
 
@@ -110,7 +112,7 @@ function publicationTime(
       value: formatBeijingTime(evidence.firstPublishedAt),
     };
   return {
-    label: "最近确认时间",
+    label: "最近更新时间",
     value: formatBeijingTime(record.updatedAt || record.createdAt),
   };
 }
