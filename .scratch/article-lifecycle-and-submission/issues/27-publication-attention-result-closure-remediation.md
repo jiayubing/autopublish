@@ -2,7 +2,7 @@
 
 **What to build:** 修复第三阶段审计确认的 publication evidence、明确失败投影、运行期 uncertain 收敛和 Renderer 结果工作台问题，使成功、明确失败和不确定结果都能稳定、幂等、可理解地形成用户闭环。
 
-**Status:** `PARTIAL`；27-A 已在本地完成实现、定向验证、Primary Audit、blocking remediation 与 Bounded Re-audit，evidence 见 `handoffs/27-A-publication-evidence-and-failure-read-model.md`。用户要求在此停止；27-B 尚未开始。
+**Status:** `PARTIAL`；27-A 已在本地完成实现、定向验证、Primary Audit、blocking remediation 与 Bounded Re-audit，evidence 见 `handoffs/27-A-publication-evidence-and-failure-read-model.md`。27-B 已完成 implementation、定向验证、Primary Audit、P1 remediation、Bounded Re-audit 与 commit，evidence 见 `handoffs/27-B-runtime-uncertain-recovery.md`；27-C 尚未开始。
 
 **Scheduling gate:** 基于 commit `7da7ec4` 的第三阶段只读审计结论启动。执行前必须重新确认当前 HEAD、clean/dirty 状态和本文件在 Wave Plan / `docs/WORK-INDEX.md` 中仍是唯一当前入口。27-A → 27-B → 27-C → 27-D 串行；不得并行修改 publication evidence、OperationalStore outcome/recovery 或共享 Renderer read model。
 
@@ -190,3 +190,11 @@
 - 完成范围：V2 regular publication evidence、canonical archive locator projection、统一明确失败安全 read model 及其 IPC/renderer 类型合同；没有 schema migration、真实外部操作或新的 publication/attention writer。
 - Primary Audit 的 blocking finding 已在同一工作包修复，并通过 Bounded Re-audit；完整 evidence、命令和工作树状态见 `handoffs/27-A-publication-evidence-and-failure-read-model.md`。
 - 27-A implementation 已提交到当前分支；尚未进行 merge/integration。27-B 为独立后续工作包，必须在用户另行授权后从新的 scheduling preflight 开始，不得自动进入。
+
+## 11. 27-B execution record
+
+- Base integration HEAD：`e03298ebc8a62377fbb93fb0b696971ecfe6e01d`；开始时工作树干净，27-A 是唯一已完成的前序串行项。
+- 只修改 regular queue group orchestrator 与其 composition：远端调用完成后的 outcome 本地事务失败时，编排器通过既有 `markOrphanedRegularAttemptUncertain` 窄恢复 capability 在当前进程收敛为 durable uncertain/manual-check。没有重放 adapter、替换 attempt identity、新增 status writer 或注入完整 `OperationalStore`。
+- 一次性 outcome transaction fault、恢复重复调用、Attention 投影、adapter 调用次数、持续恢复失败后的启动兜底均有行为回归。完整 evidence 见 `handoffs/27-B-runtime-uncertain-recovery.md`。
+- Primary Audit 发现并修复 `P1 INTRODUCED_BY_CHANGE`：递增时钟下的重复 orphaned recovery 可能因新 fingerprint 冲突。幂等判断已在 outcome aggregate 的 transaction 内收敛，Bounded Re-audit `PASS`。
+- Implementation commit：`6b5f53375279b3178f75b3f53f17f800581b5d8e`。变更已直接写入当前 integration branch `codex/第三阶段`，没有独立分支需要 merge；27-B 已 Closure，27-C 可在用户另行授权后开始。

@@ -16,9 +16,9 @@
 | Wave 12 / Ticket 18 | `COMPLETE` | 18-0～18-E、本地图片准备 integration closure、审计与 final clean-HEAD gate 已闭合。 |
 | Wave 13 / Ticket 19 | `PARTIAL` | 19-0～19-G 本地 implementation、审计、remediation 和最终本地验证已闭合；独立 HTTP multipart 带图真实验收仍需当次明确授权。 |
 | Ticket 20 / Ticket 21 | `PENDING` | 已移出当前 Wave，当前没有调度入口；未来是否实施必须建立独立计划，不从 Ticket 19 自动启动。 |
-| 阶段三审计整改 / Ticket 27 | `PARTIAL` | 27-A publication evidence/失败 read model 已完成本地实现、定向验证、Primary Audit、blocking remediation、Bounded Re-audit 与 handoff（`handoffs/27-A-publication-evidence-and-failure-read-model.md`）；用户要求停止，27-B 未开始。 |
+| 阶段三审计整改 / Ticket 27 | `PARTIAL` | 27-A publication evidence/失败 read model 已完成本地实现、定向验证、Primary Audit、blocking remediation、Bounded Re-audit 与 handoff；27-B 当前运行期 uncertain 恢复已完成 implementation、定向验证、Primary Audit、P1 remediation、Bounded Re-audit 与 commit（`6b5f533`；`handoffs/27-B-runtime-uncertain-recovery.md`）；27-C 尚未开始。 |
 
-**当前动作：** Ticket 27 状态 `PARTIAL`。27-A 已提交到当前本地分支；27-B 不是当前动作，只有用户另行授权后才能重新做 scheduling preflight 并开始。不得自动进入后续工作包，也不得恢复真实外部操作。小型、明确且与 Ticket 27 owner 不重叠的局部修改仍按 `docs/AI-ENTRY.md` 处理。
+**当前动作：** Ticket 27 状态 `PARTIAL`。27-B 已 Closure；27-C 满足前序 gate，但只有用户另行授权后才能重新做 scheduling preflight 并开始。不得自动进入后续工作包，也不得恢复真实外部操作。小型、明确且与 Ticket 27 owner 不重叠的局部修改仍按 `docs/AI-ENTRY.md` 处理。
 
 ## 2. 未闭合入口与停止边界
 
@@ -45,7 +45,7 @@
 
 - 当前合同：`issues/27-publication-attention-result-closure-remediation.md`；状态 `PARTIAL`；27-A evidence：`handoffs/27-A-publication-evidence-and-failure-read-model.md`。
 - 串行顺序：27-A publication evidence/失败 read model → 27-B 当前运行期 uncertain 恢复 → 27-C Attention/发布档案 Renderer → 27-D combined audit/closure。
-- 27-A 的本地 implementation、定向验证、Primary Audit、blocking remediation 与 Bounded Re-audit 已完成；按用户要求在此停止，27-B 尚未开始且不继承本次请求的自动执行授权。
+- 27-A 的本地 implementation、定向验证、Primary Audit、blocking remediation 与 Bounded Re-audit 已完成；27-B 的 implementation、定向验证、Primary Audit、P1 remediation、Bounded Re-audit 与 commit 已完成（`6b5f533`），27-C 未获本次自动执行授权。
 - 人工“确认已接受”不强制填写 URL；人工决定、绑定的 attempt/observation、明确的 manual positive evidence time 和 resolution fingerprint 构成成功证据。无链接时档案必须明确说明，不伪造远端定位信息。
 - 本 Ticket 不继承任何真实登录、发布、付费、取消、订单核对或生产迁移授权。
 
