@@ -89,7 +89,9 @@ test("two platform fixtures and the fake publisher validate the common contract 
     if (platformId === "lieju")
       assert.equal(loaded.legacyQueue, undefined);
     else assert.equal(typeof loaded.legacyQueue.publish, "function");
-    assert.equal(typeof loaded.regularSubmission.preparePlatformSubmission, "function");
+    if (platformId === "lieju")
+      assert.equal(typeof loaded.regularSubmission.preparePlatformSubmission, "function");
+    else assert.equal(loaded.regularSubmission, undefined);
   }
   assert.equal(
     parsePublishOutcome(

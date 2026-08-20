@@ -149,11 +149,11 @@ test("article management presents the current customer's Lieju profile", () => {
   assert.match(rendered, /保存到客户档案，不会修改任何文章标题或正文/);
 });
 
-test("account profile creation makes remote binding explicit before submission", () => {
+test("empty account profile selection makes remote binding explicit before submission", () => {
   const rendered = renderAccountProfileSelector().markup;
   assert.match(rendered, /显式绑定当前平台登录身份/);
   assert.match(rendered, /投稿时只核验已有绑定/);
   assert.match(rendered, /创建并绑定/);
-  assert.match(rendered, /删除档案/);
+  assert.doesNotMatch(rendered, /删除档案/);
   assert.doesNotMatch(rendered, /首次开始投稿时核验并关联当前登录账号/);
 });

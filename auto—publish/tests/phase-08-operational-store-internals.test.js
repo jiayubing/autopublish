@@ -39,6 +39,7 @@ const PUBLIC_SURFACE = [
   "databasePath",
   "createAccountProfile",
   "listAccountProfiles",
+  "deleteAccountProfile",
   "assertExecutableAccountProfile",
   "reservePublicationTarget",
   "commitRemoteOutcome",

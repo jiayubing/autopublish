@@ -15,6 +15,8 @@ const INVOKE_CHANNELS = [
   "platforms:get-queue",
   "platforms:list-account-profiles",
   "platforms:confirm-account-profile",
+  "platforms:bind-account-profile",
+  "platforms:delete-account-profile",
   "platforms:open-login",
   "platforms:check-login",
 ];
@@ -74,7 +76,7 @@ test("public preload platform login methods encode one exact platform identity",
 });
 
 test("platform domain exposes only queue, profile, and login contracts", () => {
-  assert.equal(platformContracts.length, 5);
+  assert.equal(platformContracts.length, INVOKE_CHANNELS.length);
   assert.deepEqual(
     platformContracts.map((contract) => contract.channel).sort(),
     [...INVOKE_CHANNELS].sort(),

@@ -6,7 +6,6 @@ function createPlatform(runtimeContext) {
   delete require.cache[adapterPath];
   const adapter = require("./adapter").createPlatformAdapter(runtimeContext);
   return {
-    regularSubmission: { preparePlatformSubmission: adapter.preparePlatformSubmission },
     legacyQueue: {
       scan: function () { return adapter.scanArticles(definition.scanDir); },
       parse: adapter.parseArticleFiles,

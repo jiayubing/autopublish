@@ -19,6 +19,9 @@ const { setDiagnosticReporter } = require("../src/diagnostics/diagnostic-produce
 const {
   createPlatformWorkbenchService,
 } = require("../desktop/services/platform-workbench-service");
+const {
+  createSubmissionTargetCatalog,
+} = require("../desktop/services/submission-target-catalog");
 
 function definition(id, overrides) {
   const base = {
@@ -231,12 +234,14 @@ test("built-in projections and enabled filtering match the frozen four-platform 
   }]));
   assert.deepEqual(matrix, {
     lieju: { displayName: "列举网", kind: "platform", regular: true, legacy: false, login: true, inspect: true, image: true },
-    toutiao: { displayName: "头条", kind: "platform", regular: true, legacy: true, login: true, inspect: true, image: false },
+    toutiao: { displayName: "头条", kind: "platform", regular: false, legacy: true, login: true, inspect: true, image: false },
     hepan: { displayName: "蓝色河畔", kind: "platform", regular: true, legacy: true, login: false, inspect: true, image: false },
     media: { displayName: "付费媒体", kind: "resource", regular: false, legacy: false, login: false, inspect: false, image: false },
   });
   assert.deepEqual(loadPlatforms({ platformIds: ["lieju"] }).map((platform) => platform.definition.id), ["lieju"]);
   assert.equal(Array.isArray(loadPlatforms({ platformIds: ["toutiao"] })[0].legacyQueue.scan()), true);
+  assert.equal(createSubmissionTargetCatalog().find("toutiao"), null);
+  assert.deepEqual(createSubmissionTargetCatalog().list().map((platform) => platform.id), ["lieju", "hepan"]);
 });
 
 test("built-in optional contributions stay platform-owned and exact", async () => {
