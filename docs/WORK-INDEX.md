@@ -4,7 +4,7 @@
 
 ## 当前执行入口
 
-- [Ticket 27：投稿结果闭环整改](../.scratch/article-lifecycle-and-submission/issues/27-publication-attention-result-closure-remediation.md) — `PARTIAL`，27-A 与 27-B 均已 Closure；27-B evidence 见 [handoff](../.scratch/article-lifecycle-and-submission/handoffs/27-B-runtime-uncertain-recovery.md)（`6b5f533`）。27-C 已满足前序 gate，但尚未获用户授权开始。
+- [Ticket 27：投稿结果闭环整改](../.scratch/article-lifecycle-and-submission/issues/27-publication-attention-result-closure-remediation.md) — `PARTIAL`，27-A～27-C 均已 Closure；27-C 的审计与 evidence 见 [handoff](../.scratch/article-lifecycle-and-submission/handoffs/27-C-result-closure-renderer.md)。27-D combined audit/closure 须获用户另行授权。
 
 本区只登记上述一个当前计划。人工确认发布不强制填写 URL；详细产品边界、工作包、gate 和验收由 Ticket 27 合同拥有。
 

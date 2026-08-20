@@ -2,7 +2,7 @@
 
 **What to build:** 修复第三阶段审计确认的 publication evidence、明确失败投影、运行期 uncertain 收敛和 Renderer 结果工作台问题，使成功、明确失败和不确定结果都能稳定、幂等、可理解地形成用户闭环。
 
-**Status:** `PARTIAL`；27-A 已在本地完成实现、定向验证、Primary Audit、blocking remediation 与 Bounded Re-audit，evidence 见 `handoffs/27-A-publication-evidence-and-failure-read-model.md`。27-B 已完成 implementation、定向验证、Primary Audit、P1 remediation、Bounded Re-audit 与 commit，evidence 见 `handoffs/27-B-runtime-uncertain-recovery.md`；27-C 尚未开始。
+**Status:** `PARTIAL`；27-A 已在本地完成实现、定向验证、Primary Audit、blocking remediation 与 Bounded Re-audit，evidence 见 `handoffs/27-A-publication-evidence-and-failure-read-model.md`。27-B 已完成 implementation、定向验证、Primary Audit、P1 remediation、Bounded Re-audit 与 commit，evidence 见 `handoffs/27-B-runtime-uncertain-recovery.md`；27-C 已完成 implementation、Primary Audit、P2 remediation、Bounded Re-audit 与 commit，evidence 见 `handoffs/27-C-result-closure-renderer.md`。27-D 必须在用户另行授权后开始。
 
 **Scheduling gate:** 基于 commit `7da7ec4` 的第三阶段只读审计结论启动。执行前必须重新确认当前 HEAD、clean/dirty 状态和本文件在 Wave Plan / `docs/WORK-INDEX.md` 中仍是唯一当前入口。27-A → 27-B → 27-C → 27-D 串行；不得并行修改 publication evidence、OperationalStore outcome/recovery 或共享 Renderer read model。
 
@@ -198,3 +198,12 @@
 - 一次性 outcome transaction fault、恢复重复调用、Attention 投影、adapter 调用次数、持续恢复失败后的启动兜底均有行为回归。完整 evidence 见 `handoffs/27-B-runtime-uncertain-recovery.md`。
 - Primary Audit 发现并修复 `P1 INTRODUCED_BY_CHANGE`：递增时钟下的重复 orphaned recovery 可能因新 fingerprint 冲突。幂等判断已在 outcome aggregate 的 transaction 内收敛，Bounded Re-audit `PASS`。
 - Implementation commit：`6b5f53375279b3178f75b3f53f17f800581b5d8e`。变更已直接写入当前 integration branch `codex/第三阶段`，没有独立分支需要 merge；27-B 已 Closure，27-C 可在用户另行授权后开始。
+
+## 12. 27-C execution record
+
+- Base integration HEAD：`6b45bbaccf34a25eefb10f9f66e49768880f3841`；开始时工作树干净，27-A、27-B 是唯一已完成的前序串行项。
+- 本次仅按 Manual Dispatch 完成 Renderer read model、稳定 navigation intent、定向行为测试和 Renderer 构建验证；没有改写 publication、Attention、recovery 或 Article Lifecycle 的事实 owner，也没有执行真实外部操作。
+- 发布档案首层按最终结果展示平台/账号、结果、确认或发布时间、远端 ID、可打开链接与证据来源；人工确认无链接明确显示“已人工确认发布，未记录可用链接”。投稿内容和技术核对信息移至独立折叠区。
+- Attention 使用受控原因摘要和明确的发生/下一步/完成后文案；普通不确定的确认文案说明永久发布与 URL 非必填。三个导航动作分别进入统一投稿入口、发布档案和文章编辑。
+- Primary Audit 发现并修复 `P2 INTRODUCED_BY_CHANGE`：Renderer 曾将带非敏感 query 的安全发布 URL 错误隐藏，和主进程链接服务合同不一致；现已使用同一安全规则，覆盖 safe-query 与 sensitive-query fixture，Bounded Re-audit `PASS`。
+- Implementation commit：`fdaa1154abe0e0c6367e5f61e30e39737c7e61bb`。27-C 已 Closure；完整定向验证、审计和当前边界见 `handoffs/27-C-result-closure-renderer.md`。27-D 不得自动开始，须获用户另行授权。
