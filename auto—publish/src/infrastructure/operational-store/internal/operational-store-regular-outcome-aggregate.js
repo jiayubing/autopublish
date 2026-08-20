@@ -287,8 +287,8 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
       : manualEvidence
         ? "manual_positive_evidence_time"
         : "first_positive_observation_time";
-    return domain.parsePublicationEvidenceV1({
-      version: 1,
+    return domain.parsePublicationEvidenceV2({
+      version: 2,
       articleIdentityV1: prepared.articleIdentityV1,
       customerSnapshotV1: display.customerSnapshotV1,
       contentAvailable: true,
@@ -307,6 +307,7 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
         decisionKind: prepared.decisionKind,
       },
       orderNumber: null,
+      remoteId: positive.remoteId || null,
       remoteUrl: positive.remoteUrl || null,
       missingReasons: [],
       safeEvidenceRefs: [
@@ -363,7 +364,7 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
         const evidence = publicationEvidence(row, acceptedObserved);
         const success = publicationSuccess.applyFirstPublicationSuccess({
           attemptId: id,
-          publicationEvidenceV1: evidence,
+          publicationEvidence: evidence,
           stamp,
         });
         if (
@@ -391,7 +392,7 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
       const evidence = publicationEvidence(row, observed);
       const success = publicationSuccess.applyFirstPublicationSuccess({
         attemptId: id,
-        publicationEvidenceV1: evidence,
+        publicationEvidence: evidence,
         stamp,
       });
       fault("after-publication-success", { attemptId: id });
@@ -611,16 +612,25 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
     if (
       !value ||
       Object.keys(value).some(
-        (key) => !["observedAt", "remoteUrl"].includes(key),
+        (key) => !["observedAt", "remoteId", "remoteUrl"].includes(key),
       )
     )
       throw fail("REGULAR_MANUAL_POSITIVE_EVIDENCE_REQUIRED");
+    let remoteId;
+    try {
+      remoteId = domain.parsePublicationRemoteId(
+        value.remoteId === undefined ? null : value.remoteId,
+      );
+    } catch (_) {
+      throw fail("REGULAR_MANUAL_POSITIVE_EVIDENCE_REQUIRED");
+    }
     const normalized = {
       observedAt: safeTimestamp(
         value.observedAt,
         "REGULAR_OUTCOME_TIME_INVALID",
       ),
       providerEventAt: null,
+      remoteId,
       remoteUrl: value.remoteUrl || null,
     };
     if (normalized.observedAt > stamp)
@@ -692,7 +702,7 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
       const evidence = publicationEvidence(row, observed, positive);
       const success = publicationSuccess.applyFirstPublicationSuccess({
         attemptId: id,
-        publicationEvidenceV1: evidence,
+        publicationEvidence: evidence,
         stamp,
       });
       fault("after-manual-publication-success", { attemptId: id });
@@ -830,8 +840,8 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
       activeTargetState: row.active_target_state || null,
       observation: (intent.detail && intent.detail.observation) || null,
       resolution: (intent.detail && intent.detail.resolution) || null,
-      publicationEvidenceV1: row.evidence_json
-        ? domain.parsePublicationEvidenceV1(fromText(row.evidence_json))
+      publicationEvidence: row.evidence_json
+        ? domain.parsePublicationEvidence(fromText(row.evidence_json))
         : null,
     });
   }

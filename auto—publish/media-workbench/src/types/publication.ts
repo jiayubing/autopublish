@@ -102,6 +102,12 @@ export interface PublicationEvidenceV1 {
   missingReasons: string[];
   safeEvidenceRefs: Array<{ kind: string; fingerprint: string }>;
 }
+export interface PublicationEvidenceV2
+  extends Omit<PublicationEvidenceV1, "version"> {
+  version: 2;
+  remoteId: string | null;
+}
+export type PublicationEvidence = PublicationEvidenceV1 | PublicationEvidenceV2;
 export interface TerminalTargetV1 {
   version: 1;
   articleIdentityV1: { version: 1; clientId: string; articleId: string };
@@ -155,7 +161,15 @@ export interface DeletionTransactionIdentityV1 {
 export interface PublicationArchiveEntry {
   publicationId: string;
   attemptId: string;
-  publicationEvidenceV1: PublicationEvidenceV1;
+  publicationEvidence: PublicationEvidence;
+  publicationLocator: {
+    remoteId: string | null;
+    remoteUrl: string | null;
+    displayStatus:
+      | "MANUAL_CONFIRMED_NO_LOCATOR"
+      | "RECORDED"
+      | "UNKNOWN_LEGACY";
+  };
   terminalTargetV1: TerminalTargetV1;
 }
 
@@ -610,6 +624,7 @@ export interface ArticleAttentionItem {
     jobId?: string | null;
     status?: string | null;
     reasonCode?: string | null;
+    reasonSummary?: string | null;
     updatedAt?: string | null;
     articleStatus?: string | null;
   };
@@ -631,6 +646,7 @@ export interface ArticleAttentionItem {
   transactionId?: string | null;
   status?: string | null;
   reasonCode?: string | null;
+  reasonSummary?: string | null;
   pairState?: string | null;
   recommendedAction?: string | null;
   allowedActions: string[];

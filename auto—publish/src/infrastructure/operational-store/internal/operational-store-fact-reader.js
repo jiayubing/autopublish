@@ -63,7 +63,7 @@ function createOperationalStoreFactReader(context) {
         let successEvidence = null;
         if (row.success_evidence) {
           try {
-            successEvidence = domain.parsePublicationEvidenceV1(
+            successEvidence = domain.parsePublicationEvidence(
               fromText(row.success_evidence),
               { allowLegacy: row.migration_success === 1 },
             );
@@ -71,6 +71,15 @@ function createOperationalStoreFactReader(context) {
             throw fail("PUBLICATION_SUCCESS_EVIDENCE_INVALID");
           }
         }
+        const intent = fromText(row.intent_payload) || {};
+        const failure =
+          row.status === "failed"
+            ? domain.projectRegularPublicationFailure(
+                intent.detail && intent.detail.observation
+                  ? intent.detail.observation.code
+                  : null,
+              )
+            : null;
         return Object.freeze({
           publicationId: row.publication_id,
           articleId: row.article_id,
@@ -86,10 +95,11 @@ function createOperationalStoreFactReader(context) {
             : {}),
           target,
           attemptId: row.attempt_id || null,
-          remoteId:
-            successEvidence && successEvidence.orderNumber
-              ? successEvidence.orderNumber
-              : null,
+          remoteId: successEvidence
+            ? successEvidence.version === 2
+              ? successEvidence.remoteId
+              : successEvidence.orderNumber
+            : null,
           remoteUrl:
             domain.normalizePublishedArticleUrl(
               successEvidence
@@ -99,6 +109,7 @@ function createOperationalStoreFactReader(context) {
           createdAt: row.created_at,
           updatedAt: row.updated_at,
           finishedAt: row.finished_at || null,
+          ...(failure || {}),
         });
       });
     const submissionItems = db
@@ -121,6 +132,9 @@ function createOperationalStoreFactReader(context) {
             payload && typeof payload.outcomeStatus === "string"
               ? payload.outcomeStatus
               : null,
+          ...(row.status === "failed"
+            ? domain.projectRegularPublicationFailure(payload.reasonCode)
+            : {}),
           queueGroupId: row.queue_group_id || null,
           position: row.position || null,
           platformId: row.platform_id || null,

@@ -450,7 +450,7 @@ test("public regular submission preserves text-only evidence, first success, arc
   const completed = completeRegular(harness, publishedItem, "published");
   assert.equal(completed.accepted.status, "published");
   assert.equal(completed.accepted.firstWins, true);
-  assert.deepEqual(completed.accepted.publicationEvidenceV1.imageSummaryV1, {
+  assert.deepEqual(completed.accepted.publicationEvidence.imageSummaryV1, {
     deliveryMode: "text_only",
     images: [],
     decisionKind: "initial",
@@ -461,10 +461,10 @@ test("public regular submission preserves text-only evidence, first success, arc
       articleIds: [published.id],
     });
   assert.equal(archives.length, 1);
-  assert.equal(archives[0].publicationEvidenceV1.title, published.title);
-  assert.equal(archives[0].publicationEvidenceV1.body, published.content);
+  assert.equal(archives[0].publicationEvidence.title, published.title);
+  assert.equal(archives[0].publicationEvidence.body, published.content);
   assert.equal(
-    archives[0].publicationEvidenceV1.remoteUrl,
+    archives[0].publicationEvidence.remoteUrl,
     "https://synthetic.example/published",
   );
 
@@ -496,7 +496,7 @@ test("public regular submission preserves text-only evidence, first success, arc
   assert.equal(
     harness.transitionPorts.publishedArchiveQueries.listPublishedArchives({
       articleIds: [published.id],
-    })[0].publicationEvidenceV1.body,
+    })[0].publicationEvidence.body,
     published.content,
   );
 

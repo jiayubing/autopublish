@@ -148,7 +148,7 @@ export default function GeneratedArticlesView({
   const publicationArchivesByArticle = useMemo(() => {
     const grouped = new Map<string, PublicationArchiveEntry[]>();
     publishedArchives.forEach((archive) => {
-      const articleId = archive.publicationEvidenceV1.articleIdentityV1.articleId;
+      const articleId = archive.publicationEvidence.articleIdentityV1.articleId;
       grouped.set(articleId, [
         ...(grouped.get(articleId) || []),
         archive,

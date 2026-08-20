@@ -49,8 +49,8 @@ function createOperationalStorePublicationArchiveQuery(
   }
 
   function archiveFor(success) {
-    const evidence = domain.parsePublicationEvidenceV1(
-      success.publicationEvidenceV1,
+    const evidence = domain.parsePublicationEvidence(
+      success.publicationEvidence,
       { allowLegacy: true },
     );
     let articleId;
@@ -87,7 +87,8 @@ function createOperationalStorePublicationArchiveQuery(
     return Object.freeze({
       publicationId,
       attemptId: success.attemptId,
-      publicationEvidenceV1: evidence,
+      publicationEvidence: evidence,
+      publicationLocator: domain.projectPublicationLocator(evidence),
       terminalTargetV1,
     });
   }

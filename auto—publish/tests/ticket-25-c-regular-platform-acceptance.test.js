@@ -758,15 +758,15 @@ test("25-C uncertain freezes the article, forbids replay, and exposes only the t
       (evidence) => evidence.attemptId === accepted.items[0].attemptId,
     );
     assert.equal(
-      acceptedSnapshot.publicationEvidenceV1.contentFingerprint,
+      acceptedSnapshot.publicationEvidence.contentFingerprint,
       acceptedEvidence.contentFingerprint,
     );
     assert.equal(
-      acceptedSnapshot.publicationEvidenceV1.imageSummaryV1.deliveryMode,
+      acceptedSnapshot.publicationEvidence.imageSummaryV1.deliveryMode,
       "text_only",
     );
     assert.deepEqual(
-      acceptedSnapshot.publicationEvidenceV1.imageSummaryV1.images,
+      acceptedSnapshot.publicationEvidence.imageSummaryV1.images,
       [],
     );
     assert.throws(

@@ -97,6 +97,7 @@ const attentionSafeFacts = exactObject({
   jobId: optionalNullableText(160),
   status: optionalNullableText(80),
   reasonCode: optionalNullableText(128),
+  reasonSummary: optionalNullableText(1000),
   updatedAt: optionalNullableText(64),
   articleStatus: optionalNullableText(80),
 });
@@ -129,6 +130,7 @@ const articleAttentionItem = exactObject({
   transactionId: optionalNullableText(200),
   status: optionalNullableText(80),
   reasonCode: optionalNullableText(128),
+  reasonSummary: optionalNullableText(1000),
   pairState: optionalNullableText(80),
   recommendedAction: optionalField(nullableField(attentionActions)),
   allowedActions: arrayField(attentionActions, { max: 32 }),
@@ -232,6 +234,7 @@ function projectArticleAttentionItem(input) {
     "transactionId",
     "status",
     "reasonCode",
+    "reasonSummary",
     "pairState",
     "recommendedAction",
     "allowedActions",

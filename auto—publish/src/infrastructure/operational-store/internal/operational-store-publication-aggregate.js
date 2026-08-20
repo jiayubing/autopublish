@@ -616,9 +616,32 @@ function createPublicationAggregate(context, activeTarget) {
             );
             const evidence = db
               .prepare(
-                "SELECT remote_id,remote_url,created_at FROM remote_evidence WHERE attempt_id=? ORDER BY created_at DESC LIMIT 1",
+                "SELECT remote_id,remote_url,evidence_json,created_at FROM remote_evidence WHERE attempt_id=? ORDER BY created_at DESC LIMIT 1",
               )
               .get(attempt.attempt_id);
+            const successEvidence = db
+              .prepare(
+                "SELECT evidence_json FROM remote_evidence WHERE attempt_id=? AND remote_id=?",
+              )
+              .get(
+                attempt.attempt_id,
+                `publication-success:${attempt.attempt_id}`,
+              );
+            const publicationEvidence = successEvidence
+              ? domain.parsePublicationEvidence(
+                  fromText(successEvidence.evidence_json),
+                  { allowLegacy: true },
+                )
+              : null;
+            const intent = fromText(attempt.intent_payload) || {};
+            const failure =
+              attempt.status === "failed"
+                ? domain.projectRegularPublicationFailure(
+                    intent.detail && intent.detail.observation
+                      ? intent.detail.observation.code
+                      : null,
+                  )
+                : null;
             return Object.freeze({
               attemptId: attempt.attempt_id,
               status: cancellation ? "cancelled" : attempt.status,
@@ -626,14 +649,20 @@ function createPublicationAggregate(context, activeTarget) {
               finishedAt: attempt.finished_at,
               createdAt: attempt.created_at,
               updatedAt: attempt.finished_at || attempt.created_at,
-              remoteId:
-                evidence &&
-                !String(evidence.remote_id || "").startsWith(
-                  "publication-success:",
-                )
+              remoteId: publicationEvidence
+                ? publicationEvidence.version === 2
+                  ? publicationEvidence.remoteId
+                  : publicationEvidence.orderNumber
+                : evidence &&
+                    !String(evidence.remote_id || "").startsWith(
+                      "publication-success:",
+                    )
                   ? evidence.remote_id
                   : null,
-              remoteUrl: (evidence && evidence.remote_url) || null,
+              remoteUrl: publicationEvidence
+                ? publicationEvidence.remoteUrl
+                : (evidence && evidence.remote_url) || null,
+              ...(failure || {}),
               ...(cancellation
                 ? {
                     reasonCode:
@@ -658,6 +687,12 @@ function createPublicationAggregate(context, activeTarget) {
             ? {
                 reasonCode:
                   latestAttempt.reasonCode || "REGULAR_QUEUE_ITEM_CANCELLED",
+              }
+            : {}),
+          ...(latestAttempt && latestAttempt.reasonCode
+            ? {
+                reasonCode: latestAttempt.reasonCode,
+                reasonSummary: latestAttempt.reasonSummary || null,
               }
             : {}),
           createdAt: record.created_at,

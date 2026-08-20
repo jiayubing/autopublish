@@ -43,6 +43,10 @@ function safeRecord(record, scopedClientId) {
   }
   const attempts = Array.isArray(value.attempts)
     ? value.attempts.map(function (attempt) {
+        const failure =
+          attempt.status === "failed"
+            ? domain.projectRegularPublicationFailure(attempt.reasonCode)
+            : null;
         return {
           attemptId:
             typeof attempt.attemptId === "string" ? attempt.attemptId : null,
@@ -57,8 +61,7 @@ function safeRecord(record, scopedClientId) {
             typeof attempt.remoteUrl === "string" ? attempt.remoteUrl : null,
           errorCode:
             typeof attempt.errorCode === "string" ? attempt.errorCode : null,
-          reasonCode:
-            typeof attempt.reasonCode === "string" ? attempt.reasonCode : null,
+          ...(failure || {}),
         };
       })
     : [];
@@ -80,6 +83,7 @@ function safeRecord(record, scopedClientId) {
     remoteUrl: latest && latest.remoteUrl,
     errorCode: latest && latest.errorCode,
     reasonCode: latest && latest.reasonCode,
+    reasonSummary: latest && latest.reasonSummary,
   };
 }
 
@@ -113,7 +117,8 @@ function safePublishedArchive(entry, scopedClientId) {
   const fields = [
     "publicationId",
     "attemptId",
-    "publicationEvidenceV1",
+    "publicationEvidence",
+    "publicationLocator",
     "terminalTargetV1",
   ];
   if (
@@ -134,9 +139,10 @@ function safePublishedArchive(entry, scopedClientId) {
   let evidence;
   let terminal;
   try {
-    evidence = domain.parsePublicationEvidenceV1(value.publicationEvidenceV1, {
+    evidence = domain.parsePublicationEvidence(value.publicationEvidence, {
       allowLegacy: true,
     });
+    domain.parsePublicationLocator(value.publicationLocator);
     terminal = domain.parseTerminalTargetV1(value.terminalTargetV1);
   } catch (_) {
     throw snapshotError("ARTICLE_MANAGEMENT_PUBLICATION_ARCHIVE_INVALID");
@@ -154,7 +160,8 @@ function safePublishedArchive(entry, scopedClientId) {
   return {
     publicationId,
     attemptId,
-    publicationEvidenceV1: evidence,
+    publicationEvidence: evidence,
+    publicationLocator: domain.projectPublicationLocator(evidence),
     terminalTargetV1: terminal,
   };
 }
@@ -239,9 +246,9 @@ function createArticleManagementSnapshot(options) {
         .filter(function (entry) {
           return (
             entry &&
-            entry.publicationEvidenceV1 &&
+            entry.publicationEvidence &&
             articleIds.includes(
-              entry.publicationEvidenceV1.articleIdentityV1.articleId,
+              entry.publicationEvidence.articleIdentityV1.articleId,
             )
           );
         })

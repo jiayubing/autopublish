@@ -373,6 +373,14 @@ function createRecoveryAggregate(context, activeTarget) {
             return null;
           const resolutionAttention =
             projectPaidOrderResolutionAttention(intent);
+          const failure =
+            row.status === "failed"
+              ? domain.projectRegularPublicationFailure(
+                  intent.detail && intent.detail.observation
+                    ? intent.detail.observation.code
+                    : null,
+                )
+              : null;
           return Object.freeze({
             publicationId: row.publication_id,
             articleId: row.article_id,
@@ -386,6 +394,7 @@ function createRecoveryAggregate(context, activeTarget) {
             platformId: /^platform:([^:]+):/.exec(row.target_key)?.[1] || null,
             accountProfileId:
               /^platform:[^:]+:account:(.+)$/.exec(row.target_key)?.[1] || null,
+            ...(failure || {}),
             ...resolutionAttention,
           });
         })

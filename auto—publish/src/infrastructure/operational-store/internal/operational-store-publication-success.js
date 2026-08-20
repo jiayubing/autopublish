@@ -8,7 +8,7 @@ function createPublicationSuccessPrimitive(context) {
 
   function parseEvidence(value, allowLegacy) {
     try {
-      return domain.parsePublicationEvidenceV1(value, {
+      return domain.parsePublicationEvidence(value, {
         allowLegacy: allowLegacy === true,
       });
     } catch (_) {
@@ -98,7 +98,7 @@ function createPublicationSuccessPrimitive(context) {
       )
       .get(articleId);
     if (!existing) return null;
-    const publicationEvidenceV1 = parseEvidence(
+    const publicationEvidence = parseEvidence(
       fromText(existing.evidence_json),
     );
     return Object.freeze({
@@ -107,7 +107,7 @@ function createPublicationSuccessPrimitive(context) {
       status: "published",
       idempotent: true,
       firstWins: true,
-      publicationEvidenceV1,
+      publicationEvidence,
     });
   }
 
@@ -116,9 +116,7 @@ function createPublicationSuccessPrimitive(context) {
     const attemptId = domain.AttemptId.serialize(
       domain.AttemptId.parse(value.attemptId),
     );
-    const evidence = domain.parsePublicationEvidenceV1(
-      value.publicationEvidenceV1,
-    );
+    const evidence = domain.parsePublicationEvidence(value.publicationEvidence);
     const row = db
       .prepare(
         "SELECT a.publication_id,a.status attempt_status,p.article_id,p.status publication_status FROM publication_attempts a JOIN publication_records p ON p.publication_id=a.publication_id WHERE a.attempt_id=?",
@@ -177,7 +175,7 @@ function createPublicationSuccessPrimitive(context) {
       status: "published",
       idempotent: false,
       firstWins: true,
-      publicationEvidenceV1: evidence,
+      publicationEvidence: evidence,
     });
   }
 
@@ -203,7 +201,7 @@ function createPublicationSuccessPrimitive(context) {
           articleId: row.article_id,
           status: "published",
           firstWins: true,
-          publicationEvidenceV1: parseEvidence(
+          publicationEvidence: parseEvidence(
             fromText(row.evidence_json),
             options && options.allowLegacy === true,
           ),

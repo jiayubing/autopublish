@@ -458,6 +458,7 @@ function createArticleAttentionQuery(options) {
       jobId: safeText(value.jobId, 160),
       status: safeText(value.status || value.statusCode, 80),
       reasonCode: safeText(value.reasonCode || value.errorCode, 128),
+      reasonSummary: safeText(value.reasonSummary, 1000),
       updatedAt: safeText(value.updatedAt || value.observedAt, 64),
       articleStatus: safeText(normalizedFacts.articleStatus, 80),
     };
@@ -483,6 +484,7 @@ function createArticleAttentionQuery(options) {
       transactionId: safeText(value.transactionId || value.id, 160),
       status: safeText(value.status, 80),
       reasonCode: safeText(value.reasonCode || value.errorCode, 128),
+      reasonSummary: safeText(value.reasonSummary, 1000),
       orderId: safeText(value.orderId || value.orderNid, 160),
       remoteId: safeText(value.remoteId, 512),
       remoteUrl: safeText(value.remoteUrl, 2048),

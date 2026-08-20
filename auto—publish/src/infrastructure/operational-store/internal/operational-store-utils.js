@@ -61,6 +61,7 @@ function safeOperationalPayload(value) {
     "filename",
     "outcomeStatus",
     "quotedPrice",
+    "reasonCode",
     "resourceNameSnapshot",
     "sourcePlatformId",
     "systemSubmissionCode",

@@ -88,7 +88,7 @@ function sandboxManagementSnapshot() {
       {
         publicationId: "publication-sandbox",
         attemptId: "attempt-sandbox",
-        publicationEvidenceV1: {
+        publicationEvidence: {
           version: 1,
           articleIdentityV1,
           customerSnapshotV1: {
@@ -122,6 +122,11 @@ function sandboxManagementSnapshot() {
           safeEvidenceRefs: [
             { kind: "PREPARED_SUBMISSION", fingerprint: "a".repeat(64) },
           ],
+        },
+        publicationLocator: {
+          remoteId: null,
+          remoteUrl: "https://publisher.example/article-published",
+          displayStatus: "RECORDED",
         },
         terminalTargetV1: {
           version: 1,
@@ -270,7 +275,7 @@ suite("production preload sandbox boundary", { concurrency: false }, () => {
             ok: result?.ok,
             errorCode: result?.error?.code || null,
             remoteUrl:
-              result?.data?.publishedArchives?.[0]?.publicationEvidenceV1
+              result?.data?.publishedArchives?.[0]?.publicationEvidence
                 ?.remoteUrl || null,
             stage: result?.data?.workflowItems?.find(
               (item) => item.articleId === "article-published",
@@ -543,7 +548,7 @@ suite("production preload sandbox boundary", { concurrency: false }, () => {
             return (
               result?.ok === true &&
               result.data?.articles?.[0]?.researchSnapshots?.[0]?.references?.[0]?.snippet?.length === 10000 &&
-              result.data?.publishedArchives?.[0]?.publicationEvidenceV1
+              result.data?.publishedArchives?.[0]?.publicationEvidence
                 ?.remoteUrl ===
                 "https://publisher.example/article-published" &&
               result.data?.workflowItems?.find(

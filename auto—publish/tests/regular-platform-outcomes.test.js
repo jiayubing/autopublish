@@ -25,7 +25,9 @@ const {
 } = require("../src/infrastructure/operational-store/operational-store");
 
 function fixture(options) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "regular-outcome-09-"));
+  const root =
+    (options && options.workspaceRoot) ||
+    fs.mkdtempSync(path.join(os.tmpdir(), "regular-outcome-09-"));
   const transitionPorts = {};
   const store = createOperationalStore({
     workspaceRoot: root,
@@ -90,10 +92,12 @@ function fixture(options) {
     orderTransitions: transitionPorts.orderObservationTransitions,
     queueTransitions: transitionPorts.regularQueueTransitions,
     groupTransitions: transitionPorts.regularQueueGroupTransitions,
+    publishedArchiveQueries: transitionPorts.publishedArchiveQueries,
     prepare,
     close() {
       store.close();
-      fs.rmSync(root, { recursive: true, force: true });
+      if (!options || options.removeWorkspaceRoot !== false)
+        fs.rmSync(root, { recursive: true, force: true });
     },
   };
 }
@@ -172,9 +176,9 @@ test("regular accepted and paid status 2 share one first-wins publication snapsh
         orderSnapshotFingerprint: context.orderSnapshotFingerprint,
       }),
     });
-    assert.equal(regular.publicationEvidenceV1.resultCode, "REGULAR_ACCEPTED");
+    assert.equal(regular.publicationEvidence.resultCode, "REGULAR_ACCEPTED");
     assert.equal(
-      paid.publication.publicationEvidenceV1.resultCode,
+      paid.publication.publicationEvidence.resultCode,
       "REGULAR_ACCEPTED",
     );
     const check = new DatabaseSync(f.store.databasePath);
@@ -271,8 +275,8 @@ test("a paid anomaly closes on its own status 2 after regular global publication
       }),
     });
 
-    assert.equal(regular.publicationEvidenceV1.resultCode, "REGULAR_ACCEPTED");
-    assert.equal(paid.publication.publicationEvidenceV1.resultCode, "REGULAR_ACCEPTED");
+    assert.equal(regular.publicationEvidence.resultCode, "REGULAR_ACCEPTED");
+    assert.equal(paid.publication.publicationEvidence.resultCode, "REGULAR_ACCEPTED");
     const view = f.orderTransitions.listOrderObservationViews()[0];
     assert.equal(view.statusCode, "2");
     assert.equal(view.anomaly, null);
@@ -344,18 +348,18 @@ test("accepted atomically publishes from frozen evidence and is idempotent first
     assert.equal(snapshot.publicationStatus, "published");
     assert.equal(snapshot.itemStatus, "completed");
     assert.equal(snapshot.queueGroupId, null);
-    assert.equal(snapshot.publicationEvidenceV1.title, prepared.evidence.title);
+    assert.equal(snapshot.publicationEvidence.title, prepared.evidence.title);
     assert.equal(
-      snapshot.publicationEvidenceV1.submittedAt,
+      snapshot.publicationEvidence.submittedAt,
       "2026-08-07T01:00:00.000Z",
     );
     assert.equal(
-      snapshot.publicationEvidenceV1.firstPublishedAtSource,
+      snapshot.publicationEvidence.firstPublishedAtSource,
       "provider_event_time",
     );
     assert.equal(snapshot.observation.remoteId, "hepan-article-1");
     assert.equal(
-      snapshot.publicationEvidenceV1.safeEvidenceRefs.find(
+      snapshot.publicationEvidence.safeEvidenceRefs.find(
         (evidence) => evidence.kind === "REGULAR_ACCEPTED_OBSERVATION",
       ).fingerprint,
       snapshot.observation.fingerprint,
@@ -387,6 +391,69 @@ test("accepted atomically publishes from frozen evidence and is idempotent first
   }
 });
 
+test("regular accepted preserves ID-only, URL-only, and combined remote locators", () => {
+  const f = fixture();
+  try {
+    const idOnly = f.prepare("article-id-only");
+    const idResult = f.transitions.recordRegularAccepted({
+      regularPublicationAttemptId: idOnly.claim.regularPublicationAttemptId,
+      observation: {
+        status: "accepted",
+        code: "HEPAN_ACCEPTED",
+        remoteId: "hepan:id-only",
+      },
+    });
+    assert.equal(idResult.publicationEvidence.version, 2);
+    assert.equal(idResult.publicationEvidence.remoteId, "hepan:id-only");
+    assert.equal(idResult.publicationEvidence.remoteUrl, null);
+    const idArchive = f.publishedArchiveQueries.listPublishedArchives({
+      articleIds: ["article-id-only"],
+    })[0];
+    assert.deepEqual(idArchive.publicationLocator, {
+      remoteId: "hepan:id-only",
+      remoteUrl: null,
+      displayStatus: "RECORDED",
+    });
+    assert.equal(
+      f.store.listArticleLifecycleFacts({ articleIds: ["article-id-only"] })
+        .publications[0].remoteId,
+      "hepan:id-only",
+    );
+
+    const urlOnly = f.prepare("article-url-only");
+    const urlResult = f.transitions.recordRegularAccepted({
+      regularPublicationAttemptId: urlOnly.claim.regularPublicationAttemptId,
+      observation: {
+        status: "accepted",
+        code: "HEPAN_ACCEPTED",
+        remoteUrl: "https://example.test/article/url-only",
+      },
+    });
+    assert.equal(urlResult.publicationEvidence.remoteId, null);
+    assert.equal(
+      urlResult.publicationEvidence.remoteUrl,
+      "https://example.test/article/url-only",
+    );
+    const combined = f.prepare("article-combined-locator");
+    const combinedResult = f.transitions.recordRegularAccepted({
+      regularPublicationAttemptId: combined.claim.regularPublicationAttemptId,
+      observation: {
+        status: "accepted",
+        code: "HEPAN_ACCEPTED",
+        remoteId: "hepan:combined",
+        remoteUrl: "https://example.test/article/combined",
+      },
+    });
+    assert.equal(combinedResult.publicationEvidence.remoteId, "hepan:combined");
+    assert.equal(
+      combinedResult.publicationEvidence.remoteUrl,
+      "https://example.test/article/combined",
+    );
+  } finally {
+    f.close();
+  }
+});
+
 test("accepted transition fails closed when the adapter supplies no remote identity", () => {
   const f = fixture();
   try {
@@ -409,7 +476,7 @@ test("accepted transition fails closed when the adapter supplies no remote ident
     });
     assert.equal(snapshot.publicationStatus, "remote_started");
     assert.equal(snapshot.observation, null);
-    assert.equal(snapshot.publicationEvidenceV1, null);
+    assert.equal(snapshot.publicationEvidence, null);
   } finally {
     f.close();
   }
@@ -444,20 +511,42 @@ test("other attempt evidence cannot affect repeated or concurrent publication su
     for (const result of [repeated, ...concurrent]) {
       assert.equal(result.idempotent, true);
       assert.deepEqual(
-        result.publicationEvidenceV1,
-        first.publicationEvidenceV1,
+        result.publicationEvidence,
+        first.publicationEvidence,
       );
       assert.deepEqual(
-        domain.parsePublicationEvidenceV1(result.publicationEvidenceV1),
-        first.publicationEvidenceV1,
+        domain.parsePublicationEvidence(result.publicationEvidence),
+        first.publicationEvidence,
       );
     }
+    const check = new DatabaseSync(f.store.databasePath);
+    check
+      .prepare(
+        "INSERT INTO remote_evidence VALUES(?,?,?,?,?,?)",
+      )
+      .run(
+        "evidence-after-publication-success",
+        attemptId,
+        "unrelated-evidence-after-publication-success",
+        "https://example.test/unrelated",
+        "{}",
+        "2026-08-07T01:00:03.000Z",
+      );
+    check.close();
+    const record = f.store.listPublicationRecords({
+      articleIds: ["article-success-with-order-evidence"],
+    })[0];
+    assert.equal(record.attempts[0].remoteId, "hepan-article-1");
+    assert.equal(
+      record.attempts[0].remoteUrl,
+      "https://example.test/article/1",
+    );
     assert.equal(f.store.listRemoteOrders().length, 1);
     assert.deepEqual(
       f.transitions.getRegularOutcomeSnapshot({
         regularPublicationAttemptId: attemptId,
-      }).publicationEvidenceV1,
-      first.publicationEvidenceV1,
+      }).publicationEvidence,
+      first.publicationEvidence,
     );
   } finally {
     f.close();
@@ -501,8 +590,17 @@ test("uncertain pauses only its group and supports the two bound resolutions", (
       regularPublicationAttemptId: prepared.claim.regularPublicationAttemptId,
     });
     assert.equal(
-      final.publicationEvidenceV1.firstPublishedAtSource,
+      final.publicationEvidence.firstPublishedAtSource,
       "manual_positive_evidence_time",
+    );
+    assert.deepEqual(
+      f.publishedArchiveQueries.listPublishedArchives({ articleIds: ["article-1"] })[0]
+        .publicationLocator,
+      {
+        remoteId: null,
+        remoteUrl: null,
+        displayStatus: "MANUAL_CONFIRMED_NO_LOCATOR",
+      },
     );
     assert.throws(
       () =>
@@ -516,6 +614,144 @@ test("uncertain pauses only its group and supports the two bound resolutions", (
           },
         }),
       { code: "REGULAR_UNCERTAIN_RESOLUTION_OPPOSITE" },
+    );
+  } finally {
+    f.close();
+  }
+});
+
+test("manual acceptance without a locator closes attention permanently across restart", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "regular-outcome-restart-"));
+  let first;
+  let reopened;
+  try {
+    first = fixture({ workspaceRoot: root, removeWorkspaceRoot: false });
+    const prepared = first.prepare("article-manual-no-locator-restart");
+    first.transitions.recordRegularUncertain({
+      regularPublicationAttemptId: prepared.claim.regularPublicationAttemptId,
+      observation: { status: "uncertain", code: "REMOTE_RESULT_UNKNOWN" },
+    });
+    const confirmation = first.transitions.prepareRegularUncertainResolution({
+      regularPublicationAttemptId: prepared.claim.regularPublicationAttemptId,
+    });
+    first.transitions.confirmRegularAccepted({
+      regularPublicationAttemptId: prepared.claim.regularPublicationAttemptId,
+      confirmationToken: confirmation.confirmationToken,
+      manualPositiveEvidence: { observedAt: "2026-08-07T01:00:00.000Z" },
+    });
+    assert.equal(
+      createArticleAttentionQuery({ operationalStore: first.store }).list().items
+        .length,
+      0,
+    );
+    first.close();
+    first = null;
+
+    reopened = fixture({ workspaceRoot: root, removeWorkspaceRoot: false });
+    assert.equal(
+      createArticleAttentionQuery({ operationalStore: reopened.store }).list()
+        .items.length,
+      0,
+    );
+  } finally {
+    if (first) first.close();
+    if (reopened) reopened.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("manual acceptance preserves optional remote ID and URL evidence", () => {
+  const f = fixture();
+  try {
+    const prepared = f.prepare("article-manual-optional-locator");
+    f.transitions.recordRegularUncertain({
+      regularPublicationAttemptId: prepared.claim.regularPublicationAttemptId,
+      observation: { status: "uncertain", code: "REMOTE_RESULT_UNKNOWN" },
+    });
+    const confirmation = f.transitions.prepareRegularUncertainResolution({
+      regularPublicationAttemptId: prepared.claim.regularPublicationAttemptId,
+    });
+    f.transitions.confirmRegularAccepted({
+      regularPublicationAttemptId: prepared.claim.regularPublicationAttemptId,
+      confirmationToken: confirmation.confirmationToken,
+      manualPositiveEvidence: {
+        observedAt: "2026-08-07T01:00:00.000Z",
+        remoteId: "manual:article-1",
+        remoteUrl: "https://example.test/manual-article-1",
+      },
+    });
+    assert.deepEqual(
+      f.publishedArchiveQueries.listPublishedArchives({
+        articleIds: ["article-manual-optional-locator"],
+      })[0].publicationLocator,
+      {
+        remoteId: "manual:article-1",
+        remoteUrl: "https://example.test/manual-article-1",
+        displayStatus: "RECORDED",
+      },
+    );
+  } finally {
+    f.close();
+  }
+});
+
+test("explicit failure projects one safe reason into publication, lifecycle, and attention", () => {
+  const f = fixture();
+  try {
+    const prepared = f.prepare("article-explicit-failure");
+    f.transitions.recordRegularArticleRejected({
+      regularPublicationAttemptId: prepared.claim.regularPublicationAttemptId,
+      observation: {
+        status: "article_rejected",
+        code: "CONTENT_REJECTED",
+      },
+    });
+    const record = f.store.listPublicationRecords({
+      articleIds: ["article-explicit-failure"],
+    })[0];
+    assert.deepEqual(
+      {
+        reasonCode: record.reasonCode,
+        reasonSummary: record.reasonSummary,
+        attemptReasonCode: record.attempts[0].reasonCode,
+        attemptReasonSummary: record.attempts[0].reasonSummary,
+      },
+      {
+        reasonCode: "CONTENT_REJECTED",
+        reasonSummary: "平台明确拒绝了这篇文章，请检查内容后从投稿入口重新发起。",
+        attemptReasonCode: "CONTENT_REJECTED",
+        attemptReasonSummary: "平台明确拒绝了这篇文章，请检查内容后从投稿入口重新发起。",
+      },
+    );
+    const facts = f.store.listArticleLifecycleFacts({
+      articleIds: ["article-explicit-failure"],
+    });
+    assert.equal(facts.publications[0].reasonCode, "CONTENT_REJECTED");
+    assert.equal(
+      facts.submissionItems[0].reasonSummary,
+      "平台明确拒绝了这篇文章，请检查内容后从投稿入口重新发起。",
+    );
+    const attention = createArticleAttentionQuery({
+      operationalStore: f.store,
+      readers: {
+        getArticle() {
+          return {
+            status: "generated",
+            title: "明确失败文章",
+            content: "正文",
+          };
+        },
+      },
+    }).list();
+    assert.deepEqual(
+      {
+        reasonCode: attention.items[0].reasonCode,
+        reasonSummary: attention.items[0].reasonSummary,
+      },
+      {
+        reasonCode: "CONTENT_REJECTED",
+        reasonSummary: "平台明确拒绝了这篇文章，请检查内容后从投稿入口重新发起。",
+      },
     );
   } finally {
     f.close();
@@ -787,7 +1023,7 @@ test("fault after the unique success primitive rolls the whole outcome back", ()
     });
     assert.equal(snapshot.publicationStatus, "remote_started");
     assert.equal(snapshot.itemStatus, "remote_started");
-    assert.equal(snapshot.publicationEvidenceV1, null);
+    assert.equal(snapshot.publicationEvidence, null);
   } finally {
     f.close();
   }
@@ -993,7 +1229,7 @@ test("explicit pre-submit article rejection closes, while recoverable group bloc
       const snapshot = f.transitions.getRegularOutcomeSnapshot({
         regularPublicationAttemptId: claim.regularPublicationAttemptId,
       });
-      assert.equal(snapshot.publicationEvidenceV1, null);
+      assert.equal(snapshot.publicationEvidence, null);
       if (status === "group_blocked") {
         assert.equal(snapshot.publicationStatus, "queued");
         assert.equal(snapshot.attemptStatus, "queued");
@@ -1187,7 +1423,7 @@ test("article rejection continues the same FIFO group while accepted closes the 
     assert.equal(
       f.transitions.getRegularOutcomeSnapshot({
         regularPublicationAttemptId: second.attemptId,
-      }).publicationEvidenceV1.firstPublishedAtSource,
+      }).publicationEvidence.firstPublishedAtSource,
       "first_positive_observation_time",
     );
     const group = f.groupTransitions.listRegularQueueGroupSnapshots({})[0];
@@ -1443,7 +1679,7 @@ test("legacy publication success entry point is closed without changing canonica
       regularPublicationAttemptId: attemptId,
     });
     assert.equal(beforeAccepted.publicationStatus, "remote_started");
-    assert.equal(beforeAccepted.publicationEvidenceV1, null);
+    assert.equal(beforeAccepted.publicationEvidence, null);
     const acceptedResult = f.transitions.recordRegularAccepted(
       accepted(attemptId),
     );
@@ -1455,11 +1691,11 @@ test("legacy publication success entry point is closed without changing canonica
     });
     assert.equal(snapshot.publicationStatus, "published");
     assert.deepEqual(
-      snapshot.publicationEvidenceV1,
-      acceptedResult.publicationEvidenceV1,
+      snapshot.publicationEvidence,
+      acceptedResult.publicationEvidence,
     );
     assert.equal(
-      snapshot.publicationEvidenceV1.safeEvidenceRefs.filter(
+      snapshot.publicationEvidence.safeEvidenceRefs.filter(
         (evidence) => evidence.kind === "REGULAR_ACCEPTED_OBSERVATION",
       ).length,
       1,

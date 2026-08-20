@@ -6,7 +6,7 @@
 
 ## 1. 当前状态
 
-整理日期：2026-08-18。本文状态来自整理前实时计划；每次执行仍必须用当前源码、测试、schema 和 Git 状态重新验证，本文不能覆盖可执行事实。
+整理日期：2026-08-20。本文状态来自整理前实时计划；每次执行仍必须用当前源码、测试、schema 和 Git 状态重新验证，本文不能覆盖可执行事实。
 
 | 范围 | 状态 | 当前事实与剩余 gate |
 | --- | --- | --- |
@@ -16,8 +16,9 @@
 | Wave 12 / Ticket 18 | `COMPLETE` | 18-0～18-E、本地图片准备 integration closure、审计与 final clean-HEAD gate 已闭合。 |
 | Wave 13 / Ticket 19 | `PARTIAL` | 19-0～19-G 本地 implementation、审计、remediation 和最终本地验证已闭合；独立 HTTP multipart 带图真实验收仍需当次明确授权。 |
 | Ticket 20 / Ticket 21 | `PENDING` | 已移出当前 Wave，当前没有调度入口；未来是否实施必须建立独立计划，不从 Ticket 19 自动启动。 |
+| 阶段三审计整改 / Ticket 27 | `PARTIAL` | 27-A publication evidence/失败 read model 已完成本地实现、定向验证、Primary Audit、blocking remediation、Bounded Re-audit 与 handoff（`handoffs/27-A-publication-evidence-and-failure-read-model.md`）；用户要求停止，27-B 未开始。 |
 
-**当前动作：** 没有已登记的本地持续实施入口。新复杂任务先在 `../../docs/WORK-INDEX.md` 登记唯一当前计划；小型局部任务按 `docs/AI-ENTRY.md` 直接读取相关源码和测试。上述 `PARTIAL` 不代表可以自动恢复真实外部操作或旧 UI 验收路线。
+**当前动作：** Ticket 27 状态 `PARTIAL`。27-A 已提交到当前本地分支；27-B 不是当前动作，只有用户另行授权后才能重新做 scheduling preflight 并开始。不得自动进入后续工作包，也不得恢复真实外部操作。小型、明确且与 Ticket 27 owner 不重叠的局部修改仍按 `docs/AI-ENTRY.md` 处理。
 
 ## 2. 未闭合入口与停止边界
 
@@ -39,6 +40,14 @@
 - 当前合同：`issues/19-lieju-image-publication-adapter.md`；本地 closure evidence：`handoffs/19-G-lieju-http-integration-closure.md`。
 - 唯一未闭合入口是用户单独授权后的列举网真实 HTTP multipart 带图验收。
 - 探索授权、历史发布授权或其他平台授权都不能代替本次验收授权；Ticket 20/21 保持 deferred。
+
+### 2.4 阶段三审计整改 / Ticket 27
+
+- 当前合同：`issues/27-publication-attention-result-closure-remediation.md`；状态 `PARTIAL`；27-A evidence：`handoffs/27-A-publication-evidence-and-failure-read-model.md`。
+- 串行顺序：27-A publication evidence/失败 read model → 27-B 当前运行期 uncertain 恢复 → 27-C Attention/发布档案 Renderer → 27-D combined audit/closure。
+- 27-A 的本地 implementation、定向验证、Primary Audit、blocking remediation 与 Bounded Re-audit 已完成；按用户要求在此停止，27-B 尚未开始且不继承本次请求的自动执行授权。
+- 人工“确认已接受”不强制填写 URL；人工决定、绑定的 attempt/observation、明确的 manual positive evidence time 和 resolution fingerprint 构成成功证据。无链接时档案必须明确说明，不伪造远端定位信息。
+- 本 Ticket 不继承任何真实登录、发布、付费、取消、订单核对或生产迁移授权。
 
 ## 3. 已完成基线与历史位置
 

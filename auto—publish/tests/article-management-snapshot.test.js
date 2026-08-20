@@ -219,6 +219,54 @@ describe("article management snapshot", function () {
     assert.equal(snapshot.workflowByArticle["article-a"].stage, "published");
   });
 
+  it("projects the controlled publication failure summary instead of a provider message", async function () {
+    const service = createArticleManagementSnapshot({
+      getRevision: () => 1,
+      listArticles: () => [
+        { id: "article-a", clientId: "client-a", title: "A", content: "正文" },
+      ],
+      listTrash: () => [],
+      listBatches: () => [],
+      listPublications: () => [
+        {
+          publicationId: "publication-a",
+          clientId: "client-a",
+          articleId: "article-a",
+          status: "failed",
+          attempts: [
+            {
+              attemptId: "attempt-a",
+              status: "failed",
+              reasonCode: "CONTENT_REJECTED",
+              reasonSummary: "vendor response body must not cross the boundary",
+            },
+          ],
+        },
+      ],
+      listAttention: () => ({
+        revision: 1,
+        items: [],
+        counts: { total: 0, actionable: 0 },
+      }),
+      submissionPlatformDirectory: { list: () => [] },
+    });
+
+    const snapshot = await service.get({ clientId: "client-a" });
+    assert.deepEqual(snapshot.publicationRecords[0].attempts[0], {
+      attemptId: "attempt-a",
+      status: "failed",
+      createdAt: null,
+      updatedAt: null,
+      startedAt: null,
+      finishedAt: null,
+      remoteId: null,
+      remoteUrl: null,
+      errorCode: null,
+      reasonCode: "CONTENT_REJECTED",
+      reasonSummary: "平台明确拒绝了这篇文章，请检查内容后从投稿入口重新发起。",
+    });
+  });
+
   it("does not fall back to the legacy order display reader when lifecycle facts are unavailable", async function () {
     let legacyReads = 0;
     const service = createArticleManagementSnapshot({

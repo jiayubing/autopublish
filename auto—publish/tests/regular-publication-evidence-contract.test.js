@@ -63,6 +63,70 @@ test("publicationEvidenceV1 accepts the exact online regular success contract", 
   assert.deepEqual(domain.parsePublicationEvidenceV1(evidence()), evidence());
 });
 
+test("publicationEvidenceV2 preserves a safe optional remote ID without changing V1", () => {
+  const idOnly = {
+    ...evidence(),
+    version: 2,
+    remoteId: "hepan:article-1",
+    remoteUrl: null,
+  };
+  assert.deepEqual(domain.parsePublicationEvidenceV2(idOnly), idOnly);
+  assert.deepEqual(domain.projectPublicationLocator(idOnly), {
+    remoteId: "hepan:article-1",
+    remoteUrl: null,
+    displayStatus: "RECORDED",
+  });
+  assert.throws(
+    () => domain.parsePublicationEvidenceV1({ ...evidence(), remoteId: "x" }),
+    { code: "DTO_UNKNOWN_FIELD" },
+  );
+  assert.throws(
+    () =>
+      domain.parsePublicationEvidenceV2({
+        ...idOnly,
+        remoteId: "unsafe\nremote-id",
+      }),
+    { code: "PUBLICATION_EVIDENCE_V2_REMOTE_ID_INVALID" },
+  );
+  assert.throws(
+    () =>
+      domain.parsePublicationEvidenceV2({
+        ...idOnly,
+        resultCode: "PAID_PUBLISHED",
+      }),
+    { code: "PUBLICATION_EVIDENCE_V2_RESULT_INVALID" },
+  );
+});
+
+test("publication evidence treats a manual accepted result without a locator explicitly", () => {
+  const manual = {
+    ...evidence(),
+    version: 2,
+    remoteId: null,
+    remoteUrl: null,
+    firstPublishedAtSource: "manual_positive_evidence_time",
+    safeEvidenceRefs: [
+      { kind: "PREPARED_SUBMISSION", fingerprint },
+      { kind: "MANUAL_POSITIVE_EVIDENCE", fingerprint: "b".repeat(64) },
+    ],
+  };
+  assert.equal(domain.parsePublicationEvidence(manual).version, 2);
+  assert.deepEqual(domain.projectPublicationLocator(manual), {
+    remoteId: null,
+    remoteUrl: null,
+    displayStatus: "MANUAL_CONFIRMED_NO_LOCATOR",
+  });
+  assert.throws(
+    () =>
+      domain.parsePublicationLocator({
+        remoteId: "legacy:unexpected",
+        remoteUrl: null,
+        displayStatus: "UNKNOWN_LEGACY",
+      }),
+    { code: "PUBLICATION_LOCATOR_INVALID" },
+  );
+});
+
 test("nested snapshots are closed and reject sensitive or unknown fields", () => {
   assert.throws(
     () =>

@@ -351,7 +351,7 @@ function createOrderObservationAggregate(
       existingSuccess ||
       publicationSuccess.applyFirstPublicationSuccess({
         attemptId: row.attempt_id,
-        publicationEvidenceV1: publicationEvidence(
+        publicationEvidence: publicationEvidence(
           row,
           observation,
           manual,

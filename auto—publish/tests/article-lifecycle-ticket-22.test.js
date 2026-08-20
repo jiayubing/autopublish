@@ -320,7 +320,7 @@ function regularPublishedFixture(articleId = "article-22-regular") {
     store,
     transitionPorts,
     articleId,
-    evidence: success.publicationEvidenceV1,
+    evidence: success.publicationEvidence,
     close() {
       store.close();
       fs.rmSync(root, { recursive: true, force: true });
@@ -435,7 +435,7 @@ function paidPublishedFixture(articleId = "article-22-paid") {
     transitionPorts,
     articleId,
     orderId,
-    evidence: result.publication.publicationEvidenceV1,
+    evidence: result.publication.publicationEvidence,
     close() {
       store.close();
       fs.rmSync(root, { recursive: true, force: true });
@@ -463,7 +463,7 @@ test("published archive query is read-only and covers regular accepted and paid 
     afterDb.close();
     assert.equal(after, before);
     assert.equal(archives.length, 1);
-    assert.equal(archives[0].publicationEvidenceV1.body, fixture.evidence.body);
+    assert.equal(archives[0].publicationEvidence.body, fixture.evidence.body);
     assert.equal(archives[0].terminalTargetV1.terminalKind, "PUBLISHED");
     assert.equal(archives[0].terminalTargetV1.attemptId, archives[0].attemptId);
   }
@@ -497,7 +497,7 @@ test("published archive remains immutable after a later paid aftercare observati
   const after = fixture.transitionPorts.publishedArchiveQueries.listPublishedArchives({
     articleIds: [fixture.articleId],
   })[0];
-  assert.deepEqual(after.publicationEvidenceV1, before.publicationEvidenceV1);
+  assert.deepEqual(after.publicationEvidence, before.publicationEvidence);
   assert.deepEqual(after.terminalTargetV1, before.terminalTargetV1);
 });
 
@@ -594,7 +594,7 @@ test("legacy unavailable evidence stays null and never falls back to current art
     }),
     publishedArchiveQueries: transitionPorts.publishedArchiveQueries,
   }).get({ clientId: "client-22" });
-  const archived = snapshot.publishedArchives[0].publicationEvidenceV1;
+  const archived = snapshot.publishedArchives[0].publicationEvidence;
   assert.equal(archived.body, null);
   assert.equal(archived.title, null);
   assert.equal(archived.firstPublishedAt, null);
@@ -634,7 +634,8 @@ test("typed article-management archive field delegates V1 validation and rejects
   const archive = {
     publicationId: "publication-22",
     attemptId: "attempt-22",
-    publicationEvidenceV1: evidence,
+    publicationEvidence: evidence,
+    publicationLocator: domain.projectPublicationLocator(evidence),
     terminalTargetV1: domain.parseTerminalTargetV1(terminalFixture()),
   };
   const data = {
@@ -648,7 +649,7 @@ test("typed article-management archive field delegates V1 validation and rejects
     workflowItems: [],
   };
   const encoded = registry.success(contract, data);
-  assert.equal(encoded.data.publishedArchives[0].publicationEvidenceV1.body, "实际投稿正文");
+  assert.equal(encoded.data.publishedArchives[0].publicationEvidence.body, "实际投稿正文");
   assert.throws(
     () => registry.success(contract, Object.assign({}, data, {
       publishedArchives: [Object.assign({}, archive, { token: "secret" })],
@@ -658,7 +659,7 @@ test("typed article-management archive field delegates V1 validation and rejects
   assert.throws(
     () => registry.success(contract, Object.assign({}, data, {
       publishedArchives: [Object.assign({}, archive, {
-        publicationEvidenceV1: Object.assign({}, evidence, { workspacePath: "F:\\private" }),
+        publicationEvidence: Object.assign({}, evidence, { workspacePath: "F:\\private" }),
       })],
     })),
     { code: "IPC_RESULT_INVALID" },

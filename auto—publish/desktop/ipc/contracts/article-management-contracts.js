@@ -8,7 +8,8 @@ const {
   optionalField,
 } = require("./registry");
 const {
-  parsePublicationEvidenceV1,
+  parsePublicationEvidence,
+  parsePublicationLocator,
 } = require("../../../src/domain/publication-evidence-contract");
 const {
   parseTerminalTargetV1,
@@ -44,6 +45,7 @@ const publicationAttempt = exactObject({
   remoteUrl: nullableField(text(4096)),
   errorCode: nullableField(text(128)),
   reasonCode: nullableField(text(128)),
+  reasonSummary: nullableField(text(1000)),
 });
 const publicationRecord = exactObject({
   publicationId: id,
@@ -62,9 +64,13 @@ const publicationRecord = exactObject({
   remoteUrl: optionalField(nullableField(text(4096))),
   errorCode: optionalField(nullableField(text(128))),
   reasonCode: optionalField(nullableField(text(128))),
+  reasonSummary: optionalField(nullableField(text(1000))),
 });
 const publicationEvidenceField = customField(function (value) {
-  return parsePublicationEvidenceV1(value, { allowLegacy: true });
+  return parsePublicationEvidence(value, { allowLegacy: true });
+});
+const publicationLocatorField = customField(function (value) {
+  return parsePublicationLocator(value);
 });
 const terminalTargetField = customField(function (value) {
   return parseTerminalTargetV1(value);
@@ -72,7 +78,8 @@ const terminalTargetField = customField(function (value) {
 const publishedArchive = exactObject({
   publicationId: id,
   attemptId: id,
-  publicationEvidenceV1: publicationEvidenceField,
+  publicationEvidence: publicationEvidenceField,
+  publicationLocator: publicationLocatorField,
   terminalTargetV1: terminalTargetField,
 });
 const submissionPlatform = exactObject({
@@ -252,6 +259,7 @@ function projectPublicationRecord(value) {
     "remoteUrl",
     "errorCode",
     "reasonCode",
+    "reasonSummary",
   ]);
   output.attempts = Array.isArray(value && value.attempts)
     ? value.attempts.map((item) =>
@@ -266,6 +274,7 @@ function projectPublicationRecord(value) {
           "remoteUrl",
           "errorCode",
           "reasonCode",
+          "reasonSummary",
         ]),
       )
     : [];
@@ -276,7 +285,8 @@ function projectPublishedArchive(value) {
   return projectFields(value, [
     "publicationId",
     "attemptId",
-    "publicationEvidenceV1",
+    "publicationEvidence",
+    "publicationLocator",
     "terminalTargetV1",
   ]);
 }

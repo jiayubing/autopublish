@@ -5,6 +5,7 @@ const error = require("./safe-operational-error");
 const dto = require("./dto");
 const regularPublication = require("./regular-publication-contract");
 const publicationEvidence = require("./publication-evidence-contract");
+const publicationFailureReadModel = require("./publication-failure-read-model");
 const paidMediaOrder = require("./paid-media-order-contract");
 const orderObservation = require("./order-observation-contract");
 const articleLifecycleTerminal = require("./article-lifecycle-terminal-contract");
@@ -17,6 +18,7 @@ module.exports = Object.freeze({
   ...dto,
   ...regularPublication,
   ...publicationEvidence,
+  ...publicationFailureReadModel,
   ...paidMediaOrder,
   ...orderObservation,
   ...articleLifecycleTerminal,

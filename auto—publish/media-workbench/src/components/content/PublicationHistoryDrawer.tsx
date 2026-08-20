@@ -3,7 +3,7 @@ import { AlertTriangle, ExternalLink, X } from "lucide-react";
 import { formatBeijingTime } from "../../time-format";
 import type {
   PublicationArchiveEntry,
-  PublicationEvidenceV1,
+  PublicationEvidence,
   PublicationHistoryRecord,
   PublicationHistorySummary,
 } from "../../types/publication";
@@ -50,7 +50,7 @@ function missingReasonLabel(reason: string | undefined): string {
 }
 
 function evidenceTime(
-  evidence: PublicationEvidenceV1,
+  evidence: PublicationEvidence,
   value: string | null,
   missingReason: string,
 ): string {
@@ -59,7 +59,7 @@ function evidenceTime(
   return missingReasonLabel(reason || missingReason);
 }
 
-function targetLabel(evidence: PublicationEvidenceV1): string {
+function targetLabel(evidence: PublicationEvidence): string {
   const target = evidence.targetSnapshotV1;
   if (target.kind === "platform")
     return `${target.platformName} · ${target.accountLabel}`;
@@ -159,11 +159,14 @@ export default function PublicationHistoryDrawer({
             const archive = archives.find(
               (entry) => entry.publicationId === record.publicationId,
             );
-            const evidence = archive?.publicationEvidenceV1;
+            const evidence = archive?.publicationEvidence;
             const remoteUrl = safeRemoteUrl(
               evidence?.remoteUrl || attempt.remoteUrl,
             );
-            const remoteIdentity = evidence?.orderNumber || attempt.remoteId;
+            const remoteIdentity =
+              (evidence && evidence.version === 2 ? evidence.remoteId : null) ||
+              evidence?.orderNumber ||
+              attempt.remoteId;
             const uncertain = record.status === "uncertain";
             return (
               <section

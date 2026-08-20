@@ -9,6 +9,7 @@ const {
 } = require("./regular-publication-contract");
 
 const FINGERPRINT = /^[a-f0-9]{64}$/;
+const REMOTE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/u;
 const MISSING_REASONS = new Set([
   "LEGACY_SUBMISSION_CONTENT_UNAVAILABLE",
   "LEGACY_SUBMITTED_AT_UNAVAILABLE",
@@ -180,6 +181,13 @@ function remoteUrl(value) {
   } catch (_) {
     return invalid();
   }
+}
+
+function remoteId(value) {
+  if (value === null) return null;
+  if (typeof value !== "string" || !REMOTE_ID.test(value))
+    invalid("PUBLICATION_EVIDENCE_V2_REMOTE_ID_INVALID");
+  return value;
 }
 
 function parseSafeEvidenceRef(input) {
@@ -367,9 +375,125 @@ function parsePublicationEvidenceV1(input, options) {
   });
 }
 
+function parsePublicationEvidenceV2(input, options) {
+  exact(input, [
+    "version",
+    "articleIdentityV1",
+    "customerSnapshotV1",
+    "contentAvailable",
+    "title",
+    "body",
+    "contentFingerprint",
+    "targetSnapshotV1",
+    "resultCode",
+    "submittedAt",
+    "submittedAtSource",
+    "firstPublishedAt",
+    "firstPublishedAtSource",
+    "imageSummaryV1",
+    "orderNumber",
+    "remoteId",
+    "remoteUrl",
+    "missingReasons",
+    "safeEvidenceRefs",
+  ]);
+  if (input.version !== 2) invalid("PUBLICATION_EVIDENCE_V2_INVALID");
+  if (input.resultCode !== "REGULAR_ACCEPTED")
+    invalid("PUBLICATION_EVIDENCE_V2_RESULT_INVALID");
+  const { remoteId: inputRemoteId, ...v1Input } = input;
+  const parsedV1 = parsePublicationEvidenceV1(
+    { ...v1Input, version: 1 },
+    options,
+  );
+  // V1 is deliberately closed.  V2 is the only online contract that can
+  // preserve a regular platform's display-only remote identifier.
+  const parsedRemoteId = remoteId(inputRemoteId);
+  const manualPositive =
+    parsedV1.firstPublishedAtSource === "manual_positive_evidence_time" &&
+    parsedV1.safeEvidenceRefs.some(
+      (reference) => reference.kind === "MANUAL_POSITIVE_EVIDENCE",
+    );
+  if (
+    parsedV1.resultCode === "REGULAR_ACCEPTED" &&
+    !parsedRemoteId &&
+    !parsedV1.remoteUrl &&
+    !manualPositive
+  )
+    invalid("REGULAR_ACCEPTED_REMOTE_IDENTITY_REQUIRED");
+  return Object.freeze({
+    ...parsedV1,
+    version: 2,
+    remoteId: parsedRemoteId,
+  });
+}
+
+function parsePublicationEvidence(input, options) {
+  if (!input || typeof input !== "object" || Array.isArray(input))
+    invalid("PUBLICATION_EVIDENCE_INVALID");
+  if (input.version === 1) return parsePublicationEvidenceV1(input, options);
+  if (input.version === 2) return parsePublicationEvidenceV2(input, options);
+  return invalid("PUBLICATION_EVIDENCE_VERSION_UNSUPPORTED");
+}
+
+function projectPublicationLocator(input) {
+  const evidence = parsePublicationEvidence(input, { allowLegacy: true });
+  const remoteId = evidence.version === 2 ? evidence.remoteId : null;
+  const manualWithoutLocator =
+    evidence.resultCode === "REGULAR_ACCEPTED" &&
+    evidence.firstPublishedAtSource === "manual_positive_evidence_time" &&
+    evidence.safeEvidenceRefs.some(
+      (reference) => reference.kind === "MANUAL_POSITIVE_EVIDENCE",
+    ) &&
+    !remoteId &&
+    !evidence.remoteUrl;
+  return Object.freeze({
+    remoteId,
+    remoteUrl: evidence.remoteUrl,
+    displayStatus: manualWithoutLocator
+      ? "MANUAL_CONFIRMED_NO_LOCATOR"
+      : remoteId || evidence.remoteUrl
+        ? "RECORDED"
+        : "UNKNOWN_LEGACY",
+  });
+}
+
+function parsePublicationLocator(input) {
+  exact(input, ["remoteId", "remoteUrl", "displayStatus"]);
+  if (
+    ![
+      "MANUAL_CONFIRMED_NO_LOCATOR",
+      "RECORDED",
+      "UNKNOWN_LEGACY",
+    ].includes(input.displayStatus)
+  )
+    invalid("PUBLICATION_LOCATOR_INVALID");
+  const parsedRemoteId = remoteId(input.remoteId);
+  const parsedRemoteUrl = remoteUrl(input.remoteUrl);
+  if (
+    (input.displayStatus === "RECORDED" &&
+      !parsedRemoteId &&
+      !parsedRemoteUrl) ||
+    (input.displayStatus === "MANUAL_CONFIRMED_NO_LOCATOR" &&
+      (parsedRemoteId || parsedRemoteUrl)) ||
+    (input.displayStatus === "UNKNOWN_LEGACY" &&
+      (parsedRemoteId || parsedRemoteUrl))
+  )
+    invalid("PUBLICATION_LOCATOR_INVALID");
+  return Object.freeze({
+    remoteId: parsedRemoteId,
+    remoteUrl: parsedRemoteUrl,
+    displayStatus: input.displayStatus,
+  });
+}
+
 module.exports = Object.freeze({
   parseCustomerSnapshotV1,
   parseImageSummaryV1,
+  parsePublicationEvidence,
   parsePublicationEvidenceV1,
+  parsePublicationEvidenceV2,
+  parsePublicationLocator,
+  parsePublicationRemoteId: remoteId,
   parseTargetSnapshotV1,
+  projectPublicationLocator,
 });
