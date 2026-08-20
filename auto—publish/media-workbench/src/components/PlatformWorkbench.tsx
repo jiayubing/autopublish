@@ -5,6 +5,7 @@ import { useAttentionFeature } from "../features/attention/use-attention-feature
 import { useConfirmation } from "../confirmation";
 import type { ContentWorkbenchFeature } from "../features/content/use-content-workbench-feature";
 import type { ArticleAttentionItem } from "../types/publication";
+import type { ArticleLibraryNavigationIntent } from "../article-library-navigation";
 import type { useSubmissionCenterFeature } from "../features/submission-center/use-submission-center-feature";
 import RegularQueueGroupsPanel from "./RegularQueueGroupsPanel";
 import PaidMediaWorkbench from "./PaidMediaWorkbench";
@@ -17,10 +18,7 @@ interface PlatformWorkbenchProps {
   content: ContentWorkbenchFeature;
   submissionCenter: ReturnType<typeof useSubmissionCenterFeature>;
   initialSection?: SubmissionCenterSection;
-  onOpenArticleLibrary: (intent?: {
-    articleId?: string;
-    clientId?: string;
-  }) => void;
+  onOpenArticleLibrary: (intent?: ArticleLibraryNavigationIntent) => void;
   onOpenOrders: () => void;
 }
 
@@ -164,7 +162,7 @@ export default function PlatformWorkbench({
     }
   }
 
-  function openAttentionTarget(item: ArticleAttentionItem) {
+  function openPublication(item: ArticleAttentionItem) {
     if (item.kind === "paid_order_creation_uncertain" || item.kind === "order_status_anomaly") {
       setAttentionDetail(item);
       return;
@@ -173,10 +171,35 @@ export default function PlatformWorkbench({
       onOpenArticleLibrary({
         clientId: item.clientId || clientId || undefined,
         articleId: item.articleId,
+        destination: "publication",
       });
       return;
     }
     setAttentionDetail(item);
+  }
+
+  function openArticle(item: ArticleAttentionItem) {
+    if (!item.articleId) {
+      setAttentionDetail(item);
+      return;
+    }
+    onOpenArticleLibrary({
+      clientId: item.clientId || clientId || undefined,
+      articleId: item.articleId,
+      destination: "article",
+    });
+  }
+
+  function openSubmission(item: ArticleAttentionItem) {
+    if (!item.articleId) {
+      setAttentionDetail(item);
+      return;
+    }
+    onOpenArticleLibrary({
+      clientId: item.clientId || clientId || undefined,
+      articleId: item.articleId,
+      destination: "submission",
+    });
   }
 
   return (
@@ -327,15 +350,10 @@ export default function PlatformWorkbench({
                 item.targetLabel || "未指定目标 / 账号未记录"
               }
               clientLabel={clientLabel}
-              onOpenPublication={openAttentionTarget}
-              onOpenArticleLibrary={(item) =>
-                onOpenArticleLibrary({
-                  clientId: item.clientId || clientId || undefined,
-                  articleId: item.articleId || undefined,
-                })
-              }
+              onOpenPublication={openPublication}
+              onOpenArticleLibrary={openSubmission}
               onInspect={setAttentionDetail}
-              onOpenArticle={openAttentionTarget}
+              onOpenArticle={openArticle}
               onAttentionAction={(item, action) => setAttentionDetail(item)}
             />
             <button

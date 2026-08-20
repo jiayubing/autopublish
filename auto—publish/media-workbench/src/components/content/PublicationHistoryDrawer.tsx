@@ -12,7 +12,6 @@ import {
   latestPublicationAttempt,
   publicationRecordStatusLabel,
   publicationStatusLabel,
-  publicationTargetLabel,
 } from "../../publication-status";
 
 interface PublicationHistoryDrawerProps {
@@ -27,13 +26,18 @@ interface PublicationHistoryDrawerProps {
   onOpenAttention?: () => void;
 }
 
+const SENSITIVE_QUERY_NAME =
+  /^(?:access_token|api[_-]?key|apikey|auth(?:orization)?|cookie|password|refresh_token|secret|session(?:id)?|token)$/iu;
+
 function safeRemoteUrl(value: string | null | undefined): string | null {
-  if (!value) return null;
+  if (typeof value !== "string" || !value || value.length > 2048) return null;
   try {
     const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:"
-      ? url.toString()
-      : null;
+    if (url.protocol !== "https:" || url.username || url.password || url.hash)
+      return null;
+    for (const name of url.searchParams.keys())
+      if (SENSITIVE_QUERY_NAME.test(name)) return null;
+    return url.href;
   } catch {
     return null;
   }
@@ -59,12 +63,67 @@ function evidenceTime(
   return missingReasonLabel(reason || missingReason);
 }
 
-function targetLabel(evidence: PublicationEvidence): string {
-  const target = evidence.targetSnapshotV1;
-  if (target.kind === "platform")
-    return `${target.platformName} · ${target.accountLabel}`;
-  if (target.kind === "media") return target.mediaName;
-  return `${target.platformName} · 历史账号不可得`;
+function targetFacts(
+  record: PublicationHistoryRecord,
+  evidence: PublicationEvidence | undefined,
+): { platform: string; account: string | null } {
+  if (evidence?.targetSnapshotV1.kind === "platform") {
+    return {
+      platform: evidence.targetSnapshotV1.platformName,
+      account: evidence.targetSnapshotV1.accountLabel,
+    };
+  }
+  if (evidence?.targetSnapshotV1.kind === "media") {
+    return { platform: evidence.targetSnapshotV1.mediaName, account: null };
+  }
+  if (evidence?.targetSnapshotV1.kind === "legacy-unknown-account") {
+    return {
+      platform: evidence.targetSnapshotV1.platformName,
+      account: "历史账号未记录",
+    };
+  }
+  return {
+    platform: record.displayName || record.platformId || "目标未记录",
+    account: null,
+  };
+}
+
+function evidenceSourceLabel(evidence: PublicationEvidence | undefined): string {
+  if (!evidence) return "执行记录";
+  if (evidence.firstPublishedAtSource === "manual_positive_evidence_time")
+    return "人工确认";
+  if (evidence.firstPublishedAtSource === "remote_response_time")
+    return "平台返回";
+  return "已归档发布证据";
+}
+
+function publicationTime(
+  record: PublicationHistoryRecord,
+  evidence: PublicationEvidence | undefined,
+): { label: string; value: string } {
+  if (evidence?.firstPublishedAt)
+    return {
+      label:
+        evidence.firstPublishedAtSource === "manual_positive_evidence_time"
+          ? "人工确认时间"
+          : "确认/发布时间",
+      value: formatBeijingTime(evidence.firstPublishedAt),
+    };
+  return {
+    label: "最近确认时间",
+    value: formatBeijingTime(record.updatedAt || record.createdAt),
+  };
+}
+
+function resultExplanation(
+  record: PublicationHistoryRecord,
+  reasonSummary: string | null | undefined,
+): string | null {
+  if (record.status === "failed")
+    return reasonSummary || "投稿未被平台接受，请从统一投稿入口重新发起。";
+  if (record.status === "uncertain" || record.status === "manual_check")
+    return "远端结果尚未确认，可能已经成功；请在需处理事项中完成核对。";
+  return null;
 }
 
 export default function PublicationHistoryDrawer({
@@ -145,7 +204,7 @@ export default function PublicationHistoryDrawer({
             role="alert"
             className="mx-4 mt-4 rounded-md border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700"
           >
-            {publicationUrlError}
+            暂时无法打开发布链接，请稍后重试或向平台核对。
           </div>
         )}
         <div className="min-w-0 flex-1 space-y-3 p-4">
@@ -160,14 +219,24 @@ export default function PublicationHistoryDrawer({
               (entry) => entry.publicationId === record.publicationId,
             );
             const evidence = archive?.publicationEvidence;
+            const locator = archive?.publicationLocator;
             const remoteUrl = safeRemoteUrl(
-              evidence?.remoteUrl || attempt.remoteUrl,
+              locator?.remoteUrl || evidence?.remoteUrl || attempt.remoteUrl,
             );
             const remoteIdentity =
+              locator?.remoteId ||
               (evidence && evidence.version === 2 ? evidence.remoteId : null) ||
               evidence?.orderNumber ||
               attempt.remoteId;
             const uncertain = record.status === "uncertain";
+            const target = targetFacts(record, evidence);
+            const publishedAt = publicationTime(record, evidence);
+            const explanation = resultExplanation(
+              record,
+              attempt.reasonSummary || record.reasonSummary,
+            );
+            const manualWithoutLocator =
+              locator?.displayStatus === "MANUAL_CONFIRMED_NO_LOCATOR";
             return (
               <section
                 key={record.publicationId}
@@ -176,7 +245,7 @@ export default function PublicationHistoryDrawer({
                 <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <div className="break-words text-sm font-semibold text-slate-800">
-                      {publicationTargetLabel(record)}
+                      {target.platform}
                     </div>
                     <div
                       className={`mt-1 inline-flex max-w-full flex-wrap rounded-full border px-2 py-0.5 text-[11px] font-semibold ${uncertain ? "border-rose-200 bg-rose-50 text-rose-700" : "border-slate-200 bg-slate-50 text-slate-600"}`}
@@ -184,17 +253,38 @@ export default function PublicationHistoryDrawer({
                       {publicationRecordStatusLabel(record.status, record)}
                     </div>
                   </div>
-                  <span className="shrink-0 text-[11px] text-slate-500">
-                    {formatBeijingTime(
-                      record.updatedAt || attempt.updatedAt || record.createdAt,
-                    )}
-                  </span>
                 </div>
                 <dl className="mt-3 grid min-w-0 gap-2 text-xs">
                   <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
-                    <dt className="text-slate-400">目标</dt>
+                    <dt className="text-slate-400">平台</dt>
                     <dd className="min-w-0 break-words text-slate-700">
-                      {record.targetKey}
+                      {target.platform}
+                    </dd>
+                  </div>
+                  {target.account && (
+                    <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
+                      <dt className="text-slate-400">账号</dt>
+                      <dd className="min-w-0 break-words text-slate-700">
+                        {target.account}
+                      </dd>
+                    </div>
+                  )}
+                  <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
+                    <dt className="text-slate-400">最终结果</dt>
+                    <dd className="min-w-0 break-words text-slate-700">
+                      {publicationRecordStatusLabel(record.status, record)}
+                    </dd>
+                  </div>
+                  <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
+                    <dt className="text-slate-400">{publishedAt.label}</dt>
+                    <dd className="min-w-0 break-words text-slate-700">
+                      {publishedAt.value}
+                    </dd>
+                  </div>
+                  <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
+                    <dt className="text-slate-400">证据来源</dt>
+                    <dd className="min-w-0 break-words text-slate-700">
+                      {evidenceSourceLabel(evidence)}
                     </dd>
                   </div>
                   {remoteUrl && (
@@ -215,108 +305,103 @@ export default function PublicationHistoryDrawer({
                   )}
                   {remoteIdentity && (
                     <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
-                      <dt className="text-slate-400">订单号/远端 ID</dt>
+                      <dt className="text-slate-400">远端 ID</dt>
                       <dd className="min-w-0 break-all font-mono text-slate-700">
                         {remoteIdentity}
                       </dd>
                     </div>
                   )}
-                  {attempt.errorCode && (
-                    <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
-                      <dt className="text-slate-400">安全错误码</dt>
-                      <dd className="min-w-0 break-all font-mono text-rose-700">
-                        {attempt.errorCode}
-                      </dd>
-                    </div>
-                  )}
-                  {attempt.reasonCode && (
-                    <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
-                      <dt className="text-slate-400">核对结果码</dt>
-                      <dd className="min-w-0 break-all font-mono text-slate-700">
-                        {attempt.reasonCode}
-                      </dd>
-                    </div>
-                  )}
                 </dl>
+                {manualWithoutLocator && (
+                  <p className="mt-3 rounded border border-emerald-200 bg-emerald-50 p-2.5 text-xs leading-5 text-emerald-800">
+                    已人工确认发布，未记录可用链接。
+                  </p>
+                )}
+                {explanation && (
+                  <p className="mt-3 rounded border border-amber-100 bg-amber-50/60 p-2.5 text-xs leading-5 text-amber-900">
+                    {explanation}
+                  </p>
+                )}
                 {evidence && (
-                  <div className="mt-3 grid min-w-0 gap-2 rounded border border-blue-100 bg-blue-50/40 p-3 text-xs">
-                    <div className="font-semibold text-slate-800">
-                      实际投稿档案（只读）
-                    </div>
+                  <details className="mt-3 rounded border border-blue-100 bg-blue-50/40 p-3 text-xs">
+                    <summary className="cursor-pointer font-semibold text-slate-800">
+                      投稿内容快照
+                    </summary>
+                    <div className="mt-3 grid min-w-0 gap-2">
+                      <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
+                        <span className="text-slate-400">客户</span>
+                        <span className="min-w-0 break-words text-slate-700">
+                          {evidence.customerSnapshotV1.displayName}
+                        </span>
+                      </div>
                     <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
-                      <span className="text-slate-400">客户</span>
-                      <span className="min-w-0 break-words text-slate-700">
-                        {evidence.customerSnapshotV1.displayName}
-                      </span>
-                    </div>
-                    <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
-                      <span className="text-slate-400">目标</span>
-                      <span className="min-w-0 break-words text-slate-700">
-                        {targetLabel(evidence)}
-                      </span>
-                    </div>
-                    <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
-                      <span className="text-slate-400">结果</span>
-                      <span className="min-w-0 break-words font-mono text-slate-700">
-                        {evidence.resultCode}
-                      </span>
-                    </div>
-                    <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
-                      <span className="text-slate-400">提交时间</span>
-                      <span className="min-w-0 break-words text-slate-700">
-                        {evidenceTime(
-                          evidence,
-                          evidence.submittedAt,
-                          "LEGACY_SUBMITTED_AT_UNAVAILABLE",
-                        )}
-                      </span>
-                    </div>
-                    <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
-                      <span className="text-slate-400">首次发布时间</span>
-                      <span className="min-w-0 break-words text-slate-700">
-                        {evidenceTime(
-                          evidence,
-                          evidence.firstPublishedAt,
-                          "LEGACY_FIRST_PUBLISHED_AT_UNAVAILABLE",
-                        )}
-                      </span>
-                    </div>
-                    <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
-                      <span className="text-slate-400">投稿标题</span>
-                      <span className="min-w-0 break-words text-slate-700">
-                        {evidence.contentAvailable
-                          ? evidence.title
-                          : missingReasonLabel(
+                        <span className="text-slate-400">投稿标题</span>
+                        <span className="min-w-0 break-words text-slate-700">
+                          {evidence.contentAvailable
+                            ? evidence.title
+                            : missingReasonLabel(
+                                "LEGACY_SUBMISSION_CONTENT_UNAVAILABLE",
+                              )}
+                        </span>
+                      </div>
+                      <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
+                        <span className="text-slate-400">投稿正文</span>
+                        {evidence.contentAvailable ? (
+                          <pre className="max-h-64 min-w-0 overflow-auto whitespace-pre-wrap break-words font-sans text-slate-700">
+                            {evidence.body}
+                          </pre>
+                        ) : (
+                          <span className="min-w-0 break-words text-amber-700">
+                            {missingReasonLabel(
                               "LEGACY_SUBMISSION_CONTENT_UNAVAILABLE",
                             )}
-                      </span>
-                    </div>
-                    <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
-                      <span className="text-slate-400">投稿正文</span>
-                      {evidence.contentAvailable ? (
-                        <pre className="max-h-64 min-w-0 overflow-auto whitespace-pre-wrap break-words font-sans text-slate-700">
-                          {evidence.body}
-                        </pre>
-                      ) : (
-                        <span className="min-w-0 break-words text-amber-700">
-                          {missingReasonLabel(
-                            "LEGACY_SUBMISSION_CONTENT_UNAVAILABLE",
-                          )}
+                          </span>
+                        )}
+                      </div>
+                      <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
+                        <span className="text-slate-400">图片摘要</span>
+                        <span className="min-w-0 break-words text-slate-700">
+                          {evidence.imageSummaryV1
+                            ? `${evidence.imageSummaryV1.deliveryMode} · ${evidence.imageSummaryV1.images.length} 张 · ${evidence.imageSummaryV1.decisionKind}`
+                            : missingReasonLabel(
+                                "LEGACY_IMAGE_SUMMARY_UNAVAILABLE",
+                              )}
                         </span>
-                      )}
+                      </div>
+                    </div>
+                  </details>
+                )}
+                <details className="mt-3 rounded border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+                  <summary className="cursor-pointer font-semibold text-slate-700">
+                    投稿处理与核对详情
+                  </summary>
+                  <dl className="mt-3 grid min-w-0 gap-2">
+                    <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
+                      <dt className="text-slate-400">投稿目标</dt>
+                      <dd className="min-w-0 break-all font-mono">{record.targetKey}</dd>
                     </div>
                     <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
-                      <span className="text-slate-400">图片摘要</span>
-                      <span className="min-w-0 break-words text-slate-700">
-                        {evidence.imageSummaryV1
-                          ? `${evidence.imageSummaryV1.deliveryMode} · ${evidence.imageSummaryV1.images.length} 张 · ${evidence.imageSummaryV1.decisionKind}`
-                          : missingReasonLabel(
-                              "LEGACY_IMAGE_SUMMARY_UNAVAILABLE",
-                            )}
-                      </span>
+                      <dt className="text-slate-400">结果代码</dt>
+                      <dd className="min-w-0 break-all font-mono">
+                        {evidence?.resultCode || attempt.reasonCode || attempt.errorCode || "未记录"}
+                      </dd>
                     </div>
-                  </div>
-                )}
+                    <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
+                      <dt className="text-slate-400">提交时间</dt>
+                      <dd className="min-w-0 break-words">
+                        {evidence
+                          ? evidenceTime(
+                              evidence,
+                              evidence.submittedAt,
+                              "LEGACY_SUBMITTED_AT_UNAVAILABLE",
+                            )
+                          : formatBeijingTime(
+                              attempt.startedAt || record.createdAt,
+                            )}
+                      </dd>
+                    </div>
+                  </dl>
+                </details>
                 {uncertain && (
                   <div className="mt-3 min-w-0 rounded border border-rose-200 bg-white/70 p-2.5">
                     <div className="text-xs font-semibold leading-5 text-rose-700">

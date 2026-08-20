@@ -26,6 +26,7 @@ import type {
   ArticleWorkflowFilter,
   ArticleWorkflowStage,
 } from "../../article-workflow";
+import type { ArticleLibraryNavigationIntent } from "../../article-library-navigation";
 
 export interface FavoriteMediaPage {
   items: MediaResource[];
@@ -140,7 +141,7 @@ export interface GeneratedArticlesViewProps {
   watchRemovalTransaction: (transactionId: string) => Promise<boolean>;
   stageFilter?: ArticleWorkflowFilter;
   generationBatchId?: string | null;
-  articleId?: string | null;
+  articleNavigationIntent?: ArticleLibraryNavigationIntent | null;
   onClearGenerationBatchFilter?: () => void;
   onGenerationBatchFilterChange?: (batchId: string | null) => void;
   dirtyArticleId?: string | null;

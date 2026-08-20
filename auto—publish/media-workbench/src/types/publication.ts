@@ -32,6 +32,7 @@ export interface PublicationHistoryAttempt {
   remoteUrl: string | null;
   errorCode: string | null;
   reasonCode: string | null;
+  reasonSummary?: string | null;
 }
 export interface PublicationHistoryRecord {
   publicationId: string;
@@ -50,6 +51,7 @@ export interface PublicationHistoryRecord {
   remoteUrl: string | null;
   errorCode: string | null;
   reasonCode: string | null;
+  reasonSummary?: string | null;
 }
 export interface PublicationHistorySummary {
   status: PublicationHistorySummaryStatus;

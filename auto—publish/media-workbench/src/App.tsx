@@ -17,6 +17,7 @@ import { useMediaFeature } from "./features/media/use-media-feature";
 import { useContentWorkbenchFeature } from "./features/content/use-content-workbench-feature";
 import { SettingsFeatureProvider } from "./features/settings/settings-context";
 import { useSubmissionCenterFeature } from "./features/submission-center/use-submission-center-feature";
+import type { ArticleLibraryNavigationIntent } from "./article-library-navigation";
 
 export default function App() {
   return (
@@ -44,11 +45,8 @@ function AppContent() {
   const [submissionCenterSection, setSubmissionCenterSection] = useState<
     "regular" | "paid" | "attention"
   >("regular");
-  const [articleLibraryIntent, setArticleLibraryIntent] = useState<{
-    articleId?: string;
-    generationBatchId?: string;
-    clientId?: string;
-  } | null>(null);
+  const [articleLibraryIntent, setArticleLibraryIntent] =
+    useState<ArticleLibraryNavigationIntent | null>(null);
   const { snapshot: mediaSnapshot, feature: mediaFeature } = useMediaFeature();
   const content = useContentWorkbenchFeature();
   const submissionCenter = useSubmissionCenterFeature(
@@ -92,11 +90,7 @@ function AppContent() {
     };
   }, [content.snapshot, orders.length, submissionCenter.snapshot.data.counts.total]);
 
-  function openArticleLibrary(intent?: {
-    articleId?: string;
-    generationBatchId?: string;
-    clientId?: string;
-  }) {
+  function openArticleLibrary(intent?: ArticleLibraryNavigationIntent) {
     setArticleLibraryIntent(intent || null);
     setCurrentView("article-library");
   }

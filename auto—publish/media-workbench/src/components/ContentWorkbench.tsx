@@ -13,6 +13,7 @@ import { useConfirmation, useConfirmationScope } from "../confirmation";
 import type { ContentWorkbenchFeature } from "../features/content/use-content-workbench-feature";
 import { reportRuntimeDiagnostic } from "../features/workspace/runtime-diagnostic-sink";
 import type { FavoriteMediaPage } from "./content/GeneratedArticlesView.types";
+import type { ArticleLibraryNavigationIntent } from "../article-library-navigation";
 
 type RefreshState = "idle" | "refreshing" | "error";
 const REFRESH_CONFIRMATION_MS = 3000;
@@ -20,17 +21,9 @@ const REFRESH_CONFIRMATION_MS = 3000;
 interface ContentWorkbenchProps {
   content: ContentWorkbenchFeature;
   mode?: "production" | "library";
-  articleIntent?: {
-    articleId?: string;
-    generationBatchId?: string;
-    clientId?: string;
-  } | null;
+  articleIntent?: ArticleLibraryNavigationIntent | null;
   onArticleIntentConsumed?: () => void;
-  onOpenArticleLibrary?: (intent?: {
-    articleId?: string;
-    generationBatchId?: string;
-    clientId?: string;
-  }) => void;
+  onOpenArticleLibrary?: (intent?: ArticleLibraryNavigationIntent) => void;
   favoriteMediaPage?: FavoriteMediaPage;
   onFavoriteMediaPageChange?: (page: number) => void;
   onOpenOrders?: () => void;
@@ -87,7 +80,8 @@ export default function ContentWorkbench({
   const [generationBatchFilter, setGenerationBatchFilter] = useState<
     string | null
   >(null);
-  const [articleIntentId, setArticleIntentId] = useState<string | null>(null);
+  const [articleNavigationIntent, setArticleNavigationIntent] =
+    useState<ArticleLibraryNavigationIntent | null>(null);
   const [error, setError] = useState("");
   const [refreshConfirmationVisible, setRefreshConfirmationVisible] =
     useState(false);
@@ -131,7 +125,7 @@ export default function ContentWorkbench({
     setTab("history");
     setArticleStageFilter("all");
     setGenerationBatchFilter(articleIntent.generationBatchId || null);
-    setArticleIntentId(articleIntent.articleId || null);
+    setArticleNavigationIntent(articleIntent);
     if (articleIntent.clientId) content.selectClient(articleIntent.clientId);
     onArticleIntentConsumed?.();
   }, [articleIntent, content, onArticleIntentConsumed]);
@@ -431,7 +425,7 @@ export default function ContentWorkbench({
                   onClearGenerationBatchFilter={() => setGenerationBatchFilter(null)}
                   onGenerationBatchFilterChange={setGenerationBatchFilter}
                   dirtyArticleId={historyDirtyArticleId}
-                  articleId={articleIntentId}
+                  articleNavigationIntent={articleNavigationIntent}
                   favoriteMediaPage={favoriteMediaPage}
                   onFavoriteMediaPageChange={onFavoriteMediaPageChange}
                   onArticleSelect={openHistoryEditor}

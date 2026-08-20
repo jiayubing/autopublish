@@ -16,6 +16,7 @@ import type {
 } from "../../types/publication";
 import type { GeneratedContentArticle } from "../../types/generation";
 import { type ArticleWorkflowFilter } from "../../article-workflow";
+import type { ArticleLibraryNavigationIntent } from "../../article-library-navigation";
 import type {
   ArticleManagementReadModel,
   FavoriteMediaPage,
@@ -62,7 +63,7 @@ export default function GeneratedArticlesView({
   watchRemovalTransaction,
   stageFilter = "all",
   generationBatchId,
-  articleId,
+  articleNavigationIntent,
   onClearGenerationBatchFilter,
   onGenerationBatchFilterChange,
   dirtyArticleId,
@@ -96,6 +97,8 @@ export default function GeneratedArticlesView({
   );
   const [drawerArticle, setDrawerArticle] =
     useState<GeneratedContentArticle | null>(null);
+  const handledArticleNavigationRef =
+    useRef<ArticleLibraryNavigationIntent | null>(null);
   const lastNonTrashStageRef = useRef<ArticleWorkflowFilter>(
     stageFilter === "trash" ? "all" : stageFilter,
   );
@@ -117,12 +120,6 @@ export default function GeneratedArticlesView({
   useEffect(() => {
     setSelected([]);
   }, [generationBatchId]);
-
-  useEffect(() => {
-    if (!articleId) return;
-    const target = articles.find((article) => article.id === articleId);
-    if (target) setDrawerArticle(target);
-  }, [articleId, articles]);
 
   const updateSelected = useCallback((next: React.SetStateAction<string[]>) => {
     setSelected((current) =>
@@ -318,6 +315,40 @@ export default function GeneratedArticlesView({
     if (!workflow) return;
     onArticleSelect(article, source, workflow.stage === "published");
   }
+
+  useEffect(() => {
+    if (
+      !articleNavigationIntent ||
+      handledArticleNavigationRef.current === articleNavigationIntent
+    )
+      return;
+    const articleId = articleNavigationIntent?.articleId;
+    if (!articleId) return;
+    const target = articles.find((article) => article.id === articleId);
+    if (!target) return;
+    handledArticleNavigationRef.current = articleNavigationIntent;
+    const destination = articleNavigationIntent.destination || "publication";
+    if (destination === "publication") {
+      setDrawerArticle(target);
+      return;
+    }
+    if (destination === "article") {
+      openArticle(target);
+      return;
+    }
+    if (!canSubmitArticle(target)) return;
+    updateSelected([selectionKey(target)]);
+    intakeIntents.open([
+      { clientId: target.clientId, articleId: target.id },
+    ]);
+  }, [
+    articleNavigationIntent,
+    articles,
+    canSubmitArticle,
+    intakeIntents,
+    openArticle,
+    updateSelected,
+  ]);
 
   async function trashSelected() {
     await removalIntents.previewTrash(

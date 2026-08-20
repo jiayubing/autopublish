@@ -10,13 +10,52 @@ type ArticleAttentionSnapshot = ReturnType<AttentionFeature["getSnapshot"]>;
 
 function labelFor(item: ArticleAttentionItem): string {
   if (item.kind === "removal_needs_repair") return "删除事务需要修复";
-  if (item.kind === "regular_platform_failed") return "普通平台投稿明确失败";
-  if (item.kind === "regular_platform_uncertain") return "普通平台结果待确认";
+  if (item.kind === "regular_platform_failed") return "投稿未被平台接受";
+  if (item.kind === "regular_platform_uncertain") return "远端投稿结果待确认";
   if (item.kind === "paid_order_creation_uncertain") return "付费订单创建待确认";
   if (item.kind === "order_status_anomaly") return "订单状态异常";
   if (item.kind === "published_archive_failed")
     return "远端成功，本地归档待处理";
   return "需处理项需要核对";
+}
+
+function happenedCopy(item: ArticleAttentionItem): string {
+  if (item.kind === "regular_platform_failed")
+    return (
+      item.reasonSummary ||
+      "投稿未被平台接受，请检查投稿信息后从统一投稿入口重新发起。"
+    );
+  if (item.kind === "regular_platform_uncertain")
+    return "投稿请求已发出，但远端结果尚未确认，远端可能已经接受。";
+  return item.message || "当前状态需要进一步处理。";
+}
+
+function nextStepCopy(item: ArticleAttentionItem): string {
+  if (item.kind === "regular_platform_failed")
+    return "可查看文章和发布详情；重新投稿请通过统一投稿入口发起。";
+  if (item.kind === "regular_platform_uncertain")
+    return "请人工核对远端结果后，选择“确认已接受”或“确认未接受”。";
+  return "请根据下方允许操作继续处理。";
+}
+
+function completionCopy(item: ArticleAttentionItem): string {
+  if (item.kind === "regular_platform_failed")
+    return "打开统一投稿入口不会重试原请求；它会开始一次新的投稿流程。";
+  if (item.kind === "regular_platform_uncertain")
+    return "确认已接受会永久标记文章已发布；确认未接受会按最终事实解除当前待确认事项。";
+  return "处理完成后会刷新权威结果；已解决事项将自动消失。";
+}
+
+function confirmationMessage(
+  item: ArticleAttentionItem,
+  action: string,
+  fallback: string,
+): string {
+  if (action === "confirm-regular-accepted")
+    return "请仅在已人工核对远端接受后确认。确认后文章将永久标记为已发布；发布链接不是必填项。";
+  if (action === "confirm-regular-not-accepted")
+    return "请仅在已人工核对远端未接受后确认。确认后当前待确认事项会按最终事实关闭。";
+  return fallback || `${item.titleSnapshot || item.attentionId} 需要确认后才能继续。`;
 }
 
 function actionLabel(action: string): string {
@@ -189,7 +228,7 @@ export default function ArticleAttentionPanel({
         preview.requiresConfirmation &&
         !(await confirm({
           title: "确认处理需处理项",
-          message: `${item.titleSnapshot || item.attentionId}：${preview.message}`,
+          message: confirmationMessage(item, action, preview.message),
           confirmLabel: actionLabel(action),
           tone: "warning",
         }))
@@ -337,7 +376,6 @@ export default function ArticleAttentionPanel({
                   {card.items.map((item) => (
                     <div key={item.attentionId}>
                       {labelFor(item)}
-                      {item.reasonCode ? ` · ${item.reasonCode}` : ""}
                     </div>
                   ))}
                 </dd>
@@ -360,13 +398,41 @@ export default function ArticleAttentionPanel({
               </div>
             </dl>
             <div className="mt-3 rounded border border-amber-100 bg-amber-50/60 p-2 text-xs leading-5 text-amber-900">
-              <div className="font-semibold">问题说明</div>
+              <div className="font-semibold">发生了什么</div>
               {card.items.map((item) => (
                 <p key={item.attentionId} className="mt-1 break-words">
-                  {item.message || "当前状态需要进一步处理。"}
+                  {happenedCopy(item)}
                 </p>
               ))}
             </div>
+            <div className="mt-2 rounded border border-slate-100 bg-slate-50 p-2 text-xs leading-5 text-slate-700">
+              <div className="font-semibold">下一步</div>
+              {card.items.map((item) => (
+                <p key={item.attentionId} className="mt-1 break-words">
+                  {nextStepCopy(item)}
+                </p>
+              ))}
+            </div>
+            <div className="mt-2 rounded border border-slate-100 bg-white p-2 text-xs leading-5 text-slate-600">
+              <div className="font-semibold">处理完成后</div>
+              {card.items.map((item) => (
+                <p key={item.attentionId} className="mt-1 break-words">
+                  {completionCopy(item)}
+                </p>
+              ))}
+            </div>
+            {card.items.some((item) => item.reasonCode) && (
+              <details className="mt-2 rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-600">
+                <summary className="cursor-pointer font-semibold">核对详情</summary>
+                {card.items.map((item) =>
+                  item.reasonCode ? (
+                    <p key={item.attentionId} className="mt-1 break-all font-mono">
+                      原因码：{item.reasonCode}
+                    </p>
+                  ) : null,
+                )}
+              </details>
+            )}
             <div className="mt-3">
               <div className="text-xs font-semibold text-slate-700">允许操作</div>
               <div className="mt-2 flex flex-wrap gap-1.5">
