@@ -11,7 +11,10 @@ import {
   onWorkspaceDataInvalidated,
   onWorkspaceInvalidationDiagnostic,
 } from "../../bridge/workspace";
-import { createWorkspaceCoordinator } from "./workspace-coordinator.js";
+import {
+  createWorkspaceCoordinator,
+  loadWorkspaceRuntimeIdentityWithRetry,
+} from "./workspace-coordinator.js";
 import { reportRuntimeDiagnostic } from "./runtime-diagnostic-sink";
 
 type ScopeRefresh = (input: {
@@ -48,19 +51,23 @@ export function WorkspaceCoordinatorProvider({
         "workspace-invalidation",
       ),
     );
-    let cancelled = false;
-    getWorkspaceRuntimeIdentity()
+    const abortController = new AbortController();
+    loadWorkspaceRuntimeIdentityWithRetry(
+      getWorkspaceRuntimeIdentity,
+      { signal: abortController.signal },
+    )
       .then((identity) => {
-        if (!cancelled) coordinator.initialize(identity);
+        coordinator.initialize(identity);
       })
-      .catch(() => {
+      .catch((error) => {
+        if (error?.name === "AbortError") return;
         reportRuntimeDiagnostic(
           "WORKSPACE_RUNTIME_IDENTITY_UNAVAILABLE",
           "workspace-invalidation",
         );
       });
     return () => {
-      cancelled = true;
+      abortController.abort();
       disposeDiagnostic();
       coordinator.stop();
     };

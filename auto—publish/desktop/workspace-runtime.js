@@ -181,6 +181,7 @@ function createWorkspaceRuntime(deps) {
       throw new Error("Workspace runtime is not started");
     if (ipc) return ipc;
     ipc = require("./ipc/register").registerIpc(ipcDeps);
+    invalidation.invalidate("WORKSPACE_RUNTIME_READY");
     return ipc;
   }
 

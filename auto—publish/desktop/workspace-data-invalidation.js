@@ -10,6 +10,7 @@ const ALLOWED_SCOPES = Object.freeze([
 // The reason code is the command's domain fact.  Scopes are a presentation
 // concern and deliberately have one owner so mutations cannot drift apart.
 const SCOPES_BY_REASON = Object.freeze({
+  WORKSPACE_RUNTIME_READY: ALLOWED_SCOPES,
   SUBMISSION_BATCH_CANCELLED: ["articleManagement", "articleAttention", "platformQueue"],
   SUBMISSION_BATCH_CREATED: ["articleManagement", "articleAttention", "platformQueue"],
   SUBMISSION_QUEUE_CANCELLED: ["articleManagement", "articleAttention", "platformQueue"],

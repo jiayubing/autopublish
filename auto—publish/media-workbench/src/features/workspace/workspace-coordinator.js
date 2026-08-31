@@ -11,6 +11,42 @@ const KNOWN_SCOPE_SET = new Set(KNOWN_SCOPES);
 const RUNTIME_ID = /^[A-Za-z0-9._:-]{1,128}$/;
 const REASON_CODE = /^[A-Za-z0-9._:-]{1,128}$/;
 
+export async function loadWorkspaceRuntimeIdentityWithRetry(
+  loader,
+  /** @type {{ signal?: AbortSignal, maxAttempts?: number, delayMs?: number }} */
+  { signal, maxAttempts = 5, delayMs = 100 } = {},
+) {
+  if (typeof loader !== "function")
+    throw new TypeError("Workspace runtime identity loader is required");
+  const attempts = Number.isSafeInteger(maxAttempts) && maxAttempts > 0 ? maxAttempts : 1;
+  const waitMs = Number.isFinite(delayMs) && delayMs >= 0 ? delayMs : 0;
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+    try {
+      return await loader();
+    } catch (error) {
+      lastError = error;
+      if (attempt >= attempts) throw error;
+      await new Promise((resolve, reject) => {
+        let timer;
+        const abort = () => {
+          if (timer) clearTimeout(timer);
+          signal?.removeEventListener("abort", abort);
+          reject(new DOMException("Aborted", "AbortError"));
+        };
+        timer = setTimeout(() => {
+          signal?.removeEventListener("abort", abort);
+          resolve();
+        }, waitMs * 2 ** (attempt - 1));
+        signal?.addEventListener("abort", abort, { once: true });
+        if (signal?.aborted) abort();
+      });
+    }
+  }
+  throw lastError;
+}
+
 function safeDiagnostic(code) {
   return Object.freeze({ code, category: "workspace-invalidation" });
 }
@@ -145,7 +181,18 @@ export function createWorkspaceCoordinator(options = {}) {
         throw new Error(`Workspace scope already has an owner: ${scope}`);
       registrations.set(scope, listener);
       publishSnapshot();
-      if (started) notify(scope, "initial", null);
+      if (started)
+        notify(
+          scope,
+          "initial",
+          workspaceRuntimeId
+            ? {
+                workspaceRuntimeId,
+                revision: lastRevision,
+                reasonCode: "WORKSPACE_IDENTITY_SYNC",
+              }
+            : null,
+        );
       return () => {
         if (registrations.get(scope) === listener) {
           registrations.delete(scope);

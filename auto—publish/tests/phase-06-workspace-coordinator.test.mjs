@@ -4,7 +4,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 
-import { createWorkspaceCoordinator } from "../media-workbench/src/features/workspace/workspace-coordinator.js";
+import {
+  createWorkspaceCoordinator,
+  loadWorkspaceRuntimeIdentityWithRetry,
+} from "../media-workbench/src/features/workspace/workspace-coordinator.js";
 
 const require = createRequire(import.meta.url);
 const {
@@ -208,6 +211,79 @@ test("workspace coordinator publishes the queried runtime identity before later 
   rawListener(event({ workspaceRuntimeId: "runtime-query-1", revision: 5 }));
   assert.equal(coordinator.getSnapshot().lastRevision, 5);
   assert.ok(snapshots.length >= 2);
+});
+
+test("workspace coordinator scopes platform commands from a delayed runtime-ready event", () => {
+  let rawListener;
+  const refreshes = [];
+  const coordinator = createWorkspaceCoordinator({
+    subscribe: (listener) => {
+      rawListener = listener;
+      return () => {};
+    },
+  });
+  coordinator.register("platformQueue", (input) => refreshes.push(input));
+  coordinator.start();
+  assert.equal(refreshes.at(-1).workspaceRuntimeId, null);
+
+  rawListener(event({
+    workspaceRuntimeId: "runtime-delayed-ready",
+    revision: 1,
+    scopes: [
+      "platformQueue",
+      "articleAttention",
+      "articleManagement",
+      "orders",
+      "contentSources",
+      "mediaWorkbench",
+      "submissionCenter",
+    ],
+    reasonCode: "WORKSPACE_RUNTIME_READY",
+  }));
+
+  assert.equal(refreshes.at(-1).kind, "invalidation");
+  assert.equal(
+    refreshes.at(-1).workspaceRuntimeId,
+    "runtime-delayed-ready",
+  );
+  assert.equal(coordinator.getSnapshot().workspaceRuntimeId, "runtime-delayed-ready");
+});
+
+test("workspace coordinator replays a runtime identity when a scope registers after startup", () => {
+  const refreshes = [];
+  const coordinator = createWorkspaceCoordinator({ subscribe: () => () => {} });
+  coordinator.start();
+  assert.equal(
+    coordinator.initialize({ workspaceRuntimeId: "runtime-before-registration", revision: 2 }),
+    true,
+  );
+  coordinator.register("platformQueue", (input) => refreshes.push(input));
+  assert.deepEqual(refreshes, [
+    {
+      kind: "initial",
+      workspaceRuntimeId: "runtime-before-registration",
+      revision: 2,
+      reasonCode: "WORKSPACE_IDENTITY_SYNC",
+      scope: "platformQueue",
+    },
+  ]);
+});
+
+test("runtime identity retry recovers from a transient IPC failure", async () => {
+  let calls = 0;
+  const identity = await loadWorkspaceRuntimeIdentityWithRetry(
+    async () => {
+      calls += 1;
+      if (calls === 1) throw new Error("startup race");
+      return { workspaceRuntimeId: "runtime-recovered", revision: 0 };
+    },
+    { maxAttempts: 2, delayMs: 0 },
+  );
+  assert.equal(calls, 2);
+  assert.deepEqual(identity, {
+    workspaceRuntimeId: "runtime-recovered",
+    revision: 0,
+  });
 });
 
 test("workspace coordinator replays a StrictMode effect without losing its transport", () => {

@@ -169,6 +169,56 @@ it("workspace runtime validates lifecycle dependencies before a workspace can st
   assert.throws(function() { createWorkspaceRuntime({ ipcMain: {} }); }, /sendToRenderer/);
 });
 
+it("workspace runtime announces every renderer scope after IPC registration", async function() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "workspace-runtime-ready-"));
+  const sent = [];
+  const order = [];
+  const restore = replaceModules([{
+    request: "../desktop/ipc/register",
+    exports: {
+      registerIpc: function() {
+        order.push("register-ipc");
+        return { dispose: async function() {} };
+      }
+    }
+  }]);
+  const runtime = createWorkspaceRuntime(Object.assign(workspaceRuntimeOptions(root), {
+    sendToRenderer: function(channel, payload) {
+      order.push("send-ready");
+      sent.push([channel, payload]);
+    },
+    createWorkspaceRuntimeComposition: async function() {
+      return {
+        runtime: {},
+        modules: {},
+        ipcDeps: {},
+        dispose: async function() {}
+      };
+    }
+  }));
+  try {
+    await runtime.start({ workspacePath: path.join(root, "workspace") });
+    runtime.registerIpc();
+    assert.deepEqual(order, ["register-ipc", "send-ready"]);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0][0], "workspace:data-invalidated");
+    assert.equal(sent[0][1].reasonCode, "WORKSPACE_RUNTIME_READY");
+    assert.deepEqual(sent[0][1].scopes, [
+      "platformQueue",
+      "articleAttention",
+      "articleManagement",
+      "orders",
+      "contentSources",
+      "mediaWorkbench",
+      "submissionCenter"
+    ]);
+  } finally {
+    await runtime.dispose();
+    restore();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 it("disposes a workspace composition that resolves after runtime disposal", async function() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "workspace-runtime-dispose-race-"));
   let resolveComposition;
