@@ -18,7 +18,7 @@ function dependencies(overrides) {
     calls: calls,
     getClient: function(id) { calls.push("client:" + id); return client; },
     researchStore: { getResearch: function(clientId, queryId) { calls.push("research:" + clientId + ":" + queryId); return research; } },
-    templateStore: { getTemplate: function(platform, templateId) { calls.push("template:" + platform + ":" + templateId); return template; } },
+    templateStore: { getCatalogTemplate: function(input) { calls.push("template:" + input.platformId + ":" + input.templateId); return template; } },
     materialStore: { getSelectedMaterials: async function() { return [{ id: "brand.md", name: "brand.md", extension: ".md", status: "ready", content: "Client material", contentHash: "material-hash", source: "text" }]; } },
     buildPrompt: function(input) { calls.push("prompt"); return { system: "System", user: "User" }; },
     aiClient: { complete: async function(messages) { calls.push("ai"); return "# Article title\n\nArticle body"; } },
@@ -126,7 +126,7 @@ describe("article generator", function() {
     };
     const deps = dependencies({
       researchStore: { getResearch: function(clientId, queryId) { calls.push(queryId); return researchById[queryId]; } },
-      templateStore: { getTemplate: function() { calls.push("template"); return { id: "template-1", scenario: "Guide", body: "Template instructions" }; } },
+      templateStore: { getCatalogTemplate: function() { calls.push("template"); return { id: "template-1", scenario: "Guide", body: "Template instructions" }; } },
       buildPrompt: function(value) { calls.push("prompt"); assert.deepStrictEqual(value.researchItems, [researchById["query-1"], researchById["query-2"]]); return { system: "System", user: "User" }; },
       aiClient: { complete: async function() { calls.push("ai"); return "# Article title\n\nArticle body"; } }
     });
@@ -207,7 +207,7 @@ describe("article generator", function() {
         promptInput = value;
         return { system: "System", user: "User" };
       },
-      templateStore: { getTemplate: function() {
+      templateStore: { getCatalogTemplate: function() {
         return { id: "template-1", platform: "ctrip", scenario: "Guide", name: "Guide", body: "Template instructions", bodyHash: "template-hash" };
       } }
     });
@@ -244,7 +244,6 @@ describe("article generator", function() {
   it("uses the catalog seam for a body-only template and snapshots a derived display name", async function() {
     const deps = dependencies({
       templateStore: {
-        getTemplate: function() { throw new Error("legacy template lookup should not be used"); },
         getCatalogTemplate: function() { return { platform: "new-platform", templateId: "first-template", id: "first-template", displayName: "first-template", body: "Body-only instruction", bodyHash: "body-hash" }; }
       },
       buildPrompt: function(value) { assert.equal(value.scenario, "first-template"); return { system: "System", user: "User" }; }
