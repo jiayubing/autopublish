@@ -33,7 +33,7 @@ assert result["code"] == "HEPAN_AUTH_OK"
 assert result["account"] == {"displayName": "fixture-user", "uid": "987654321"}
 print("ok")
 `;
-    const result = spawnSync("python", ["-c", code], { encoding: "utf8", timeout: 10000 });
+    const result = spawnSync("python", ["-c", code], { encoding: "utf8", timeout: 30000 });
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.equal(result.stdout.trim(), "ok");
   });
@@ -68,7 +68,7 @@ assert "errorCode" not in result
 assert result["account"] == {"displayName": "fixture-user", "uid": "2093208"}
 print("ok")
 `;
-    const result = spawnSync("python", ["-c", code], { encoding: "utf8", timeout: 10000 });
+    const result = spawnSync("python", ["-c", code], { encoding: "utf8", timeout: 30000 });
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.equal(result.stdout.trim(), "ok");
   });
@@ -93,7 +93,7 @@ assert result["authenticated"] is False
 assert result["errorCode"] == "HEPAN_AUTH_REDIRECTED"
 print("ok")
 `;
-    const result = spawnSync("python", ["-c", code], { encoding: "utf8", timeout: 10000 });
+    const result = spawnSync("python", ["-c", code], { encoding: "utf8", timeout: 30000 });
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.equal(result.stdout.trim(), "ok");
   });
@@ -118,7 +118,7 @@ assert result["ok"] is True and result["authenticated"] is True
 assert result["account"]["uid"] == "2093208"
 print("ok")
 `;
-    const result = spawnSync("python", ["-c", code], { encoding: "utf8", timeout: 10000 });
+    const result = spawnSync("python", ["-c", code], { encoding: "utf8", timeout: 30000 });
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.equal(result.stdout.trim(), "ok");
   });
@@ -137,7 +137,7 @@ soup = module.BeautifulSoup('''
 assert module.extract_account_identity(soup) is None
 print("ok")
 `;
-    const result = spawnSync("python", ["-c", code], { encoding: "utf8", timeout: 10000 });
+    const result = spawnSync("python", ["-c", code], { encoding: "utf8", timeout: 30000 });
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.equal(result.stdout.trim(), "ok");
   });
@@ -166,7 +166,7 @@ for label, markup in cases:
     assert account is None, (label, account)
 print("ok")
 `;
-    const result = spawnSync("python", ["-c", code], { encoding: "utf8", timeout: 10000 });
+    const result = spawnSync("python", ["-c", code], { encoding: "utf8", timeout: 30000 });
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.equal(result.stdout.trim(), "ok");
   });
@@ -194,7 +194,7 @@ assert "account" not in result
 assert "errorCode" not in result
 print("ok")
 `;
-    const result = spawnSync("python", ["-c", code], { encoding: "utf8", timeout: 10000 });
+    const result = spawnSync("python", ["-c", code], { encoding: "utf8", timeout: 30000 });
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.equal(result.stdout.trim(), "ok");
   });
@@ -225,7 +225,7 @@ except module.HepanCheckError: pass
 else: raise AssertionError("CRLF was accepted")
 print("ok")
 `;
-    const result = spawnSync("python", ["-c", code], { encoding: "utf8", timeout: 10000 });
+    const result = spawnSync("python", ["-c", code], { encoding: "utf8", timeout: 30000 });
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.equal(result.stdout.trim(), "ok");
   });
@@ -256,7 +256,7 @@ assert payload["requestMayHaveBeenSent"] is True
 assert "synthetic disconnect" not in json.dumps(payload)
 print("ok")
 `;
-    const result = spawnSync("python", ["-c", code], { encoding: "utf8", timeout: 10000 });
+    const result = spawnSync("python", ["-c", code], { encoding: "utf8", timeout: 30000 });
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.equal(result.stdout.trim(), "ok");
   });

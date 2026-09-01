@@ -8,6 +8,10 @@ const DEFAULT_PARALLEL_CONCURRENCY = 4;
 
 const SERIAL_NAME_RULES = Object.freeze([
   [
+    /hepan-login-check/i,
+    "Python subprocess capability checks require an isolated process boundary",
+  ],
+  [
     /(?:capacity|migration)/i,
     "capacity and migration tests use shared runtime or migration boundaries",
   ],
