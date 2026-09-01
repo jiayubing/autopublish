@@ -64,7 +64,7 @@ describe("ai content service", function() {
         contentStore: { saveArticle: function(value) { return value; } },
         materialStore: materialStore,
         researchStore: { getResearch: function() { return { id: "q1", answerText: "answer" }; } },
-        templateStore: { getTemplate: function() { return { id: "template-1", body: "body", scenario: "guide" }; } },
+        templateStore: { getCatalogTemplate: function() { return { id: "template-1", body: "body", scenario: "guide" }; } },
         aiClientFactory: function() { return { complete: async function() { return "# title\nbody"; } }; },
         articleGeneratorFactory: function(deps) { return { generateArticle: async function(input) {
           materials = await deps.materialStore.getSelectedMaterials(input.clientId, input.materialIds);
