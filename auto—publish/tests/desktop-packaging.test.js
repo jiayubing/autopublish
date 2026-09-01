@@ -467,7 +467,7 @@ describe("source assembly and packaging contract", function() {
     const harness = loadMainWithStartupHarness({ state: "selection_required" }, { authenticated: false });
     await harness.ready();
 
-    assert.deepEqual(harness.events.map(function(event) { return event[0]; }), ["getPath", "auth-ipc", "window"]);
+    assert.deepEqual(harness.events.map(function(event) { return event[0]; }), ["window", "getPath", "auth-ipc"]);
     assert.equal(harness.events.some(function(event) { return event[0] === "runtime"; }), false);
     assert.equal(harness.events.some(function(event) { return event[0] === "task"; }), false);
     assert.equal(harness.events.some(function(event) { return event[0] === "doubao"; }), false);
