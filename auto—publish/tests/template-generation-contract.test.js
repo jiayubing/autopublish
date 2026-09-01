@@ -43,7 +43,7 @@ describe("template catalog to generation contract", function() {
         aiProviderService: { getFingerprint: () => "fixture" },
         articleGeneratorFactory: (deps) => ({
           generateArticle: async (input) => {
-            const template = deps.templateStore.getTemplate({ platformId: input.platform, templateId: input.templateId });
+            const template = deps.templateStore.getCatalogTemplate({ platformId: input.platform, templateId: input.templateId });
             assert.equal(typeof template.body, "string");
             return { id: `article-${input.templateId}`, title: "Fixture title", content: "Fixture body" };
           },
