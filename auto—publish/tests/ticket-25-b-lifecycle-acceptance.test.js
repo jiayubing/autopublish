@@ -116,7 +116,7 @@ function createHarness(options) {
       },
     },
     templateStore: {
-      getTemplate() {
+      getCatalogTemplate() {
         return {
           id: "ticket-25-b-template",
           name: "合成模板",
