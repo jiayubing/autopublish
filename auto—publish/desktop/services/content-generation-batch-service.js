@@ -324,17 +324,10 @@ function createContentGenerationBatchService(options) {
   async function validateTemplates(templates) {
     return Promise.all(templates.map(function(item) {
       try {
-        let template;
-        if (typeof templateStore.getTemplate === "function" && templateStore.getTemplate.length <= 1 &&
-            (typeof templateStore.getCatalogTemplate !== "function" || templateStore.getCatalogTemplate === templateStore.getTemplate)) {
-          template = templateStore.getTemplate({ platformId: item.platform, templateId: item.templateId });
-        } else if (typeof templateStore.getCatalogTemplate === "function") {
-          template = templateStore.getCatalogTemplate({ platformId: item.platform, templateId: item.templateId });
-        } else if (typeof templateStore.getTemplate === "function") {
-          // Compatibility adapter for older injected test doubles. The real store
-          // above only exposes the catalog interface to business callers.
-          template = templateStore.getTemplate(item.platform, item.templateId);
-        }
+        const template = templateStore.getCatalogTemplate({
+          platformId: item.platform,
+          templateId: item.templateId
+        });
         if (!template || typeof template.body !== "string" || !template.body.trim()) throw generationError("GENERATION_TEMPLATE_NOT_FOUND");
         const selection = { platform: item.platform, templateId: item.templateId };
         if (template.source === "builtin" || template.source === "custom") selection.source = template.source;
