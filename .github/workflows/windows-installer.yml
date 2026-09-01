@@ -38,13 +38,8 @@ jobs:
       - run: npm ci
         working-directory: auto—publish/media-workbench
 
-      - name: Run generation tests
-        run: >-
-          node --test
-          tests/article-generator.test.js
-          tests/ai-content-service.test.js
-          tests/content-generation-batch-service.test.js
-          tests/generation-batch-runner.test.js
+      - name: Run desktop core tests
+        run: npm run test:desktop-core
         working-directory: auto—publish
 
       - name: Build unsigned Windows installer
