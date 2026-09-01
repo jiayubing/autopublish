@@ -1,0 +1,58 @@
+name: Windows Installer
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to package
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    env:
+      CI_SYNTHETIC_ONLY: "1"
+      HEPAN_VENDOR_DIR: resources/hepan/vendor-pure
+    steps:
+      - name: Checkout requested ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: auto—publish/package-lock.json
+
+      - run: npm ci
+        working-directory: auto—publish
+
+      - run: npm ci
+        working-directory: auto—publish/media-workbench
+
+      - name: Run generation tests
+        run: >-
+          node --test
+          tests/article-generator.test.js
+          tests/ai-content-service.test.js
+          tests/content-generation-batch-service.test.js
+          tests/generation-batch-runner.test.js
+        working-directory: auto—publish
+
+      - name: Build unsigned Windows installer
+        run: npm run dist:alpha:dirty
+        working-directory: auto—publish
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: ETO-001-windows-installer
+          path: |
+            auto—publish/release-alpha/*.exe
+          if-no-files-found: error
+          retention-days: 14
