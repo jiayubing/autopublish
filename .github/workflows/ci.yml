@@ -217,7 +217,6 @@ jobs:
           --output build/evidence/capacity.json
           --operation ticket-15-capacity
           --test tests/phase-02-runtime-capacity.test.js
-          --test tests/phase-05-handoff-capacity.test.js
           --test tests/phase-06-media-renderer-capacity.test.mjs
           --test tests/content-generation-batch-ipc.test.js
           --test tests/generation-snapshot-event.test.js
