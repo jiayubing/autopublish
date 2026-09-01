@@ -43,6 +43,45 @@ it("returns the complete queue-group snapshot after pausing one group", async fu
   assert.deepEqual(calls, [{ queueGroupId: "group-a" }]);
   assert.deepEqual(result, { ok: true, data: { items: groups } });
 });
+
+it("validates and forwards the queue-group submission interval command", async function () {
+  const handlers = new Map();
+  const calls = [];
+  const groups = [{ queueGroupId: "group-a", submissionIntervalSeconds: 45 }];
+  registerContentSubmissionIpc({
+    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
+    submissionMaintenance: {},
+    submissionWorkflow: {
+      regularQueueGroups: {
+        list: () => groups,
+        updateSubmissionInterval: (input) => {
+          calls.push(input);
+          return groups;
+        },
+        start: async () => undefined,
+        pause: () => undefined,
+        startAll: async () => undefined,
+        pauseAll: () => ({ groups }),
+      },
+    },
+  });
+  const channel = "content:update-regular-queue-group-submission-interval";
+  const input = {
+    queueGroupId: "group-a",
+    submissionIntervalSeconds: 45,
+    expectedRevision: 2,
+  };
+  const result = await handlers.get(channel)(null, input);
+  assert.deepEqual(calls, [input]);
+  assert.deepEqual(result, { ok: true, data: { items: groups } });
+
+  const invalid = await handlers.get(channel)(null, {
+    ...input,
+    submissionIntervalSeconds: 3601,
+  });
+  assert.equal(invalid.ok, false);
+  assert.equal(invalid.error.code, "REGULAR_QUEUE_CONFIG_INVALID");
+});
 it("does not register the retired submission batch cancellation capability", async function () {
   const handlers = new Map();
   registerContentSubmissionIpc({

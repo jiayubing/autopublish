@@ -215,6 +215,80 @@ test("save IPC contract requires a fingerprint and accepts only closed typed out
   });
 });
 
+test("ordinary article edits preserve generation provenance when the request carries stale source fields", () => {
+  const original = article("article-provenance", "client-a", {
+    materialIds: ["brand-v1.md"],
+    researchQueryIds: ["question-v1"],
+    materialSnapshots: [{
+      id: "brand-v1.md",
+      name: "品牌资料 v1",
+      extension: ".md",
+      content: "生成时资料",
+      contentHash: "hash-v1",
+      source: "client-material",
+    }],
+    researchSnapshots: [{
+      questionId: "question-v1",
+      question: "旧问题",
+      answerText: "生成时回答",
+      references: [],
+      collectedAt: "2026-07-11T00:00:00.000Z",
+      collectionMethod: "manual",
+    }],
+    templateId: "template-v1",
+    templateSnapshot: {
+      platform: "toutiao",
+      id: "template-v1",
+      name: "模板 v1",
+      scenario: "guide",
+      body: "生成时模板",
+      bodyHash: "template-hash-v1",
+    },
+  });
+  const fixture = makeFixture();
+  try {
+    fixture.add(original);
+    const editor = fixture.coordinator.readArticleForEdit({
+      clientId: original.clientId,
+      articleId: original.id,
+    });
+    const saved = fixture.coordinator.saveExistingArticle({
+    article: Object.assign({}, editor.article, {
+      title: "编辑后的标题",
+      content: "编辑后的正文",
+      materialIds: ["brand-v2.md"],
+      researchQueryIds: ["question-v2"],
+      materialSnapshots: [{
+        id: "brand-v2.md",
+        name: "当前资料 v2",
+        extension: ".md",
+        content: "不应写入",
+        contentHash: "hash-v2",
+        source: "client-material",
+      }],
+      templateId: "template-v2",
+      templateSnapshot: Object.assign({}, original.templateSnapshot, {
+        id: "template-v2",
+        body: "当前模板 v2",
+        bodyHash: "template-hash-v2",
+      }),
+    }),
+    expectedFingerprint: editor.editFingerprint,
+    });
+    assert.equal(saved.outcome, "saved");
+    assert.equal(saved.article.title, "编辑后的标题");
+    assert.equal(saved.article.content, "编辑后的正文");
+    assert.deepEqual(saved.article.materialIds, original.materialIds);
+    assert.deepEqual(saved.article.researchQueryIds, original.researchQueryIds);
+    assert.deepEqual(saved.article.materialSnapshots, original.materialSnapshots);
+    assert.deepEqual(saved.article.researchSnapshots, original.researchSnapshots);
+    assert.equal(saved.article.templateId, original.templateId);
+    assert.deepEqual(saved.article.templateSnapshot, original.templateSnapshot);
+  } finally {
+    fixture.close();
+  }
+});
+
 test("lifecycle projection exposes one operation decision matrix for runtime facts", () => {
   const base = article("article-1");
   const cases = [

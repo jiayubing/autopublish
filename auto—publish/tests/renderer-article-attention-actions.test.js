@@ -49,6 +49,7 @@ test('article attention actions produce visible publication/detail results', asy
       const calls = [];
       const content = {
         listClients: () => ok({ clients: [{ id: article.clientId, name: '测试客户', knowledgeFiles: [] }] }),
+        getClientDetails: () => ok({ client: { id: article.clientId, name: '测试客户', knowledgeFiles: [] }, research: [] }),
         listGeneratedArticles: () => ok({ articles: [article] }),
         getArticleManagementSnapshot: () => ok({
           clientId: article.clientId,
@@ -84,7 +85,7 @@ test('article attention actions produce visible publication/detail results', asy
         }),
         getSubmissionCenterSnapshot: () => ok({
           schemaVersion: 1,
-          clientId: article.clientId,
+          clientId: null,
           revision: 1,
           regular: { groups: [] },
           paid: { batches: [] },
@@ -95,12 +96,16 @@ test('article attention actions produce visible publication/detail results', asy
             { ...repair, targetLabel: '蓝色河畔 / account-1' },
           ] },
           counts: { regularItems: 0, paidBatches: 0, attentionItems: 4, total: 4 },
+          page: 1,
+          pageSize: 100,
+          hasMore: false,
+          failures: [],
         }),
         listArticleAttention: () => ok({ revision: 1, items: [attention, uncertain, paidResolution, repair], counts: { total: 4, actionable: 4 } }),
         getArticleAttention: ({ attentionId }) => ok({ item: attentionId === repair.attentionId ? repair : attention }), previewArticleAttention: ({ attentionId, action, resolutionInput }) => ok({ attentionId, revision: 1, action, requiresConfirmation: true, confirmationToken: 'attention-token', resolutionInput, message: '投稿明确失败', changedScopes: [] }),
         resolveArticleAttention: ({ attentionId, action }) => { calls.push(action); return ok({ outcome: action === 'open-publication' ? 'open-publication' : 'inspection_required', attentionId, changedScopes: [] }); },
         listSubmissionBatches: () => ok({ batches: [] }), listArticleTrash: () => ok({ trash: [] }),
-        listPublicationHistory: () => ok({ records: [publication] }), listResearch: () => ok({ research: [] }), listQuestions: () => ok({ questions: [] }), listTemplateCatalog: () => ok({ revision: '1', platforms: [], templates: [], diagnostics: [] }), listTemplates: () => ok({ templates: [] }),
+        listPublicationHistory: () => ok({ records: [publication] }), listResearch: () => ok({ research: [] }), listResearchMetadata: () => ok({ research: [] }), listQuestions: () => ok({ questions: [] }), listTemplateCatalog: () => ok({ revision: '1', platforms: [], templates: [], diagnostics: [] }), listTemplates: () => ok({ templates: [] }),
         getDoubaoLoginState: () => ok({ loginState: { status: 'unknown' } }), getDoubaoQueueState: () => ok({ queue: { status: 'idle', currentTaskId: null, completed: 0, total: 0, waitRemainingMs: 0, tasks: [] } }), onDoubaoQueueState: () => () => {}, onArticleRemovalTransaction: () => () => {}, listArticleRemovalTransactions: () => ok({ transactions: [] })
       };
       window.desktopConsole = {
@@ -109,7 +114,7 @@ test('article attention actions produce visible publication/detail results', asy
         workspace: { getBootstrapState: () => ok({ state: 'ready' }), getCurrent: () => ok({}), openCurrent: () => ok(undefined), onInvalidated: () => () => {} },
         workspaceData: { getRuntimeIdentity: () => ok({ workspaceRuntimeId: 'attention-runtime', revision: 1 }), onInvalidated: () => () => {} }, platforms: { getQueue: () => ok({ platforms: [], queue: [] }), getState: () => ok({ phase: 'idle' }), onState: () => () => {} },
         runtimeDiagnostics: { get: () => ok({ ok: true, buildInfo: {}, capabilities: {}, errors: [], warnings: [] }) }, media: { scanArticles: () => ok([]), getResourcePage: () => ok({ items: [], total: 0, page: 1, pageSize: 100 }), getPool: () => ok([]), getBalance: () => ok({ balance: '0' }) }, orders: { getOrders: () => ok([]) },
-        aiProvider: { getStatus: () => ok({ configured: false }) }, platformSettings: { getStatus: () => ok({ configured: false, publishIntervalSeconds: 30 }) }, storageMaintenance: { getUsage: () => ok({}) }
+        aiProvider: { getStatus: () => ok({ configured: false }) }, platformSettings: { getStatus: () => ok({ configured: false }) }, storageMaintenance: { getUsage: () => ok({}) }
       };
       window.__attentionActionCalls = calls;
     });

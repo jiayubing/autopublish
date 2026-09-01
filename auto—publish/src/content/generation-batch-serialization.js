@@ -15,12 +15,17 @@ const TASK_STATUSES = new Set([
 const BATCH_STATUSES = new Set([
   "pending",
   "running",
-  "stopping",
-  "stopped",
+  "paused",
   "interrupted",
   "paused_configuration",
   "completed",
   "failed",
+  "abandoned",
+]);
+const LEGACY_BATCH_STATUS_NORMALIZATION = new Map([
+  ["pausing", "paused"],
+  ["stopping", "paused"],
+  ["stopped", "paused"],
 ]);
 const RESUMABLE_STATUSES = new Set(["pending", "failed", "interrupted"]);
 
@@ -173,7 +178,7 @@ function normalizePersisted(batch) {
     Array.isArray(batch) ||
     batch.version !== BATCH_VERSION ||
     typeof batch.id !== "string" ||
-    !BATCH_STATUSES.has(batch.status) ||
+    (!BATCH_STATUSES.has(batch.status) && !LEGACY_BATCH_STATUS_NORMALIZATION.has(batch.status)) ||
     !Array.isArray(batch.tasks) ||
     !Array.isArray(batch.clientSources) ||
     !Array.isArray(batch.templates) ||
@@ -197,7 +202,7 @@ function normalizePersisted(batch) {
     version: BATCH_VERSION,
     id: batch.id,
     concurrency: concurrency,
-    status: batch.status,
+    status: LEGACY_BATCH_STATUS_NORMALIZATION.get(batch.status) || batch.status,
     createdAt: batch.createdAt,
     updatedAt: batch.updatedAt,
     aiConfigFingerprint: batch.aiConfigFingerprint,

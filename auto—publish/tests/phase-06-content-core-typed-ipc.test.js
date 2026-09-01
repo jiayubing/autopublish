@@ -45,8 +45,10 @@ const {
 
 const CHANNELS = [
   "content:list-clients",
+  "content:get-client-details",
   "content:save-client-lieju-publication-profile",
   "content:list-research",
+  "content:list-research-metadata",
   "content:list-template-catalog",
   "content:retry-material",
   "content:generate-article",
@@ -67,7 +69,7 @@ const CHANNELS = [
   "content:article-removal-transaction",
 ].sort();
 
-test("content core declares exactly 21 versioned path-free capabilities", function () {
+test("content core declares exactly 23 versioned path-free capabilities", function () {
   const registry = createContractRegistry(contentCoreContracts);
   assert.deepEqual(
     contentCoreContracts.map((contract) => contract.channel).sort(),
@@ -939,6 +941,43 @@ test("generated articles omit structured research snippets at the production IPC
     title: "结构化摘要",
     url: "https://example.com/reference",
   });
+});
+
+test("single article generation preserves typed AI configuration failures", async function () {
+  const handlers = new Map();
+  const ipcMain = createAuthenticatedIpcMain(
+    {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      },
+    },
+    async function () {},
+  );
+  registerAiContentIpc({
+    ipcMain,
+    aiContentService: {
+      generateArticle() {
+        const error = new Error("AI client configuration is invalid");
+        error.code = "AI_CONFIG_INVALID";
+        throw error;
+      },
+    },
+  });
+
+  const result = await handlers.get("content:generate-article")(null, {
+    schemaVersion: 1,
+    payload: {
+      clientId: "client-1",
+      materialIds: ["material-1"],
+      researchQueryIds: ["research-1"],
+      platform: "platform-1",
+      templateId: "template-1",
+    },
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, "AI_CONFIG_INVALID");
+  assert.equal(result.error.userMessage, "AI 配置无效，请检查设置后重试。");
 });
 
 test("article management binds client identity to real OperationalStore publication records", async function () {

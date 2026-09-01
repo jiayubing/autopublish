@@ -306,6 +306,10 @@ function normalizeArticle(article) {
     article.generationTaskId,
     "generationTaskId",
   );
+  const generationOperationId = normalizeOptionalProvenance(
+    article.generationOperationId,
+    "generationOperationId",
+  );
   if (materialSnapshots !== undefined)
     normalized.materialSnapshots = materialSnapshots;
   if (templateSnapshot !== undefined)
@@ -314,6 +318,8 @@ function normalizeArticle(article) {
     normalized.generationBatchId = generationBatchId;
   if (generationTaskId !== undefined)
     normalized.generationTaskId = generationTaskId;
+  if (generationOperationId !== undefined)
+    normalized.generationOperationId = generationOperationId;
   if (researchIds.legacy) {
     assertNonEmptyString(article.researchQueryId, "researchQueryId");
     Object.defineProperty(normalized, LEGACY_ARTICLE, {

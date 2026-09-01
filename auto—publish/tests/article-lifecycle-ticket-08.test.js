@@ -534,6 +534,29 @@ test("production preparation port verifies the account profile before adapter pr
   assert.equal(preparations, 1);
 });
 
+test("queue-run preparation reuses the initial account inspection but rechecks drift after each preparation", async () => {
+  let inspections = 0;
+  const makeClaim = (suffix) => ({
+    platformId: "toutiao", accountProfileId: "account-a",
+    regularPublicationAttemptId: "attempt-" + suffix,
+    articleIdentityV1: { version: 1, clientId: "client-a", articleId: "article-" + suffix },
+    targetIdentityV1: { version: 1, kind: "platform", platformId: "toutiao", accountProfileId: "account-a" },
+    publicationSnapshot: { title: "Title", body: "Body" },
+  });
+  const port = createRegularPlatformPreparationPort({
+    accountInspector: { inspect: async () => { inspections += 1; return { verified: true, accountProfileId: "account-a", remoteFingerprint: "fingerprint-a" }; } },
+    regularImagePlanService: { createPlan: async () => imagePlan(0) },
+    regularSubmissionPorts: [{ id: "toutiao", preparePlatformSubmission: async (claim) => domain.createPreparedSubmission({ preparedSubmissionEvidenceV1: domain.createTextOnlyPreparedSubmissionEvidenceV1(claim), submitPreparedPublication: async () => ({ status: "accepted" }) }) }],
+  });
+  port.beginQueueRun("queue-run-a");
+  await port.preparePlatformSubmission(makeClaim("one"));
+  await port.preparePlatformSubmission(makeClaim("two"));
+  assert.equal(inspections, 3);
+  port.endQueueRun();
+  await port.preparePlatformSubmission(makeClaim("three"));
+  assert.equal(inspections, 5);
+});
+
 test("prepared browser submission rejects account drift before the remote boundary", async () => {
   let inspections = 0;
   let submissions = 0;
@@ -1689,7 +1712,11 @@ test("an idempotent submission-start read never authorizes another remote call",
       targetIdentityV1: preparedEvidence.targetIdentityV1,
     }),
     listRegularQueueGroupSnapshots: () => [
-      { queueGroupId: "group-a", platformId: "toutiao" },
+      {
+        queueGroupId: "group-a",
+        platformId: "toutiao",
+        submissionIntervalSeconds: 0,
+      },
     ],
     pauseAllRegularQueueGroups: () => ({ groups: [] }),
     pauseRegularQueueGroupsOnStartup: () => ({ groups: [] }),

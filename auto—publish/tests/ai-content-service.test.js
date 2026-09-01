@@ -104,6 +104,130 @@ describe("ai content service", function() {
     assert.equal(setup.calls.filter(function(value) { return value === "saveArticle"; }).length, 1);
   });
 
+  it("generates and persists each requested article independently while retaining partial failures", async function() {
+    let invocation = 0;
+    const saved = [];
+    const setup = createService({
+      contentStore: { saveArticle: function(value) { saved.push(value); return value; } },
+      articleGeneratorFactory: function() {
+        return { generateArticle: async function(input) {
+          invocation += 1;
+          if (invocation === 2) throw error("AI_RATE_LIMITED");
+          return Object.assign({}, setup.article, { id: "article-" + invocation, generationOperationId: input.generationOperationId });
+        } };
+      }
+    });
+    const result = await setup.service.generateArticle({
+      generationOperationId: "parent-operation",
+      articleCount: 3,
+      clientId: "client-1", materialIds: ["facts.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1"
+    });
+    assert.deepEqual(result.articles.map(function(item) { return [item.index, item.article.id, item.article.generationOperationId]; }), [
+      [0, "article-1", "parent-operation-1"],
+      [2, "article-3", "parent-operation-3"],
+    ]);
+    assert.deepEqual(result.failures, [{ index: 1, code: "AI_RATE_LIMITED" }]);
+    assert.equal(result.status, "partial");
+    assert.equal(saved.length, 2);
+    const repeated = await setup.service.generateArticle({
+      generationOperationId: "parent-operation", articleCount: 3,
+      clientId: "client-1", materialIds: ["facts.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1"
+    });
+    assert.deepEqual(repeated, result);
+    assert.equal(invocation, 3);
+  });
+
+  it("reuses persisted child results after a runtime restart", async function() {
+    let invocations = 0;
+    const persisted = new Map();
+    const setup = createService({
+      contentStore: {
+        saveArticle: function(value) { persisted.set(value.generationOperationId, value); return value; },
+        findByGenerationOperationId: function(id) { const article = persisted.get(id); return article ? { kind: "one", article: article } : { kind: "none" }; },
+      },
+      articleGeneratorFactory: function() { return { generateArticle: async function(input) { invocations += 1; return Object.assign({}, setup.article, { id: "persisted-" + invocations, generationOperationId: input.generationOperationId }); } }; },
+    });
+    await setup.service.generateArticle({ generationOperationId: "restart-op", articleCount: 2, clientId: "client-1", materialIds: ["facts.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" });
+    assert.equal(invocations, 2);
+    const restarted = createService({
+      contentStore: {
+        saveArticle: function(value) { persisted.set(value.generationOperationId, value); return value; },
+        findByGenerationOperationId: function(id) { const article = persisted.get(id); return article ? { kind: "one", article: article } : { kind: "none" }; },
+      },
+      articleGeneratorFactory: function() { return { generateArticle: async function() { throw new Error("must not regenerate persisted child"); } }; },
+    });
+    const result = await restarted.service.generateArticle({ generationOperationId: "restart-op", articleCount: 2, clientId: "client-1", materialIds: ["facts.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" });
+    assert.equal(result.status, "completed");
+    assert.deepEqual(result.articles.map(function(item) { return item.article.id; }), ["persisted-1", "persisted-2"]);
+  });
+
+  it("deduplicates concurrent single-generation calls by operation identity", async function() {
+    let release;
+    let generateCalls = 0;
+    const saved = [];
+    const setup = createService({
+      contentStore: {
+        createArticle: function(value) { saved.push(value); return value; },
+        findByGenerationOperationId: function() { return { kind: "none" }; },
+      },
+      articleGeneratorFactory: function() {
+        return { generateArticle: async function(input) {
+          generateCalls += 1;
+          assert.equal(input.generationOperationId, "operation-1");
+          await new Promise(function(resolve) { release = resolve; });
+          return Object.assign({}, setup.article, { generationOperationId: input.generationOperationId });
+        } };
+      }
+    });
+    const input = { generationOperationId: "operation-1", clientId: "client-1", materialIds: ["facts.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" };
+    const first = setup.service.generateArticle(input);
+    const second = setup.service.generateArticle(input);
+    assert.equal(setup.service.getState().status, "running");
+    assert.equal(generateCalls, 1);
+    release();
+    const results = await Promise.all([first, second]);
+    assert.deepEqual(results[0], results[1]);
+    assert.equal(saved.length, 1);
+    assert.equal(results[0].generationOperationId, "operation-1");
+    assert.equal(setup.service.getState().status, "idle");
+  });
+
+  it("returns a persisted operation result without invoking the provider again", async function() {
+    const persisted = Object.assign({}, createService().article, { generationOperationId: "operation-persisted" });
+    let generatorCalls = 0;
+    const setup = createService({
+      contentStore: {
+        findByGenerationOperationId: function(id) {
+          assert.equal(id, "operation-persisted");
+          return { kind: "one", article: persisted };
+        }
+      },
+      articleGeneratorFactory: function() {
+        return { generateArticle: async function() { generatorCalls += 1; throw new Error("provider must not run"); } };
+      }
+    });
+    const result = await setup.service.generateArticle({ generationOperationId: "operation-persisted", clientId: "client-1", materialIds: ["facts.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" });
+    assert.deepEqual(result, persisted);
+    assert.equal(generatorCalls, 0);
+  });
+
+  it("exposes an uncertain outcome when runtime disposal interrupts a remote call", async function() {
+    let release;
+    const setup = createService({
+      articleGeneratorFactory: function() {
+        return { generateArticle: async function() {
+          await new Promise(function(resolve) { release = resolve; });
+          return setup.article;
+        } };
+      }
+    });
+    const pending = setup.service.generateArticle({ generationOperationId: "operation-dispose", clientId: "client-1", materialIds: ["facts.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" });
+    await setup.service.dispose();
+    assert.deepEqual(setup.service.getState(), { status: "uncertain", operationId: "operation-dispose", outcome: "result-uncertain" });
+    release();
+    await pending;
+  });
+
   it("preserves safe AI configuration failures without touching local reads", async function() {
     const setup = createService({ aiClientFactory: function() { throw error("AI_CONFIG_INVALID", "AI client configuration is invalid"); } });
     assert.deepStrictEqual(setup.service.listGeneratedArticles("client-1").map(function(item) { return item.id; }), ["article-1"]);

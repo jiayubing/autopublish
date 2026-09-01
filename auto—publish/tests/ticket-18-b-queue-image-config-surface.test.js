@@ -70,6 +70,8 @@ function openRuntime(root, options) {
     regularQueueGroupTransitions: transitionPorts.regularQueueGroupTransitions,
     regularQueueGroupImageCountTransitions:
       transitionPorts.regularQueueGroupImageCountTransitions,
+    regularQueueGroupSubmissionIntervalTransitions:
+      transitionPorts.regularQueueGroupSubmissionIntervalTransitions,
     accountProfileResolver: store.assertExecutableAccountProfile,
     clientSnapshotResolver: (clientId) => ({
       version: 1,
@@ -143,6 +145,58 @@ function group(application, queueGroupId) {
   const snapshot = application.listRegularQueueGroups();
   return snapshot.find((item) => item.queueGroupId === queueGroupId);
 }
+
+test("application persists and updates the common queue-group submission interval", () => {
+  const fixture = setup();
+  try {
+    fixture.runtime.contentStore.createArticle(article("interval-lieju"));
+    fixture.runtime.contentStore.createArticle(article("interval-hepan"));
+    const lieju = fixture.runtime.application.admitRegularQueueItems(
+      admissionInput(fixture.profiles.lieju, "interval-lieju", {
+        submissionIntervalSeconds: 0,
+      }),
+    );
+    const hepan = fixture.runtime.application.admitRegularQueueItems(
+      admissionInput(fixture.profiles.hepan, "interval-hepan"),
+    );
+    const liejuGroup = group(
+      fixture.runtime.application,
+      lieju.items[0].queueGroupId,
+    );
+    assert.equal(liejuGroup.submissionIntervalSeconds, 0);
+    assert.equal(
+      group(fixture.runtime.application, hepan.items[0].queueGroupId)
+        .submissionIntervalSeconds,
+      30,
+    );
+
+    const updated = fixture.runtime.application.updateRegularQueueGroupSubmissionInterval({
+      queueGroupId: liejuGroup.queueGroupId,
+      submissionIntervalSeconds: 3600,
+      expectedRevision: liejuGroup.revision,
+    });
+    assert.equal(
+      updated.find((item) => item.queueGroupId === liejuGroup.queueGroupId)
+        .submissionIntervalSeconds,
+      3600,
+    );
+    assert.throws(
+      () =>
+        fixture.runtime.application.updateRegularQueueGroupSubmissionInterval({
+          queueGroupId: liejuGroup.queueGroupId,
+          submissionIntervalSeconds: 3601,
+          expectedRevision: liejuGroup.revision + 1,
+        }),
+      { code: "REGULAR_QUEUE_CONFIG_INVALID" },
+    );
+    assert.equal(
+      fixture.runtime.invalidations.at(-1),
+      "REGULAR_QUEUE_GROUP_SUBMISSION_INTERVAL_UPDATED",
+    );
+  } finally {
+    fixture.close();
+  }
+});
 
 test("18-B application admits only imageCount 0..5, preserves existing groups, and updates through the named transition", () => {
   const fixture = setup();

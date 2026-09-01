@@ -3,6 +3,7 @@ const {
   projectClient,
   projectMaterial,
   projectResearch,
+  projectResearchMetadata,
   projectTemplate,
   projectTemplateCatalog,
 } = require("./contracts/content-library-contracts");
@@ -34,6 +35,7 @@ function registerAiContentIpc(deps) {
   if (!ipcMain || !service) throw new Error("AI content IPC requires the workspace content service");
 
   ipcMain.handle("content:list-clients", function() { return wrap(async function() { return { clients: (await service.listClients()).map(projectClient) }; }); });
+  ipcMain.handle("content:get-client-details", function(event, clientId) { return wrap(async function() { const result = await service.getClientDetails(clientId); return { client: projectClient(result.client), research: result.research.map(projectResearch) }; }); });
   ipcMain.handle("content:save-client-lieju-publication-profile", function(event, input) {
     return wrap(async function() {
       const result = await service.saveClientLiejuPublicationProfile(input);
@@ -41,11 +43,20 @@ function registerAiContentIpc(deps) {
     });
   });
   ipcMain.handle("content:list-research", function(event, clientId) { return wrap(function() { return { research: service.listResearch(clientId).map(projectResearch) }; }); });
+  ipcMain.handle("content:list-research-metadata", function(event, clientId) { return wrap(function() { return { research: service.listResearchMetadata(clientId).map(projectResearchMetadata) }; }); });
   ipcMain.handle("content:list-template-catalog", function() { return wrap(function() { return projectTemplateCatalog(service.listTemplateCatalog()); }); });
   ipcMain.handle("content:retry-material", function(event, input) {
     return wrap(async function() { return { material: projectMaterial(await service.retryMaterial(input && input.clientId, input && input.materialId)) }; });
   });
-  ipcMain.handle("content:generate-article", function(event, input) { return wrap(async function() { return { article: projectArticle(await service.generateArticle(generationInput(input))) }; }); });
+  ipcMain.handle("content:generate-article", function(event, input) { return wrap(async function() {
+    const result = await service.generateArticle(generationInput(input));
+    if (result && Array.isArray(result.articles) && Array.isArray(result.failures)) {
+      return { article: Object.assign({}, result, { articles: result.articles.map(function(item) {
+        return { index: item.index, article: projectArticle(item.article) };
+      }) }) };
+    }
+    return { article: projectArticle(result) };
+  }); });
   ipcMain.handle("content:save-article", function(event, input) {
     return wrap(function() {
       const result = service.saveArticle(input);

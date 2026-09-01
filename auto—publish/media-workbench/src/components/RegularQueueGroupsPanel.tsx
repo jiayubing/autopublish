@@ -21,6 +21,12 @@ function imageCountFrom(value: string) {
   return Number(value);
 }
 
+function submissionIntervalFrom(value: string) {
+  if (!/^(?:0|[1-9]\d{0,2}|[1-2]\d{3}|3[0-5]\d{2}|3600)$/.test(value))
+    return null;
+  return Number(value);
+}
+
 const SYSTEM_PAUSE_REASON_LABELS: Record<string, string> = {
   REGULAR_ACCOUNT_PROFILE_NOT_BOUND: "账号档案尚未绑定当前平台账号，请先完成绑定。",
   REGULAR_ACCOUNT_PROFILE_MISMATCH: "当前登录账号与该账号档案不一致，请切换回原账号或新建档案。",
@@ -86,7 +92,7 @@ function QueueGroupImageCountControl({
   }
 
   return (
-    <div className="mt-3 flex flex-col gap-2 rounded border border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-end sm:justify-between">
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
       <label className="grid gap-1 text-xs font-medium text-slate-700">
         每篇图片数量
         <input
@@ -126,16 +132,113 @@ function QueueGroupImageCountControl({
   );
 }
 
+function QueueGroupSubmissionIntervalControl({
+  group,
+  busy,
+  onUpdate,
+}: {
+  group: QueueGroupView;
+  busy: boolean;
+  onUpdate: (input: {
+    queueGroupId: string;
+    submissionIntervalSeconds: number;
+    expectedRevision: number;
+  }) => Promise<unknown>;
+}) {
+  const [draft, setDraft] = useState(
+    String(group.submissionIntervalSeconds),
+  );
+  const [feedback, setFeedback] = useState("");
+  const interval = submissionIntervalFrom(draft);
+  const changed =
+    interval !== null && interval !== group.submissionIntervalSeconds;
+
+  useEffect(() => {
+    setDraft(String(group.submissionIntervalSeconds));
+  }, [group.queueGroupId, group.submissionIntervalSeconds]);
+
+  useEffect(() => {
+    setFeedback("");
+  }, [group.queueGroupId]);
+
+  async function save() {
+    if (interval === null) {
+      setFeedback("请输入 0 到 3600 的整数。");
+      return;
+    }
+    setFeedback("");
+    try {
+      await onUpdate({
+        queueGroupId: group.queueGroupId,
+        submissionIntervalSeconds: interval,
+        expectedRevision: group.revision,
+      });
+      setFeedback("投稿间隔已保存。");
+    } catch (error) {
+      setFeedback(
+        error instanceof Error && error.message
+          ? error.message
+          : "保存投稿间隔失败。",
+      );
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <label className="grid gap-1 text-xs font-medium text-slate-700">
+        投稿间隔（秒）
+        <input
+          type="number"
+          inputMode="numeric"
+          min={0}
+          max={3600}
+          step={1}
+          value={draft}
+          aria-invalid={interval === null}
+          aria-label={`${group.platformLabel} 投稿间隔（秒）`}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            setFeedback("");
+          }}
+          className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm sm:w-28"
+        />
+      </label>
+      <button
+        type="button"
+        disabled={busy || interval === null || !changed}
+        onClick={() => void save()}
+        className="rounded border border-sky-300 bg-white px-3 py-2 text-xs font-semibold text-sky-800 disabled:opacity-40"
+      >
+        {busy ? "保存中…" : "保存投稿间隔"}
+      </button>
+      {feedback && (
+        <p
+          role={feedback === "投稿间隔已保存。" ? "status" : "alert"}
+          className={`text-xs ${
+            feedback === "投稿间隔已保存。"
+              ? "text-emerald-700"
+              : "text-rose-700"
+          } sm:col-span-2`}
+        >
+          {feedback}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function RegularQueueGroupsPanel({
   groups,
   loading,
   startBusy,
   pauseBusy,
   imageCountBusy,
+  submissionIntervalBusy,
   removeBusy,
   onStart,
   onPause,
   onUpdateImageCount,
+  onUpdateSubmissionInterval,
   onRemove,
 }: {
   groups: QueueGroupView[];
@@ -143,12 +246,18 @@ export default function RegularQueueGroupsPanel({
   startBusy: boolean;
   pauseBusy: boolean;
   imageCountBusy: boolean;
+  submissionIntervalBusy: boolean;
   removeBusy: boolean;
   onStart: (queueGroupId: string) => void;
   onPause: (queueGroupId: string) => void;
   onUpdateImageCount: (input: {
     queueGroupId: string;
     imageCount: number;
+    expectedRevision: number;
+  }) => Promise<unknown>;
+  onUpdateSubmissionInterval: (input: {
+    queueGroupId: string;
+    submissionIntervalSeconds: number;
     expectedRevision: number;
   }) => Promise<unknown>;
   onRemove: (item: RegularQueueGroupSnapshot["remaining"][number]) => void;
@@ -170,11 +279,18 @@ export default function RegularQueueGroupsPanel({
             <button type="button" disabled={pauseBusy || !group.actions.canPause} onClick={() => onPause(group.queueGroupId)} className="rounded border border-amber-300 px-3 py-2 text-xs font-semibold text-amber-800 disabled:opacity-40">暂停</button>
           </div>
         </div>
-        <QueueGroupImageCountControl
-          group={group}
-          busy={imageCountBusy}
-          onUpdate={onUpdateImageCount}
-        />
+        <div className="mt-3 grid gap-3 border-y border-slate-200 bg-slate-50 px-1 py-3 lg:grid-cols-2">
+          <QueueGroupImageCountControl
+            group={group}
+            busy={imageCountBusy}
+            onUpdate={onUpdateImageCount}
+          />
+          <QueueGroupSubmissionIntervalControl
+            group={group}
+            busy={submissionIntervalBusy}
+            onUpdate={onUpdateSubmissionInterval}
+          />
+        </div>
         {group.current && <p className="mt-3 text-xs text-blue-700">当前文章：{articleLabel(group.current)}</p>}
         <ol className="mt-3 list-decimal space-y-1 pl-5 text-xs text-slate-600">
           {group.remaining.map((item) => (

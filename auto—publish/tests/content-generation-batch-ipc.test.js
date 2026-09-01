@@ -72,11 +72,12 @@ describe("content generation batch IPC", function() {
         tasks: [{ clientId: "client-1", platform: "media", templateId: "guide", materialIds: ["material-1"], researchQueryIds: ["research-1"] }],
       }; },
       createAndStartBatch: async function() { return { id: "batch-1" }; },
-       stopBatch: async function() { return null; }, continueBatch: async function() { return null; }, retryFailed: async function() { return null; }, previewCancelPending: async function() { return { pendingCount: 1, canCancel: true }; }, cancelPending: async function() { return { id: "batch-1", status: "completed" }; }, getState: function() { return { status: "idle" }; },
+       pauseBatch: async function() { return null; }, abandonBatch: async function() { return { id: "batch-1", status: "abandoned" }; }, continueBatch: async function() { return null; }, resumeBatch: async function() { return null; }, retryFailed: async function() { return null; }, previewCancelPending: async function() { return { pendingCount: 1, canCancel: true }; }, cancelPending: async function() { return { id: "batch-1", status: "completed" }; }, getState: function() { return { status: "idle" }; },
       subscribe: function() { return function() {}; }
     };
     registerContentGenerationBatchIpc({ ipcMain, contentGenerationBatchService: service });
-     for (const channel of ["content:preview-generation-batch", "content:create-and-start-generation-batch", "content:pause-generation-batch", "content:stop-generation-batch", "content:continue-generation-batch", "content:resume-generation-batch", "content:retry-failed-generation-batch", "content:preview-cancel-pending-generation-batch", "content:cancel-pending-generation-batch", "content:get-generation-runtime-snapshot"]) assert.ok(handlers.has(channel), channel);
+     for (const channel of ["content:preview-generation-batch", "content:create-and-start-generation-batch", "content:pause-generation-batch", "content:abandon-generation-batch", "content:continue-generation-batch", "content:resume-generation-batch", "content:retry-failed-generation-batch", "content:preview-cancel-pending-generation-batch", "content:cancel-pending-generation-batch", "content:get-generation-runtime-snapshot"]) assert.ok(handlers.has(channel), channel);
+    assert.equal(handlers.has("content:stop-generation-batch"), false);
     assert.deepStrictEqual(await handlers.get("content:preview-generation-batch")({}, { templates: [{ platform: "media", templateId: "guide" }] }), { ok: true, data: {
       clientCount: 1,
       executableClientCount: 1,

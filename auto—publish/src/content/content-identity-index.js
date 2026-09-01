@@ -25,6 +25,7 @@ function createContentIdentityIndex(options) {
         };
   const byArticle = new Map();
   const byTask = new Map();
+  const byOperation = new Map();
   opts.listClientIds().forEach(function (clientId) {
     opts.listArticles(clientId).forEach(function (rawArticle) {
       const article = opts.snapshot
@@ -42,6 +43,11 @@ function createContentIdentityIndex(options) {
         taskMatches.push(article);
         byTask.set(article.generationTaskId, taskMatches);
       }
+      if (article.generationOperationId) {
+        const operationMatches = byOperation.get(article.generationOperationId) || [];
+        operationMatches.push(article);
+        byOperation.set(article.generationOperationId, operationMatches);
+      }
     });
   });
 
@@ -51,6 +57,9 @@ function createContentIdentityIndex(options) {
     },
     findByGenerationTaskId: function (generationTaskId) {
       return resultFor(byTask.get(generationTaskId) || []);
+    },
+    findByGenerationOperationId: function (generationOperationId) {
+      return resultFor(byOperation.get(generationOperationId) || []);
     },
     size: byArticle.size,
   };

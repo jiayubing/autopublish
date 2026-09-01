@@ -182,34 +182,31 @@ describe("generation batch runner", function() {
     });
   });
 
-  it("aborts the active task and leaves later tasks pending when stopped", async function() {
+  it("finishes the active task and leaves later tasks pending when paused", async function() {
     const batch = makeBatch([{}, {}]);
     const store = fakeStore(batch);
     let taskStarted;
     const started = new Promise(function(resolve) { taskStarted = resolve; });
+    let resolveTask;
     const runner = createGenerationBatchRunner({
       batchStore: store,
-      executeTask: function(task, options) {
+      executeTask: function(task) {
         taskStarted();
-        return new Promise(function(resolve, reject) {
-          options.signal.addEventListener("abort", function() {
-            const error = new Error("aborted");
-            error.name = "AbortError";
-            reject(error);
-          }, { once: true });
-        });
+        return new Promise(function(resolve) { resolveTask = resolve; });
       },
       concurrency: 1
     });
 
     const running = runner.run(batch.id);
     await started;
-    await runner.stop();
+    const paused = runner.pause();
+    resolveTask({ id: "article-1" });
+    await paused;
     await running;
 
-    assert.equal(store.getBatch(batch.id).tasks[0].status, "interrupted");
+    assert.equal(store.getBatch(batch.id).tasks[0].status, "succeeded");
     assert.equal(store.getBatch(batch.id).tasks[1].status, "pending");
-    assert.equal(store.getBatch(batch.id).status, "stopped");
+    assert.equal(store.getBatch(batch.id).status, "paused");
   });
 
   it("retries rate limits, network failures, timeouts, and server failures with injected waits", async function() {
@@ -371,8 +368,8 @@ describe("generation batch runner", function() {
     await runner.dispose();
     await running;
     await runner.dispose();
-    assert.equal(store.getBatch(batch.id).status, "stopped");
-    assert.equal(runner.getState().status, "stopped");
+    assert.equal(store.getBatch(batch.id).status, "interrupted");
+    assert.equal(runner.getState().status, "interrupted");
   });
 
   it("keeps the running task alive while cancelling later pending tasks", async function() {
@@ -423,29 +420,21 @@ describe("generation batch runner", function() {
     assert.equal(events[0].status, "running");
   });
 
-  it("handles a controllable fifty-task run without duplicate execution after stop and continue", async function() {
+  it("handles a controllable fifty-task run without duplicate execution after pause and continue", async function() {
     const batch = makeBatch(Array.from({ length: 50 }, function() { return {}; }));
     const store = fakeStore(batch);
     const calls = [];
     let firstStarted;
     const firstStartedPromise = new Promise(function(resolve) { firstStarted = resolve; });
-    let stopped = false;
     const runner = createGenerationBatchRunner({
       batchStore: store,
       executeTask: function(task, options) {
         calls.push(task.id);
         if (calls.length === 1) {
           firstStarted();
-          return new Promise(function(resolve, reject) {
-            const timer = setTimeout(function() { resolve({ id: "article-1" }); }, 20);
-            options.signal.addEventListener("abort", function() {
-              stopped = true;
-              clearTimeout(timer);
-              const error = new Error("aborted");
-              error.name = "AbortError";
-              reject(error);
-            }, { once: true });
-          });
+            return new Promise(function(resolve) {
+              const timer = setTimeout(function() { resolve({ id: "article-1" }); }, 20);
+            });
         }
         return Promise.resolve({ id: "article-" + task.id });
       }
@@ -453,13 +442,13 @@ describe("generation batch runner", function() {
 
     const running = runner.run(batch.id);
     await firstStartedPromise;
-    await runner.stop();
+    await runner.pause();
     await running;
-    assert.equal(stopped, true);
-    assert.equal(store.getBatch(batch.id).tasks.filter(function(task) { return task.status === "succeeded"; }).length, 0);
+    assert.equal(store.getBatch(batch.id).status, "paused");
+    assert.equal(store.getBatch(batch.id).tasks.filter(function(task) { return task.status === "succeeded"; }).length, 1);
 
     await runner.run(batch.id, "unfinished");
-    assert.equal(calls.length, 51);
+    assert.equal(calls.length, 50);
     assert.equal(new Set(calls).size, 50);
     assert.equal(store.getBatch(batch.id).tasks.filter(function(task) { return task.status === "succeeded"; }).length, 50);
   });

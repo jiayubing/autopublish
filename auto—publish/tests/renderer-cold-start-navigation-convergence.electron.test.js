@@ -233,6 +233,125 @@ async function installPackagedFixture(application, responseDelayMs) {
   );
 }
 
+function platformLoginFixtureResults() {
+  const { productionIpcContractFixtures } = require("./fixtures/phase-06-production-ipc-contract-fixtures");
+  const { productionIpcRegistry } = require("../desktop/ipc/contracts/production-registry");
+  const fixtureFor = (channel) =>
+    productionIpcContractFixtures.find(
+      (fixture) => fixture.channel === channel && fixture.result !== undefined,
+    );
+  const article = fixtureFor("content:get-article-editor").result.article;
+  const operation = (allowed) => ({
+    allowed,
+    reasonCodes: [],
+    safeMetadata: {},
+  });
+  const management = {
+    clientId: article.clientId,
+    revision: 1,
+    articles: [article],
+    trash: [],
+    publicationRecords: [],
+    submissionPlatforms: [
+      { id: "platform-1", displayName: "测试平台", contentQueueImport: true },
+    ],
+    workflowItems: [
+      {
+        articleId: article.id,
+        workflow: {
+          version: 1,
+          stage: "pending_submission",
+          label: "待投稿",
+          primaryAction: "submit",
+          allowedBulkActions: ["submit", "trash"],
+          reasonCodes: [],
+          reasonMessage: null,
+          locks: {
+            canEdit: true,
+            canSubmit: true,
+            canCancel: false,
+            canTrash: true,
+          },
+          operations: {
+            edit: operation(true),
+            submit: operation(true),
+            trash: operation(true),
+            restore: operation(false),
+            purge: operation(false),
+          },
+          attentionCount: 0,
+          orderSummary: {
+            status: "none",
+            label: "无订单",
+            records: 0,
+            active: 0,
+            published: 0,
+            attention: 0,
+          },
+          publicationSummary: {
+            status: "none",
+            label: "未发布",
+            records: 0,
+            published: 0,
+            uncertain: false,
+          },
+          targetFacts: [],
+        },
+      },
+    ],
+  };
+  const success = (channel, result) =>
+    productionIpcRegistry.success(productionIpcRegistry.byChannel(channel), result);
+  return {
+    management: success("content:get-article-management-snapshot", management),
+    openLogin: success("platforms:open-login", {
+      platformId: "platform-1",
+      status: "opened",
+    }),
+    checkLogin: success("platforms:check-login", {
+      platformId: "platform-1",
+      authenticated: false,
+    }),
+  };
+}
+
+async function installPlatformLoginFixture(application) {
+  const fixture = platformLoginFixtureResults();
+  await application.evaluate(
+    async ({ BrowserWindow, ipcMain }, input) => {
+      const install = (channel, response) => {
+        ipcMain.removeHandler(channel);
+        ipcMain.handle(channel, () => {
+          globalThis.__navigationSmokeMetrics.commandChannels.push(channel);
+          return response;
+        });
+      };
+      install("content:get-article-management-snapshot", input.management);
+      install("platforms:open-login", input.openLogin);
+      install("platforms:check-login", input.checkLogin);
+      const window = BrowserWindow.getAllWindows()[0];
+      if (!window || window.isDestroyed())
+        throw new Error("packaged window unavailable");
+      window.webContents.send("workspace:data-invalidated", {
+        schemaVersion: 1,
+        workspaceRuntimeId: "fixture-1",
+        revision: 1,
+        scopes: [
+          "platformQueue",
+          "articleAttention",
+          "articleManagement",
+          "orders",
+          "contentSources",
+          "mediaWorkbench",
+          "submissionCenter",
+        ],
+        reasonCode: "WORKSPACE_RUNTIME_READY",
+      });
+    },
+    fixture,
+  );
+}
+
 async function mouseClickView(page, view) {
   const button = page.locator(`#nav-item-${view}`);
   const box = await button.boundingBox();
@@ -497,6 +616,60 @@ test(
         ]),
       );
       console.log(JSON.stringify({ unpackedExecutable, rounds: observations.length, converged: observations.filter((item) => item.converged).length, mutationCalls: observations.reduce((total, item) => total + item.mutationCalls.length, 0), pageErrors: observations.reduce((total, item) => total + item.pageErrors.length, 0), matrix }));
+    }
+  },
+);
+
+test(
+  "unpacked platform login buttons reach packaged IPC after workspace startup",
+  { skip: !unpackedSmoke, timeout: 120000 },
+  async () => {
+    const directory = fs.mkdtempSync(
+      path.join(os.tmpdir(), "auto-publish-platform-login-"),
+    );
+    let application;
+    try {
+      application = await electron.launch({
+        executablePath: unpackedExecutable,
+        args: [
+          "--disable-gpu",
+          `--user-data-dir=${path.join(directory, "user-data")}`,
+        ],
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined },
+      });
+      const page = await application.firstWindow();
+      page.setDefaultTimeout(20000);
+      const pageErrors = [];
+      page.on("pageerror", (error) =>
+        pageErrors.push(error.stack || error.message),
+      );
+      await installPackagedFixture(application, 0);
+      await page.getByText("数据已就绪").waitFor();
+      await installPlatformLoginFixture(application);
+      await page.getByRole("checkbox", { name: /^全选 / }).check();
+      await page.getByRole("button", { name: "发起投稿 (1)" }).click();
+      await page
+        .getByRole("combobox", { name: "普通平台投稿目标" })
+        .selectOption("platform-1");
+
+      await page.getByRole("button", { name: "打开登录页" }).click();
+      await page.getByText("登录页已打开，请完成登录后点击检查登录").waitFor();
+      await page.getByRole("button", { name: "检查登录" }).click();
+      await page.getByText("尚未检测到登录").waitFor();
+
+      const metrics = await application.evaluate(
+        () => globalThis.__navigationSmokeMetrics,
+      );
+      assert.deepEqual(
+        metrics.commandChannels.filter((channel) =>
+          ["platforms:open-login", "platforms:check-login"].includes(channel),
+        ),
+        ["platforms:open-login", "platforms:check-login"],
+      );
+      assert.deepEqual(pageErrors, []);
+    } finally {
+      if (application) await application.close();
+      fs.rmSync(directory, { recursive: true, force: true });
     }
   },
 );

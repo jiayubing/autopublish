@@ -149,7 +149,7 @@ function ensureBuild() {
 async function startRenderer(options) {
   const port = Number((options && options.port) || 4174);
   await ensureBuild();
-  if (!browserPromise) browserPromise = chromium.launch({ headless: true });
+  if (!browserPromise) browserPromise = chromium.launch({ headless: true, channel: "msedge" });
   if (!servers.has(port)) {
     const url = `http://127.0.0.1:${port}/`;
     const processValue = spawn(
@@ -165,8 +165,13 @@ async function startRenderer(options) {
 
 async function closeRenderer() {
   if (browserPromise) {
-    const browser = await browserPromise;
-    await browser.close();
+    try {
+      const browser = await browserPromise;
+      await browser.close();
+    } catch (_) {
+      // Browser launch failures are surfaced by startRenderer; cleanup must
+      // still terminate any preview server started before that failure.
+    }
   }
   const processes = [...servers.values()].map(
     ({ process: processValue }) => processValue,

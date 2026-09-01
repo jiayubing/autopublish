@@ -46,6 +46,8 @@ function createRegularQueueApplication(options) {
   const groupTransitions = value.regularQueueGroupTransitions || null;
   const groupImageCountTransitions =
     value.regularQueueGroupImageCountTransitions || null;
+  const groupSubmissionIntervalTransitions =
+    value.regularQueueGroupSubmissionIntervalTransitions || null;
   const accountProfileResolver = value.accountProfileResolver;
   const clientSnapshotResolver = typeof value.clientSnapshotResolver === "function"
     ? value.clientSnapshotResolver
@@ -147,7 +149,11 @@ function createRegularQueueApplication(options) {
     const queueConfig = input && input.queueConfig;
     if (queueConfig === undefined) return undefined;
     if (!plainObject(queueConfig) || Object.keys(queueConfig).some(function (key) {
-      return key !== "queueGroupId" && key !== "imageCount";
+      return (
+        key !== "queueGroupId" &&
+        key !== "imageCount" &&
+        key !== "submissionIntervalSeconds"
+      );
     }))
       throw fail("REGULAR_QUEUE_CONFIG_INVALID");
     if (queueConfig.queueGroupId !== undefined &&
@@ -158,6 +164,13 @@ function createRegularQueueApplication(options) {
       (!Number.isInteger(queueConfig.imageCount) ||
         queueConfig.imageCount < 0 ||
         queueConfig.imageCount > 5)
+    )
+      throw fail("REGULAR_QUEUE_CONFIG_INVALID");
+    if (
+      queueConfig.submissionIntervalSeconds !== undefined &&
+      (!Number.isInteger(queueConfig.submissionIntervalSeconds) ||
+        queueConfig.submissionIntervalSeconds < 0 ||
+        queueConfig.submissionIntervalSeconds > 3600)
     )
       throw fail("REGULAR_QUEUE_CONFIG_INVALID");
     return Object.freeze(Object.assign({}, queueConfig));
@@ -190,6 +203,33 @@ function createRegularQueueApplication(options) {
     });
   }
 
+  function submissionIntervalUpdateFrom(input) {
+    const request = input || {};
+    if (
+      !plainObject(request) ||
+      Object.keys(request).some(function (key) {
+        return (
+          key !== "queueGroupId" &&
+          key !== "submissionIntervalSeconds" &&
+          key !== "expectedRevision"
+        );
+      }) ||
+      typeof request.queueGroupId !== "string" ||
+      !request.queueGroupId.trim() ||
+      !Number.isInteger(request.submissionIntervalSeconds) ||
+      request.submissionIntervalSeconds < 0 ||
+      request.submissionIntervalSeconds > 3600 ||
+      !Number.isInteger(request.expectedRevision) ||
+      request.expectedRevision < 0
+    )
+      throw fail("REGULAR_QUEUE_CONFIG_INVALID");
+    return Object.freeze({
+      queueGroupId: request.queueGroupId.trim(),
+      submissionIntervalSeconds: request.submissionIntervalSeconds,
+      expectedRevision: request.expectedRevision,
+    });
+  }
+
   function groupImagePublishingSupported(platformId) {
     const platform = platformList().find(function (candidate) {
       return candidate.id === platformId;
@@ -207,6 +247,9 @@ function createRegularQueueApplication(options) {
         ? { queueGroupId: queueConfig.queueGroupId }
         : {}),
       imageCount: 0,
+      ...(queueConfig && queueConfig.submissionIntervalSeconds !== undefined
+        ? { submissionIntervalSeconds: queueConfig.submissionIntervalSeconds }
+        : {}),
     });
   }
 
@@ -513,6 +556,12 @@ function createRegularQueueApplication(options) {
           group.imageCount > 5
         )
           throw fail("REGULAR_QUEUE_GROUP_QUERY_INVALID");
+        if (
+          !Number.isInteger(group.submissionIntervalSeconds) ||
+          group.submissionIntervalSeconds < 0 ||
+          group.submissionIntervalSeconds > 3600
+        )
+          throw fail("REGULAR_QUEUE_GROUP_QUERY_INVALID");
         const reasonCode =
           typeof group.actions?.reasonCode === "string" &&
           /^[A-Z][A-Z0-9_]{0,127}$/.test(group.actions.reasonCode)
@@ -532,6 +581,7 @@ function createRegularQueueApplication(options) {
           platformId: group.platformId,
           accountProfileId: group.accountProfileId,
           imageCount: group.imageCount,
+          submissionIntervalSeconds: group.submissionIntervalSeconds,
           imagePublishingSupported: groupImagePublishingSupported(group.platformId),
           runState: group.runState,
           pauseIntent: group.pauseIntent,
@@ -577,12 +627,28 @@ function createRegularQueueApplication(options) {
     return listRegularQueueGroups();
   }
 
+  function updateRegularQueueGroupSubmissionInterval(input) {
+    if (
+      !groupSubmissionIntervalTransitions ||
+      typeof groupSubmissionIntervalTransitions.setRegularQueueGroupSubmissionInterval !==
+        "function"
+    )
+      throw fail("REGULAR_QUEUE_GROUP_SUBMISSION_INTERVAL_UNAVAILABLE");
+    const request = submissionIntervalUpdateFrom(input);
+    groupSubmissionIntervalTransitions.setRegularQueueGroupSubmissionInterval(
+      request,
+    );
+    notifyDataInvalidated("REGULAR_QUEUE_GROUP_SUBMISSION_INTERVAL_UPDATED");
+    return listRegularQueueGroups();
+  }
+
   return Object.freeze({
     previewRegularQueueAdmission,
     admitRegularQueueItems,
     listRegularQueueGroups,
     removePendingQueueItems,
     updateRegularQueueGroupImageCount,
+    updateRegularQueueGroupSubmissionInterval,
   });
 }
 

@@ -48,9 +48,10 @@ function createContentStore(options) {
   }
 
   function findByGenerationTaskId(id) { return createIdentityIndex().findByGenerationTaskId(id); }
+  function findByGenerationOperationId(id) { return createIdentityIndex().findByGenerationOperationId(id); }
   function findByArticleId(id) { return createIdentityIndex().findByArticleId(id); }
   const delegated = ["getArticle", "saveArticle", "createArticle", "listArticles", "moveArticleToTrash", "restoreTrashedArticle", "listTrashedArticles", "getTrashedTombstone", "permanentlyDeleteTrashedArticle", "isArticleTrashed", "isArticleRemoved"];
-  const api = { snapshotArticle, fingerprintArticle, resolveIdentities, findByGenerationTaskId, findByArticleId, createGenerationTaskIndex: createIdentityIndex, supportsIdempotentRemovalOperation: articleStore.supportsIdempotentRemovalOperation === true };
+  const api = { snapshotArticle, fingerprintArticle, resolveIdentities, findByGenerationTaskId, findByGenerationOperationId, findByArticleId, createGenerationTaskIndex: createIdentityIndex, supportsIdempotentRemovalOperation: articleStore.supportsIdempotentRemovalOperation === true };
   delegated.forEach(function(name) {
     if (typeof articleStore[name] === "function") api[name] = articleStore[name].bind(articleStore);
   });

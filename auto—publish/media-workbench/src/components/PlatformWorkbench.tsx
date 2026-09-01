@@ -37,8 +37,34 @@ export default function PlatformWorkbench({
     clientId ||
     "当前客户";
   const center = submissionCenter.snapshot;
+  const [clientFilter, setClientFilter] = useState<string>("");
+  const [page, setPage] = useState(1);
+  const pageSize = center.data.pageSize || 100;
+  useEffect(() => {
+    setPage(center.data.page || 1);
+  }, [center.data.page]);
+  async function changeClientFilter(value: string) {
+    setClientFilter(value);
+    setPage(1);
+    submissionCenter.feature.setPage(1);
+    const workspaceRuntimeId = center.scope?.workspaceRuntimeId;
+    if (!workspaceRuntimeId) return;
+    submissionCenter.feature.setScope({
+      workspaceRuntimeId,
+      clientId: value || undefined,
+    });
+    await submissionCenter.feature.refresh("client-filter");
+  }
+  async function changePage(nextPage: number) {
+    if (nextPage < 1 || !center.scope?.workspaceRuntimeId) return;
+    setPage(nextPage);
+    submissionCenter.feature.setPage(nextPage);
+    // Query parameters are carried by the bridge adapter; keep the current
+    // scope stable while requesting the selected page.
+    await submissionCenter.feature.refresh(`page-${nextPage}`);
+  }
   const { snapshot: attentionSnapshot, feature: attentionFeature } =
-    useAttentionFeature(clientId, {
+    useAttentionFeature(center.data.clientId || undefined, {
       clientId: center.data.clientId,
       revision: center.data.revision,
       items: center.data.attention.items,
@@ -209,6 +235,16 @@ export default function PlatformWorkbench({
         <p className="mt-1 text-xs text-slate-500">
           普通平台队列、已确认付费批次和需处理事项集中在此处执行。
         </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <label className="text-xs text-slate-600" htmlFor="submission-center-client-filter">客户筛选</label>
+          <select id="submission-center-client-filter" value={clientFilter} onChange={(event) => void changeClientFilter(event.target.value)} className="rounded border border-slate-300 bg-white px-2 py-1 text-xs">
+            <option value="">全部客户</option>
+            {content.snapshot.clients.map((client) => <option key={client.id} value={client.id}>{client.name || client.id}</option>)}
+          </select>
+          <span className="text-xs text-slate-500">第 {page} 页</span>
+          <button type="button" disabled={page <= 1 || center.query.loading} onClick={() => void changePage(page - 1)} className="rounded border border-slate-300 px-2 py-1 text-xs disabled:opacity-40">上一页</button>
+          <button type="button" disabled={!center.data.hasMore || center.query.loading} onClick={() => void changePage(page + 1)} className="rounded border border-slate-300 px-2 py-1 text-xs disabled:opacity-40">下一页</button>
+        </div>
         <div className="mt-3 flex min-w-0 flex-wrap gap-2" role="tablist" aria-label="投稿中心分区">
           {(
             [
@@ -241,6 +277,11 @@ export default function PlatformWorkbench({
       <div className="min-h-0 flex-1 overflow-y-auto">
         {section === "regular" && (
           <div className="h-full p-1">
+            {center.data.failures?.length > 0 && (
+              <p role="status" className="mb-3 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                部分投稿中心分区暂时无法读取：{center.data.failures.map((failure) => failure.section).join("、")}。可点击刷新重试。
+              </p>
+            )}
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-base font-semibold text-slate-800">普通平台队列</h2>
@@ -292,12 +333,19 @@ export default function PlatformWorkbench({
               startBusy={commands.startGroup.busy}
               pauseBusy={commands.pauseGroup.busy}
               imageCountBusy={commands.updateImageCount.busy}
+              submissionIntervalBusy={commands.updateSubmissionInterval.busy}
               removeBusy={commands.removePendingQueueItems.busy}
               onStart={(id) => void feature.startGroup(id)}
               onPause={(id) => void feature.pauseGroup(id)}
               onUpdateImageCount={(input) => feature.updateImageCount(input)}
+              onUpdateSubmissionInterval={(input) =>
+                feature.updateSubmissionInterval(input)
+              }
               onRemove={(item) => void removePendingItem(item)}
             />
+            {center.data.hasMore && (
+              <p className="mt-3 text-center text-xs text-slate-500">当前为分页结果，还有更多队列项。</p>
+            )}
             <section aria-labelledby="queue-residue-heading" className="mt-4 rounded border border-slate-200 bg-slate-50 p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>

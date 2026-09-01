@@ -266,7 +266,6 @@ function createPlatformSettingsService(options) {
 
   function prepareWorkerRuntime(input) {
     const runtimeContext = {};
-    const intervalByTargetMs = {};
     const cleanups = [];
     let timeoutMs = 90000;
     try {
@@ -282,8 +281,6 @@ function createPlatformSettingsService(options) {
           prepared.platformId !== adapter.id ||
           !isObject(prepared.runtimeContext) ||
           typeof prepared.cleanup !== "function" ||
-          !Number.isInteger(prepared.intervalMs) ||
-          prepared.intervalMs < 0 ||
           !Number.isInteger(prepared.timeoutMs) ||
           prepared.timeoutMs < 1
         )
@@ -293,7 +290,6 @@ function createPlatformSettingsService(options) {
             throw settingsError("PLATFORM_WORKER_RUNTIME_INVALID", "Platform worker runtime is invalid");
           runtimeContext[key] = prepared.runtimeContext[key];
         });
-        intervalByTargetMs[adapter.id] = prepared.intervalMs;
         timeoutMs = Math.max(timeoutMs, prepared.timeoutMs);
         cleanups.push(prepared.cleanup);
       });
@@ -306,7 +302,6 @@ function createPlatformSettingsService(options) {
     let cleaned = false;
     return Object.freeze({
       runtimeContext: Object.freeze(runtimeContext),
-      intervalByTargetMs: Object.freeze(intervalByTargetMs),
       timeoutMs,
       cleanup: function () {
         if (cleaned) return;

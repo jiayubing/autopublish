@@ -86,7 +86,6 @@ const hepanDraft = exactObject({
   categoryId: optionalField(integerField({ min: 1, max: 2147483647 })),
   vendorDir: optionalField(text(1024, 1)),
   clearVendorDir: optionalField(literalField(true)),
-  publishIntervalSeconds: optionalField(integerField({ min: 0, max: 3600 })),
 });
 const platformDraft = oneOf([mediaDraft, hepanDraft]);
 const platformQueryRequest = exactObject({ platformId });
@@ -141,7 +140,6 @@ const hepanStatus = exactObject({
   vendorConfigured: "boolean",
   bundledVendorAvailable: optionalField("boolean"),
   siteOrigin: text(2048),
-  publishIntervalSeconds: integerField({ min: 0, max: 3600 }),
   lastTest: nullableField(hepanTestResult),
 });
 const platformStatusResult = exactObject({

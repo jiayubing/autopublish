@@ -49,9 +49,7 @@ function AppContent() {
     useState<ArticleLibraryNavigationIntent | null>(null);
   const { snapshot: mediaSnapshot, feature: mediaFeature } = useMediaFeature();
   const content = useContentWorkbenchFeature();
-  const submissionCenter = useSubmissionCenterFeature(
-    content.snapshot.selectedClientId || "",
-  );
+  const submissionCenter = useSubmissionCenterFeature();
   const orders = mediaSnapshot.orders.items;
   const balance = mediaSnapshot.balance.value;
   const dataLoaded =
@@ -154,7 +152,7 @@ function AppContent() {
                   className="h-full"
                 >
                   <ContentWorkbench
-                    content={content}
+                    content={content.production}
                     mode="production"
                     onOpenArticleLibrary={openArticleLibrary}
                     onOpenOrders={() => setCurrentView("orders")}
@@ -189,7 +187,7 @@ function AppContent() {
                   className="h-full"
                 >
                   <ContentWorkbench
-                    content={content}
+                    content={content.library}
                     mode="library"
                     favoriteMediaPage={{
                       items: mediaSnapshot.pool.items,

@@ -17,6 +17,23 @@ function attention(attentionId, allowedActions = ["open-submission"]) {
 }
 
 describe("Phase 06 attention feature", () => {
+  it("supports a workspace-wide scope and refreshes without a client filter", async () => {
+    const requests = [];
+    const feature = createAttentionFeature({
+      list: async (clientId) => {
+        requests.push(clientId);
+        return { revision: 1, items: [], counts: { total: 0, actionable: 0 } };
+      },
+      preview: async () => ({}),
+      execute: async () => ({}),
+    });
+    feature.setScope({ workspaceRuntimeId: "workspace-global" });
+    await feature.refresh("initial");
+    assert.deepEqual(feature.getSnapshot().scope, { workspaceRuntimeId: "workspace-global" });
+    assert.deepEqual(requests, [undefined]);
+    feature.dispose();
+  });
+
   it("owns the scoped query revision/fingerprint and rejects an older response", async () => {
     const oldQuery = deferred();
     const newQuery = deferred();

@@ -114,8 +114,8 @@ test("schema v2 upgrades through v3 to v4 with the exact order display snapshot 
   const workspaceRoot = workspace();
   const databasePath = downgradeToV2(workspaceRoot);
   const upgraded = createOperationalStore({ workspaceRoot });
-  assert.equal(SCHEMA_VERSION, 8);
-  assert.equal(upgraded.verify().schemaVersion, 8);
+  assert.equal(SCHEMA_VERSION, 9);
+  assert.equal(upgraded.verify().schemaVersion, 9);
   upgraded.close();
 
   const database = new DatabaseSync(databasePath, { readOnly: true });
@@ -148,12 +148,12 @@ test("schema v2 upgrades through v3 to v4 with the exact order display snapshot 
       .prepare("SELECT version FROM schema_migrations ORDER BY version")
       .all()
       .map((row) => row.version),
-    [1, 2, 3, 4, 5, 6, 7, 8],
+    [1, 2, 3, 4, 5, 6, 7, 8, 9],
   );
   database.close();
 
   const reopened = createOperationalStore({ workspaceRoot });
-  assert.equal(reopened.verify().schemaVersion, 8);
+  assert.equal(reopened.verify().schemaVersion, 9);
   reopened.close();
 });
 
@@ -178,7 +178,7 @@ test("every legacy migration fault rolls back and a clean retry reaches v4", () 
     );
     assert.deepEqual(snapshotSchema(databasePath), before);
     const retried = createOperationalStore({ workspaceRoot });
-    assert.equal(retried.verify().schemaVersion, 8);
+    assert.equal(retried.verify().schemaVersion, 9);
     retried.close();
   }
 });
@@ -244,7 +244,7 @@ test("v3 backup and restored temporary workspace preserve the bounded order snap
     quotedPrice: 36.5,
   });
   const backupPath = path.join(workspaceRoot, "operations-v3.backup.sqlite");
-  assert.equal(store.backup(backupPath).schemaVersion, 8);
+  assert.equal(store.backup(backupPath).schemaVersion, 9);
   store.close();
 
   const restoredWorkspace = workspace();

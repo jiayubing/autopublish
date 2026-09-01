@@ -28,8 +28,8 @@ const directInput = (payload) => [payload];
 const template = exactObject({ platform: id, templateId: id });
 const source = exactObject({
   clientId: id,
-  materialIds: arrayField(id, { min: 1, max: 1000 }),
-  researchQueryIds: arrayField(id, { min: 1, max: 1000 }),
+  materialIds: arrayField(id, { min: 1, max: 50 }),
+  researchQueryIds: arrayField(id, { min: 1, max: 50 }),
 });
 const GENERATION_TASK_PAGE_SIZE = 256;
 const excludedClient = exactObject({
@@ -49,8 +49,8 @@ const task = exactObject({
   clientId: id,
   platform: id,
   templateId: id,
-  materialIds: arrayField(id, { max: 1000 }),
-  researchQueryIds: arrayField(id, { max: 1000 }),
+  materialIds: arrayField(id, { max: 50 }),
+  researchQueryIds: arrayField(id, { max: 50 }),
   status: enumField(["pending", "running", "succeeded", "failed", "interrupted", "cancelled"]),
   attempts: integerField({ min: 0, max: 1000 }),
   error: optionalField(nullableField(exactObject({
@@ -66,8 +66,8 @@ const batch = exactObject({
   id,
   concurrency: optionalField(integerField({ min: 1, max: 4 })),
   status: enumField([
-    "pending", "running", "pausing", "paused", "stopping", "stopped",
-    "interrupted", "paused_configuration", "completed", "failed",
+    "pending", "running", "pausing", "paused",
+    "interrupted", "paused_configuration", "completed", "failed", "abandoned",
   ]),
   createdAt: optionalField(timestamp),
   updatedAt: optionalField(timestamp),
@@ -85,6 +85,7 @@ const batch = exactObject({
 const planRequest = exactObject({
   clientIds: arrayField(id, { min: 1, max: 1000 }),
   templates: arrayField(template, { min: 1, max: 1000 }),
+  concurrency: optionalField(integerField({ min: 1, max: 4 })),
   clientSources: optionalField(arrayField(source, { max: 1000 })),
   templateCatalogRevision: optionalField(text(256, 1)),
 });
@@ -135,8 +136,8 @@ const cancelPreview = exactObject({
   canCancel: "boolean",
 });
 const runtimeStatus = enumField([
-  "idle", "pending", "starting", "running", "pausing", "paused", "stopping",
-  "stopped", "interrupted", "paused_configuration", "failed", "completed",
+  "idle", "pending", "starting", "running", "pausing", "paused",
+  "interrupted", "paused_configuration", "failed", "completed", "abandoned",
 ]);
 const state = exactObject({
   state: runtimeStatus,
@@ -169,7 +170,7 @@ const GENERATION_EVENT_FIELDS = [
 ];
 const GENERATION_STATUSES = new Set([
   "idle", "pending", "running", "pausing", "paused", "paused_configuration",
-  "stopping", "stopped", "completed", "failed", "interrupted", "cancelled", "succeeded",
+  "completed", "failed", "interrupted", "cancelled", "succeeded", "abandoned",
 ]);
 
 function generationEventError() {
@@ -325,6 +326,7 @@ const COMMON_ERRORS = {
 };
 const GENERATION_CODES = [
   "GENERATION_INPUT_INVALID", "GENERATION_CLIENTS_REQUIRED", "GENERATION_TEMPLATES_REQUIRED",
+  "GENERATION_SOURCE_LIMIT", "GENERATION_TASK_LIMIT",
   "GENERATION_CLIENT_NOT_FOUND", "CLIENT_MATERIAL_REQUIRED", "CLIENT_MATERIAL_INVALID",
   "GEO_RESEARCH_REQUIRED", "GEO_RESEARCH_INVALID", "GENERATION_TEMPLATE_NOT_FOUND",
   "GENERATION_TEMPLATE_INVALID", "GENERATION_TEMPLATE_STALE", "GENERATION_NO_EXECUTABLE_TASKS",
@@ -360,8 +362,8 @@ function contract(input, ownedErrors) {
 const generationContracts = Object.freeze([
   contract({ capability: "generation.previewBatch", channel: "content:preview-generation-batch", kind: "query", request: planRequest, success: preview, fromArgs: directArgs, toArgs: directInput }, generationErrors),
   contract({ capability: "generation.createAndStartBatch", channel: "content:create-and-start-generation-batch", kind: "command", request: planRequest, success: batchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),
-  contract({ capability: "generation.stopBatch", channel: "content:stop-generation-batch", kind: "command", request: stopRequest, success: nullableBatchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),
   contract({ capability: "generation.pauseBatch", channel: "content:pause-generation-batch", kind: "command", request: stopRequest, success: nullableBatchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),
+  contract({ capability: "generation.abandonBatch", channel: "content:abandon-generation-batch", kind: "command", request: exactObject({ batchId: id, confirmed: literalField(true) }), success: nullableBatchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),
   contract({ capability: "generation.continueBatch", channel: "content:continue-generation-batch", kind: "command", request: continuationRequest, success: batchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),
   contract({ capability: "generation.resumeBatch", channel: "content:resume-generation-batch", kind: "command", request: continuationRequest, success: batchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),
   contract({ capability: "generation.retryFailed", channel: "content:retry-failed-generation-batch", kind: "command", request: batchIdRequest, success: batchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),

@@ -20,6 +20,20 @@ function frozenClone(value) {
   return deepFreeze(clone(value));
 }
 
+function queryFrom(input) {
+  const value = input && typeof input === "object" && !Array.isArray(input) ? input : {};
+  if (Object.keys(value).some((key) => !["clientId", "page", "pageSize"].includes(key)))
+    throw fail("SUBMISSION_CENTER_QUERY_INVALID");
+  const clientId = value.clientId === undefined ? null : value.clientId;
+  if (clientId !== null && (typeof clientId !== "string" || !clientId.trim() || /[\\/\x00-\x1f\x7f]/.test(clientId)))
+    throw fail("SUBMISSION_CENTER_CLIENT_INVALID");
+  const page = value.page === undefined ? 1 : value.page;
+  const pageSize = value.pageSize === undefined ? 100 : value.pageSize;
+  if (!Number.isSafeInteger(page) || page < 1 || !Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 500)
+    throw fail("SUBMISSION_CENTER_QUERY_INVALID");
+  return { clientId: clientId === null ? null : clientId.trim(), page, pageSize };
+}
+
 function clientIdFrom(input) {
   if (
     !input ||
@@ -130,7 +144,7 @@ function projectRegular(groups, clientId) {
       throw fail("SUBMISSION_CENTER_SNAPSHOT_INVALID");
     const allItems = [current].concat(remaining).filter(Boolean);
     if (allItems.some(function (item) {
-      return !item.articleRef || item.articleRef.clientId !== clientId;
+      return !item.articleRef || (clientId && item.articleRef.clientId !== clientId);
     }))
       throw fail("SUBMISSION_CENTER_SNAPSHOT_INVALID");
     function projectItem(item, kind) {
@@ -152,6 +166,7 @@ function projectRegular(groups, clientId) {
       platformId: group.platformId,
       accountProfileId: group.accountProfileId,
       imageCount: group.imageCount,
+      submissionIntervalSeconds: group.submissionIntervalSeconds,
       imagePublishingSupported: group.imagePublishingSupported,
       runState: group.runState,
       pauseIntent: group.pauseIntent,
@@ -171,7 +186,7 @@ function projectPaid(raw, clientId) {
   return values.map(projectPaidBatch).map(function (batch) {
     const items = [batch.currentItem].concat(batch.items || []).filter(Boolean);
     if (items.some(function (item) {
-      return !item.articleRef || item.articleRef.clientId !== clientId;
+      return !item.articleRef || (clientId && item.articleRef.clientId !== clientId);
     }))
       throw fail("SUBMISSION_CENTER_SNAPSHOT_INVALID");
     function item(value) {
@@ -219,7 +234,7 @@ function projectAttention(raw, clientId) {
   if (!raw || !Array.isArray(raw.items))
     throw fail("SUBMISSION_CENTER_SNAPSHOT_INVALID");
   return raw.items.map(function (item) {
-    if (item.clientId !== clientId)
+    if (clientId && item.clientId !== clientId)
       throw fail("SUBMISSION_CENTER_SNAPSHOT_INVALID");
     return Object.assign(projectAttentionItem(item), {
       targetLabel: targetLabel(item),
@@ -242,17 +257,27 @@ function createSubmissionCenterSnapshot(options) {
   }
   const cache = new Map();
 
-  async function attempt(clientId, knownRevision) {
+  async function attempt(clientId, knownRevision, queryPage) {
     const revisionBefore = knownRevision === undefined
       ? Number(opts.getRevision())
       : knownRevision;
     if (!Number.isSafeInteger(revisionBefore) || revisionBefore < 0)
       throw fail("SUBMISSION_CENTER_SNAPSHOT_INVALID");
-    const [regularRaw, paidRaw, attentionRaw] = await Promise.all([
-      opts.listRegularQueueGroups({ clientId }),
-      opts.listPaidMediaBatches({ clientId }),
-      opts.listAttention({ clientId }),
+    const settled = await Promise.allSettled([
+      Promise.resolve().then(() => opts.listRegularQueueGroups({ ...(clientId ? { clientId } : {}) })),
+      Promise.resolve().then(() => opts.listPaidMediaBatches({ ...(clientId ? { clientId } : {}) })),
+      Promise.resolve().then(() => opts.listAttention({ ...(clientId ? { clientId } : {}) })),
     ]);
+    const failures = [];
+    const valueFor = (index, section, fallback) => {
+      const result = settled[index];
+      if (result.status === "fulfilled") return result.value;
+      failures.push({ section, code: result.reason && result.reason.code ? result.reason.code : "SUBMISSION_CENTER_QUERY_FAILED" });
+      return fallback;
+    };
+    const regularRaw = valueFor(0, "regular", []);
+    const paidRaw = valueFor(1, "paid", { items: [] });
+    const attentionRaw = valueFor(2, "attention", { items: [] });
     const revisionAfter = Number(opts.getRevision());
     const regularGroups = projectRegular(regularRaw, clientId);
     const paidBatches = projectPaid(paidRaw, clientId).filter(
@@ -263,12 +288,17 @@ function createSubmissionCenterSnapshot(options) {
       return total + (group.current ? 1 : 0) + group.remaining.length;
     }, 0);
     const paidBatchesCount = paidBatches.length;
-    const counts = {
+    const totalCounts = {
       regularItems,
       paidBatches: paidBatchesCount,
       attentionItems: attentionItems.length,
       total: regularItems + paidBatchesCount + attentionItems.length,
     };
+    const start = (queryPage.page - 1) * queryPage.pageSize;
+    const end = start + queryPage.pageSize;
+    const regularPage = regularGroups.slice(start, end);
+    const paidPage = paidBatches.slice(start, end);
+    const attentionPage = attentionItems.slice(start, end);
     return {
       revisionBefore,
       revisionAfter,
@@ -276,32 +306,37 @@ function createSubmissionCenterSnapshot(options) {
         schemaVersion: 1,
         clientId,
         revision: revisionBefore,
-        regular: { groups: regularGroups },
-        paid: { batches: paidBatches },
-        attention: { items: attentionItems },
-        counts,
+        regular: { groups: regularPage },
+        paid: { batches: paidPage },
+        attention: { items: attentionPage },
+        counts: totalCounts,
+        page: queryPage.page,
+        pageSize: queryPage.pageSize,
+        hasMore: end < Math.max(regularGroups.length, paidBatches.length, attentionItems.length),
+        failures,
       },
     };
   }
 
   async function get(input) {
-    const clientId = clientIdFrom(input);
+    const query = queryFrom(input);
+    const clientId = query.clientId;
     try {
-      await opts.validateClient(clientId);
+      if (clientId) await opts.validateClient(clientId);
     } catch (error) {
       if (error && error.code === "CLIENT_NOT_FOUND")
         throw fail("SUBMISSION_CENTER_CLIENT_INVALID");
       throw fail("SUBMISSION_CENTER_QUERY_FAILED");
     }
     const revision = Number(opts.getRevision());
-    const key = `${opts.getWorkspaceRuntimeId()}\u0000${clientId}\u0000${revision}`;
+    const key = `${opts.getWorkspaceRuntimeId()}\u0000${clientId || "*"}\u0000${query.page}\u0000${query.pageSize}\u0000${revision}`;
     if (cache.has(key)) return frozenClone(cache.get(key));
     try {
-      let result = await attempt(clientId, revision);
-      if (result.revisionBefore !== result.revisionAfter) result = await attempt(clientId);
+      let result = await attempt(clientId, revision, query);
+      if (result.revisionBefore !== result.revisionAfter) result = await attempt(clientId, undefined, query);
       if (result.revisionBefore !== result.revisionAfter)
         throw fail("SUBMISSION_CENTER_SNAPSHOT_STALE");
-      const finalKey = `${opts.getWorkspaceRuntimeId()}\u0000${clientId}\u0000${result.revisionBefore}`;
+      const finalKey = `${opts.getWorkspaceRuntimeId()}\u0000${clientId || "*"}\u0000${query.page}\u0000${query.pageSize}\u0000${result.revisionBefore}`;
       cache.clear();
       cache.set(finalKey, frozenClone(result.snapshot));
       return frozenClone(result.snapshot);

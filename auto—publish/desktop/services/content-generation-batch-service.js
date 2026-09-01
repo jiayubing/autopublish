@@ -13,9 +13,13 @@ const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer"
 
 const MAX_CLIENTS = 1000;
 const MAX_TEMPLATES = 1000;
+const MAX_SOURCE_ITEMS = 50;
+const MAX_TASKS = 1000;
 
 const SAFE_MESSAGES = {
   GENERATION_INPUT_INVALID: "Generation batch input is invalid",
+  GENERATION_SOURCE_LIMIT: "Selected materials and research answers must contain at most 50 items each",
+  GENERATION_TASK_LIMIT: "Generation batch has too many tasks",
   GENERATION_CLIENTS_REQUIRED: "At least one batch client is required",
   GENERATION_TEMPLATES_REQUIRED: "At least one writing template is required",
   GENERATION_CLIENT_NOT_FOUND: "Client was not found",
@@ -32,7 +36,8 @@ const SAFE_MESSAGES = {
   GENERATION_AI_CONFIG_CHANGED: "AI configuration changed; confirm before continuing",
   AI_CONFIG_NOT_SET: "AI provider configuration is not set",
   AI_CONFIG_BUSY: "AI provider configuration is unavailable while generation is running",
-  GENERATION_STOPPED: "Generation batch is stopped",
+  GENERATION_BATCH_NOT_ENDABLE: "Generation batch cannot be ended",
+  GENERATION_END_CONFIRMATION_REQUIRED: "Confirm before ending the generation batch",
   GENERATION_RUNNER_DISPOSED: "Generation service is disposed",
   GENERATION_WORKSPACE_REQUIRED: "Workspace root is required",
   GENERATION_INVALID_ID: "Generation identifier is invalid",
@@ -126,9 +131,10 @@ function selectedSource(input, clientId) {
   return null;
 }
 
-function selectedIds(source, field) {
+  function selectedIds(source, field) {
   if (!source || source[field] === undefined) return null;
   if (!Array.isArray(source[field])) throw generationError("GENERATION_INPUT_INVALID", field + " is invalid");
+  if (source[field].length > MAX_SOURCE_ITEMS) throw generationError("GENERATION_SOURCE_LIMIT");
   return uniqueIds(source[field], field);
 }
 
@@ -186,6 +192,7 @@ function createContentGenerationBatchService(options) {
   let activeBatchId = null;
   let activeRun = null;
   let runner;
+  let sourceCache = null;
   const runtimeId = opts.runtimeId || crypto.randomUUID();
   let sequence = 0;
   const now = typeof opts.now === "function" ? opts.now : function() { return new Date().toISOString(); };
@@ -289,6 +296,7 @@ function createContentGenerationBatchService(options) {
       const materials = await listMaterials(clientId);
       const readyMaterials = materials.filter(validMaterial);
       const materialIds = selectedIds(source, "materialIds");
+      if (materialIds === null && readyMaterials.length > MAX_SOURCE_ITEMS) codes.push("GENERATION_SOURCE_LIMIT");
       const selectedMaterials = materialIds === null ? readyMaterials : materialIds.map(function(id) {
         return materials.find(function(item) { return item && (item.id === id || item.name === id); });
       });
@@ -301,6 +309,7 @@ function createContentGenerationBatchService(options) {
       const selectedResearch = researchQueryIds === null ? validResearches : researchQueryIds.map(function(id) {
         return researches.find(function(item) { return item && item.id === id; });
       });
+      if (researchQueryIds === null && validResearches.length > MAX_SOURCE_ITEMS) codes.push("GENERATION_SOURCE_LIMIT");
       if (!selectedResearch.length) codes.push("GEO_RESEARCH_REQUIRED");
       else if (selectedResearch.some(function(item) { return !validResearch(item); })) codes.push("GEO_RESEARCH_INVALID");
 
@@ -369,6 +378,8 @@ function createContentGenerationBatchService(options) {
     validateCatalogRevision(value);
     const templates = await validateTemplates(normalizeTemplates(value.templates));
     const resolved = await resolveSources(value, clientIds);
+    const taskCount = clientIds.length * templates.length;
+    if (taskCount > MAX_TASKS) throw generationError("GENERATION_TASK_LIMIT");
     const tasks = [];
     resolved.sources.forEach(function(source) {
       templates.forEach(function(template) {
@@ -379,7 +390,7 @@ function createContentGenerationBatchService(options) {
     return {
       clientCount: clientIds.length,
       executableClientCount: resolved.sources.length,
-      taskCount: clientIds.length * templates.length,
+      taskCount: taskCount,
       executableTaskCount: tasks.length,
       excludedTaskCount: (clientIds.length - resolved.sources.length) * templates.length,
       excludedClients: resolved.excludedClients,
@@ -400,7 +411,7 @@ function createContentGenerationBatchService(options) {
 
   function assertAvailable() {
     if (disposed) throw generationError("GENERATION_RUNNER_DISPOSED");
-    if (activeRun || activeStatus === "running" || activeStatus === "pausing" || activeStatus === "stopping") throw generationError("GENERATION_BATCH_BUSY");
+    if (activeRun || activeStatus === "running" || activeStatus === "pausing") throw generationError("GENERATION_BATCH_BUSY");
   }
 
   function currentState(persistedBatch) {
@@ -418,7 +429,7 @@ function createContentGenerationBatchService(options) {
       updatedAt = status === persistedBatch.status ? (persistedBatch.updatedAt || updatedAt) : updatedAt;
     }
     return { state: status, status: status, batchId: batchId, counts: clone(counts), updatedAt: updatedAt,
-      concurrency: 1, runtimeId: runtimeId, sequence: sequence, isBatchRunning: ["running", "pausing", "stopping"].includes(status), isStopPending: status === "stopping" };
+      concurrency: runnerState.concurrency || (persistedBatch && persistedBatch.concurrency) || 2, runtimeId: runtimeId, sequence: sequence, isBatchRunning: ["running", "pausing"].includes(status), isStopPending: false };
   }
 
   function canResume(batch) {
@@ -431,7 +442,10 @@ function createContentGenerationBatchService(options) {
     let batch = activeBatchIdForSnapshot ? batchStore.getBatch(activeBatchIdForSnapshot) : null;
     if (!batch) {
       const batches = batchStore.listBatches();
-      batch = batches.find(function(item) { return canResume(item) || ["running", "pausing", "stopping"].includes(item.status); }) || batches[batches.length - 1] || null;
+      const newest = batches[0] || null;
+      batch = newest && newest.status === "abandoned"
+        ? null
+        : batches.find(function(item) { return canResume(item) || ["running", "pausing"].includes(item.status); }) || newest;
     }
     const runtime = currentState(batch && activeBatchIdForSnapshot === batch.id ? batch : undefined);
     return {
@@ -453,9 +467,24 @@ function createContentGenerationBatchService(options) {
     if (!aiClient && generatorFactory === createArticleGenerator) throw generationError("AI_CONFIG_NOT_SET");
     const signal = context && context.signal;
     const signalClient = aiClient ? { complete: function(messages) { return aiClient.complete(messages, { signal: signal }); } } : null;
+    if (!sourceCache) sourceCache = { materials: new Map(), research: new Map() };
+    const scopedMaterialStore = Object.assign({}, materialStore, {
+      getSelectedMaterials: async function(clientId, ids) {
+        const key = clientId + "\u0000" + ids.join("\u0000");
+        if (!sourceCache.materials.has(key)) sourceCache.materials.set(key, materialStore.getSelectedMaterials(clientId, ids));
+        return sourceCache.materials.get(key);
+      }
+    });
+    const scopedResearchStore = Object.assign({}, researchStore, {
+      getResearch: function(clientId, id) {
+        const key = clientId + "\u0000" + id;
+        if (!sourceCache.research.has(key)) sourceCache.research.set(key, researchStore.getResearch(clientId, id));
+        return sourceCache.research.get(key);
+      }
+    });
     const generator = generatorFactory({
       getClient: function(clientId) { return clientKnowledge.getClient(clientId); },
-      researchStore: researchStore, materialStore: materialStore, templateStore: templateStore,
+      researchStore: scopedResearchStore, materialStore: scopedMaterialStore, templateStore: templateStore,
       buildPrompt: promptFactory, aiClient: signalClient, createId: createId, seenIds: seenIds
     });
     const article = await generator.generateArticle({ clientId: task.clientId, materialIds: task.materialIds,
@@ -475,10 +504,11 @@ function createContentGenerationBatchService(options) {
     return { id: article.id, articleId: article.id };
   }
 
-  function ensureRunner() {
-    if (runner) return runner;
+  function ensureRunner(concurrency) {
+    const requested = concurrency === undefined ? 2 : concurrency;
+    if (runner && runner.getState && runner.getState().concurrency === requested) return runner;
     runner = (opts.runnerFactory || createGenerationBatchRunner)({ batchStore: batchStore, executeTask: executeTask,
-      contentStore: contentStore, concurrency: 1 });
+      contentStore: contentStore, concurrency: requested });
     if (runner && typeof runner.subscribe === "function") runner.subscribe(function(event) { emit(event); });
     return runner;
   }
@@ -487,8 +517,10 @@ function createContentGenerationBatchService(options) {
     assertAvailable();
     const previewResult = await prepareBatch(input);
     if (!previewResult.executableTaskCount) throw generationError("GENERATION_NO_EXECUTABLE_TASKS");
+    const requestedConcurrency = input && input.concurrency !== undefined ? input.concurrency : 2;
+    if (!Number.isInteger(requestedConcurrency) || requestedConcurrency < 1 || requestedConcurrency > 4) throw generationError("GENERATION_CONCURRENCY_INVALID");
     const batch = batchStore.createBatch({ clientSources: previewResult.clientSources, templates: previewResult.templates,
-      aiConfigFingerprint: await fingerprint(), concurrency: 1 });
+      aiConfigFingerprint: await fingerprint(), concurrency: requestedConcurrency });
     emitBatch(batch);
     notifyData("GENERATION_BATCH_CREATED");
     return clone(batch);
@@ -506,14 +538,14 @@ function createContentGenerationBatchService(options) {
       if (selection === "unfinished" && currentFingerprint !== batch.aiConfigFingerprint && confirmConfigChange !== true) {
         throw generationError("GENERATION_AI_CONFIG_CHANGED");
       }
-      const activeRunner = ensureRunner();
+      const activeRunner = ensureRunner(batch.concurrency || 2);
       activeStatus = "running";
       emitBatch(batch, "running");
       const runnerPromise = activeRunner.run(batchId, selection);
       const work = Promise.resolve(runnerPromise)
         .then(function(result) {
           emitBatch(result, result && result.status);
-          if (result && ["completed", "failed", "stopped", "interrupted", "paused_configuration"].includes(result.status)) notifyData("GENERATION_BATCH_TERMINAL");
+          if (result && ["completed", "failed", "abandoned", "interrupted", "paused_configuration", "paused"].includes(result.status)) notifyData("GENERATION_BATCH_TERMINAL");
           return clone(result);
         })
         .catch(function(error) {
@@ -523,9 +555,9 @@ function createContentGenerationBatchService(options) {
             failedBatch = batchStore.getBatch(batchId);
             if (!failedBatch) {
               stateUnavailable = true;
-            } else if (["pending", "running", "stopping", "interrupted"].includes(failedBatch.status) && typeof batchStore.updateBatchStatus === "function") {
+            } else if (["pending", "running", "interrupted"].includes(failedBatch.status) && typeof batchStore.updateBatchStatus === "function") {
               failedBatch = batchStore.updateBatchStatus(batchId, "failed");
-            } else if (["pending", "running", "stopping", "interrupted"].includes(failedBatch.status)) {
+            } else if (["pending", "running", "interrupted"].includes(failedBatch.status)) {
               stateUnavailable = true;
             }
           } catch (stateError) {
@@ -559,6 +591,7 @@ function createContentGenerationBatchService(options) {
             activeRun = null;
             activeStatus = "idle";
             activeBatchId = null;
+            sourceCache = null;
           }
         });
       reservation.promise = work;
@@ -568,6 +601,7 @@ function createContentGenerationBatchService(options) {
         activeRun = null;
         activeStatus = "idle";
         activeBatchId = null;
+        sourceCache = null;
       }
       throw error;
     }
@@ -618,16 +652,16 @@ function createContentGenerationBatchService(options) {
     return clone(batch);
   }
 
-  async function requestStop(input, commandStatus) {
+  async function requestPause(input) {
     if (input !== undefined) {
       const value = assertObject(input);
       if (value.batchId !== undefined && value.batchId !== activeBatchId) throw generationError("GENERATION_BATCH_BUSY");
     }
     if (!runner || !activeRun || activeStatus === "idle") return null;
-    activeStatus = commandStatus;
+    activeStatus = "pausing";
     const batch = batchStore.getBatch(activeBatchId);
-    emitBatch(batch, commandStatus);
-    Promise.resolve().then(function() { return typeof runner[commandStatus === "pausing" ? "pause" : "stop"] === "function" ? runner[commandStatus === "pausing" ? "pause" : "stop"]() : runner.stop(); })
+    emitBatch(batch, "pausing");
+    Promise.resolve().then(function() { return runner.pause(); })
       .catch(function(error) {
         const controlError = generationError("GENERATION_CONTROL_FAILED");
         activeStatus = "running";
@@ -637,7 +671,7 @@ function createContentGenerationBatchService(options) {
           category: "internal",
           operationId: "generation-batch-control",
           metadata: {
-            operation: commandStatus === "pausing" ? "pause" : "stop",
+            operation: "pause",
             phase: "command",
             outcome: "failed",
             errorCode: error && /^[A-Z][A-Z0-9_]{1,127}$/.test(error.code || "")
@@ -647,7 +681,7 @@ function createContentGenerationBatchService(options) {
         });
         emitBatch(batch, "running", controlError);
       });
-    return runtimeBatch(batch, commandStatus);
+    return runtimeBatch(batch, "pausing");
   }
 
   async function createAndStartBatch(input) {
@@ -655,12 +689,20 @@ function createContentGenerationBatchService(options) {
     return runBatch(batch.id, "pending", false);
   }
 
-  async function stopBatch(input) {
-    return requestStop(input, "stopping");
+  async function pauseBatch(input) {
+    return requestPause(input);
   }
 
-  async function pauseBatch(input) {
-    return requestStop(input, "pausing");
+  async function abandonBatch(input) {
+    const value = assertObject(input);
+    if (value.confirmed !== true) throw generationError("GENERATION_END_CONFIRMATION_REQUIRED");
+    const batchId = assertId(value.batchId, "batch id");
+    if (activeRun && activeBatchId === batchId) throw generationError("GENERATION_BATCH_BUSY");
+    if (!batchStore || typeof batchStore.abandonBatch !== "function") throw generationError("GENERATION_BATCH_INVALID");
+    const batch = batchStore.abandonBatch(batchId);
+    emitBatch(batch, "abandoned");
+    notifyData("GENERATION_BATCH_TERMINAL");
+    return clone(batch);
   }
 
   function get(batchId) { return clone(batchStore.getBatch(assertId(batchId, "batch id"))); }
@@ -699,7 +741,7 @@ function createContentGenerationBatchService(options) {
     preview: preview, previewBatch: preview, prepare: prepareBatch, prepareBatch: prepareBatch, revalidate: revalidateBatch, revalidateBatch: revalidateBatch,
     createBatch: createBatch, createAndStartBatch: createAndStartBatch, createAndStartGenerationBatch: createAndStartBatch, startBatch: startBatch, startGenerationBatch: startBatch, startPreparedBatch: startBatch,
     continueBatch: continueBatch, continueGenerationBatch: continueBatch, resumeBatch: continueBatch, resumeGenerationBatch: continueBatch,
-    pauseBatch: pauseBatch, pauseGenerationBatch: pauseBatch, stopBatch: stopBatch, stopGenerationBatch: stopBatch,
+    pauseBatch: pauseBatch, pauseGenerationBatch: pauseBatch, abandonBatch: abandonBatch, abandonGenerationBatch: abandonBatch,
     retryFailed: retryFailed, retryFailedBatch: retryFailed, retryFailedGenerationBatch: retryFailed,
     previewCancelPending: previewCancelPending, previewCancelPendingGenerationBatch: previewCancelPending,
     cancelPending: cancelPending, cancelPendingGenerationBatch: cancelPending,

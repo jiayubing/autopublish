@@ -147,6 +147,7 @@ function installDesktopFixture(page) {
     };
     const content = {
       listClients: () => result({ clients: [client] }),
+      getClientDetails: () => result({ client, research: [] }),
       listGeneratedArticles: () => result({ articles: [] }),
       getArticleManagementSnapshot: ({ clientId }) =>
         result({
@@ -161,6 +162,7 @@ function installDesktopFixture(page) {
       listSubmissionBatches: () => result({ batches: [] }),
       listArticleTrash: () => result({ trash: [] }),
       listResearch: () => result({ research: [] }),
+      listResearchMetadata: () => result({ research: [] }),
       listQuestions: () => result({ questions: [] }),
       getDoubaoLoginState: () => result({ loginState: { status: "unknown" } }),
       getDoubaoQueueState: () =>
@@ -352,7 +354,6 @@ function installDesktopFixture(page) {
                   categoryId: 121,
                   vendorConfigured: false,
                   siteOrigin: "https://www.hepan.com",
-                  publishIntervalSeconds: 0,
                   lastTest: null,
                 },
         }),
@@ -671,9 +672,10 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
           knowledgeFiles: [{ id: "facts.md", name: "facts.md", content: "客户事实", status: "ready" }],
         };
         window.desktopConsole.content.listClients = () => result({ clients: [client] });
-        window.desktopConsole.content.listResearch = () => result({
-          research: [{ id: "research-1", clientId: client.id, question: "客户问题", answerText: "完整回答", isAnswerComplete: true }],
-        });
+        const research = [{ id: "research-1", clientId: client.id, question: "客户问题", answerText: "完整回答", isAnswerComplete: true }];
+        window.desktopConsole.content.getClientDetails = () => result({ client, research });
+        window.desktopConsole.content.listResearch = () => result({ research });
+        window.desktopConsole.content.listResearchMetadata = () => result({ research });
         window.desktopConsole.content.listTemplateCatalog = () => result({
           revision: "single-default-template",
           platforms: [{ id: "fixture", displayName: "测试平台", description: "", order: 1 }],
@@ -687,7 +689,7 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
       await page.getByRole("button", { name: "文章生成" }).click();
       await page.getByText(/资料 1 份 · 回答 1 条/).waitFor();
 
-      assert.equal(await page.getByRole("button", { name: "生成文章" }).isEnabled(), true);
+      assert.equal(await page.getByRole("button", { name: "生成 1 篇文章" }).isEnabled(), true);
     } finally {
       await page.close();
     }

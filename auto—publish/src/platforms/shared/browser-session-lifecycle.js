@@ -143,7 +143,13 @@ function createBrowserSessionLifecycle(options) {
       const output = run(["list"], { timeout: 8000, session: session });
       probeFailed = false;
       return output.indexOf(session.session) !== -1;
-    } catch (_) {
+    } catch (error) {
+      // A missing named session is the normal cold-start state. Only unknown
+      // probe failures should prevent the lifecycle from starting a session.
+      if (error && error.code === "PLAYWRIGHT_SESSION_NOT_OPEN") {
+        probeFailed = false;
+        return false;
+      }
       probeFailed = true;
       diagnose("BROWSER_SESSION_PROBE_FAILED", "transport", "probe");
       return false;

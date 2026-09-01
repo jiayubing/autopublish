@@ -7,9 +7,11 @@ import {
   deleteContentQuestion,
   collectDoubaoQuestion,
   listContentClients,
+  getContentClientDetails,
   saveClientLiejuPublicationProfile,
   listContentQuestions,
   listContentResearch,
+  listContentResearchMetadata,
   listContentTemplateCatalog,
   retryContentMaterial,
   retryFailedDoubao,
@@ -36,7 +38,7 @@ import {
   subscribeDoubaoQueue,
   updateContentQuestion,
 } from "../../bridge/content";
-import { saveContentArticle } from "../../bridge/generation";
+import { generateContentArticle, saveContentArticle } from "../../bridge/generation";
 import {
   getContentArticleRemovalTransaction,
   onContentArticleRemovalTransaction,
@@ -67,6 +69,8 @@ export function useContentWorkbenchFeature() {
       listTemplateCatalog: listContentTemplateCatalog,
       listQuestions: listContentQuestions,
       listResearch: listContentResearch,
+      getClientDetails: getContentClientDetails,
+      listResearchMetadata: listContentResearchMetadata,
       loadManagement: getArticleManagementSnapshot,
       openPublicationUrl,
       createQuestion: createContentQuestion,
@@ -80,6 +84,7 @@ export function useContentWorkbenchFeature() {
         article: GeneratedContentArticle;
         expectedFingerprint: string;
       }) => saveContentArticle(input.article, input.expectedFingerprint),
+      generateArticle: generateContentArticle,
       collectDoubaoQuestion,
       startPreparedDoubaoBatch: (input: { tasks: DoubaoBatchTask[] }) =>
         startPreparedDoubaoBatch(input.tasks),
@@ -155,6 +160,9 @@ export function useContentWorkbenchFeature() {
   );
   return {
     snapshot,
+    getClientDetails: getContentClientDetails,
+    production: feature.production,
+    library: feature.library,
     refresh: (reason = "manual") => feature.refresh(reason),
     refreshClientData: (reason = "manual") => feature.refreshClientData(reason),
     refreshManagement: feature.refreshManagement,
@@ -164,6 +172,7 @@ export function useContentWorkbenchFeature() {
     selectClient: feature.selectClient,
     setCurrentArticle: (article: GeneratedContentArticle | null) =>
       feature.setCurrentArticle(article),
+    generation: feature.production.generation!,
     commands: feature.commands,
     watchRemovalTransaction: feature.watchRemovalTransaction,
     clearRemovalTransaction: feature.clearRemovalTransaction,

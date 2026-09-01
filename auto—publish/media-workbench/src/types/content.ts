@@ -11,7 +11,7 @@ export interface ContentMaterial {
   name: string;
   extension?: string;
   status?: "ready" | "error" | "converting" | string;
-  content: string;
+  content?: string;
   characterCount?: number;
   error?: { code?: string; message?: string } | null;
   contentHash?: string;
@@ -96,6 +96,8 @@ export interface ContentResearch {
   updatedAt?: string;
   createdAt?: string;
   isAnswerComplete?: boolean;
+  answerLength?: number;
+  referenceCount?: number;
 }
 export interface ContentTemplate {
   id: string;

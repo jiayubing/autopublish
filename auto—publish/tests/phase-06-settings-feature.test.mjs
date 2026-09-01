@@ -43,7 +43,6 @@ function adapters(overrides = {}) {
     vendorConfigured: false,
     bundledVendorAvailable: false,
     siteOrigin: "",
-    publishIntervalSeconds: 0,
     lastTest: null,
   };
   return {

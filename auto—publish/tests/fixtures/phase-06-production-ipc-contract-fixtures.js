@@ -1110,20 +1110,20 @@ const PRODUCTION_CALLERS = Object.freeze({
     application: "service.createAndStartBatch",
     featureBinding: "start",
   }),
-  "generation.stopBatch": Object.freeze({
+  "generation.abandonBatch": Object.freeze({
     view: "media-workbench/src/components/content/BatchGenerationView.tsx",
     viewSymbol: "useGenerationFeature",
     feature:
       "media-workbench/src/features/generation/use-generation-feature.ts",
     featureSymbol: "useGenerationFeature",
     bridge: "media-workbench/src/bridge/generation.ts",
-    bridgeSymbol: "stopGenerationBatch",
-    preloadMethod: "stopGenerationBatch",
-    command: "generation.stopBatch",
-    channel: "content:stop-generation-batch",
+    bridgeSymbol: "abandonGenerationBatch",
+    preloadMethod: "abandonGenerationBatch",
+    command: "generation.abandonBatch",
+    channel: "content:abandon-generation-batch",
     registrar: "desktop/ipc/content-generation-batch-ipc.js",
-    application: "service.stopBatch",
-    featureBinding: "stop",
+    application: "service.abandonBatch",
+    featureBinding: "abandon",
   }),
   "generation.pauseBatch": Object.freeze({
     view: "media-workbench/src/components/content/BatchGenerationView.tsx",
@@ -2171,10 +2171,10 @@ const PRODUCTION_CONSUMERS = Object.freeze({
     "media-workbench/src/components/content/BatchGenerationView.tsx",
     "start",
   ],
-  "generation.stopBatch": [
+  "generation.abandonBatch": [
     "direct",
     "media-workbench/src/components/content/BatchGenerationView.tsx",
-    "stop",
+    "abandon",
   ],
   "generation.pauseBatch": [
     "direct",
@@ -2933,7 +2933,7 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
         [
           "generation.previewBatch",
           "generation.createAndStartBatch",
-          "generation.stopBatch",
+          "generation.abandonBatch",
           "generation.pauseBatch",
           "generation.continueBatch",
           "generation.resumeBatch",
@@ -4174,6 +4174,10 @@ const rawProductionIpcContractFixtures = [
         attentionItems: 0,
         total: 0,
       },
+      page: 1,
+      pageSize: 100,
+      hasMore: false,
+      failures: [],
     },
   },
   {
@@ -4293,11 +4297,11 @@ const rawProductionIpcContractFixtures = [
     },
   },
   {
-    capability: "generation.stopBatch",
-    channel: "content:stop-generation-batch",
+    capability: "generation.abandonBatch",
+    channel: "content:abandon-generation-batch",
     owner: "generation",
-    productionCaller: "desktop/preload.js:content:stop-generation-batch",
-    request: {},
+    productionCaller: "desktop/preload.js:content:abandon-generation-batch",
+    request: { batchId: "batch-1", confirmed: true },
     result: {
       batch: null,
     },

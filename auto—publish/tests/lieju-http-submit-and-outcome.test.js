@@ -597,7 +597,7 @@ for (const scenario of [
     storageStateFailureAt: 2,
   },
 ]) {
-  test(`Lieju HTTP post ${scenario.name} stays uncertain and never posts twice`, async () => {
+  test(`Lieju HTTP post ${scenario.name} never posts twice`, async () => {
     const fixture = stateFixture();
     const runtime = makeRequestRuntime({
       postResponses: [scenario.post],
@@ -605,12 +605,23 @@ for (const scenario of [
     });
     try {
       const prepared = await prepare(createAdapter(fixture, runtime));
-      const expected = {
-        status: "uncertain",
-        errorCode: "REMOTE_RESULT_UNKNOWN",
-      };
+      const expected = scenario.name === "state save failure"
+        ? {
+            status: "accepted",
+            remoteId: "654321",
+            remoteUrl: "https://ly.lieju.com/beijing/654321.html",
+          }
+        : {
+            status: "uncertain",
+            errorCode: "REMOTE_RESULT_UNKNOWN",
+          };
       assert.deepEqual(await prepared.submitPreparedPublication(), expected);
-      assert.deepEqual(await prepared.submitPreparedPublication(), expected);
+      assert.deepEqual(
+        await prepared.submitPreparedPublication(),
+        scenario.name === "state save failure"
+          ? { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" }
+          : expected,
+      );
       assert.equal(runtime.postCalls.length, 1);
     } finally {
       fs.rmSync(fixture.root, { recursive: true, force: true });

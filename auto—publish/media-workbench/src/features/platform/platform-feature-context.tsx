@@ -15,6 +15,7 @@ import { bindAccountProfile, confirmAccountProfile, deleteAccountProfile, listAc
 import {
   listRegularQueueGroups,
   updateRegularQueueGroupImageCount,
+  updateRegularQueueGroupSubmissionInterval,
   removePendingQueueItems,
   pauseAllRegularQueueGroups,
   pauseRegularQueueGroup,
@@ -40,6 +41,7 @@ function createProductionPlatformFeature(): PlatformFeature {
     deleteAccountProfile,
     listRegularQueueGroups,
     updateRegularQueueGroupImageCount,
+    updateRegularQueueGroupSubmissionInterval,
     removePendingQueueItems,
     startRegularQueueGroup,
     pauseRegularQueueGroup,

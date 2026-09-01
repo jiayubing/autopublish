@@ -361,8 +361,12 @@ function listClientIdentities(workspaceRoot) {
   try { entries = fs.readdirSync(clients.clientsRoot, { withFileTypes: true }); } catch (_) { throw pathOutOfBounds(); }
   return entries.filter(function(entry) { return entry.isDirectory() && !entry.name.startsWith("."); }).map(function(entry) {
     const directory = getClientWorkspace({ root: clients.workspaceRoot, clients: clients.clientsRoot }, entry.name);
-    const metadata = readClientMetadata(assertClientDirectory(directory, clients));
-    return { id: metadata.id, name: metadata.name, directory: directory };
+    const boundary = assertClientDirectory(directory, clients);
+    const metadata = readClientMetadata(boundary);
+    const client = { id: metadata.id, name: metadata.name, directory: directory, publicationProfiles: metadata.publicationProfiles };
+    const searchQuery = readOptionalSearchQueryWithinBoundary(boundary);
+    if (searchQuery !== undefined) client.searchQuery = searchQuery;
+    return client;
   });
 }
 

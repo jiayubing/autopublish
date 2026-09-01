@@ -9,7 +9,7 @@ import {
   retryFailedGenerationBatch,
   previewCancelPendingGenerationBatch,
   previewGenerationBatch,
-  stopGenerationBatch,
+  abandonGenerationBatch,
   subscribeGenerationBatchState,
 } from '../../bridge/generation';
 import { useWorkspaceRuntimeIdentity } from '../workspace/workspace-coordinator-context';
@@ -25,7 +25,7 @@ export function useGenerationFeature() {
       previewBatch: previewGenerationBatch,
       pause: pauseGenerationBatch,
       resume: resumeGenerationBatch,
-      stop: stopGenerationBatch,
+      abandon: abandonGenerationBatch,
       continue: continueGenerationBatch,
       retry: retryFailedGenerationBatch,
       previewCancelPending: previewCancelPendingGenerationBatch,
@@ -52,7 +52,7 @@ export function useGenerationFeature() {
     previewBatch: feature.previewBatch,
     pause: feature.pause,
     resume: feature.resume,
-    stop: feature.stop,
+    abandon: feature.abandon,
     continue: feature.continue,
     retry: feature.retry,
     previewCancelPending: feature.previewCancelPending,

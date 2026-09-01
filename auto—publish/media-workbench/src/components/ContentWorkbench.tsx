@@ -387,12 +387,13 @@ export default function ContentWorkbench({
             clientId={clientId}
             research={research}
             researchByClient={researchByClient}
+            getClientDetails={content.getClientDetails}
             templateCatalog={templateCatalog}
             selectedArticle={article}
             onArticleChange={content.setCurrentArticle}
             commands={content.commands}
             commandStates={content.snapshot.commands}
-            refreshManagement={content.refreshManagement}
+            generationFeature={content.generation}
             onViewBatchArticles={openGenerationBatchArticles}
           />
         )}

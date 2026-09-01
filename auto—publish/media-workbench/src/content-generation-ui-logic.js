@@ -69,12 +69,31 @@ export function getMaterialId(material) {
   return material.id || material.name;
 }
 
+export function normalizeGenerationMaterial(material) {
+  const value = material && typeof material === 'object' ? { ...material } : {};
+  value.id = value.id || value.name;
+  value.status = value.status || (typeof value.content === 'string' && value.content.trim() ? 'ready' : 'error');
+  if (!Number.isFinite(value.characterCount) && typeof value.content === 'string') {
+    value.characterCount = value.content.length;
+  }
+  return value;
+}
+
 export function isUsableMaterial(material) {
-  return material?.status !== 'error' && material?.status !== 'converting' && Boolean(material?.content?.trim());
+  if (!material || material.status === 'error' || material.status === 'converting') return false;
+  if (Object.prototype.hasOwnProperty.call(material, 'content')) return Boolean(material.content?.trim());
+  if (Number.isFinite(material.characterCount)) return material.characterCount > 0;
+  // The initial batch read model intentionally omits bodies. A ready material
+  // in that projection is selectable; the service performs the authoritative
+  // content validation during preview/start.
+  return material.status === 'ready';
 }
 
 export function isUsableResearch(research) {
-  return research?.isAnswerComplete !== false && Boolean(research?.answerText?.trim());
+  if (!research || research.isAnswerComplete === false) return false;
+  if (Object.prototype.hasOwnProperty.call(research, 'answerText')) return Boolean(research.answerText?.trim());
+  if (Number.isFinite(research.answerLength)) return research.answerLength > 0;
+  return research.isAnswerComplete === true;
 }
 
 export function reconcileSourceSelection(materials, research, source) {
@@ -95,9 +114,22 @@ export function isExecutableSource(materials, research, source) {
     && selected.researchQueryIds.length === source.researchQueryIds.length;
 }
 
+export function shouldAutoSelectCurrentClient(clients, currentClientId, researchByClient, selectedClientIds = [], touched = false) {
+  if (touched || !currentClientId || !Array.isArray(clients) || selectedClientIds.length) return false;
+  const client = clients.find((item) => item?.id === currentClientId);
+  if (!client) return false;
+  const materials = Array.isArray(client.knowledgeFiles) ? client.knowledgeFiles : [];
+  const research = researchByClient?.[currentClientId] || [];
+  const source = {
+    materialIds: materials.filter(isUsableMaterial).map(getMaterialId),
+    researchQueryIds: research.filter(isUsableResearch).map((item) => item.id),
+  };
+  return isExecutableSource(materials, research, source);
+}
+
 export function sourceCharacterCount(materials, research) {
-  return materials.reduce((total, item) => total + (item.content?.length || 0), 0)
-    + research.reduce((total, item) => total + (item.answerText?.length || 0), 0);
+  return materials.reduce((total, item) => total + (typeof item.content === 'string' ? item.content.length : item.characterCount || 0), 0)
+    + research.reduce((total, item) => total + (typeof item.answerText === 'string' ? item.answerText.length : item.answerLength || 0), 0);
 }
 
 export function groupTemplatesByPlatform(templates) {

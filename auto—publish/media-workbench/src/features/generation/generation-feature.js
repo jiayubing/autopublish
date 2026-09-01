@@ -1,7 +1,7 @@
 import { createCommandOwner } from '../../infrastructure/query-identity/query-identity.js';
 
-const COMMANDS = Object.freeze(['previewBatch', 'start', 'pause', 'resume', 'stop', 'continue', 'retry', 'previewCancelPending', 'cancelPending']);
-const LIVE_STATUSES = new Set(['running', 'pausing', 'stopping']);
+const COMMANDS = Object.freeze(['previewBatch', 'start', 'pause', 'resume', 'abandon', 'continue', 'retry', 'previewCancelPending', 'cancelPending']);
+const LIVE_STATUSES = new Set(['running', 'pausing']);
 
 function safeError(value) {
   const userMessage = value && typeof value.userMessage === 'string' &&
@@ -269,7 +269,7 @@ export function createGenerationFeature(adapters = {}) {
     start: (input) => runCommand('start', input),
     pause: (input) => runCommand('pause', input),
     resume: (input) => runCommand('resume', input),
-    stop: (input) => runCommand('stop', input),
+    abandon: (input) => runCommand('abandon', input),
     continue: (input) => runCommand('continue', input),
     retry: (input) => runCommand('retry', input),
     previewCancelPending: (input) => runCommand('previewCancelPending', input),

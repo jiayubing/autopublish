@@ -474,7 +474,7 @@ test("23-C v4 to v5 schema migration is atomic and retryable at every fault", ()
         .prepare("SELECT version FROM schema_migrations ORDER BY version")
         .all()
         .map((row) => row.version),
-      [1, 2, 3, 4, 5, 6, 7, 8],
+      [1, 2, 3, 4, 5, 6, 7, 8, 9],
     );
     upgraded.close();
     fs.rmSync(root, { recursive: true, force: true });

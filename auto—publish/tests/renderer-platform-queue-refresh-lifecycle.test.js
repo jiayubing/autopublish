@@ -23,6 +23,7 @@ function installDesktopFixture(page) {
       queueCalls: 0,
       submissionCenterCalls: 0,
       imageCountUpdates: [],
+      submissionIntervalUpdates: [],
       imageUpdateFailure: false,
       pendingImageUpdate: null,
       queueRevision: 0,
@@ -40,6 +41,7 @@ function installDesktopFixture(page) {
         platformId: "toutiao",
         accountProfileId: "profile-toutiao",
         imageCount: 0,
+        submissionIntervalSeconds: 30,
         imagePublishingSupported: false,
         runState: "paused",
         pauseIntent: "manual",
@@ -52,14 +54,14 @@ function installDesktopFixture(page) {
         updatedAt: "2026-08-15T00:00:00.000Z",
       },
     ];
-    const submissionCenterData = () => {
+    const submissionCenterData = (clientId = null) => {
       const group = state.currentGroup || groupData()[0];
       group.imagePublishingSupported = state.imagePublishingSupported === true;
       group.revision = state.queueRevision;
       const regularItems = group.remaining.length + (group.current ? 1 : 0);
       return {
         schemaVersion: 1,
-        clientId: "fixture-client",
+        clientId,
         revision: state.queueRevision,
         regular: { groups: [group] },
         paid: { batches: [] },
@@ -97,6 +99,17 @@ function installDesktopFixture(page) {
       return new Promise((resolve) => {
         state.pendingImageUpdate = () => update().then(resolve);
       });
+    };
+    const updateSubmissionInterval = (input) => {
+      state.queueRevision += 1;
+      state.submissionIntervalUpdates.push(input.submissionIntervalSeconds);
+      const next = groupData();
+      next[0].submissionIntervalSeconds = input.submissionIntervalSeconds;
+      next[0].imagePublishingSupported =
+        state.imagePublishingSupported === true;
+      next[0].revision = state.queueRevision;
+      state.currentGroup = next[0];
+      return response({ items: next });
     };
     const response = (data) => Promise.resolve({ ok: true, data });
     const authState = {
@@ -203,12 +216,15 @@ function installDesktopFixture(page) {
           submissionPlatforms: [],
           workflowItems: [],
         }),
-      getSubmissionCenterSnapshot: () => {
+      getSubmissionCenterSnapshot: (input) => {
         state.submissionCenterCalls += 1;
-        return response(submissionCenterData());
+        const clientId =
+          typeof input === "string" ? input : input?.clientId || null;
+        return response(submissionCenterData(clientId));
       },
       listRegularQueueGroups: () => response({ items: groupData() }),
       updateRegularQueueGroupImageCount: updateImageCount,
+      updateRegularQueueGroupSubmissionInterval: updateSubmissionInterval,
       startRegularQueueGroup: () => response([]),
       pauseRegularQueueGroup: () => response([]),
       startAllRegularQueueGroups: () => response([]),
@@ -254,7 +270,6 @@ function installDesktopFixture(page) {
           categoryId: 0,
           vendorConfigured: false,
           siteOrigin: "",
-          publishIntervalSeconds: 30,
           lastTest: null,
         }),
     };
@@ -351,6 +366,9 @@ function installDesktopFixture(page) {
       },
       getImageCountUpdates() {
         return state.imageCountUpdates;
+      },
+      getSubmissionIntervalUpdates() {
+        return state.submissionIntervalUpdates;
       },
     };
     window.desktopConsole = {
@@ -534,6 +552,27 @@ describe("renderer platform queue lifecycle", { concurrency: false }, () => {
     await page.getByText("数据已就绪").waitFor();
     await page.locator("#nav-item-submission-center").click();
     await page.getByRole("heading", { name: "普通平台队列" }).waitFor();
+    const intervalInput = page.getByRole("spinbutton", {
+      name: /投稿间隔（秒）/,
+    });
+    await intervalInput.waitFor();
+    assert.equal(await intervalInput.inputValue(), "30");
+    const saveInterval = page.getByRole("button", { name: "保存投稿间隔" });
+    await intervalInput.fill("3601");
+    assert.equal(await intervalInput.getAttribute("aria-invalid"), "true");
+    assert.equal(await saveInterval.isDisabled(), true);
+    await intervalInput.fill("45");
+    await saveInterval.click();
+    await page
+      .getByRole("status")
+      .filter({ hasText: "投稿间隔已保存。" })
+      .waitFor();
+    assert.deepEqual(
+      await page.evaluate(() =>
+        window.__platformQueueLifecycle.getSubmissionIntervalUpdates(),
+      ),
+      [45],
+    );
     const input = page.getByRole("spinbutton", {
       name: "头条 每篇图片数量",
     });

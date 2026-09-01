@@ -38,7 +38,6 @@ const EMPTY_HEPAN: HepanProviderStatus = {
   vendorConfigured: false,
   bundledVendorAvailable: false,
   siteOrigin: "",
-  publishIntervalSeconds: 0,
   lastTest: null,
 };
 

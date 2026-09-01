@@ -70,6 +70,42 @@ test("content read model rejects stale selected-client queries through feature q
   assert.deepEqual(snapshot.research.map((item) => item.id), ["research-b"]);
 });
 
+test("research metadata refresh never replaces the selected client's full research details", async () => {
+  const fullResearch = deferred();
+  const metadata = deferred();
+  const feature = createContentWorkbenchFeature(adapters({
+    listResearch: async (clientId) => clientId === "client-a" ? fullResearch.promise : [],
+    listResearchMetadata: async () => metadata.promise,
+  }));
+  feature.setScope({ workspaceRuntimeId: "runtime-1" });
+  await feature.refreshSources("initial");
+
+  const details = feature.refreshClientData("initial");
+  const index = feature.refreshResearchIndex("initial");
+
+  fullResearch.resolve([{
+    id: "research-client-a",
+    clientId: "client-a",
+    answerText: "full",
+    references: [{ title: "Reference", url: "https://example.test/reference" }],
+    collectionMethod: "automatic",
+  }]);
+  await details;
+
+  assert.equal(feature.getSnapshot().research[0].references.length, 1);
+  metadata.resolve([{
+    id: "research-client-a",
+    clientId: "client-a",
+    question: "Q",
+    answerLength: 4,
+    referenceCount: 1,
+    isAnswerComplete: true,
+  }]);
+  await index;
+  assert.equal(feature.getSnapshot().research[0].references.length, 1);
+  feature.dispose();
+});
+
 test("content destructive command rejects an input client outside its current feature scope", async () => {
   let executeCalls = 0;
   const feature = createContentWorkbenchFeature(adapters({

@@ -41,6 +41,10 @@ function createSubmissionInterface(maintenance, regularQueueService, regularQueu
     regularQueueGroups: {
       list: bind(regular, "listRegularQueueGroups"),
       updateImageCount: bind(regular, "updateRegularQueueGroupImageCount"),
+      updateSubmissionInterval: bind(
+        regular,
+        "updateRegularQueueGroupSubmissionInterval",
+      ),
       start: bind(regularQueueGroups, "startGroup"),
       pause: bind(regularQueueGroups, "pauseGroup"),
       startAll: bind(regularQueueGroups, "startAll"),
@@ -203,6 +207,33 @@ function regularQueueGroupImageCountInput(input) {
   return input;
 }
 
+function regularQueueGroupSubmissionIntervalInput(input) {
+  if (
+    !input ||
+    typeof input !== "object" ||
+    Array.isArray(input) ||
+    Object.keys(input).some(function (key) {
+      return (
+        key !== "queueGroupId" &&
+        key !== "submissionIntervalSeconds" &&
+        key !== "expectedRevision"
+      );
+    }) ||
+    typeof input.queueGroupId !== "string" ||
+    !input.queueGroupId.trim() ||
+    !Number.isInteger(input.submissionIntervalSeconds) ||
+    input.submissionIntervalSeconds < 0 ||
+    input.submissionIntervalSeconds > 3600 ||
+    !Number.isInteger(input.expectedRevision) ||
+    input.expectedRevision < 0
+  ) {
+    const error = new Error("Invalid regular queue submission-interval request");
+    error.code = "REGULAR_QUEUE_CONFIG_INVALID";
+    throw error;
+  }
+  return input;
+}
+
 function registerContentSubmissionIpc(deps) {
   const maintenance = deps.submissionMaintenance;
   if (!maintenance) {
@@ -293,6 +324,18 @@ function registerContentSubmissionIpc(deps) {
         return {
           items: workflow.regularQueueGroups.updateImageCount(
             regularQueueGroupImageCountInput(input),
+          ),
+        };
+      });
+    },
+  );
+  deps.ipcMain.handle(
+    "content:update-regular-queue-group-submission-interval",
+    function (event, input) {
+      return wrap(function () {
+        return {
+          items: workflow.regularQueueGroups.updateSubmissionInterval(
+            regularQueueGroupSubmissionIntervalInput(input),
           ),
         };
       });

@@ -124,6 +124,8 @@ function createHttpRuntime(options) {
       return next;
     },
     storageState: async ({ path: filename }) => {
+      if (value.stateSaveError && postCalls.length > 0)
+        throw new Error("synthetic state save failure");
       fs.writeFileSync(filename, '{"cookies":[]}', "utf8");
     },
     dispose: async () => undefined,
@@ -381,7 +383,7 @@ test("Lieju auto verifies the account and freezes HTTP preparation without start
   }
 });
 
-test("Lieju auto falls back before POST and browser consumes the frozen city, zone, body, and image plan", async () => {
+test("Lieju auto blocks before POST when HTTP preparation fails and never opens a browser", async () => {
   const fixture = stateFixture();
   const http = createHttpRuntime({
     getResponses: [new Error("synthetic timeout")],
@@ -394,42 +396,12 @@ test("Lieju auto falls back before POST and browser consumes the frozen city, zo
     },
   });
   try {
-    const prepared = await loaded.adapter.preparePlatformSubmission(
-      claim(),
-      imagePlan(),
+    await assert.rejects(
+      () => loaded.adapter.preparePlatformSubmission(claim(), imagePlan()),
+      { code: "LIEJU_HTTP_GET_FAILED" },
     );
     assert.equal(http.postCalls.length, 0);
-    assert.equal(
-      loaded.commands.filter((args) => args[0] === "open").length,
-      1,
-    );
-    assert.equal(
-      loaded.commands.some(
-        (args) =>
-          args[0] === "goto" && args[1] === "https://post.lieju.com/3/239",
-      ),
-      true,
-    );
-    const fill = loaded.codeSources.find((source) =>
-      source.includes("setInputFiles"),
-    );
-    assert.ok(fill);
-    assert.match(fill, /合成正文/);
-    assert.match(fill, /zone-final/);
-    assert.match(fill, /local_file1/);
-    assert.deepEqual(prepared.preparedSubmissionEvidenceV1.images, [
-      {
-        assetFingerprint:
-          "219003d8a14a805283226fe9c6e894424e7c76bc87a49232cf5af96bebf27328",
-        layoutSlot: 0,
-      },
-    ]);
-    assert.deepEqual(await prepared.submitPreparedPublication(), {
-      status: "accepted",
-      remoteId: "654321",
-      remoteUrl: "https://ly.lieju.com/shanghai/654321.html",
-    });
-    assert.equal(http.postCalls.length, 0);
+    assert.equal(loaded.commands.filter((args) => args[0] === "open").length, 0);
   } finally {
     loaded.restore();
     fs.rmSync(fixture.root, { recursive: true, force: true });
@@ -465,6 +437,64 @@ test("Lieju never turns an HTTP POST timeout into a browser submission or a seco
       loaded.commands.filter((args) => args[0] === "open").length,
       0,
     );
+  } finally {
+    loaded.restore();
+    fs.rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("Lieju auto blocks on HTTP account inspection failure without opening a browser", async () => {
+  const fixture = stateFixture();
+  const http = createHttpRuntime({ getResponses: [new Error("synthetic timeout")] });
+  const loaded = loadAdapterWithBrowser({
+    runtimeContext: { browserRuntime: { stateFile: fixture.stateFile }, httpRequest: http.request },
+  });
+  try {
+    await assert.rejects(() => loaded.adapter.ensureAccountInspectionReady({}), {
+      code: "LIEJU_HTTP_GET_FAILED",
+    });
+    assert.equal(loaded.commands.filter((args) => args[0] === "open").length, 0);
+  } finally {
+    loaded.restore();
+    fs.rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("Lieju preserves remote accepted identity when HTTP session state save fails", async () => {
+  const fixture = stateFixture();
+  const http = createHttpRuntime({
+    stateSaveError: true,
+    getResponses: [
+      response(),
+      response({ body: cityDirectory() }),
+      response({ body: publicationForm() }),
+    ],
+    postResponses: [
+      response({
+        status: 302,
+        url: "https://post.lieju.com/3/239?action=postnew",
+        headers: {
+          location: "https://ly.lieju.com/shanghai/987654.html",
+          "content-type": "text/html; charset=utf-8",
+        },
+        body: "",
+      }),
+    ],
+  });
+  const loaded = loadAdapterWithBrowser({
+    runtimeContext: {
+      browserRuntime: { stateFile: fixture.stateFile },
+      httpRequest: http.request,
+    },
+  });
+  try {
+    const prepared = await loaded.adapter.preparePlatformSubmission(claim());
+    assert.deepEqual(await prepared.submitPreparedPublication(), {
+      status: "accepted",
+      remoteId: "987654",
+      remoteUrl: "https://ly.lieju.com/shanghai/987654.html",
+    });
+    assert.equal(http.postCalls.length, 1);
   } finally {
     loaded.restore();
     fs.rmSync(fixture.root, { recursive: true, force: true });

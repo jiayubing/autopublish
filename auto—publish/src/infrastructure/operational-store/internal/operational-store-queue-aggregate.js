@@ -17,6 +17,8 @@ function createOperationalStoreQueueAggregate(context) {
     listRegularQueueGroupSnapshots: runtime.listRegularQueueGroupSnapshots,
     setRegularQueueGroupRunIntent: runtime.setRegularQueueGroupRunIntent,
     setRegularQueueGroupImageCount: runtime.setRegularQueueGroupImageCount,
+    setRegularQueueGroupSubmissionInterval:
+      runtime.setRegularQueueGroupSubmissionInterval,
     startAllRegularQueueGroups: runtime.startAllRegularQueueGroups,
     pauseAllRegularQueueGroups: runtime.pauseAllRegularQueueGroups,
     pauseRegularQueueGroupsOnStartup: runtime.pauseRegularQueueGroupsOnStartup,

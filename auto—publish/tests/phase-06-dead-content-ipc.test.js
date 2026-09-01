@@ -44,7 +44,7 @@ test("preload and main IPC sources omit dead content capability names", () => {
   ].join("\n");
 
   for (const channel of DEAD_CHANNELS) {
-    assert.equal(boundarySource.includes(channel), false, channel);
+    assert.equal(boundarySource.includes(JSON.stringify(channel)), false, channel);
   }
 
   for (const preloadMethod of [

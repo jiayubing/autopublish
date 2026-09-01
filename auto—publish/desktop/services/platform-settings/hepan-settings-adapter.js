@@ -91,14 +91,6 @@ function normalizeCategoryId(value) {
   return number;
 }
 
-function normalizePublishIntervalSeconds(value) {
-  const number = value == null || value === "" ? 30 : Number(value);
-  if (!Number.isInteger(number) || number < 0 || number > 3600) {
-    throw adapterError("PLATFORM_CONFIG_INVALID", "Hepan publish interval is invalid");
-  }
-  return number;
-}
-
 function assertCookiePath(value, io, path) {
   const text = String(value == null ? "" : value).trim();
   if (!text || text.includes("\0") || !path.isAbsolute(text)) throw adapterError("PLATFORM_CONFIG_INVALID", "Hepan Cookie path is invalid");
@@ -174,7 +166,6 @@ function createHepanSettingsAdapter(options) {
       cookie: { type: "string", required: true, nonEmpty: true },
       categoryId: { type: "integer", required: true, min: 1, default: 121 },
       vendorDir: { type: "string", required: false, clearable: true, clearValue: "" },
-      publishIntervalSeconds: { type: "integer", required: true, min: 0, max: 3600, default: 30 },
       siteOrigin: { type: "string", required: true, default: HEPAN_SITE_ORIGIN }
     },
     secretFields: ["cookie"],
@@ -192,7 +183,6 @@ function createHepanSettingsAdapter(options) {
         cookie,
         categoryId: normalizeCategoryId(value.categoryId),
         vendorDir,
-        publishIntervalSeconds: normalizePublishIntervalSeconds(value.publishIntervalSeconds),
         siteOrigin: HEPAN_SITE_ORIGIN
       };
     },
@@ -207,7 +197,6 @@ function createHepanSettingsAdapter(options) {
         cookiePath: assertCookiePath(cookiePath, io, path),
         categoryId: normalizeCategoryId(source.HEPAN_CATEGORY_ID),
         vendorDir: source.HEPAN_VENDOR_DIR || "",
-        publishIntervalSeconds: normalizePublishIntervalSeconds(source.HEPAN_PUBLISH_INTERVAL_SECONDS),
         siteOrigin: HEPAN_SITE_ORIGIN
       };
     },
@@ -221,7 +210,6 @@ function createHepanSettingsAdapter(options) {
         categoryId: value.categoryId || 121,
         vendorConfigured: Boolean(value.vendorDir),
         bundledVendorAvailable: Boolean(bundledVendorDir),
-        publishIntervalSeconds: normalizePublishIntervalSeconds(value.publishIntervalSeconds),
         siteOrigin: HEPAN_SITE_ORIGIN,
         lastTest: context.lastTest || null
       };
@@ -296,21 +284,9 @@ function createHepanSettingsAdapter(options) {
             pythonPath: config.pythonPath,
             categoryId: config.categoryId,
             vendorDir: config.vendorDir || "",
-            publishIntervalSeconds:
-              Number.isInteger(config.publishIntervalSeconds) &&
-              config.publishIntervalSeconds >= 0 &&
-              config.publishIntervalSeconds <= 3600
-                ? config.publishIntervalSeconds
-                : 30,
             cookiePath: temporaryCookie.cookiePath,
           }),
         }),
-        intervalMs:
-          (Number.isInteger(config.publishIntervalSeconds) &&
-          config.publishIntervalSeconds >= 0 &&
-          config.publishIntervalSeconds <= 3600
-            ? config.publishIntervalSeconds
-            : 30) * 1000,
         timeoutMs: 120000,
         cleanup: temporaryCookie.cleanup,
       });

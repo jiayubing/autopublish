@@ -43,12 +43,11 @@ export type GenerationBatchLiveStatus =
   | "running"
   | "pausing"
   | "paused"
-  | "stopping"
-  | "stopped"
   | "interrupted"
   | "paused_configuration"
   | "failed"
-  | "completed";
+  | "completed"
+  | "abandoned";
 
 export interface GenerationBatchTemplateSelection {
   platform: string;
@@ -149,4 +148,12 @@ export interface GeneratedContentArticle {
   };
   generationBatchId?: string | null;
   generationTaskId?: string | null;
+  generationOperationId?: string | null;
+}
+export interface ContentGenerationOperation {
+  operationId: string;
+  articleCount: number;
+  status: "completed" | "partial" | "failed";
+  articles: Array<{ index: number; article: GeneratedContentArticle }>;
+  failures: Array<{ index: number; code: string }>;
 }

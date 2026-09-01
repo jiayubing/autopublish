@@ -113,12 +113,17 @@ function verifyV4Structure(db, errorCode, options) {
     ],
   };
   const allowV8ImageCount = options && options.allowV8ImageCount === true;
+  const allowV9SubmissionInterval =
+    options && options.allowV9SubmissionInterval === true;
   const validTables = Object.entries(required).every(([name, expected]) => {
     const actual = columns(db, name);
     return (
       actual.length ===
         expected.length +
-          (allowV8ImageCount && name === "submission_queue_groups" ? 1 : 0) &&
+          (allowV8ImageCount && name === "submission_queue_groups" ? 1 : 0) +
+          (allowV9SubmissionInterval && name === "submission_queue_groups"
+            ? 1
+            : 0) &&
       expected.every(
         ([column, type, notnull, pk], index) =>
           actual[index] &&

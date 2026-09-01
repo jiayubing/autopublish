@@ -91,7 +91,6 @@ describe("platform settings service", () => {
           return {
             platformId: "fixture",
             runtimeContext: { fixtureRuntime: { configured: true } },
-            intervalMs: 1200,
             timeoutMs: 91000,
             cleanup: () => { cleaned += 1; },
           };
@@ -105,7 +104,7 @@ describe("platform settings service", () => {
     assert.deepStrictEqual(prepared.runtimeContext, {
       fixtureRuntime: { configured: true },
     });
-    assert.deepStrictEqual(prepared.intervalByTargetMs, { fixture: 1200 });
+    assert.equal(Object.hasOwn(prepared, "intervalByTargetMs"), false);
     assert.equal(prepared.timeoutMs, 91000);
     prepared.cleanup();
     prepared.cleanup();

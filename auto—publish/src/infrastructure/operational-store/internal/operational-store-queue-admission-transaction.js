@@ -96,12 +96,26 @@ function createQueueAdmissionTransaction(context) {
     )
       throw fail("REGULAR_QUEUE_CONFIG_INVALID");
     for (const key of Object.keys(queueConfig))
-      if (key !== "queueGroupId" && key !== "imageCount")
+      if (
+        key !== "queueGroupId" &&
+        key !== "imageCount" &&
+        key !== "submissionIntervalSeconds"
+      )
         throw fail("REGULAR_QUEUE_CONFIG_INVALID");
     const imageCount =
       queueConfig.imageCount === undefined ? 1 : queueConfig.imageCount;
     if (!Number.isInteger(imageCount) || imageCount < 0 || imageCount > 5)
       throw fail("OPERATIONAL_QUEUE_GROUP_IMAGE_COUNT_INVALID");
+    const submissionIntervalSeconds =
+      queueConfig.submissionIntervalSeconds === undefined
+        ? 30
+        : queueConfig.submissionIntervalSeconds;
+    if (
+      !Number.isInteger(submissionIntervalSeconds) ||
+      submissionIntervalSeconds < 0 ||
+      submissionIntervalSeconds > 3600
+    )
+      throw fail("OPERATIONAL_QUEUE_GROUP_SUBMISSION_INTERVAL_INVALID");
     return Object.freeze({
       queueGroupId:
         queueConfig.queueGroupId === undefined
@@ -112,6 +126,7 @@ function createQueueAdmissionTransaction(context) {
               "OPERATIONAL_QUEUE_GROUP_ID_INVALID",
             ),
       imageCount,
+      submissionIntervalSeconds,
     });
   }
 
@@ -141,7 +156,7 @@ function createQueueAdmissionTransaction(context) {
     const queueGroupId = requestedId || `queue-group-${randomUUID()}`;
     try {
       db.prepare(
-        "INSERT INTO submission_queue_groups(queue_group_id,platform_id,account_profile_id,pause_intent,revision,created_at,updated_at,image_count) VALUES(?,?,?,?,?,?,?,?)",
+        "INSERT INTO submission_queue_groups(queue_group_id,platform_id,account_profile_id,pause_intent,revision,created_at,updated_at,image_count,submission_interval_seconds) VALUES(?,?,?,?,?,?,?,?,?)",
       ).run(
         queueGroupId,
         target.platformId,
@@ -151,6 +166,7 @@ function createQueueAdmissionTransaction(context) {
         stamp,
         stamp,
         queueConfig.imageCount,
+        queueConfig.submissionIntervalSeconds,
       );
     } catch (error) {
       if (String((error && error.code) || "").startsWith("SQLITE_CONSTRAINT")) {

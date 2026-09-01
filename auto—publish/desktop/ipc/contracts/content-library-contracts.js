@@ -33,7 +33,7 @@ const contentMaterial = exactObject({
   name: text(500),
   extension: optionalField(text(32)),
   status: optionalField(text(80)),
-  content: multiline(2000000),
+  content: optionalField(multiline(2000000)),
   characterCount: optionalField(integerField({ min: 0, max: 2000000 })),
   error: optionalField(nullableField(materialError)),
   contentHash: optionalField(text(256)),
@@ -65,6 +65,17 @@ const research = exactObject({
   updatedAt: optionalField(timestamp),
   createdAt: optionalField(timestamp),
   isAnswerComplete: optionalField(boolean),
+});
+const researchMetadata = exactObject({
+  id,
+  clientId: id,
+  question: optionalField(multiline(10000)),
+  collectionMethod: enumField(["automatic", "manual", "legacy"]),
+  collectedAt: optionalField(timestamp),
+  updatedAt: optionalField(timestamp),
+  isAnswerComplete: optionalField(boolean),
+  answerLength: optionalField(integerField({ min: 0, max: 2000000 })),
+  referenceCount: optionalField(integerField({ min: 0, max: 1000 })),
 });
 const template = exactObject({
   id,
@@ -116,6 +127,16 @@ const contentLibraryContracts = Object.freeze([
     toArgs: directInput,
   }),
   contentContract({
+    capability: "content.getClientDetails",
+    channel: "content:get-client-details",
+    feature: "content",
+    kind: "query",
+    request: exactObject({ clientId: id }),
+    success: exactObject({ client: contentClient, research: arrayField(research, { max: 10000 }) }),
+    fromArgs: (args) => ({ clientId: args[0] }),
+    toArgs: (payload) => [payload.clientId],
+  }),
+  contentContract({
     capability: "content.listClients",
     channel: "content:list-clients",
     feature: "content",
@@ -126,6 +147,16 @@ const contentLibraryContracts = Object.freeze([
     }),
     fromArgs: noArgs,
     toArgs: noInput,
+  }),
+  contentContract({
+    capability: "content.listResearchMetadata",
+    channel: "content:list-research-metadata",
+    feature: "content",
+    kind: "query",
+    request: exactObject({ clientId: id }),
+    success: exactObject({ research: arrayField(researchMetadata, { max: 10000 }) }),
+    fromArgs: (args) => ({ clientId: args[0] }),
+    toArgs: (payload) => [payload.clientId],
   }),
   contentContract({
     capability: "content.listResearch",
@@ -220,6 +251,13 @@ function projectResearch(value) {
   return output;
 }
 
+function projectResearchMetadata(value) {
+  return projectFields(value, [
+    "id", "clientId", "question", "collectionMethod", "collectedAt", "updatedAt",
+    "isAnswerComplete", "answerLength", "referenceCount",
+  ]);
+}
+
 function projectTemplate(value) {
   return projectFields(value, [
     "id",
@@ -279,6 +317,7 @@ module.exports = {
   projectClient,
   projectMaterial,
   projectResearch,
+  projectResearchMetadata,
   projectTemplate,
   projectTemplateCatalog,
   research,

@@ -67,6 +67,7 @@ function createGenerationBatchRunner(options) {
   const activeTasks = new Map();
   let activeRun = null;
   let disposed = false;
+  let pauseRequested = false;
   let state = { status: "idle", batchId: null, counts: null, concurrency: concurrency, updatedAt: now() };
 
   function emit(batch, status, task, error, updatedAt) {
@@ -223,10 +224,14 @@ function createGenerationBatchRunner(options) {
     }
   }
 
-  function finishStatus(batchId, stopped) {
+  function finishStatus(batchId, interrupted) {
     const batch = deps.batchStore.getBatch(batchId);
-    if (stopped) {
-      if (batch.status !== "paused_configuration") deps.batchStore.updateBatchStatus(batchId, "stopped");
+    if (interrupted) {
+      if (batch.status !== "paused_configuration") deps.batchStore.updateBatchStatus(batchId, "interrupted");
+      return deps.batchStore.getBatch(batchId);
+    }
+    if (pauseRequested) {
+      if (batch.status !== "paused_configuration") deps.batchStore.updateBatchStatus(batchId, "paused");
       return deps.batchStore.getBatch(batchId);
     }
     if (batch.status === "paused_configuration") return batch;
@@ -247,7 +252,8 @@ function createGenerationBatchRunner(options) {
     if (!VALID_SELECTIONS.has(chosen)) throw runnerError("GENERATION_SELECTION_INVALID", "Generation task selection is invalid");
     if (activeRun) throw runnerError("GENERATION_BATCH_BUSY", "A generation batch is already running");
 
-    const stopController = new AbortController();
+      const stopController = new AbortController();
+    pauseRequested = false;
     const work = (async function() {
       let batch = deps.batchStore.getBatch(batchId);
       setState(batch, "running");
@@ -255,7 +261,7 @@ function createGenerationBatchRunner(options) {
       let nextIndex = 0;
       let configurationPaused = false;
       async function worker() {
-        while (!stopController.signal.aborted) {
+        while (!stopController.signal.aborted && !pauseRequested) {
           const taskId = taskIds[nextIndex];
           nextIndex += 1;
           if (!taskId) return;
@@ -294,14 +300,11 @@ function createGenerationBatchRunner(options) {
     }
   }
 
-  async function stop() {
-    if (!activeRun) return state.batchId ? deps.batchStore.getBatch(state.batchId) : null;
-    activeRun.stopController.abort();
-    return activeRun.promise;
-  }
-
   async function pause() {
-    return stop();
+    if (!activeRun) return state.batchId ? deps.batchStore.getBatch(state.batchId) : null;
+    pauseRequested = true;
+    state = Object.assign({}, state, { status: "pausing", updatedAt: now() });
+    return activeRun.promise;
   }
 
   function getState() { return clone(state); }
@@ -315,11 +318,12 @@ function createGenerationBatchRunner(options) {
   async function dispose() {
     if (disposed) return;
     disposed = true;
-    await stop();
+    if (activeRun) activeRun.stopController.abort();
+    if (activeRun) await activeRun.promise;
     listeners.clear();
   }
 
-  return { run: run, stop: stop, pause: pause, getState: getState, subscribe: subscribe, dispose: dispose };
+  return { run: run, pause: pause, getState: getState, subscribe: subscribe, dispose: dispose };
 }
 
 module.exports = { createGenerationBatchRunner };

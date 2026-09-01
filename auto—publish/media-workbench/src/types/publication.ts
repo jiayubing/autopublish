@@ -176,7 +176,7 @@ export interface PublicationArchiveEntry {
 }
 
 export interface ArticleSelection {
-  clientId: string;
+  clientId: string | null;
   articleId: string;
 }
 export type ArticleRemovalTransactionStatus =
@@ -319,6 +319,7 @@ export interface RegularQueueGroupSnapshot {
   platformId: string;
   accountProfileId: string;
   imageCount: number;
+  submissionIntervalSeconds: number;
   imagePublishingSupported: boolean;
   runState: "paused" | "running" | "in_flight";
   pauseIntent: "none" | "manual" | "system";
@@ -421,7 +422,11 @@ export interface RegularQueueAdmissionInput {
   articleRefs: ArticleSelection[];
   platformId: string;
   accountProfileId: string;
-  queueConfig?: { queueGroupId?: string; imageCount?: number };
+  queueConfig?: {
+    queueGroupId?: string;
+    imageCount?: number;
+    submissionIntervalSeconds?: number;
+  };
 }
 export interface RegularQueueAdmissionPreview {
   target: RegularQueueTarget;
@@ -674,6 +679,10 @@ export interface SubmissionCenterSnapshot {
     attentionItems: number;
     total: number;
   };
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+  failures: Array<{ section: string; code: string }>;
 }
 
 export interface ArticleAttentionList {

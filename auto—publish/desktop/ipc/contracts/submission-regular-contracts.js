@@ -48,6 +48,9 @@ const regularQueueTarget = exactObject({
 const regularQueueConfig = exactObject({
   queueGroupId: optionalField(id),
   imageCount: optionalField(integerField({ min: 0, max: 5 })),
+  submissionIntervalSeconds: optionalField(
+    integerField({ min: 0, max: 3600 }),
+  ),
 });
 const regularAdmissionFields = {
   articleRefs: arrayField(articleRef, { min: 1, max: 1000 }),
@@ -122,6 +125,7 @@ const regularQueueGroupSnapshot = exactObject({
   platformId: id,
   accountProfileId: id,
   imageCount: integerField({ min: 0, max: 5 }),
+  submissionIntervalSeconds: integerField({ min: 0, max: 3600 }),
   imagePublishingSupported: "boolean",
   runState: enumField(["paused", "running", "in_flight"]),
   pauseIntent: enumField(["none", "manual", "system"]),
@@ -189,6 +193,19 @@ const submissionRegularContracts = Object.freeze([
     request: exactObject({
       queueGroupId: id,
       imageCount: integerField({ min: 0, max: 5 }),
+      expectedRevision: revision,
+    }),
+    success: regularQueueGroupList,
+    fromArgs: directArgs,
+    toArgs: directInput,
+  }),
+  submissionContract({
+    capability: "content.updateRegularQueueGroupSubmissionInterval",
+    channel: "content:update-regular-queue-group-submission-interval",
+    kind: "command",
+    request: exactObject({
+      queueGroupId: id,
+      submissionIntervalSeconds: integerField({ min: 0, max: 3600 }),
       expectedRevision: revision,
     }),
     success: regularQueueGroupList,
@@ -384,6 +401,18 @@ const submissionRegularContractFixtures = Object.freeze([
     request: {
       queueGroupId: "regular-group-1",
       imageCount: 3,
+      expectedRevision: 2,
+    },
+    result: { items: [] },
+  },
+  {
+    channel: "content:update-regular-queue-group-submission-interval",
+    owner: "content",
+    productionCaller:
+      "desktopConsole.content.updateRegularQueueGroupSubmissionInterval",
+    request: {
+      queueGroupId: "regular-group-1",
+      submissionIntervalSeconds: 30,
       expectedRevision: 2,
     },
     result: { items: [] },

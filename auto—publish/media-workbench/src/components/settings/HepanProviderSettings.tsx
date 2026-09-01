@@ -12,7 +12,6 @@ const EMPTY: HepanProviderStatus = {
   categoryId: 0,
   vendorConfigured: false,
   siteOrigin: "",
-  publishIntervalSeconds: 0,
   lastTest: null,
 };
 
@@ -26,7 +25,6 @@ type HepanPatch = {
   categoryId: number;
   vendorDir?: string;
   clearVendorDir?: true;
-  publishIntervalSeconds: number;
 };
 
 export default function HepanProviderSettings() {
@@ -37,9 +35,6 @@ export default function HepanProviderSettings() {
   const [cookie, setCookie] = useState("");
   const [categoryId, setCategoryId] = useState(EMPTY.categoryId);
   const [vendorDir, setVendorDir] = useState("");
-  const [publishIntervalSeconds, setPublishIntervalSeconds] = useState(
-    EMPTY.publishIntervalSeconds,
-  );
   const [localError, setLocalError] = useState("");
   const loading = snapshot.hepan.query.loading;
   const saving = snapshot.commands.saveHepan.busy;
@@ -71,11 +66,6 @@ export default function HepanProviderSettings() {
         ? status.categoryId
         : EMPTY.categoryId,
     );
-    setPublishIntervalSeconds(
-      Number.isInteger(status.publishIntervalSeconds)
-        ? status.publishIntervalSeconds
-        : EMPTY.publishIntervalSeconds,
-    );
     setPythonPath("");
     setCookie("");
     setVendorDir("");
@@ -84,7 +74,6 @@ export default function HepanProviderSettings() {
   function draft(): HepanPatch {
     const patch: HepanPatch = {
       categoryId: Number(categoryId),
-      publishIntervalSeconds: Number(publishIntervalSeconds),
     };
     if (pythonPath.trim()) patch.pythonPath = pythonPath.trim();
     if (cookie.trim()) patch.cookie = cookie;
@@ -92,23 +81,9 @@ export default function HepanProviderSettings() {
     return patch;
   }
 
-  function testDraft(): Omit<HepanPatch, "publishIntervalSeconds"> {
-    const value = draft();
-    const { publishIntervalSeconds: _interval, ...withoutInterval } = value;
-    return withoutInterval;
-  }
-
   function validate(): boolean {
     if (!Number.isInteger(categoryId) || categoryId < 1) {
       setLocalError("栏目 ID 必须是大于 0 的整数。");
-      return false;
-    }
-    if (
-      !Number.isInteger(publishIntervalSeconds) ||
-      publishIntervalSeconds < 0 ||
-      publishIntervalSeconds > 3600
-    ) {
-      setLocalError("发布间隔必须是 0–3600 秒的整数。");
       return false;
     }
     if (!pythonPath.trim() && !status.pythonConfigured) {
@@ -141,7 +116,7 @@ export default function HepanProviderSettings() {
       }))
     )
       return;
-    await feature.testHepan(testDraft());
+    await feature.testHepan(draft());
   }
 
   async function clearVendor() {
@@ -227,55 +202,6 @@ export default function HepanProviderSettings() {
             className="min-w-0 rounded-md border border-slate-300 px-3 py-2 text-sm"
           />
         </label>
-        <div className="grid min-w-0 gap-2 rounded-md border border-slate-200 p-3">
-          <label className="grid min-w-0 gap-1 text-sm font-medium text-slate-700">
-            发布间隔（秒）
-            <input
-              aria-label="发布间隔（秒）"
-              type="number"
-              min={0}
-              max={3600}
-              step={1}
-              value={publishIntervalSeconds}
-              onChange={(event) =>
-                setPublishIntervalSeconds(Number(event.target.value))
-              }
-              disabled={disabled}
-              className="min-w-0 rounded-md border border-slate-300 px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="grid min-w-0 gap-1 text-xs text-slate-600">
-            常用预设
-            <select
-              aria-label="河畔发布间隔预设"
-              value={
-                [10, 30, 60].includes(publishIntervalSeconds)
-                  ? String(publishIntervalSeconds)
-                  : "custom"
-              }
-              onChange={(event) => {
-                if (event.target.value !== "custom")
-                  setPublishIntervalSeconds(Number(event.target.value));
-              }}
-              disabled={disabled}
-              className="min-w-0 rounded-md border border-slate-300 px-3 py-2 text-sm"
-            >
-              <option value="10">10 秒</option>
-              <option value="30">30 秒</option>
-              <option value="60">60 秒</option>
-              <option value="custom">自定义</option>
-            </select>
-          </label>
-          {publishIntervalSeconds === 0 && (
-            <p className="rounded border border-amber-200 bg-amber-50 p-2 text-xs leading-5 text-amber-800">
-              0
-              秒不会增加等待，但可能触发河畔频率限制，请确认账号和远端策略允许。
-            </p>
-          )}
-          <p className="text-xs text-slate-500">
-            范围 0–3600 秒；默认 30 秒。测试登录不会按此间隔等待或投稿。
-          </p>
-        </div>
         <label className="grid min-w-0 gap-1 text-sm font-medium text-slate-700">
           河畔 Cookie
           <input

@@ -17,7 +17,7 @@ const { runRendererModule } = require("./helpers/run-renderer-module");
 const CHANNELS = [
   "content:preview-generation-batch",
   "content:create-and-start-generation-batch",
-  "content:stop-generation-batch",
+  "content:abandon-generation-batch",
   "content:pause-generation-batch",
   "content:continue-generation-batch",
   "content:resume-generation-batch",
@@ -58,7 +58,7 @@ test("generation preload forwards named methods as exact versioned requests", as
   const methodCalls = [
     ["previewGenerationBatch", CHANNELS[0], [plan]],
     ["createAndStartGenerationBatch", CHANNELS[1], [plan]],
-    ["stopGenerationBatch", CHANNELS[2], [{ batchId: "batch-1" }]],
+    ["abandonGenerationBatch", CHANNELS[2], [{ batchId: "batch-1", confirmed: true }]],
     ["pauseGenerationBatch", CHANNELS[3], [{ batchId: "batch-1" }]],
     ["continueGenerationBatch", CHANNELS[4], [{ batchId: "batch-1" }]],
     ["resumeGenerationBatch", CHANNELS[5], [{ batchId: "batch-1" }]],

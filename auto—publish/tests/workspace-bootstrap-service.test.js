@@ -30,7 +30,7 @@ function createHarness(options) {
   fs.mkdirSync(userDataPath, { recursive: true });
   let currentTime = new Date("2026-07-14T12:00:00.000Z");
   let tokenNumber = 0;
-  const events = { saves: [], relaunches: [], opens: [], taskReads: 0, queueReads: 0, generationReads: 0 };
+  const events = { saves: [], relaunches: [], opens: [], taskReads: 0, queueReads: 0, generationReads: 0, contentGenerationReads: 0 };
   const validator = createWorkspaceValidator({
     appPath,
     resourcesPath,
@@ -41,6 +41,7 @@ function createHarness(options) {
   let taskState = { isBatchRunning: false, isStopPending: false, isPlatformRunning: false };
   let queueState = { state: "idle" };
   let generationState = { status: "idle" };
+  let contentGenerationState = { status: "idle" };
   const service = createWorkspaceBootstrapService(Object.assign({
     env: {},
     locationStore,
@@ -59,6 +60,9 @@ function createHarness(options) {
     generationBatchService: {
       getState: function() { events.generationReads += 1; return generationState; }
     },
+    aiContentService: {
+      getState: function() { events.contentGenerationReads += 1; return contentGenerationState; }
+    },
     relaunch: function() { events.relaunches.push(true); },
     openPath: function(value) { events.opens.push(value); }
   }, options || {}));
@@ -72,6 +76,7 @@ function createHarness(options) {
     setTaskState: function(value) { taskState = value; },
     setQueueState: function(value) { queueState = value; },
     setGenerationState: function(value) { generationState = value; },
+    setContentGenerationState: function(value) { contentGenerationState = value; },
     setTime: function(value) { currentTime = new Date(value); },
     cleanup: function() { fs.rmSync(root, { recursive: true, force: true }); }
   };
@@ -623,6 +628,19 @@ describe("workspace bootstrap service", function() {
       harness.setGenerationState({ status: "running", isBatchRunning: true });
       await assertError(harness.service.confirmSelection({ token: selected.selection.token }), "WORKSPACE_SWITCH_BUSY");
       assert.equal(harness.events.generationReads, 1);
+      assert.equal(fs.existsSync(path.join(candidate, ".autopublish-workspace.json")), false);
+    } finally { harness.cleanup(); }
+  });
+
+  it("blocks workspace switching while single article generation is running", async function() {
+    const harness = createHarness();
+    const candidate = path.join(harness.root, "candidate");
+    fs.mkdirSync(candidate);
+    try {
+      const selected = harness.service.chooseDirectory(candidate);
+      harness.setContentGenerationState({ status: "running", operationId: "operation-1" });
+      await assertError(harness.service.confirmSelection({ token: selected.selection.token }), "WORKSPACE_SWITCH_BUSY");
+      assert.equal(harness.events.contentGenerationReads, 1);
       assert.equal(fs.existsSync(path.join(candidate, ".autopublish-workspace.json")), false);
     } finally { harness.cleanup(); }
   });

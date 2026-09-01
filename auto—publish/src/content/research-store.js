@@ -183,6 +183,31 @@ function createResearchStore(workspaceRoot, options) {
       .map(function(entry) { return readRecord(path.join(directory, entry.name), clientId); });
   }
 
+  function listResearchMetadata(clientId) {
+    const directory = clientDirectory(clientId, false);
+    if (!directory || !pathExists(directory)) return [];
+    return fs.readdirSync(directory, { withFileTypes: true })
+      .filter(function(entry) { return entry.isFile() && path.extname(entry.name).toLowerCase() === ".json"; })
+      .sort(function(a, b) { return a.name.localeCompare(b.name); })
+      .map(function(entry) {
+        let record;
+        try { record = JSON.parse(fs.readFileSync(path.join(directory, entry.name), "utf8")); }
+        catch (_) { throw storeError("RESEARCH_INVALID_JSON", "Research JSON is invalid"); }
+        const answerText = typeof record.answerText === "string" ? record.answerText : "";
+        return {
+          id: record.id,
+          clientId: clientId,
+          question: record.question,
+          collectionMethod: record.collectionMethod === undefined ? "legacy" : record.collectionMethod,
+          collectedAt: record.collectedAt === undefined ? record.createdAt : record.collectedAt,
+          updatedAt: record.updatedAt === undefined ? (record.collectedAt === undefined ? record.createdAt : record.collectedAt) : record.updatedAt,
+          isAnswerComplete: Boolean(answerText.trim()),
+          answerLength: answerText.length,
+          referenceCount: Array.isArray(record.references) ? record.references.length : 0,
+        };
+      });
+  }
+
   function getResearch(clientId, queryId) {
     const filename = recordPath(clientId, queryId, false);
     if (!pathExists(filename)) throw storeError("RESEARCH_NOT_FOUND", "Research was not found");
@@ -235,7 +260,7 @@ function createResearchStore(workspaceRoot, options) {
     return record;
   }
 
-  return { listResearch, getResearch, saveResearch, deleteResearch };
+  return { listResearch, listResearchMetadata, getResearch, saveResearch, deleteResearch };
 }
 
 module.exports = { createResearchStore };

@@ -147,7 +147,7 @@ test("OperationalStore facade persists caller-visible facts through its public c
   let store;
   try {
     store = createOperationalStore({ workspaceRoot });
-    assert.equal(SCHEMA_VERSION, 8);
+    assert.equal(SCHEMA_VERSION, 9);
     assert.deepEqual(Object.keys(store), PUBLIC_SURFACE);
     assert.equal(Object.isFrozen(store), true);
     assert.equal("db" in store, false);

@@ -45,6 +45,7 @@ const regularQueueGroupSnapshot = exactObject({
   platformId: id,
   accountProfileId: id,
   imageCount: integerField({ min: 0, max: 5 }),
+  submissionIntervalSeconds: integerField({ min: 0, max: 3600 }),
   imagePublishingSupported: "boolean",
   runState: enumField(["paused", "running", "in_flight"]),
   pauseIntent: enumField(["none", "manual", "system"]),
@@ -97,7 +98,7 @@ const attentionItem = exactObject(Object.assign({}, articleAttentionItem.fields,
 
 const submissionCenterSnapshot = exactObject({
   schemaVersion: require("./registry").literalField(1),
-  clientId: clientIdentity,
+  clientId: nullableField(clientIdentity),
   revision: integerField({ min: 0, max: Number.MAX_SAFE_INTEGER }),
   regular: exactObject({ groups: arrayField(regularQueueGroupSnapshot, { max: 10000 }) }),
   paid: exactObject({ batches: arrayField(paidExecutionBatch, { max: 10000 }) }),
@@ -108,6 +109,10 @@ const submissionCenterSnapshot = exactObject({
     attentionItems: integerField({ min: 0, max: 100000 }),
     total: integerField({ min: 0, max: 100000 }),
   }),
+  page: integerField({ min: 1, max: Number.MAX_SAFE_INTEGER }),
+  pageSize: integerField({ min: 1, max: 500 }),
+  hasMore: "boolean",
+  failures: arrayField(exactObject({ section: safeText(32, 1), code }), { max: 3 }),
 });
 
 const submissionCenterContracts = Object.freeze([
@@ -115,7 +120,11 @@ const submissionCenterContracts = Object.freeze([
     capability: "content.getSubmissionCenterSnapshot",
     channel: "content:get-submission-center-snapshot",
     kind: "query",
-    request: exactObject({ clientId: clientIdentity }),
+    request: exactObject({
+      clientId: optionalField(clientIdentity),
+      page: optionalField(integerField({ min: 1, max: Number.MAX_SAFE_INTEGER })),
+      pageSize: optionalField(integerField({ min: 1, max: 500 })),
+    }),
     success: submissionCenterSnapshot,
     fromArgs: directArgs,
     toArgs: directInput,

@@ -72,9 +72,12 @@ export function createAttentionFeature(adapters = {}) {
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     setScope(nextScope) {
       if (disposed) return;
-      if (!nextScope || typeof nextScope.workspaceRuntimeId !== 'string' || !nextScope.workspaceRuntimeId || typeof nextScope.clientId !== 'string' || !nextScope.clientId) throw new TypeError('Attention scope is invalid');
+      if (!nextScope || typeof nextScope.workspaceRuntimeId !== 'string' || !nextScope.workspaceRuntimeId || (nextScope.clientId !== undefined && (typeof nextScope.clientId !== 'string' || !nextScope.clientId))) throw new TypeError('Attention scope is invalid');
       if (scope?.workspaceRuntimeId === nextScope.workspaceRuntimeId && scope?.clientId === nextScope.clientId) return;
-      scope = Object.freeze({ workspaceRuntimeId: nextScope.workspaceRuntimeId, clientId: nextScope.clientId });
+      scope = Object.freeze({
+        workspaceRuntimeId: nextScope.workspaceRuntimeId,
+        ...(nextScope.clientId ? { clientId: nextScope.clientId } : {}),
+      });
       attentionQuery.setScope(scope);
       previewOwner.invalidate();
       executeOwner.invalidate();

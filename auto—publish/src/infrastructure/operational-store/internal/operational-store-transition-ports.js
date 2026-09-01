@@ -36,6 +36,10 @@ function exposeOperationalStoreTransitionPorts(options, dependencies) {
   holder.regularQueueGroupImageCountTransitions = Object.freeze({
     setRegularQueueGroupImageCount: queue.setRegularQueueGroupImageCount,
   });
+  holder.regularQueueGroupSubmissionIntervalTransitions = Object.freeze({
+    setRegularQueueGroupSubmissionInterval:
+      queue.setRegularQueueGroupSubmissionInterval,
+  });
   holder.regularOutcomeTransitions = Object.freeze({
     confirmRegularAccepted: regularOutcome.confirmRegularAccepted,
     confirmRegularNotAccepted: regularOutcome.confirmRegularNotAccepted,

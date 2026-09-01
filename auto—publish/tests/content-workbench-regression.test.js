@@ -29,3 +29,35 @@ test("content workbench public feature owns client, template, and refresh state"
   assert.deepEqual(feature.getSnapshot().management.articles, []);
   feature.dispose();
 });
+
+test("production boundary exposes client detail hydration for batch generation", async () => {
+  const { createContentWorkbenchFeature } = await import(
+    "../media-workbench/src/features/content/content-workbench-feature.js"
+  );
+  const detailedClient = {
+    id: "client-1",
+    name: "客户一",
+    knowledgeFiles: [{ id: "brand.md", name: "brand.md", status: "ready" }],
+  };
+  const feature = createContentWorkbenchFeature({
+    listClients: async () => [{ id: "client-1", name: "客户一" }],
+    getClientDetails: async () => ({ client: detailedClient, research: [] }),
+    listTemplateCatalog: async () => ({ revision: "", platforms: [], templates: [], diagnostics: [] }),
+    listQuestions: async () => [],
+    listResearch: async () => [],
+    loadManagement: async () => ({ articles: [] }),
+    listPaidMediaBatches: async () => [],
+    startPaidMediaBatch: async () => ({}),
+    startAllPaidMediaBatches: async () => ({}),
+    pausePaidMediaBatch: async () => ({}),
+    cancelRemainingPaidMediaBatchItems: async () => ({}),
+  });
+  feature.setScope({ workspaceRuntimeId: "runtime-1" });
+  assert.equal(await feature.production.refresh("initial"), true);
+  assert.equal(typeof feature.production.getClientDetails, "function");
+  assert.deepEqual(await feature.production.getClientDetails("client-1"), {
+    client: detailedClient,
+    research: [],
+  });
+  feature.dispose();
+});

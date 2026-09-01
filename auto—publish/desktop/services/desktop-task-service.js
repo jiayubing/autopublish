@@ -196,7 +196,6 @@ function createDesktopTaskService(opts) {
         })
         : {
           runtimeContext: {},
-          intervalByTargetMs: {},
           timeoutMs: 90000,
           cleanup: function () {},
         };
@@ -218,8 +217,6 @@ function createDesktopTaskService(opts) {
     var result = null;
     try {
       var submitOptions = { autoSubmit: true, interactive: false, closeAfterEach: false, timeoutMs: preparedWorkerRuntime.timeoutMs };
-      if (Object.keys(preparedWorkerRuntime.intervalByTargetMs).length)
-        submitOptions.intervalByTargetMs = preparedWorkerRuntime.intervalByTargetMs;
       var payload = { plan: workerPlan, platformRuntimeContext: preparedWorkerRuntime.runtimeContext, submitOptions: submitOptions };
       var watchdogMs = Number.isInteger(hooks && hooks.platformWatchdogMs) && hooks.platformWatchdogMs > 0
         ? hooks.platformWatchdogMs

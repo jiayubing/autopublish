@@ -299,7 +299,7 @@ test("v6 legacy paid selection migration records one safe notice and is atomic/r
     assert.equal(failed.noticeCount, 0);
 
     const retried = createOperationalStore({ workspaceRoot: root });
-    assert.equal(retried.verify().schemaVersion, 8);
+    assert.equal(retried.verify().schemaVersion, 9);
     retried.close();
     const db = new DatabaseSync(database, { readOnly: true });
     try {
@@ -308,7 +308,7 @@ test("v6 legacy paid selection migration records one safe notice and is atomic/r
           .prepare("SELECT version FROM schema_migrations ORDER BY version")
           .all()
           .map((row) => row.version),
-        [1, 2, 3, 4, 5, 6, 7, 8],
+        [1, 2, 3, 4, 5, 6, 7, 8, 9],
       );
       assert.equal(
         db

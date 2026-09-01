@@ -1,5 +1,6 @@
 import type {
   GeneratedContentArticle,
+  ContentGenerationOperation,
   GenerationBatch,
   GenerationBatchCancelPreview,
   GenerationBatchPreview,
@@ -41,13 +42,15 @@ type GenerationRuntimeSnapshot = {
 };
 type GenerationContentApi = {
   generateArticle: (input: {
+    generationOperationId?: string;
+    articleCount?: number;
     clientId: string;
     materialIds: string[];
     researchQueryIds: string[];
     platform: string;
     templateId: string;
     templateCatalogRevision?: string;
-  }) => Promise<GenerationIpcResponse<{ article: GeneratedContentArticle }>>;
+  }) => Promise<GenerationIpcResponse<{ article: GeneratedContentArticle | ContentGenerationOperation }>>;
   saveArticle: (input: {
     article: GeneratedContentArticle;
     expectedFingerprint: string;
@@ -90,8 +93,9 @@ type GenerationContentApi = {
   pauseGenerationBatch: (input?: {
     batchId?: string;
   }) => Promise<GenerationIpcResponse<{ batch: GenerationBatch | null }>>;
-  stopGenerationBatch: (input?: {
-    batchId?: string;
+  abandonGenerationBatch: (input: {
+    batchId: string;
+    confirmed: true;
   }) => Promise<GenerationIpcResponse<{ batch: GenerationBatch | null }>>;
   continueGenerationBatch: (input: {
     batchId: string;
@@ -144,13 +148,15 @@ async function callGeneration<TWire, TResult = TWire>(
 }
 
 export async function generateContentArticle(input: {
+  generationOperationId?: string;
+  articleCount?: number;
   clientId: string;
   materialIds: string[];
   researchQueryIds: string[];
   platform: string;
   templateId: string;
   templateCatalogRevision?: string;
-}): Promise<GeneratedContentArticle> {
+}): Promise<GeneratedContentArticle | ContentGenerationOperation> {
   return callGeneration(
     (api) => requireBridgeMethod(api.generateArticle)(input),
     "Unable to generate article",
@@ -228,12 +234,13 @@ export async function pauseGenerationBatch(input?: {
   );
 }
 
-export async function stopGenerationBatch(input?: {
-  batchId?: string;
+export async function abandonGenerationBatch(input: {
+  batchId: string;
+  confirmed: true;
 }): Promise<GenerationBatch | null> {
   return callGeneration(
-    (api) => requireBridgeMethod(api.stopGenerationBatch)(input),
-    "Unable to stop generation batch",
+    (api) => requireBridgeMethod(api.abandonGenerationBatch)(input),
+    "Unable to end generation batch",
     { map: (data) => data.batch },
   );
 }

@@ -192,7 +192,7 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
         previewGenerationBatch: () => ok({}),
         createAndStartGenerationBatch: () => ok({ batch }),
         pauseGenerationBatch: () => ok({ batch }),
-        stopGenerationBatch: () => ok({ batch }),
+        abandonGenerationBatch: () => ok({ batch }),
         continueGenerationBatch: () => ok({ batch }),
         resumeGenerationBatch: () => ok({ batch }),
         retryFailedGenerationBatch: () => ok({ batch }),

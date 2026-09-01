@@ -330,7 +330,7 @@ test("reference standard platform reaches the public regular submission chain wi
     const admitted = admit(
       harness,
       ["reference-accepted", "reference-uncertain"],
-      { imageCount: 2 },
+      { imageCount: 2, submissionIntervalSeconds: 0 },
     );
     const queueGroupId = admitted.items[0].queueGroupId;
     const before = harness.application
@@ -418,8 +418,10 @@ test("reference standard platform reaches the public regular submission chain wi
       ["with_images", "with_images"],
     );
     assert.equal(harness.state.assetReadCalls.length, 4);
-    assert.equal(harness.state.accountPreparationCalls.length, 4);
-    assert.equal(harness.state.accountInspectionCalls, 4);
+    // Queue-run preparation reuses the initial account inspection while each
+    // article still receives its own final drift check before submission.
+    assert.equal(harness.state.accountPreparationCalls.length, 3);
+    assert.equal(harness.state.accountInspectionCalls, 3);
     assert.equal(
       harness.outcomeService.getRegularOutcomeSnapshot({
         regularPublicationAttemptId: admitted.items[0].attemptId,

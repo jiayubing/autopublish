@@ -229,6 +229,22 @@ function createClientMaterialStore(options) {
     return results;
   }
 
+  function listMaterialMetadata(clientId) {
+    const client = getClientDirectory(clientId);
+    let entries;
+    try { entries = fs.readdirSync(client.directory, { withFileTypes: true }); } catch (error) {
+      if (isMissing(error)) throw materialError("CLIENT_NOT_FOUND", "Client directory was not found");
+      throw pathError();
+    }
+    return entries.filter(function(entry) {
+      if (!entry.isFile() || entry.name.startsWith(".") || EXCLUDED_NAMES.has(entry.name)) return false;
+      return SUPPORTED_EXTENSIONS.has(path.extname(entry.name).toLowerCase());
+    }).sort(function(a, b) { return a.name.localeCompare(b.name); }).map(function(entry) {
+      const extension = path.extname(entry.name).toLowerCase();
+      return { id: encodeMaterialId(entry.name), name: entry.name, extension: extension, status: "ready" };
+    });
+  }
+
   async function getSelectedMaterials(clientId, materialIds) {
     if (!Array.isArray(materialIds)) throw materialError("CLIENT_MATERIAL_INVALID", "Client material selection is invalid");
     const materials = await listMaterials(clientId);
@@ -251,7 +267,7 @@ function createClientMaterialStore(options) {
     return item;
   }
 
-  return { listMaterials: listMaterials, getSelectedMaterials: getSelectedMaterials, retryMaterial: retryMaterial };
+  return { listMaterials: listMaterials, listMaterialMetadata: listMaterialMetadata, getSelectedMaterials: getSelectedMaterials, retryMaterial: retryMaterial };
 }
 
 module.exports = { createClientMaterialStore, encodeMaterialId };

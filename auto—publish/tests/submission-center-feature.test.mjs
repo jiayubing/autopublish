@@ -18,8 +18,30 @@ function snapshot(clientId, revision, total = 0) {
     paid: { batches: [] },
     attention: { items: [] },
     counts: { regularItems: total, paidBatches: 0, attentionItems: 0, total },
+    page: 1,
+    pageSize: 100,
+    hasMore: false,
+    failures: [],
   };
 }
+
+test("submission center supports a workspace-wide scope without a client filter", async () => {
+  const requests = [];
+  const feature = createSubmissionCenterFeature({
+    async getSnapshot(request) {
+      requests.push(request);
+      return snapshot(null, 1, 3);
+    },
+  });
+  feature.setScope({ workspaceRuntimeId: "workspace-1" });
+  assert.equal(await feature.refresh("runtime-ready"), true);
+  assert.deepEqual(feature.getSnapshot().scope, {
+    workspaceRuntimeId: "workspace-1",
+  });
+  assert.deepEqual(requests, [{ page: 1, pageSize: 100 }]);
+  assert.equal(feature.getSnapshot().data.counts.total, 3);
+  feature.dispose();
+});
 
 test("submission center resets on client scope changes and rejects the older query result", async () => {
   const first = deferred();

@@ -4,9 +4,9 @@ import { useWorkspaceScope } from '../workspace/workspace-coordinator-context';
 import { createAttentionFeature } from './attention-feature.js';
 import type { ArticleAttentionList } from '../../types/publication';
 
-type ScopedAttentionSource = ArticleAttentionList & { clientId: string };
+type ScopedAttentionSource = ArticleAttentionList & { clientId: string | null };
 
-export function useAttentionFeature(clientId: string, source?: ScopedAttentionSource) {
+export function useAttentionFeature(clientId?: string, source?: ScopedAttentionSource) {
   const clientIdRef = useRef(clientId);
   clientIdRef.current = clientId;
   const sourceRef = useRef(source);
@@ -23,23 +23,23 @@ export function useAttentionFeature(clientId: string, source?: ScopedAttentionSo
 
   useEffect(() => {
     const currentScope = feature.getSnapshot().scope;
-    if (!currentScope?.workspaceRuntimeId || !clientId || currentScope.clientId === clientId) return;
-    feature.setScope({ workspaceRuntimeId: currentScope.workspaceRuntimeId, clientId });
-    if (sourceRef.current?.clientId === clientId)
+    if (!currentScope?.workspaceRuntimeId || currentScope.clientId === clientId) return;
+    feature.setScope({ workspaceRuntimeId: currentScope.workspaceRuntimeId, ...(clientId ? { clientId } : {}) });
+    if ((sourceRef.current?.clientId || undefined) === clientId)
       feature.replaceSnapshot(sourceRef.current, 'scope-change');
     else if (!sourceRef.current)
       void feature.refresh('scope-change');
   }, [clientId, feature]);
 
   useEffect(() => {
-    if (source?.clientId === clientId && feature.getSnapshot().scope?.clientId === clientId)
+    if ((source?.clientId || undefined) === clientId && feature.getSnapshot().scope?.clientId === clientId)
       feature.replaceSnapshot(source, 'submission-center-snapshot');
   }, [clientId, feature, source?.clientId, source?.items, source?.revision]);
 
   useWorkspaceScope('articleAttention', (event) => {
-    if (!event.workspaceRuntimeId || !clientIdRef.current) return;
-    feature.setScope({ workspaceRuntimeId: event.workspaceRuntimeId, clientId: clientIdRef.current });
-    if (sourceRef.current?.clientId === clientIdRef.current)
+    if (!event.workspaceRuntimeId) return;
+    feature.setScope({ workspaceRuntimeId: event.workspaceRuntimeId, ...(clientIdRef.current ? { clientId: clientIdRef.current } : {}) });
+    if ((sourceRef.current?.clientId || undefined) === clientIdRef.current)
       feature.replaceSnapshot(sourceRef.current, event.kind);
     else if (!sourceRef.current)
       void feature.refresh(event.kind);

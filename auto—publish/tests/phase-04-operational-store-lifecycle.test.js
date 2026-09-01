@@ -172,14 +172,14 @@ test("v3 to v4 migration is atomic, retryable, future-safe, and backup-verifiabl
     );
     assert.deepEqual(schemaSnapshot(databasePath), before);
     store = createOperationalStore({ workspaceRoot: root });
-    assert.equal(store.verify().schemaVersion, 8);
+    assert.equal(store.verify().schemaVersion, 9);
     const backup = path.join(root, `backup-${point}.sqlite`);
-    assert.equal(store.backup(backup).schemaVersion, 8);
+    assert.equal(store.backup(backup).schemaVersion, 9);
     store.close();
-    assert.equal(verifyOperationalDatabase(backup).schemaVersion, 8);
+    assert.equal(verifyOperationalDatabase(backup).schemaVersion, 9);
     fs.rmSync(root, { recursive: true, force: true });
   }
-  assert.equal(SCHEMA_VERSION, 8);
+  assert.equal(SCHEMA_VERSION, 9);
 });
 
 test("v4 order snapshot extension preserves rows from a real v3 database", () => {
@@ -265,13 +265,13 @@ test("v3 migration dry-run is read-only and reports the planned v4 step", () => 
   assert.equal(report.mode, "dry-run");
   assert.equal(report.fromVersion, 3);
   assert.equal(report.toVersion, SCHEMA_VERSION);
-  assert.deepEqual(report.migrations, [4, 5, 6, 7, 8]);
+  assert.deepEqual(report.migrations, [4, 5, 6, 7, 8, 9]);
   assert.deepEqual(schemaSnapshot(databasePath), before);
   assert.equal(fileHash(databasePath), beforeHash);
   store = createOperationalStore({ workspaceRoot: root });
   store.close();
   const current = dryRunOperationalStoreMigration({ workspaceRoot: root });
-  assert.equal(current.fromVersion, 8);
+  assert.equal(current.fromVersion, 9);
   assert.deepEqual(current.migrations, []);
   fs.rmSync(root, { recursive: true, force: true });
 });

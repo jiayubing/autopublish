@@ -99,6 +99,37 @@ describe("renderer batch generation behavior", function () {
     );
   });
 
+  it("accepts ready material and complete research metadata without transferring bodies", async function () {
+    const { isUsableMaterial, isUsableResearch, isExecutableSource, normalizeGenerationMaterial } =
+      await loadGenerationUiLogic();
+    const materials = [normalizeGenerationMaterial({ id: "brand", name: "brand.md", status: "ready" })];
+    assert.equal(Object.prototype.hasOwnProperty.call(materials[0], "characterCount"), false);
+    const research = [{
+      id: "q1",
+      question: "Q",
+      isAnswerComplete: true,
+      answerLength: 128,
+    }];
+    assert.equal(isUsableMaterial(materials[0]), true);
+    assert.equal(isUsableResearch(research[0]), true);
+    assert.equal(isExecutableSource(materials, research, {
+      materialIds: ["brand"],
+      researchQueryIds: ["q1"],
+    }), true);
+  });
+
+  it("waits for late research hydration before auto-selecting the current client", async function () {
+    const { shouldAutoSelectCurrentClient } = await loadGenerationUiLogic();
+    const client = { id: "dongjue", name: "东爵", knowledgeFiles: [{ id: "brand", status: "ready", characterCount: 42 }] };
+    assert.equal(shouldAutoSelectCurrentClient([client], "dongjue", {}, []), false);
+    assert.equal(shouldAutoSelectCurrentClient([client], "dongjue", {
+      dongjue: [{ id: "q1", isAnswerComplete: true, answerLength: 80 }],
+    }, []), true);
+    assert.equal(shouldAutoSelectCurrentClient([client], "dongjue", {
+      dongjue: [{ id: "q1", isAnswerComplete: true, answerLength: 80 }],
+    }, ["other"]), false);
+  });
+
   it("groups every returned template platform through the public catalog projection", async function () {
     const { groupTemplatesByPlatform, templatePlatformDisplayName } =
       await loadGenerationUiLogic();

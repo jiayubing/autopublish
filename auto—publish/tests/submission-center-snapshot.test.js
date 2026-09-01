@@ -15,6 +15,7 @@ function regularGroup(clientId) {
     platformId: "lieju",
     accountProfileId: "account-1",
     imageCount: 0,
+    submissionIntervalSeconds: 30,
     imagePublishingSupported: false,
     runState: "paused",
     pauseIntent: "manual",
@@ -267,4 +268,29 @@ test("publishes one exact typed IPC capability and rejects extra wire fields", a
   assert.throws(() =>
     productionIpcRegistry.success(contract, Object.assign({}, data, { path: "C:/secret" })),
   );
+});
+
+test("supports global paged queries and isolates a failed section", async () => {
+  const { service } = fixture({
+    regular: [regularGroup("client-1"), Object.assign(regularGroup("client-1"), { queueGroupId: "group-2" })],
+  });
+  const global = await service.get({ page: 1, pageSize: 1 });
+  assert.equal(global.clientId, null);
+  assert.equal(global.page, 1);
+  assert.equal(global.pageSize, 1);
+  assert.equal(global.hasMore, true);
+  assert.deepEqual(global.failures, []);
+
+  const partial = fixture();
+  partial.service = createSubmissionCenterSnapshot({
+    getRevision: () => 1,
+    getWorkspaceRuntimeId: () => "workspace-1",
+    validateClient: () => undefined,
+    listRegularQueueGroups: () => { throw Object.assign(new Error("down"), { code: "REGULAR_DOWN" }); },
+    listPaidMediaBatches: () => ({ items: [] }),
+    listAttention: () => ({ items: [] }),
+  });
+  const snapshot = await partial.service.get({});
+  assert.deepEqual(snapshot.failures, [{ section: "regular", code: "REGULAR_DOWN" }]);
+  assert.deepEqual(snapshot.regular.groups, []);
 });

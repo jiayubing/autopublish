@@ -11,6 +11,13 @@ it("returns closed 0/1/many GenerationTaskId results without selecting a candida
   assert.deepEqual(store.findByGenerationTaskId("many"), { kind: "many", matches: [{ clientId: "c1", articleId: "a2" }, { clientId: "c2", articleId: "a3" }] });
 });
 
+it("returns closed operation identity results across clients", function() {
+  const rows = { c1: [{ id: "a1", clientId: "c1", generationOperationId: "operation-1" }], c2: [{ id: "a2", clientId: "c2", generationOperationId: "operation-1" }] };
+  const store = createContentStore({ listClientIds: () => ["c1", "c2"], articleStore: { listArticles: (id) => rows[id] || [] } });
+  assert.equal(store.findByGenerationOperationId("missing").kind, "none");
+  assert.deepEqual(store.findByGenerationOperationId("operation-1"), { kind: "many", matches: [{ clientId: "c1", articleId: "a1" }, { clientId: "c2", articleId: "a2" }] });
+});
+
 it("indexes 5000 articles through one client pass", function() {
   let reads = 0; const rows = Array.from({ length: 5000 }, (_, index) => ({ id: `a-${index}`, clientId: "c", generationTaskId: `t-${index}` }));
   const store = createContentStore({ listClientIds: () => ["c"], articleStore: { listArticles: () => { reads += 1; return rows; } } });

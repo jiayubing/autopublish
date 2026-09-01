@@ -197,6 +197,7 @@ function createLiejuRuntime(runtimeContext) {
     accountInspection: null,
     postSubmitVerificationTimeoutMs: context.postSubmitVerificationTimeoutMs,
     postSubmitVerificationPollMs: context.postSubmitVerificationPollMs,
+    preparationCache: new Map(),
   };
 }
 
@@ -353,35 +354,6 @@ function selectedSubmissionTransport(runtime) {
       ? "browser"
       : "http";
   return runtime.submissionTransport;
-}
-
-function isBrowserFallbackEligible(error) {
-  const code = error && error.code;
-  return [
-    "LOGIN_REQUIRED",
-    "LIEJU_HTTP_REQUEST_UNAVAILABLE",
-    "LIEJU_HTTP_STATE_MISSING",
-    "LIEJU_HTTP_STATE_INVALID",
-    "LIEJU_HTTP_GET_FAILED",
-    "LIEJU_HTTP_REDIRECT_UNSAFE",
-    "LIEJU_HTML_CHARSET_CONFLICT",
-    "LIEJU_HTML_CHARSET_UNSUPPORTED",
-    "LIEJU_HTML_DECODE_FAILED",
-    "LIEJU_HTML_CHARSET_UNKNOWN",
-    "LIEJU_CITY_TARGET_INVALID",
-    "LIEJU_PUBLICATION_FORM_INVALID",
-    "LIEJU_PUBLICATION_ZONE_UNAVAILABLE",
-    "LIEJU_PUBLICATION_FORM_FIELDS_INVALID",
-    "LIEJU_ACCOUNT_INSPECTION_UNVERIFIED",
-  ].includes(code);
-}
-
-function selectBrowserFallback(runtime, error) {
-  if (selectedSubmissionTransport(runtime) !== "http") return false;
-  if (!isBrowserFallbackEligible(error)) return false;
-  runtime.submissionTransport = "browser";
-  diagnose("LIEJU_HTTP_PREPARE_FALLBACK", "transport", "browser-fallback");
-  return true;
 }
 
 async function inspectAccountThroughHttp(runtime) {
@@ -722,14 +694,9 @@ async function ensureAccountInspectionReady(runtime, options) {
     runtime.accountInspection = null;
     return ensureBrowserAccountInspectionReady(runtime, options);
   }
-  try {
-    runtime.accountInspection = await inspectAccountThroughHttp(runtime);
-    return;
-  } catch (error) {
-    if (!selectBrowserFallback(runtime, error)) throw error;
-    runtime.accountInspection = null;
-    return ensureBrowserAccountInspectionReady(runtime, options);
-  }
+  // Default queue execution verifies accounts over HTTP. A failed HTTP
+  // inspection blocks preparation instead of starting a browser transport.
+  runtime.accountInspection = await inspectAccountThroughHttp(runtime);
 }
 
 function inspectAccount(runtime) {
@@ -807,12 +774,10 @@ function createHttpSubmitCapability(runtime, action, multipart) {
             headers: payload.headers,
           }),
         );
-      const outcome = result.stateSaved
-        ? classifyLiejuHttpSubmitResponse(result.result)
-        : Object.freeze({
-            status: "uncertain",
-            errorCode: "REMOTE_RESULT_UNKNOWN",
-          });
+      // The HTTP session closes (and attempts to persist cookies) after POST.
+      // A persistence failure is a separate local diagnostic and must not
+      // erase an already-confirmed remote publication identity.
+      const outcome = classifyLiejuHttpSubmitResponse(result.result);
       diagnoseHttpSubmit(outcome);
       return outcome;
     } catch (_) {
@@ -857,10 +822,22 @@ async function prepareHttpPublicationForm(runtime, profile) {
     const cityResponse = requireHttpPublicationResponse(
       await port.get(httpFormParser.CITY_DIRECTORY_URL),
     );
-    const city = httpFormParser.resolveLiejuCityTarget(
-      httpFormParser.decodeLiejuHttpHtml(cityResponse).html,
-      profile.city,
-    );
+    let city;
+    try {
+      city = httpFormParser.resolveLiejuCityTarget(
+        httpFormParser.decodeLiejuHttpHtml(cityResponse).html,
+        profile.city,
+      );
+    } catch (error) {
+      // The directory may be temporarily hidden behind an upstream WAF page.
+      // Beijing is the contractual safe fallback and has a stable target path.
+      if (!error || error.code !== "LIEJU_CITY_TARGET_UNAVAILABLE") throw error;
+      city = Object.freeze({
+        cityId: "1",
+        url: "https://post.lieju.com/1/239",
+        selection: "beijing_fallback",
+      });
+    }
     const formResponse = requireHttpPublicationResponse(
       await port.get(city.url),
     );
@@ -1099,16 +1076,15 @@ async function preparePlatformSubmission(runtime, claim, imagePlan) {
     );
   }
   let form;
-  try {
+  const contextId = claim && claim.preparationContextId;
+  const formVersion = claim && typeof claim.preparationFormVersion === "string" && claim.preparationFormVersion ? claim.preparationFormVersion : "default";
+  const cacheKey = contextId ? [contextId, profile.city, formVersion].join("\u0000") : null;
+  if (cacheKey && runtime.preparationCache.has(cacheKey)) form = runtime.preparationCache.get(cacheKey);
+  else {
+    // Lieju publication is HTTP-only in the default mode. Preparation failures
+    // must block before POST instead of silently switching submission transports.
     form = await prepareHttpPublicationForm(runtime, profile);
-  } catch (error) {
-    if (!selectBrowserFallback(runtime, error)) throw error;
-    return prepareBrowserPlatformSubmission(
-      runtime,
-      evidence,
-      profile,
-      imagePlan,
-    );
+    if (cacheKey) runtime.preparationCache.set(cacheKey, form);
   }
   throwIfStopped();
   const prepared = prepareFrozenMultipart(

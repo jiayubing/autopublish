@@ -1,4 +1,4 @@
-const { listClients, getClient, saveLiejuPublicationProfile } = require("../../src/content/client-knowledge");
+const { listClients, listClientIdentities, getClient, saveLiejuPublicationProfile } = require("../../src/content/client-knowledge");
 const { createResearchStore } = require("../../src/content/research-store");
 const { createTemplateStore } = require("../../src/content/template-store");
 const { createArticleTrashService } = require("../../src/content/article-trash-service");
@@ -8,6 +8,10 @@ const { createClientMaterialStore } = require("../../src/content/client-material
 const { buildPrompt } = require("../../src/content/prompt-builder");
 const crypto = require("crypto");
 const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
+
+function clone(value) {
+  return value === undefined ? value : JSON.parse(JSON.stringify(value));
+}
 
 function contentError(code, message) {
   const error = new Error(message);
@@ -19,6 +23,22 @@ function assertId(value, label) {
   if (typeof value !== "string" || !value.trim()) {
     throw contentError("CONTENT_INPUT_INVALID", label + " is required");
   }
+}
+
+function normalizeGenerationOperationId(value) {
+  if (value === undefined || value === null || value === "") return crypto.randomUUID();
+  if (typeof value !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,199}$/.test(value)) {
+    throw contentError("CONTENT_INPUT_INVALID", "Generation operation id is invalid");
+  }
+  return value;
+}
+
+function normalizeArticleCount(value) {
+  if (value === undefined) return 1;
+  if (!Number.isSafeInteger(value) || value < 1 || value > 100) {
+    throw contentError("CONTENT_INPUT_INVALID", "Article count must be an integer from 1 to 100");
+  }
+  return value;
 }
 
 function normalizeResearchQueryIds(input) {
@@ -56,7 +76,8 @@ function clientDto(client) {
   delete value.directory;
   value.knowledgeFiles = Array.isArray(client && client.knowledgeFiles)
     ? client.knowledgeFiles.map(function(file) {
-      const result = { name: file.name, content: file.content };
+      const result = { name: file.name };
+      if (typeof file.content === "string") result.content = file.content;
       ["id", "extension", "status", "characterCount", "error", "contentHash", "source"].forEach(function(key) {
         if (file && Object.prototype.hasOwnProperty.call(file, key)) result[key] = file[key];
       });
@@ -75,6 +96,7 @@ function createAiContentService(opts) {
   const paths = options.paths;
   const clientKnowledge = options.clientKnowledge || {
     listClients: function() { return listClients(workspaceRoot); },
+    listClientIdentities: function() { return listClientIdentities(workspaceRoot); },
     getClient: function(id) { return getClient(workspaceRoot, id); },
     saveLiejuPublicationProfile: function(id, profile) {
       return saveLiejuPublicationProfile(workspaceRoot, id, profile);
@@ -117,6 +139,18 @@ function createAiContentService(opts) {
   const createId = options.createId || function() { return crypto.randomUUID(); };
   const seenIds = options.seenIds || new Set();
   let articleRemovalRevision = 0;
+  let disposed = false;
+  let activeOperation = null;
+  const completedOperations = new Map();
+
+  function operationState() {
+    if (!activeOperation) return { status: "idle", operationId: null, outcome: null };
+    return {
+      status: activeOperation.status,
+      operationId: activeOperation.id,
+      outcome: activeOperation.outcome || null,
+    };
+  }
 
   function notifyArticleRemovalTransaction(transaction) {
     const event = Object.assign({}, transaction || {});
@@ -202,8 +236,15 @@ function createAiContentService(opts) {
   }
 
   async function listClientsSafe() {
-    const clients = await clientKnowledge.listClients();
-    return Promise.all(clients.map(materializeClient));
+    const usesMetadataPath = typeof clientKnowledge.listClientIdentities === "function" || typeof materialStore.listMaterialMetadata === "function";
+    const clients = await (typeof clientKnowledge.listClientIdentities === "function" ? clientKnowledge.listClientIdentities() : clientKnowledge.listClients());
+    if (!usesMetadataPath) return Promise.all(clients.map(materializeClient));
+    return Promise.all(clients.map(async function(client) {
+      const value = clientDto(client);
+      if (materialStore && typeof materialStore.listMaterialMetadata === "function") value.knowledgeFiles = await materialStore.listMaterialMetadata(client.id);
+      else value.knowledgeFiles = value.knowledgeFiles.map(function(file) { const result = Object.assign({}, file); delete result.content; return result; });
+      return clientDto(value);
+    }));
   }
 
   async function getClientSafe(clientId) {
@@ -223,6 +264,22 @@ function createAiContentService(opts) {
   function listResearch(clientId) {
     assertId(clientId, "Client id");
     return researchStore.listResearch(clientId);
+  }
+
+  function listResearchMetadata(clientId) {
+    assertId(clientId, "Client id");
+    if (typeof researchStore.listResearchMetadata === "function") return researchStore.listResearchMetadata(clientId);
+    return researchStore.listResearch(clientId).map(function(item) {
+      const result = Object.assign({}, item);
+      delete result.answerText;
+      delete result.references;
+      return result;
+    });
+  }
+
+  async function getClientDetails(clientId) {
+    assertId(clientId, "Client id");
+    return { client: await materializeClient(await clientKnowledge.getClient(clientId)), research: listResearch(clientId) };
   }
 
   function getResearch(clientId, researchId) {
@@ -278,13 +335,25 @@ function createAiContentService(opts) {
     return clientDto({ knowledgeFiles: [await materialStore.retryMaterial(clientId, materialId)] }).knowledgeFiles[0];
   }
 
-  async function generateArticle(input) {
+  async function generateSingleArticle(input) {
+    if (disposed) throw contentError("CONTENT_RUNTIME_DISPOSED", "Content runtime is disposed");
     const request = input || {};
     assertId(request.clientId, "Client id");
     const materialIds = normalizeMaterialIds(request);
     const researchQueryIds = normalizeResearchQueryIds(request);
     assertId(request.platform, "Platform");
     assertId(request.templateId, "Template id");
+    const generationOperationId = normalizeGenerationOperationId(request.generationOperationId);
+    const articleCount = normalizeArticleCount(request.articleCount);
+    if (activeOperation) {
+      if (activeOperation.id !== generationOperationId) throw contentError("CONTENT_GENERATION_BUSY", "Another article generation is already running");
+      return activeOperation.promise;
+    }
+    if (contentStore && typeof contentStore.findByGenerationOperationId === "function") {
+      const existing = contentStore.findByGenerationOperationId(generationOperationId);
+      if (existing && existing.kind === "one") return existing.article;
+      if (existing && existing.kind === "many") throw contentError("CONTENT_GENERATION_ID_CONFLICT", "Generation operation identity is ambiguous");
+    }
     if (request.templateCatalogRevision !== undefined && typeof templateStore.listCatalog === "function") {
       assertId(request.templateCatalogRevision, "Template catalog revision");
       const catalog = templateStore.listCatalog();
@@ -302,17 +371,79 @@ function createAiContentService(opts) {
       createId: createId,
       seenIds: seenIds
     });
-    const generated = await generator.generateArticle(Object.assign({}, request, { materialIds: materialIds, researchQueryIds: researchQueryIds }));
-    if (!contentStore || (typeof contentStore.createArticle !== "function" && typeof contentStore.saveArticle !== "function")) {
-      throw contentError("CONTENT_STORE_REQUIRED", "Generated article cannot be persisted");
+    const operation = { id: generationOperationId, status: "running", outcome: null, promise: null };
+    activeOperation = operation;
+    operation.promise = (async function() {
+      try {
+        const generated = await generator.generateArticle(Object.assign({}, request, { materialIds: materialIds, researchQueryIds: researchQueryIds, generationOperationId: generationOperationId, articleCount: articleCount }));
+        if (!generated || typeof generated !== "object") throw contentError("CONTENT_GENERATION_INVALID", "Generated article is invalid");
+        const article = generated.generationOperationId === generationOperationId
+          ? generated
+          : Object.assign({}, generated, { generationOperationId: generationOperationId });
+        if (!contentStore || (typeof contentStore.createArticle !== "function" && typeof contentStore.saveArticle !== "function")) {
+          throw contentError("CONTENT_STORE_REQUIRED", "Generated article cannot be persisted");
+        }
+        const saved = articleMutationCoordinator && typeof articleMutationCoordinator.createArticle === "function"
+          ? articleMutationCoordinator.createArticle(article)
+          : typeof contentStore.createArticle === "function"
+            ? contentStore.createArticle(article)
+            : contentStore.saveArticle(article);
+        notifyAttentionChange("ARTICLE_SAVED");
+        operation.status = "completed";
+        operation.outcome = "saved";
+        return saved === undefined ? article : saved;
+      } catch (error) {
+        operation.status = disposed ? "uncertain" : "failed";
+        operation.outcome = disposed ? "result-uncertain" : "failed";
+        throw error;
+      } finally {
+        if (activeOperation === operation && operation.status !== "uncertain") activeOperation = null;
+      }
+    })();
+    return operation.promise;
+  }
+
+  async function generateArticle(input) {
+    const request = input || {};
+    const count = normalizeArticleCount(request.articleCount);
+    if (count === 1) return generateSingleArticle(Object.assign({}, request, { articleCount: 1 }));
+    const parentOperationId = normalizeGenerationOperationId(request.generationOperationId);
+    const known = completedOperations.get(parentOperationId);
+    if (known) return clone(known);
+    const articles = [];
+    const failures = [];
+    for (let index = 0; index < count; index += 1) {
+      const childOperationId = parentOperationId + "-" + String(index + 1);
+      try {
+        if (contentStore && typeof contentStore.findByGenerationOperationId === "function") {
+          const existing = contentStore.findByGenerationOperationId(childOperationId);
+          if (existing && existing.kind === "one" && existing.article) {
+            articles.push({ index: index, article: existing.article });
+            continue;
+          }
+          if (existing && existing.kind === "many") {
+            failures.push({ index: index, code: "CONTENT_GENERATION_ID_CONFLICT" });
+            continue;
+          }
+        }
+        const article = await generateSingleArticle(Object.assign({}, request, {
+          articleCount: 1,
+          generationOperationId: childOperationId,
+        }));
+        articles.push({ index: index, article: article });
+      } catch (error) {
+        failures.push({ index: index, code: error && error.code ? error.code : "CONTENT_GENERATION_FAILED" });
+      }
     }
-    const saved = articleMutationCoordinator && typeof articleMutationCoordinator.createArticle === "function"
-      ? articleMutationCoordinator.createArticle(generated)
-      : typeof contentStore.createArticle === "function"
-        ? contentStore.createArticle(generated)
-        : contentStore.saveArticle(generated);
-    notifyAttentionChange("ARTICLE_SAVED");
-    return saved === undefined ? generated : saved;
+    const result = {
+      operationId: parentOperationId,
+      articleCount: count,
+      status: failures.length ? (articles.length ? "partial" : "failed") : "completed",
+      articles: articles,
+      failures: failures,
+    };
+    completedOperations.set(parentOperationId, result);
+    return clone(result);
   }
 
   function saveArticle(input) {
@@ -389,15 +520,18 @@ function createAiContentService(opts) {
   return {
     listClients: listClientsSafe,
     getClient: getClientSafe,
+    getClientDetails: getClientDetails,
     saveClientLiejuPublicationProfile: saveClientLiejuPublicationProfile,
     retryMaterial: retryMaterial,
     listResearch: listResearch,
+    listResearchMetadata: listResearchMetadata,
     getResearch: getResearch,
     listTemplates: listTemplates,
     listTemplateCatalog: listTemplateCatalog,
     copyBuiltinTemplate: copyBuiltinTemplate,
     saveCustomTemplate: saveCustomTemplate,
     generateArticle: generateArticle,
+    getState: operationState,
     saveArticle: saveArticle,
     getArticleEditor: getArticleEditor,
     listGeneratedArticles: listGeneratedArticles,
@@ -412,7 +546,14 @@ function createAiContentService(opts) {
     recoverPendingArticleRemovals: articleTrashService.recoverPendingRemovals,
     getArticleRemovalTransaction: articleTrashService.getArticleRemovalTransaction,
     listArticleRemovalTransactions: articleTrashService.listArticleRemovalTransactions,
-    retryArticleRemovalTransaction: articleTrashService.retryArticleRemovalTransaction
+    retryArticleRemovalTransaction: articleTrashService.retryArticleRemovalTransaction,
+    dispose: async function() {
+      disposed = true;
+      if (activeOperation && activeOperation.status === "running") {
+        activeOperation.status = "uncertain";
+        activeOperation.outcome = "result-uncertain";
+      }
+    }
   };
 }
 

@@ -80,6 +80,7 @@ function installQuestionFixture(page, options = {}) {
     };
     const content = {
       listClients: () => result({ clients }),
+      getClientDetails: (clientId) => result({ client: clients.find((item) => item.id === clientId), research: research[clientId] || [] }),
       listGeneratedArticles: () => result({ articles: [] }),
       getArticleManagementSnapshot: ({ clientId }) =>
         result({
@@ -94,6 +95,8 @@ function installQuestionFixture(page, options = {}) {
       listSubmissionBatches: () => result({ batches: [] }),
       listArticleTrash: () => result({ trash: [] }),
       listResearch: (clientId) =>
+        result({ research: research[clientId] || [] }),
+      listResearchMetadata: (clientId) =>
         result({ research: research[clientId] || [] }),
       listQuestions: (clientId) =>
         result({ questions: questions[clientId] || [] }),

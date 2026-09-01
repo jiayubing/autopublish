@@ -139,6 +139,15 @@ function createRegularQueueGroupOrchestrator(options) {
   const randomUUID = value.randomUUID || crypto.randomUUID;
   const setTimer = value.setInterval || setInterval;
   const clearTimer = value.clearInterval || clearInterval;
+  const wait =
+    typeof value.wait === "function"
+      ? value.wait
+      : function (intervalMs) {
+          return new Promise(function (resolve) {
+            const timer = setTimeout(resolve, intervalMs);
+            if (timer && typeof timer.unref === "function") timer.unref();
+          });
+        };
   const activeGroups = new Map();
   const activePlatforms = new Map();
   const onDataInvalidated =
@@ -159,6 +168,18 @@ function createRegularQueueGroupOrchestrator(options) {
     const transition = outcomeService.applyRegularOutcome(input);
     notifyDataInvalidated("PUBLICATION_RECONCILED");
     return transition;
+  }
+
+  function submissionIntervalMs(group) {
+    const seconds = group && group.submissionIntervalSeconds;
+    if (!Number.isSafeInteger(seconds) || seconds < 0 || seconds > 3600)
+      throw fail("REGULAR_SUBMISSION_INTERVAL_INVALID");
+    return seconds * 1000;
+  }
+
+  function waitForSubmissionInterval(intervalMs) {
+    if (intervalMs <= 0) return Promise.resolve();
+    return Promise.resolve(wait(intervalMs));
   }
 
   function recoverOutcomeCommitFailure(claim, error) {
@@ -324,6 +345,8 @@ function createRegularQueueGroupOrchestrator(options) {
         return undefined;
       })
       .then(async function () {
+        if (executor && typeof executor.beginQueueRun === "function") executor.beginQueueRun("queue-run-" + queueGroupId);
+        const intervalMs = submissionIntervalMs(group);
         const completed = [];
         while (true) {
           const claim = transitions.claimRegularQueueGroupHead({
@@ -367,9 +390,15 @@ function createRegularQueueGroupOrchestrator(options) {
               observation,
               processed: Object.freeze(completed),
             });
+          const latest = snapshot().find(
+            (candidate) => candidate.queueGroupId === queueGroupId,
+          );
+          if (latest && latest.remaining.length > 0)
+            await waitForSubmissionInterval(intervalMs);
         }
       })
       .finally(function () {
+        if (executor && typeof executor.endQueueRun === "function") executor.endQueueRun();
         activeGroups.delete(queueGroupId);
         if (activePlatforms.get(group.platformId) === operation)
           activePlatforms.delete(group.platformId);

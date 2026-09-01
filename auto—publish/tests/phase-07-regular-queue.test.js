@@ -1115,6 +1115,7 @@ test("regular queue capabilities stay isolated from the full operational store a
       "previewRegularQueueAdmission",
       "removePendingQueueItems",
       "updateRegularQueueGroupImageCount",
+      "updateRegularQueueGroupSubmissionInterval",
     ]);
     assert.equal(
       Object.prototype.hasOwnProperty.call(

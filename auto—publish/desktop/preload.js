@@ -301,11 +301,17 @@ const api = {
     listClients: function () {
       return ipcRenderer.invoke("content:list-clients");
     },
+    getClientDetails: function (clientId) {
+      return ipcRenderer.invoke("content:get-client-details", clientId);
+    },
     saveClientLiejuPublicationProfile: function (input) {
       return ipcRenderer.invoke("content:save-client-lieju-publication-profile", input);
     },
     listResearch: function (clientId) {
       return ipcRenderer.invoke("content:list-research", clientId);
+    },
+    listResearchMetadata: function (clientId) {
+      return ipcRenderer.invoke("content:list-research-metadata", clientId);
     },
     listTemplateCatalog: function () {
       return ipcRenderer.invoke("content:list-template-catalog");
@@ -532,8 +538,14 @@ const api = {
     resumeGenerationBatch: function (input) {
       return ipcRenderer.invoke("content:resume-generation-batch", input || {});
     },
-    stopGenerationBatch: function (input) {
-      return ipcRenderer.invoke("content:stop-generation-batch", input || {});
+    abandonGenerationBatch: function (input) {
+      return ipcRenderer.invoke("content:abandon-generation-batch", input || {});
+    },
+    updateRegularQueueGroupSubmissionInterval: function (input) {
+      return ipcRenderer.invoke(
+        "content:update-regular-queue-group-submission-interval",
+        input,
+      );
     },
     retryFailedGenerationBatch: function (input) {
       return ipcRenderer.invoke(

@@ -21,6 +21,10 @@ const EMPTY = Object.freeze({
   paid: Object.freeze({ batches: Object.freeze([]) }),
   attention: Object.freeze({ items: Object.freeze([]) }),
   counts: Object.freeze({ regularItems: 0, paidBatches: 0, attentionItems: 0, total: 0 }),
+  page: 1,
+  pageSize: 100,
+  hasMore: false,
+  failures: Object.freeze([]),
 });
 
 export function createSubmissionCenterFeature(adapters = {}) {
@@ -30,6 +34,7 @@ export function createSubmissionCenterFeature(adapters = {}) {
   const listeners = new Set();
   let disposed = false;
   let scope = null;
+  let queryOptions = { page: 1, pageSize: 100 };
   let data = EMPTY;
   let query = queryState();
   let snapshot;
@@ -45,11 +50,14 @@ export function createSubmissionCenterFeature(adapters = {}) {
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     setScope(nextScope) {
       if (disposed) return false;
-      if (!nextScope?.workspaceRuntimeId || !nextScope?.clientId)
+      if (!nextScope?.workspaceRuntimeId)
         throw new TypeError("Submission center scope is invalid");
       if (scope?.workspaceRuntimeId === nextScope.workspaceRuntimeId && scope?.clientId === nextScope.clientId)
         return false;
-      scope = Object.freeze({ workspaceRuntimeId: nextScope.workspaceRuntimeId, clientId: nextScope.clientId });
+      scope = Object.freeze({
+        workspaceRuntimeId: nextScope.workspaceRuntimeId,
+        ...(nextScope.clientId ? { clientId: nextScope.clientId } : {}),
+      });
       identity.setScope(scope);
       data = EMPTY;
       query = queryState();
@@ -71,9 +79,17 @@ export function createSubmissionCenterFeature(adapters = {}) {
       query = queryState(true, null, reason);
       publish();
       try {
-        const next = await adapters.getSnapshot(scope.clientId);
+      const request = {
+        ...(scope.clientId ? { clientId: scope.clientId } : {}),
+        ...queryOptions,
+      };
+      const next = await adapters.getSnapshot(
+        queryOptions.page === 1 && queryOptions.pageSize === 100
+          ? (scope.clientId || request)
+          : request,
+      );
         if (!identity.isCurrent(token)) return false;
-        if (next?.clientId !== scope.clientId)
+        if (next?.clientId !== scope.clientId && next?.clientId !== null)
           throw Object.assign(new Error("投稿中心客户范围不匹配。"), { code: "SUBMISSION_CENTER_SNAPSHOT_INVALID" });
         data = Object.freeze(next);
         query = queryState(false, null, reason);
@@ -86,6 +102,11 @@ export function createSubmissionCenterFeature(adapters = {}) {
         publish();
         return false;
       }
+    },
+    setPage(nextPage) {
+      if (!Number.isInteger(nextPage) || nextPage < 1) return false;
+      queryOptions = { ...queryOptions, page: nextPage };
+      return true;
     },
     dispose() {
       if (disposed) return;

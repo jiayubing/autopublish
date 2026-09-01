@@ -14,6 +14,7 @@ const COMMAND_NAMES = Object.freeze([
   'startAllGroups',
   'pauseAllGroups',
   'updateImageCount',
+  'updateSubmissionInterval',
   'removePendingQueueItems',
 ]);
 
@@ -532,6 +533,24 @@ export function createPlatformFeature(bridge = {}) {
         { ...requireScope(), queueGroupId: input?.queueGroupId },
         () => bridge.updateRegularQueueGroupImageCount(input),
         '保存普通平台队列图片数量失败',
+        (items) => {
+          regularGroupQuery.invalidate();
+          regularQueueGroups = Object.freeze({
+            items: Object.freeze(Array.isArray(items) ? [...items] : []),
+            query: Object.freeze({ loading: false, error: null }),
+          });
+        },
+      );
+    },
+    updateSubmissionInterval(input) {
+      if (owners.updateSubmissionInterval.getSnapshot().busy)
+        return Promise.resolve({ ignored: true });
+      regularGroupQuery.invalidate();
+      return ownedCommand(
+        owners.updateSubmissionInterval,
+        { ...requireScope(), queueGroupId: input?.queueGroupId },
+        () => bridge.updateRegularQueueGroupSubmissionInterval(input),
+        '保存普通平台队列投稿间隔失败',
         (items) => {
           regularGroupQuery.invalidate();
           regularQueueGroups = Object.freeze({

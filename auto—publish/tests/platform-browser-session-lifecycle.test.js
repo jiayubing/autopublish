@@ -90,4 +90,32 @@ describe("shared browser session lifecycle", function () {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it("starts a missing named session when the probe reports typed absence", function () {
+    let starts = 0;
+    let alive = false;
+    const lifecycle = createBrowserSessionLifecycle({
+      session: { session: "fixture" },
+      run(args) {
+        if (args[0] === "list") {
+          if (!alive) {
+            const error = new Error("session is not open");
+            error.code = "PLAYWRIGHT_SESSION_NOT_OPEN";
+            throw error;
+          }
+          return "fixture";
+        }
+        throw new Error("unexpected command");
+      },
+      start() {
+        starts += 1;
+        alive = true;
+      },
+      sleep() {},
+      maxAttempts: 1,
+    });
+
+    lifecycle.ensureStarted();
+    assert.equal(starts, 1);
+  });
 });

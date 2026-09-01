@@ -76,8 +76,18 @@ function createRegularPlatformPreparationPort(options) {
       throw fail("REGULAR_CLIENT_PROFILE_READER_INVALID");
     profileReaders.set(platform.id, platform);
   }
+  let queueRunToken = null;
+  const inspectionCache = new Map();
 
-  return Object.freeze({
+  const port = {
+    beginQueueRun(runId) {
+      queueRunToken = typeof runId === "string" && runId ? runId : "queue-run";
+      inspectionCache.clear();
+    },
+    endQueueRun() {
+      queueRunToken = null;
+      inspectionCache.clear();
+    },
     async preparePlatformSubmission(claim) {
       const input = claim || {};
       const adapter = adapters.get(input.platformId);
@@ -88,7 +98,11 @@ function createRegularPlatformPreparationPort(options) {
         accountProfileId: input.accountProfileId,
         preserveCurrentPage: false,
       });
-      const inspection = await inspector.inspect(inspectionTask);
+      const inspectionKey = queueRunToken && [input.platformId, input.accountProfileId].join("\u0000");
+      const inspection = inspectionKey && inspectionCache.has(inspectionKey)
+        ? inspectionCache.get(inspectionKey)
+        : await inspector.inspect(inspectionTask);
+      if (inspectionKey && !inspectionCache.has(inspectionKey)) inspectionCache.set(inspectionKey, inspection);
       if (
         !inspection ||
         inspection.verified !== true ||
@@ -127,8 +141,9 @@ function createRegularPlatformPreparationPort(options) {
       )
         throw fail("REGULAR_CLIENT_PROFILE_INCOMPLETE");
       const adapterInput = publicationProfile === undefined
-        ? input
+        ? Object.assign({}, input)
         : Object.assign({}, input, { publicationProfile: publicationProfile });
+      if (queueRunToken) adapterInput.preparationContextId = queueRunToken;
       const prepared = domain.createPreparedSubmission(
         await adapter.preparePlatformSubmission(adapterInput, imagePlan),
       );
@@ -154,7 +169,10 @@ function createRegularPlatformPreparationPort(options) {
         submitPreparedPublication: prepared.submitPreparedPublication,
       });
     },
-  });
+  };
+  Object.defineProperty(port, "beginQueueRun", { enumerable: false });
+  Object.defineProperty(port, "endQueueRun", { enumerable: false });
+  return Object.freeze(port);
 }
 
 module.exports = { createRegularPlatformPreparationPort };

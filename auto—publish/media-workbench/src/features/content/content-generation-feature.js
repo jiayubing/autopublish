@@ -18,6 +18,11 @@ export function createContentGenerationFeature(options = {}) {
   let scope = null;
   let snapshot = Object.freeze({ scope: null, command: command.getSnapshot() });
 
+  function operationId() {
+    if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID();
+    return `generation-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+
   const emit = () => listeners.forEach((listener) => listener());
   const publish = () => {
     snapshot = Object.freeze({ scope, command: command.getSnapshot() });
@@ -52,17 +57,20 @@ export function createContentGenerationFeature(options = {}) {
       const token = command.begin(scope);
       publish();
       try {
-        const article = await options.generate(input);
+        const article = await options.generate({ ...input, generationOperationId: input.generationOperationId || operationId() });
         if (!command.isCurrent(token)) {
           await options.refreshCurrent('stale-command-result', scope);
           return article;
         }
-        if (!article || article.clientId !== scope.clientId) {
+        const articles = article && Array.isArray(article.articles)
+          ? article.articles.map((item) => item && item.article)
+          : [article];
+        if (!articles.length || articles.some((item) => !item || item.clientId !== scope.clientId)) {
           throw Object.assign(new Error('Generated article scope mismatch'), {
             code: 'CONTENT_SCOPE_MISMATCH',
           });
         }
-        options.commit(article);
+        articles.forEach((item) => options.commit(item));
         command.finalize(token, { result: article });
         publish();
         return article;

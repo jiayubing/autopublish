@@ -20,7 +20,7 @@ function writeFixture(directory) {
     "let configured = true; let lastTest = null; let testCalls = 0; let saves = 0; let clears = 0;",
     "const data = (value) => Promise.resolve({ ok: true, data: value });",
     'const auth = { authenticated: true, user: { loginName: "fixture-user" }, entitlements: [{ product: "AutoPublish", enabled: true, expiresAt: null }], device: { deviceCount: 1, maxDevices: 5 }, errorCode: null, sessionStatus: "authenticated" };',
-    'const hepanStatus = () => ({ source: "application", configured, pythonConfigured: configured, cookieConfigured: configured, categoryId: 121, vendorConfigured: false, bundledVendorAvailable: true, siteOrigin: "https://www.hepan.com", publishIntervalSeconds: 30, lastTest });',
+    'const hepanStatus = () => ({ source: "application", configured, pythonConfigured: configured, cookieConfigured: configured, categoryId: 121, vendorConfigured: false, bundledVendorAvailable: true, siteOrigin: "https://www.hepan.com", lastTest });',
     "const platformSettings = {",
     '  getStatus: (platformId) => data({ status: platformId === "hepan" ? hepanStatus() : { source: "application", configured: false, baseUrl: "", timeoutMs: 30000, allowInsecure: false, transport: "未配置", apiKeyMask: "", lastTest: null } }),',
     "  save: () => { saves += 1; return data({ status: hepanStatus() }); },",

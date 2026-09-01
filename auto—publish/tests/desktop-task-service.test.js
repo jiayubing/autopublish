@@ -131,7 +131,7 @@ it("closes every loaded login session during workspace shutdown", async function
   assert.deepEqual(calls, ["first", "second"]);
 });
 
-it("snapshots the Hepan interval once when a platform batch starts", async function() {
+it("snapshots Hepan worker runtime once when a platform batch starts", async function() {
   const paths = { contentLibrary: "C:\\portable-content", tmp: "C:\\local-state\\tmp" };
   const calls = [];
   let cleaned = false;
@@ -156,9 +156,8 @@ it("snapshots the Hepan interval once when a platform batch starts", async funct
       prepareWorkerRuntime: function() {
         return {
           runtimeContext: {
-            hepanRuntime: { pythonPath: "C:\\python.exe", categoryId: 121, vendorDir: "", publishIntervalSeconds: 17, cookiePath: "C:\\cookie.tmp" },
+            hepanRuntime: { pythonPath: "C:\\python.exe", categoryId: 121, vendorDir: "", cookiePath: "C:\\cookie.tmp" },
           },
-          intervalByTargetMs: { hepan: 17000 },
           timeoutMs: 120000,
           cleanup: function() { cleaned = true; },
         };
@@ -168,8 +167,8 @@ it("snapshots the Hepan interval once when a platform batch starts", async funct
 
   await service.startPlatformSubmit({ tasks: [{ sourcePlatformId: "source", filename: "article.txt", targetPlatformId: "hepan" }] });
   const payload = JSON.parse(calls[0].args[1]);
-  assert.equal(payload.platformRuntimeContext.hepanRuntime.publishIntervalSeconds, 17);
-  assert.equal(payload.submitOptions.intervalByTargetMs.hepan, 17000);
+  assert.equal(Object.hasOwn(payload.platformRuntimeContext.hepanRuntime, "publishIntervalSeconds"), false);
+  assert.equal(Object.hasOwn(payload.submitOptions, "intervalByTargetMs"), false);
   assert.equal(cleaned, true);
 });
 

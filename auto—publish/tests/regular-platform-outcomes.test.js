@@ -88,10 +88,13 @@ function fixture(options) {
   return {
     root,
     store,
+    profile,
     transitions: transitionPorts.regularOutcomeTransitions,
     orderTransitions: transitionPorts.orderObservationTransitions,
     queueTransitions: transitionPorts.regularQueueTransitions,
     groupTransitions: transitionPorts.regularQueueGroupTransitions,
+    submissionIntervalTransitions:
+      transitionPorts.regularQueueGroupSubmissionIntervalTransitions,
     publishedArchiveQueries: transitionPorts.publishedArchiveQueries,
     prepare,
     close() {
@@ -101,6 +104,146 @@ function fixture(options) {
     },
   };
 }
+
+function admitQueued(fixtureValue, articleId, submissionIntervalSeconds) {
+  const target = {
+    kind: "platform",
+    platformId: "hepan",
+    accountProfileId: fixtureValue.profile.accountProfileId,
+  };
+  return fixtureValue.queueTransitions.admitRegularQueueItem({
+    clientId: "client-1",
+    articleId,
+    batchId: `batch-${articleId}`,
+    itemId: `item-${articleId}`,
+    publicationId: `publication-${articleId}`,
+    attemptId: `attempt-${articleId}`,
+    target,
+    queueConfig:
+      submissionIntervalSeconds === undefined
+        ? undefined
+        : { submissionIntervalSeconds },
+    publicationSnapshot: {
+      articleId,
+      title: `标题 ${articleId}`,
+      body: `正文 ${articleId}`,
+      fingerprint: "a".repeat(64),
+    },
+    payload: { clientId: "client-1" },
+  });
+}
+
+test("regular queue waits for the configured interval before the next article", async () => {
+  const f = fixture();
+  const waits = [];
+  let preparedCount = 0;
+  try {
+    const first = admitQueued(f, "article-interval-first", 2);
+    admitQueued(f, "article-interval-second");
+    admitQueued(f, "article-interval-third");
+    const outcomeService = createRegularPlatformOutcomeService({
+      regularOutcomeTransitions: f.transitions,
+      clock: () => new Date("2026-08-07T01:00:00.000Z"),
+    });
+    const orchestrator = createRegularQueueGroupOrchestrator({
+      regularQueueGroupTransitions: f.groupTransitions,
+      regularPlatformOutcomeService: outcomeService,
+      wait: async (intervalMs) => {
+        waits.push(intervalMs);
+        if (waits.length === 1) {
+          const group = f.groupTransitions.listRegularQueueGroupSnapshots({
+            queueGroupId: first.queueGroupId,
+          })[0];
+          f.submissionIntervalTransitions.setRegularQueueGroupSubmissionInterval({
+            queueGroupId: first.queueGroupId,
+            submissionIntervalSeconds: 5,
+            expectedRevision: group.revision,
+          });
+        }
+      },
+      platformSubmissionExecutor: {
+        async preparePlatformSubmission(claim) {
+          preparedCount += 1;
+          return domain.createPreparedSubmission({
+            preparedSubmissionEvidenceV1: domain.createTextOnlyPreparedSubmissionEvidenceV1(claim),
+            submitPreparedPublication: async () => ({
+              status: "accepted",
+              remoteId: `remote-${claim.articleIdentityV1.articleId}`,
+            }),
+          });
+        },
+      },
+    });
+
+    const result = await orchestrator.startGroup({
+      queueGroupId: first.queueGroupId,
+    });
+
+    assert.equal(result.processed.length, 3);
+    assert.equal(preparedCount, 3);
+    assert.deepEqual(waits, [2000, 2000]);
+  } finally {
+    f.close();
+  }
+});
+
+test("pausing during the interval prevents the next article from being claimed", async () => {
+  const f = fixture();
+  let releaseWait;
+  let enteredWait;
+  const waitEntered = new Promise((resolve) => {
+    enteredWait = resolve;
+  });
+  const waitRelease = new Promise((resolve) => {
+    releaseWait = resolve;
+  });
+  let preparedCount = 0;
+  try {
+    const first = admitQueued(f, "article-pause-wait-first", 1);
+    admitQueued(f, "article-pause-wait-second");
+    const orchestrator = createRegularQueueGroupOrchestrator({
+      regularQueueGroupTransitions: f.groupTransitions,
+      regularPlatformOutcomeService: createRegularPlatformOutcomeService({
+        regularOutcomeTransitions: f.transitions,
+        clock: () => new Date("2026-08-07T01:00:00.000Z"),
+      }),
+      wait: async () => {
+        enteredWait();
+        await waitRelease;
+      },
+      platformSubmissionExecutor: {
+        async preparePlatformSubmission(claim) {
+          preparedCount += 1;
+          return domain.createPreparedSubmission({
+            preparedSubmissionEvidenceV1:
+              domain.createTextOnlyPreparedSubmissionEvidenceV1(claim),
+            submitPreparedPublication: async () => ({
+              status: "accepted",
+              remoteId: `remote-${claim.articleIdentityV1.articleId}`,
+            }),
+          });
+        },
+      },
+    });
+
+    const running = orchestrator.startGroup({ queueGroupId: first.queueGroupId });
+    await waitEntered;
+    orchestrator.pauseGroup({ queueGroupId: first.queueGroupId });
+    releaseWait();
+    const result = await running;
+
+    assert.equal(result.processed.length, 1);
+    assert.equal(preparedCount, 1);
+    const snapshot = f.groupTransitions.listRegularQueueGroupSnapshots({
+      queueGroupId: first.queueGroupId,
+    })[0];
+    assert.equal(snapshot.pauseIntent, "manual");
+    assert.equal(snapshot.remaining.length, 1);
+    assert.equal(snapshot.remaining[0].articleId, "article-pause-wait-second");
+  } finally {
+    f.close();
+  }
+});
 
 test("regular accepted and paid status 2 share one first-wins publication snapshot", () => {
   const f = fixture();
@@ -323,6 +466,7 @@ function admitForOrchestrator(f, articleId) {
     publicationId: `publication-${articleId}`,
     attemptId: `attempt-${articleId}`,
     target: { kind: "platform", platformId: "hepan", accountProfileId },
+    queueConfig: { submissionIntervalSeconds: 0 },
     publicationSnapshot: {
       articleId,
       title: "标题",

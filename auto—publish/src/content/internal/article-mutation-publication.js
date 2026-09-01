@@ -80,7 +80,13 @@ function createArticleMutationPublication(kernel) {
           refreshRequired: true,
         });
       }
-      const next = Object.assign({}, current, article, {
+      // Ordinary editing owns only the article's editable body fields.  The
+      // provenance snapshot is the historical fact recorded at generation
+      // time and must not be replaced by a stale Renderer projection of the
+      // current material/template selection.
+      const next = Object.assign({}, current, {
+        title: article.title,
+        content: article.content,
         clientId: ref.clientId,
         id: ref.articleId,
         status: "saved",

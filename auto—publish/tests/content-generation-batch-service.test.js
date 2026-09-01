@@ -45,7 +45,7 @@ function makeHarness(options) {
             researchQueryIds: source.researchQueryIds.slice(), status: "pending", attempts: 0, error: null, articleId: null };
         });
       });
-      const batch = { id, status: "pending", aiConfigFingerprint: input.aiConfigFingerprint,
+      const batch = { id, status: "pending", concurrency: input.concurrency, aiConfigFingerprint: input.aiConfigFingerprint,
         clientSources: input.clientSources, templates: input.templates, tasks,
         counts: { total: tasks.length, succeeded: 0, failed: 0, pending: tasks.length, interrupted: 0, cancelled: 0 } };
       batches.set(id, batch);
@@ -57,8 +57,9 @@ function makeHarness(options) {
     markTaskRunning: function(id, taskId) { const task = batches.get(id).tasks.find(function(item) { return item.id === taskId; }); task.status = "running"; task.attempts += 1; return batches.get(id); },
     markTaskSucceeded: function(id, taskId, articleId) { const task = batches.get(id).tasks.find(function(item) { return item.id === taskId; }); task.status = "succeeded"; task.articleId = articleId; task.error = null; return batches.get(id); },
     markTaskFailed: function(id, taskId, error) { const task = batches.get(id).tasks.find(function(item) { return item.id === taskId; }); task.status = "failed"; task.error = error; return batches.get(id); },
-     markTaskInterrupted: function(id, taskId) { const task = batches.get(id).tasks.find(function(item) { return item.id === taskId; }); task.status = "interrupted"; return batches.get(id); },
-     cancelPending: function(id) { const batch = batches.get(id); batch.tasks.forEach(function(task) { if (task.status === "pending") task.status = "cancelled"; }); batch.counts.pending = batch.tasks.filter(function(task) { return task.status === "pending"; }).length; batch.counts.cancelled = batch.tasks.filter(function(task) { return task.status === "cancelled"; }).length; if (!batch.tasks.some(function(task) { return ["pending", "running", "failed", "interrupted"].includes(task.status); })) batch.status = "completed"; return batch; }
+      markTaskInterrupted: function(id, taskId) { const task = batches.get(id).tasks.find(function(item) { return item.id === taskId; }); task.status = "interrupted"; return batches.get(id); },
+      cancelPending: function(id) { const batch = batches.get(id); batch.tasks.forEach(function(task) { if (task.status === "pending") task.status = "cancelled"; }); batch.counts.pending = batch.tasks.filter(function(task) { return task.status === "pending"; }).length; batch.counts.cancelled = batch.tasks.filter(function(task) { return task.status === "cancelled"; }).length; if (!batch.tasks.some(function(task) { return ["pending", "running", "failed", "interrupted"].includes(task.status); })) batch.status = "completed"; return batch; },
+      abandonBatch: function(id) { const batch = batches.get(id); batch.tasks.forEach(function(task) { if (task.status === "pending") task.status = "cancelled"; }); batch.status = "abandoned"; return batch; }
   };
 
   const runner = {
@@ -77,7 +78,7 @@ function makeHarness(options) {
       }
       return batchStore.getBatch(batchId);
     },
-    stop: async function() { return null; },
+    pause: async function() { return null; },
     getState: function() { return { status: "idle", batchId: null }; },
     subscribe: function(listener) { runnerListeners.add(listener); return function() { runnerListeners.delete(listener); }; },
     dispose: async function() {}
@@ -100,9 +101,9 @@ function makeHarness(options) {
     clientKnowledge: clientKnowledge,
     materialStore: materialStore,
     researchStore: researchStore,
-    templateStore: { getTemplate: function(platform, id) { return templates[platform + ":" + id]; }, listTemplates: function() { return Object.values(templates); } },
+    templateStore: settings.templateStore || { getTemplate: function(platform, id) { return templates[platform + ":" + id]; }, listTemplates: function() { return Object.values(templates); } },
     contentStore: articleStore,
-    articleGeneratorFactory: function() { return { generateArticle: async function(input) { calls.generate.push(input); return { id: "article-1", clientId: input.clientId, title: "Title", content: "Body", status: "generated" }; } }; },
+    articleGeneratorFactory: settings.articleGeneratorFactory || function() { return { generateArticle: async function(input) { calls.generate.push(input); return { id: "article-1", clientId: input.clientId, title: "Title", content: "Body", status: "generated" }; } }; },
     aiProviderService: { getFingerprint: function() { return currentFingerprint; }, createClient: function() { return {}; } },
     batchStore: batchStore,
     runnerFactory: settings.runnerFactory || function(options) { runnerOptions = options; return runner; }
@@ -121,6 +122,49 @@ async function waitForBatch(service, batchId, predicate) {
 }
 
 describe("content generation batch service", function() {
+  it("passes the requested batch concurrency to the runner and defaults to two", async function() {
+    const observed = [];
+    const harness = makeHarness({
+      runnerFactory: function(options) {
+        observed.push(options.concurrency);
+        return {
+          run: async function(batchId) { const batch = options.batchStore.getBatch(batchId); batch.status = "completed"; return batch; },
+          getState: function() { return { status: "idle", batchId: null, concurrency: options.concurrency }; },
+          subscribe: function() { return function() {}; },
+          dispose: async function() {},
+        };
+      },
+    });
+    const first = await harness.service.createBatch({ clientIds: ["c1"], templates: [{ platform: "ctrip", templateId: "guide" }] });
+    await harness.service.startBatch({ batchId: first.id });
+    await waitForBatch(harness.service, first.id, function(value) { return value.status === "completed"; });
+    const second = await harness.service.createBatch({ clientIds: ["c1"], templates: [{ platform: "ctrip", templateId: "guide" }], concurrency: 4 });
+    await harness.service.startBatch({ batchId: second.id });
+    assert.deepEqual(observed, [2, 4]);
+  });
+
+  it("reuses selected source reads across templates within one batch run", async function() {
+    let selectedMaterialReads = 0;
+    const harness = makeHarness({
+      templateStore: {
+        getTemplate: function(platform, id) { return { id: id, platform: platform, name: id, scenario: id, body: "write" }; },
+        listTemplates: function() { return []; },
+      },
+      materialStore: {
+        listMaterials: async function() { return [{ id: "brand.md", name: "brand.md", extension: ".md", status: "ready", content: "facts" }]; },
+        getSelectedMaterials: async function() { selectedMaterialReads += 1; return [{ id: "brand.md", name: "brand.md", extension: ".md", status: "ready", content: "facts" }]; },
+      },
+      runnerFactory: function(options) {
+        return createGenerationBatchRunner(Object.assign({}, options, { concurrency: 1 }));
+      },
+      articleGeneratorFactory: function(deps) {
+        return { generateArticle: async function(input) { await deps.materialStore.getSelectedMaterials(input.clientId, input.materialIds); return { id: "article-" + input.templateId, clientId: input.clientId, title: "Title", content: "Body", status: "generated" }; } };
+      },
+    });
+    const batch = await harness.service.startBatch({ clientIds: ["c1"], templates: [{ platform: "ctrip", templateId: "one" }, { platform: "ctrip", templateId: "two" }] });
+    await waitForBatch(harness.service, batch.id, function(value) { return value.status === "completed"; });
+    assert.equal(selectedMaterialReads, 1);
+  });
   it("keeps generation owner dependencies free of submission admission paths", function() {
     for (const relative of [
       "desktop/services/content-generation-batch-service.js",
@@ -438,7 +482,7 @@ describe("content generation batch service", function() {
     await waitForBatch(first.service, batch.id, function(value) { return value.status === "completed"; });
   });
 
-  it("persists safe state events and exposes pause, resume, stop, retry, get, and list operations", async function() {
+  it("persists safe state events and exposes pause, resume, end, retry, get, and list operations", async function() {
     const { service, calls } = makeHarness();
     const events = [];
     const unsubscribe = service.subscribe(function(event) { events.push(event); });
@@ -452,7 +496,9 @@ describe("content generation batch service", function() {
     assert.equal(retried.status, "running");
     await waitForBatch(service, batch.id, function(value) { return value.status === "completed"; });
     await service.pauseBatch();
-    await service.stopBatch();
+    const pending = await service.createBatch({ clientIds: ["c1"], templates: [{ platform: "ctrip", templateId: "guide" }] });
+    const ended = await service.abandonBatch({ batchId: pending.id, confirmed: true });
+    assert.equal(ended.status, "abandoned");
     unsubscribe();
     assert.ok(events.every(function(event) { return event.batchId && !event.prompt && !event.materials && !event.apiKey; }));
     assert.ok(events.every(function(event) { return event.status && event.updatedAt && event.counts !== undefined; }));

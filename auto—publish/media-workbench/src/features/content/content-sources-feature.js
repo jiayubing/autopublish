@@ -354,12 +354,18 @@ export function createContentSourcesFeature(adapters = {}) {
     clientQuery = Object.freeze({ loading: true, error: null, reason });
     publish();
     try {
-      const [nextQuestions, nextResearch] = await Promise.all([
+      const [nextQuestions, detailResult] = await Promise.all([
         adapters.listQuestions(requestedClientId),
-        adapters.listResearch(requestedClientId),
+        typeof adapters.getClientDetails === 'function'
+          ? adapters.getClientDetails(requestedClientId)
+          : adapters.listResearch(requestedClientId).then((items) => ({ client: null, research: items })),
       ]);
       if (!clientIdentity.isCurrent(token) || requestedClientId !== selectedClientId) return false;
       questions = Array.isArray(nextQuestions) ? nextQuestions : [];
+      if (detailResult?.client) {
+        clients = clients.map((item) => item.id === requestedClientId ? detailResult.client : item);
+      }
+      const nextResearch = detailResult?.research;
       research = Array.isArray(nextResearch) ? nextResearch : [];
       researchByClient = Object.freeze({
         ...researchByClient,
@@ -390,7 +396,7 @@ export function createContentSourcesFeature(adapters = {}) {
     publish();
     try {
       const entries = await Promise.all(
-        clientIds.map(async (clientId) => [clientId, await adapters.listResearch(clientId)]),
+        clientIds.map(async (clientId) => [clientId, await (typeof adapters.listResearchMetadata === 'function' ? adapters.listResearchMetadata(clientId) : adapters.listResearch(clientId))]),
       );
       if (!researchIndexIdentity.isCurrent(token)) return false;
       researchByClient = Object.freeze(Object.fromEntries(
@@ -406,8 +412,6 @@ export function createContentSourcesFeature(adapters = {}) {
           ];
         }),
       ));
-      if (selectedClientId && researchByClient[selectedClientId])
-        research = [...researchByClient[selectedClientId]];
       researchIndexQuery = Object.freeze({ loading: false, error: null, reason });
       publish();
       return true;
@@ -422,7 +426,7 @@ export function createContentSourcesFeature(adapters = {}) {
   const refreshAfterCommand = async (name, reason = 'command-result') => {
     const target = SOURCE_COMMANDS[name];
     if (target === 'client') {
-      await Promise.all([refreshClientData(reason), refreshResearchIndex(reason)]);
+      await refreshClientData(reason);
     } else if (target === 'sources') {
       await refreshSources(reason);
     } else if (target === 'workspaceSources') {

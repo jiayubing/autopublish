@@ -240,7 +240,8 @@ function createArticleGenerator(deps) {
       materialSnapshots: materialSnapshots,
       templateSnapshot: templateSnapshot,
       generationBatchId: optionalProvenanceId(input.generationBatchId, "Generation batch id"),
-      generationTaskId: optionalProvenanceId(input.generationTaskId, "Generation task id")
+      generationTaskId: optionalProvenanceId(input.generationTaskId, "Generation task id"),
+      generationOperationId: optionalProvenanceId(input.generationOperationId, "Generation operation id")
     };
   }
 

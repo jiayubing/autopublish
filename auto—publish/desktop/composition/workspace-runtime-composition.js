@@ -94,6 +94,11 @@ async function createWorkspaceRuntimeComposition(deps) {
     return service && service.getState ? service.getState() : null;
   }
 
+  function contentGenerationState() {
+    const service = current("aiContentService");
+    return service && service.getState ? service.getState() : null;
+  }
+
   async function dispose() {
     if (disposed) return;
     disposed = true;
@@ -341,6 +346,8 @@ async function createWorkspaceRuntimeComposition(deps) {
             operationalStoreTransitionPorts.regularQueueGroupTransitions,
           regularQueueGroupImageCountTransitions:
             operationalStoreTransitionPorts.regularQueueGroupImageCountTransitions,
+          regularQueueGroupSubmissionIntervalTransitions:
+            operationalStoreTransitionPorts.regularQueueGroupSubmissionIntervalTransitions,
           onDataInvalidated: invalidation.invalidate,
           accountProfileResolver:
             platformAccountProfileService.assertBound,
@@ -917,6 +924,7 @@ async function createWorkspaceRuntimeComposition(deps) {
                 task: taskState(),
                 collection: collectionState(),
                 generation: generationState(),
+                contentGeneration: contentGenerationState(),
               };
             },
           },

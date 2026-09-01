@@ -58,6 +58,82 @@ test("content workspace source query shares identity across initial manual and i
   assert.equal(feature.getSnapshot().query.loading, false);
 });
 
+test("single article generation stays owned by the workspace across a production view remount", async () => {
+  const pending = deferred();
+  const generated = {
+    id: "article-a",
+    clientId: "client-a",
+    title: "A",
+    content: "Body",
+    status: "generated",
+    createdAt: "2026-08-21T00:00:00.000Z",
+  };
+  const feature = createContentWorkbenchFeature({
+    ...paidExecutionAdapters,
+    listClients: async () => [{ id: "client-a", name: "A" }],
+    listTemplateCatalog: async () => ({ revision: "r1", platforms: [], templates: [], diagnostics: [] }),
+    listQuestions: async () => [],
+    listResearch: async () => [],
+    loadManagement: async () => ({}),
+    generateArticle: async () => pending.promise,
+  });
+  feature.setScope({ workspaceRuntimeId: "runtime-1" });
+  await feature.refresh("initial");
+
+  const firstViewGeneration = feature.production.generation;
+  const request = firstViewGeneration.generate({ clientId: "client-a" });
+  assert.equal(firstViewGeneration.getSnapshot().command.busy, true);
+
+  // The production view can unmount while the workspace feature remains alive.
+  const secondViewGeneration = feature.production.generation;
+  assert.equal(secondViewGeneration, firstViewGeneration);
+  pending.resolve(generated);
+  await request;
+
+  assert.equal(feature.getSnapshot().currentArticle.id, "article-a");
+  assert.equal(secondViewGeneration.getSnapshot().command.busy, false);
+  feature.dispose();
+});
+
+test("library submission commands keep regular queue admission available", async () => {
+  const calls = [];
+  const feature = createContentWorkbenchFeature({
+    ...paidExecutionAdapters,
+    listClients: async () => [{ id: "client-a", name: "A" }],
+    listTemplateCatalog: async () => ({
+      revision: "r1",
+      platforms: [],
+      templates: [],
+      diagnostics: [],
+    }),
+    listQuestions: async () => [],
+    listResearch: async () => [],
+    loadManagement: async () => ({}),
+    previewRegularQueueAdmission: async (input) => {
+      calls.push(["preview", input]);
+      return { queueableCount: 1, idempotentCount: 0 };
+    },
+    admitRegularQueueItems: async (input) => {
+      calls.push(["admit", input]);
+      return { admittedCount: 1 };
+    },
+  });
+  feature.setScope({ workspaceRuntimeId: "runtime-1" });
+  await feature.refresh("initial");
+
+  const input = {
+    articleRefs: [{ clientId: "client-a", articleId: "article-a" }],
+    platformId: "lieju",
+    accountProfileId: "profile-a",
+  };
+  assert.equal(typeof feature.library.commands.previewRegularQueueAdmission, "function");
+  assert.equal(typeof feature.library.commands.admitRegularQueueItems, "function");
+  await feature.library.commands.previewRegularQueueAdmission(input);
+  await feature.library.commands.admitRegularQueueItems(input);
+  assert.deepEqual(calls, [["preview", input], ["admit", input]]);
+  feature.dispose();
+});
+
 test("content workspace feature owns client and current-article scope", async () => {
   const feature = createContentWorkbenchFeature({
     ...paidExecutionAdapters,

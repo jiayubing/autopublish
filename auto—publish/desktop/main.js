@@ -196,6 +196,16 @@ function createDeferredGenerationBatchService() {
   };
 }
 
+function createDeferredAiContentService() {
+  return {
+    getState: function () {
+      if (workspaceRuntime && workspaceRuntime.getState().contentGeneration)
+        return workspaceRuntime.getState().contentGeneration;
+      return { status: "idle", operationId: null, outcome: null };
+    }
+  };
+}
+
 async function disposeRuntime() {
   if (authenticatedRuntime) return authenticatedRuntime.dispose();
 }
@@ -313,6 +323,7 @@ function initializeWorkspaceBootstrap() {
     taskService: createDeferredTaskService(),
     doubaoCollectionService: createDeferredQueueService(),
     generationBatchService: createDeferredGenerationBatchService(),
+    aiContentService: createDeferredAiContentService(),
     disposeRuntime: disposeRuntime,
     relaunch: relaunchApplication,
     openPath: openWorkspacePath,

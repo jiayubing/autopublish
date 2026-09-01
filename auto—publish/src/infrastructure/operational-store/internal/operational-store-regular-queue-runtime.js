@@ -59,6 +59,13 @@ function createRegularQueueRuntime(context) {
     return imageCount;
   }
 
+  function queueGroupSubmissionIntervalSeconds(value, fallback) {
+    const interval = value === undefined ? fallback : value;
+    if (!Number.isInteger(interval) || interval < 0 || interval > 3600)
+      throw fail("OPERATIONAL_QUEUE_GROUP_SUBMISSION_INTERVAL_INVALID");
+    return interval;
+  }
+
   function expectedQueueGroupRevision(value) {
     if (!Number.isSafeInteger(value) || value < 1)
       throw fail("OPERATIONAL_QUEUE_GROUP_REVISION_INVALID");
@@ -72,6 +79,7 @@ function createRegularQueueRuntime(context) {
       platformId: row.platform_id,
       accountProfileId: row.account_profile_id,
       imageCount: row.image_count,
+      submissionIntervalSeconds: row.submission_interval_seconds,
       pauseIntent: row.pause_intent,
       paused: row.pause_intent !== "none",
       revision: row.revision,
@@ -165,6 +173,7 @@ function createRegularQueueRuntime(context) {
       platformId: row.platform_id,
       accountProfileId: row.account_profile_id,
       imageCount: row.image_count,
+      submissionIntervalSeconds: row.submission_interval_seconds,
       runState: current
         ? "in_flight"
         : row.pause_intent === "none"
@@ -228,6 +237,10 @@ function createRegularQueueRuntime(context) {
       value.paused === false ? "none" : "system",
     );
     const imageCount = queueGroupImageCount(value.imageCount, 1);
+    const submissionIntervalSeconds = queueGroupSubmissionIntervalSeconds(
+      value.submissionIntervalSeconds,
+      30,
+    );
     const stamp = iso(clock);
     return transaction(() => {
       const profile = db
@@ -240,7 +253,7 @@ function createRegularQueueRuntime(context) {
         throw fail("ACCOUNT_PROFILE_PLATFORM_MISMATCH");
       try {
         db.prepare(
-          "INSERT INTO submission_queue_groups(queue_group_id,platform_id,account_profile_id,pause_intent,revision,created_at,updated_at,image_count) VALUES(?,?,?,?,?,?,?,?)",
+          "INSERT INTO submission_queue_groups(queue_group_id,platform_id,account_profile_id,pause_intent,revision,created_at,updated_at,image_count,submission_interval_seconds) VALUES(?,?,?,?,?,?,?,?,?)",
         ).run(
           queueGroupId,
           platformId,
@@ -250,6 +263,7 @@ function createRegularQueueRuntime(context) {
           stamp,
           stamp,
           imageCount,
+          submissionIntervalSeconds,
         );
       } catch (error) {
         if (String((error && error.code) || "").startsWith("SQLITE_CONSTRAINT"))
@@ -364,6 +378,48 @@ function createRegularQueueRuntime(context) {
       regularQueueFault("after-group-image-count", {
         queueGroupId,
         imageCount,
+        expectedRevision,
+      });
+      return regularQueueGroupSnapshots({ queueGroupId })[0];
+    });
+  }
+
+  function setRegularQueueGroupSubmissionInterval(input) {
+    open();
+    const value = input || {};
+    const queueGroupId = requiredText(
+      value.queueGroupId,
+      128,
+      "OPERATIONAL_QUEUE_GROUP_ID_INVALID",
+    );
+    const submissionIntervalSeconds = queueGroupSubmissionIntervalSeconds(
+      value.submissionIntervalSeconds,
+    );
+    const expectedRevision = expectedQueueGroupRevision(value.expectedRevision);
+    const stamp = iso(clock);
+    return transaction(() => {
+      const changed = db
+        .prepare(
+          "UPDATE submission_queue_groups SET submission_interval_seconds=?,revision=revision+1,updated_at=? WHERE queue_group_id=? AND revision=?",
+        )
+        .run(
+          submissionIntervalSeconds,
+          stamp,
+          queueGroupId,
+          expectedRevision,
+        ).changes;
+      if (changed !== 1) {
+        const group = db
+          .prepare(
+            "SELECT 1 FROM submission_queue_groups WHERE queue_group_id=?",
+          )
+          .get(queueGroupId);
+        if (!group) throw fail("OPERATIONAL_QUEUE_GROUP_NOT_FOUND");
+        throw fail("OPERATIONAL_QUEUE_GROUP_REVISION_CONFLICT");
+      }
+      regularQueueFault("after-group-submission-interval", {
+        queueGroupId,
+        submissionIntervalSeconds,
         expectedRevision,
       });
       return regularQueueGroupSnapshots({ queueGroupId })[0];
@@ -636,6 +692,7 @@ function createRegularQueueRuntime(context) {
         platformId: group.platform_id,
         accountProfileId: group.account_profile_id,
         imageCount: group.image_count,
+        submissionIntervalSeconds: group.submission_interval_seconds,
         itemId: head.item_id,
         batchId: head.batch_id,
         articleIdentityV1: domain.parseArticleIdentityV1({
@@ -844,6 +901,7 @@ function createRegularQueueRuntime(context) {
     listRegularQueueGroupSnapshots,
     setRegularQueueGroupRunIntent,
     setRegularQueueGroupImageCount,
+    setRegularQueueGroupSubmissionInterval,
     startAllRegularQueueGroups,
     pauseAllRegularQueueGroups,
     pauseRegularQueueGroupsOnStartup,

@@ -192,6 +192,7 @@ function installDesktopFixture(page, fixture) {
     });
     const content = {
       listClients: () => ok({ clients: [client, otherClient] }),
+      getClientDetails: (clientId) => ok({ client: clientId === otherClient.id ? otherClient : client, research: [] }),
       listGeneratedArticles: () => ok({ articles: state.articles }),
       getArticleManagementSnapshot: () => {
         const workflowItems = state.articles.reduce((items, article) => { const workflow = workflowFor(article); if (workflow) items.push({ articleId: article.id, workflow }); return items; }, []);
@@ -206,6 +207,7 @@ function installDesktopFixture(page, fixture) {
       listSubmissionBatches: () => ok({ batches: [] }),
       listArticleTrash: () => ok({ trash: state.trash }),
       listResearch: () => ok({ research: [] }),
+      listResearchMetadata: () => ok({ research: [] }),
       listQuestions: () => ok({ questions: [] }),
       getDoubaoLoginState: () => ok({ loginState: { status: "unknown" } }),
       getDoubaoQueueState: () => ok({ queue: { status: "idle", currentTaskId: null, completed: 0, total: 0, waitRemainingMs: 0, tasks: [] } }),

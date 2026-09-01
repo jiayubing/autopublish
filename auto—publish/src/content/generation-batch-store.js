@@ -124,7 +124,28 @@ function createGenerationBatchStore(options) {
     return writeBatch(batch);
   }
 
-  function getTasksForContinue(batchId) { return getBatch(batchId).tasks.filter(function (task) { return RESUMABLE_STATUSES.has(task.status); }).map(clone); }
+  function abandonBatch(batchId) {
+    const batch = getBatch(batchId);
+    if (["running"].includes(batch.status) || batch.tasks.some(function (task) { return task.status === "running"; }))
+      throw storeError("GENERATION_BATCH_BUSY", "Running generation batch cannot be ended");
+    if (!["pending", "paused", "interrupted", "paused_configuration", "failed"].includes(batch.status))
+      throw storeError("GENERATION_BATCH_NOT_ENDABLE", "Generation batch cannot be ended");
+    batch.tasks.forEach(function (task) {
+      if (task.status === "pending") {
+        task.status = "cancelled";
+        task.error = null;
+        task.updatedAt = clock();
+      }
+    });
+    batch.status = "abandoned";
+    return writeBatch(batch);
+  }
+
+  function getTasksForContinue(batchId) {
+    const batch = getBatch(batchId);
+    if (batch.status === "abandoned") return [];
+    return batch.tasks.filter(function (task) { return RESUMABLE_STATUSES.has(task.status); }).map(clone);
+  }
 
   function recoverInterrupted(batchId) {
     const filenames = batchId === undefined ? pathPolicy.listGenerationBatchFiles() : [pathPolicy.generationBatchFile(batchId, false)];
@@ -181,6 +202,7 @@ function createGenerationBatchStore(options) {
     markTaskFailed,
     markTaskInterrupted,
     cancelPending,
+    abandonBatch,
     recoverInterrupted,
     getTasksForContinue,
     markRunning: markTaskRunning,

@@ -121,26 +121,14 @@ describe("Hepan settings patch contract", () => {
     }
   });
 
-  it("preserves an old configuration without an interval and defaults it on patch", () => {
+  it("drops the retired provider interval when an old configuration is patched", () => {
     const fixture = createFixture();
     try {
-      delete fixture.initial.publishIntervalSeconds;
+      fixture.initial.publishIntervalSeconds = 12;
       fixture.store.write(fixture.initial);
-      const status = fixture.service.save("hepan", { categoryId: 808 });
-      assert.equal(status.publishIntervalSeconds, 30);
-      assert.equal(fixture.store.read().publishIntervalSeconds, 30);
-    } finally {
-      cleanup(fixture);
-    }
-  });
-
-  it("allows changing only the interval, including zero, without replacing secrets", () => {
-    const fixture = createFixture();
-    try {
-      const status = fixture.service.save("hepan", { publishIntervalSeconds: 0 });
+      fixture.service.save("hepan", { categoryId: 808 });
       const saved = fixture.store.read();
-      assert.equal(status.publishIntervalSeconds, 0);
-      assert.equal(saved.publishIntervalSeconds, 0);
+      assert.equal(saved.publishIntervalSeconds, undefined);
       assert.equal(saved.pythonPath, fixture.initial.pythonPath);
       assert.equal(saved.cookie, fixture.existingCookie);
     } finally {
@@ -251,8 +239,7 @@ describe("Hepan settings patch contract", () => {
         HEPAN_PYTHON: fixtureSeed.paths.environmentPython,
         HEPAN_COOKIE_PATH: fixtureSeed.paths.environmentCookieFile,
         HEPAN_CATEGORY_ID: "606",
-        HEPAN_VENDOR_DIR: fixtureSeed.paths.environmentVendorDir,
-        HEPAN_PUBLISH_INTERVAL_SECONDS: "12"
+        HEPAN_VENDOR_DIR: fixtureSeed.paths.environmentVendorDir
       }
     });
     try {
@@ -265,7 +252,6 @@ describe("Hepan settings patch contract", () => {
       assert.equal(status.pythonConfigured, true);
       assert.equal(status.cookieConfigured, true);
       assert.equal(status.vendorConfigured, true);
-      assert.equal(status.publishIntervalSeconds, 12);
       assertSafeStatus(status, [envFixture.paths.environmentPython, envFixture.paths.environmentCookieFile, envFixture.paths.environmentVendorDir]);
       assert.equal(serialized.includes("fixture environment cookie"), false);
 

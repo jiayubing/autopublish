@@ -323,4 +323,29 @@ describe("generation batch store", function() {
     assert.equal(unchanged.counts.cancelled, 1);
     assert.equal(unchanged.tasks[0].status, "running");
   });
+
+  it("normalizes legacy stopped batches to paused without preserving a second state route", function() {
+    const store = createGenerationBatchStore({ workspaceRoot: workspaceRoot, createId: function() { return "batch-legacy-stopped"; } });
+    const batch = store.createBatch({ clientSources: [source("c1", "q1")], templates: templates(), aiConfigFingerprint: "fp" });
+    const filename = path.join(createWorkspacePaths(workspaceRoot).generationBatches, "batch-" + batch.id + ".json");
+    const legacy = JSON.parse(fs.readFileSync(filename, "utf8"));
+    legacy.status = "stopped";
+    fs.writeFileSync(filename, JSON.stringify(legacy), "utf8");
+    assert.equal(store.getBatch(batch.id).status, "paused");
+  });
+
+  it("abandons a recoverable batch while preserving success and failure evidence", function() {
+    const store = createGenerationBatchStore({ workspaceRoot: workspaceRoot, createId: function() { return "batch-abandon"; } });
+    const batch = store.createBatch({ clientSources: [source("c1", "q1")], templates: templates(), aiConfigFingerprint: "fp" });
+    store.markTaskSucceeded(batch.id, batch.tasks[0].id, "article-1");
+    store.markTaskFailed(batch.id, batch.tasks[1].id, { code: "AI_TIMEOUT", message: "timed out" });
+    store.updateBatchStatus(batch.id, "failed");
+    const abandoned = store.abandonBatch(batch.id);
+    assert.equal(abandoned.status, "abandoned");
+    assert.equal(abandoned.tasks[0].status, "succeeded");
+    assert.equal(abandoned.tasks[0].articleId, "article-1");
+    assert.equal(abandoned.tasks[1].status, "failed");
+    assert.deepStrictEqual(abandoned.tasks[1].error, { code: "AI_TIMEOUT", message: "timed out" });
+    assert.deepStrictEqual(store.getTasksForContinue(batch.id), []);
+  });
 });

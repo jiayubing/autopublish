@@ -64,6 +64,7 @@ type ArticleManagementSnapshotWire = Omit<
 };
 type CoreContentApi = {
   listClients: () => Promise<ContentIpcResponse<{ clients: ContentClient[] }>>;
+  getClientDetails: (clientId: string) => Promise<ContentIpcResponse<{ client: ContentClient; research: ContentResearch[] }>>;
   saveClientLiejuPublicationProfile: (input: {
     clientId: string;
     profile: LiejuPublicationProfile;
@@ -71,6 +72,7 @@ type CoreContentApi = {
   listResearch: (
     clientId: string,
   ) => Promise<ContentIpcResponse<{ research: ContentResearch[] }>>;
+  listResearchMetadata: (clientId: string) => Promise<ContentIpcResponse<{ research: ContentResearch[] }>>;
   listTemplateCatalog: () => Promise<
     ContentIpcResponse<ContentTemplateCatalog>
   >;
@@ -85,7 +87,9 @@ type CoreContentApi = {
     publicationId: string;
   }) => Promise<ContentIpcResponse<{ completed: boolean }>>;
   getSubmissionCenterSnapshot: (input: {
-    clientId: string;
+    clientId?: string;
+    page?: number;
+    pageSize?: number;
   }) => Promise<ContentIpcResponse<SubmissionCenterSnapshot>>;
   getArticleEditor: (input: {
     clientId: string;
@@ -206,6 +210,11 @@ type SubmissionContentApi = {
     imageCount: number;
     expectedRevision: number;
   }) => Promise<ContentIpcResponse<{ items: RegularQueueGroupSnapshot[] }>>;
+  updateRegularQueueGroupSubmissionInterval: (input: {
+    queueGroupId: string;
+    submissionIntervalSeconds: number;
+    expectedRevision: number;
+  }) => Promise<ContentIpcResponse<{ items: RegularQueueGroupSnapshot[] }>>;
   startRegularQueueGroup: (input: {
     queueGroupId: string;
   }) => Promise<ContentIpcResponse<{ items: RegularQueueGroupSnapshot[] }>>;
@@ -308,6 +317,12 @@ export async function listContentClients(): Promise<ContentClient[]> {
     (wire) => wire.clients,
   );
 }
+export async function getContentClientDetails(clientId: string): Promise<{ client: ContentClient; research: ContentResearch[] }> {
+  return callCoreContent(
+    (api) => requireBridgeMethod(api.getClientDetails)(clientId),
+    "Unable to load client details",
+  );
+}
 export async function saveClientLiejuPublicationProfile(input: {
   clientId: string;
   profile: LiejuPublicationProfile;
@@ -324,6 +339,13 @@ export async function listContentResearch(
   return callCoreContent(
     (api) => requireBridgeMethod(api.listResearch)(clientId),
     "Unable to load research",
+    (wire) => wire.research,
+  );
+}
+export async function listContentResearchMetadata(clientId: string): Promise<ContentResearch[]> {
+  return callCoreContent(
+    (api) => requireBridgeMethod(api.listResearchMetadata)(clientId),
+    "Unable to load research metadata",
     (wire) => wire.research,
   );
 }
@@ -518,10 +540,11 @@ export async function openPublicationUrl(input: {
 }
 
 export async function getSubmissionCenterSnapshot(
-  clientId: string,
+  input: string | { clientId?: string; page?: number; pageSize?: number },
 ): Promise<SubmissionCenterSnapshot> {
+  const request = typeof input === "string" ? { clientId: input } : input;
   return callCoreContent(
-    (api) => requireBridgeMethod(api.getSubmissionCenterSnapshot)({ clientId }),
+    (api) => requireBridgeMethod(api.getSubmissionCenterSnapshot)(request),
     "Unable to load submission center snapshot",
   );
 }
@@ -572,6 +595,18 @@ export async function updateRegularQueueGroupImageCount(input: {
   return callSubmission(
     (api) => requireBridgeMethod(api.updateRegularQueueGroupImageCount)(input),
     "regular queue group image-count update failed",
+    { map: (wire) => wire.items },
+  );
+}
+export async function updateRegularQueueGroupSubmissionInterval(input: {
+  queueGroupId: string;
+  submissionIntervalSeconds: number;
+  expectedRevision: number;
+}): Promise<RegularQueueGroupSnapshot[]> {
+  return callSubmission(
+    (api) =>
+      requireBridgeMethod(api.updateRegularQueueGroupSubmissionInterval)(input),
+    "regular queue group submission-interval update failed",
     { map: (wire) => wire.items },
   );
 }

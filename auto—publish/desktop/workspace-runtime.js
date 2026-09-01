@@ -66,6 +66,11 @@ function createWorkspaceRuntime(deps) {
     return service && service.getState ? service.getState() : null;
   }
 
+  function contentGenerationState() {
+    const service = current("aiContentService");
+    return service && service.getState ? service.getState() : null;
+  }
+
   async function start(bootstrapState) {
     if (state === "running") return getState();
     if (disposePromise)
@@ -193,6 +198,7 @@ function createWorkspaceRuntime(deps) {
       task: taskState(),
       collection: collectionState(),
       generation: generationState(),
+      contentGeneration: contentGenerationState(),
     };
   }
 

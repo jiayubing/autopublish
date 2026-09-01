@@ -25,18 +25,18 @@ test("generation exposes named commands whose tokens do not finalize one another
     start: async () => ({ id: "batch-1" }),
     pause: () => new Promise((resolve) => { resolvePause = resolve; }),
     resume: async () => ({ id: "batch-1", status: "running" }),
-    stop: async () => ({ id: "batch-1", status: "stopping" }),
+    abandon: async () => ({ id: "batch-1", status: "abandoned" }),
     continue: async () => ({ id: "batch-1" }),
     retry: async () => ({ id: "batch-1" }),
   }));
   feature.setScope({ workspaceRuntimeId: "w1", batchId: "batch-1" });
   assert.equal("run" in feature, false);
   const pause = feature.pause({ batchId: "batch-1" });
-  const stop = feature.stop({ batchId: "batch-1" });
+  const abandon = feature.abandon({ batchId: "batch-1", confirmed: true });
   assert.equal(feature.getSnapshot().commands.pause.busy, true);
-  assert.equal(feature.getSnapshot().commands.stop.busy, true);
-  await stop;
-  assert.equal(feature.getSnapshot().commands.stop.busy, false);
+  assert.equal(feature.getSnapshot().commands.abandon.busy, true);
+  await abandon;
+  assert.equal(feature.getSnapshot().commands.abandon.busy, false);
   assert.equal(feature.getSnapshot().commands.pause.busy, true);
   resolvePause({ id: "batch-1", status: "paused" });
   await pause;
@@ -50,7 +50,7 @@ test("generation rejects stale batch results after a scope switch", async () => 
     start: () => new Promise((resolve) => { resolveStart = resolve; }),
     pause: async () => null,
     resume: async () => null,
-    stop: async () => null,
+    abandon: async () => null,
     continue: async () => null,
     retry: async () => null,
     previewBatch: async () => ({}),
@@ -84,7 +84,7 @@ test("generation hydrates its runtime snapshot and owns the event subscription l
     start: async () => null,
     pause: async () => null,
     resume: async () => null,
-    stop: async () => null,
+    abandon: async () => null,
     continue: async () => null,
     retry: async () => null,
     previewBatch: async () => ({}),
@@ -127,7 +127,7 @@ test("generation exposes an incomplete hydration observation when the runtime re
     start: async () => null,
     pause: async () => null,
     resume: async () => null,
-    stop: async () => null,
+    abandon: async () => null,
     continue: async () => null,
     retry: async () => null,
   }));
@@ -162,7 +162,7 @@ test("generation keeps a successful action result when its follow-up refresh fai
     start: async () => ({ id: "batch-refresh-failure" }),
     pause: async () => null,
     resume: async () => null,
-    stop: async () => null,
+    abandon: async () => null,
     continue: async () => null,
     retry: async () => null,
     reportDiagnostic: (code) => reports.push(code),
@@ -196,7 +196,7 @@ test("generation accepts only newer events from the hydrated runtime and display
     start: async () => null,
     pause: async () => null,
     resume: async () => null,
-    stop: async () => null,
+    abandon: async () => null,
     continue: async () => null,
     retry: async () => null,
   }));

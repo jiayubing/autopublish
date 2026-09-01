@@ -158,8 +158,8 @@ const DOUBAO_FIXTURES = {
   ],
 };
 
-test("content operations inventory has 35 exact versioned contracts", () => {
-  assert.equal(contentOperationsContracts.length, 35);
+test("content operations inventory has 36 exact versioned contracts", () => {
+  assert.equal(contentOperationsContracts.length, 36);
   for (const channel of [...SUBMISSION_CHANNELS, ...DOUBAO_CHANNELS]) {
     const contract = productionIpcRegistry.byChannel(channel);
     assert.ok(contract, channel);

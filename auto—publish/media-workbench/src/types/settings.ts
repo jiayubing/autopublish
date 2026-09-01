@@ -54,7 +54,6 @@ export interface HepanProviderStatus {
   vendorConfigured: boolean;
   bundledVendorAvailable?: boolean;
   siteOrigin: string;
-  publishIntervalSeconds: number;
   lastTest:
     | (PlatformProviderTestResult & {
         authenticated?: boolean;

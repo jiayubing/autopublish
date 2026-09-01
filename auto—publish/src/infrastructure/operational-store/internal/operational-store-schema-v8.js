@@ -12,12 +12,17 @@ function queueGroupRows(db) {
     .all();
 }
 
-function verifyV8Structure(db, errorCode) {
-  verifyV4Structure(db, errorCode, { allowV8ImageCount: true });
+function verifyV8Structure(db, errorCode, options) {
+  verifyV4Structure(db, errorCode, {
+    allowV8ImageCount: true,
+    allowV9SubmissionInterval:
+      options && options.allowV9SubmissionInterval === true,
+  });
   const columns = db
     .prepare("PRAGMA table_info(submission_queue_groups)")
     .all();
-  const imageCount = columns.at(-1);
+  const imageCount = columns.find((column) => column.name === "image_count");
+  const allowV9 = options && options.allowV9SubmissionInterval === true;
   const definition = db
     .prepare(
       "SELECT sql FROM sqlite_master WHERE type='table' AND name='submission_queue_groups'",
@@ -29,7 +34,7 @@ function verifyV8Structure(db, errorCode) {
     )
     .get().count;
   if (
-    columns.length !== 8 ||
+    columns.length !== 8 + (allowV9 ? 1 : 0) ||
     !imageCount ||
     imageCount.name !== "image_count" ||
     String(imageCount.type || "").toUpperCase() !== "INTEGER" ||

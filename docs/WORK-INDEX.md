@@ -4,7 +4,7 @@
 
 ## 当前执行入口
 
-当前没有默认复杂执行入口。新的复杂任务必须由用户指向具名计划，或先建立独立计划；不得从已完成 Ticket 自动续跑。
+当前没有待自动续跑的本地计划。不得从已完成 Ticket 或计划自动扩展为投稿、发布、付费或订单链路整改；新的复杂任务需要建立独立执行入口。
 
 ## 等待用户明确外部授权
 
@@ -18,7 +18,9 @@
 
 以下计划保留为历史 evidence，不是默认执行入口：
 
+- [GEO 批量发文：文章生成与列举网投稿修复计划](../.scratch/article-generation-and-lieju-remediation/ARTICLE-GENERATION-AND-LIEJU-REMEDIATION-PLAN.md) — `COMPLETE`；P0–P5、HTTP-only 列举网投稿决策、最终门禁和 bounded closure evidence 见计划 §10。
 - [Ticket 27：投稿结果闭环整改](../.scratch/article-lifecycle-and-submission/issues/27-publication-attention-result-closure-remediation.md) — `COMPLETE`；Combined Audit、remediation、final clean-HEAD gate 与最终边界见 [27-D handoff](../.scratch/article-lifecycle-and-submission/handoffs/27-D-result-closure-integration.md)。
+- [内容生产链路整改与优化计划](../.scratch/content-production/CONTENT-PRODUCTION-REMEDIATION-PLAN.md) — `COMPLETE`；Phase 0–6 已完成，最终集成验证与 bounded re-audit evidence 见计划 §16。
 - [平台账号档案 P1 收敛](../.scratch/platform-account-profile-p1/PLATFORM-ACCOUNT-PROFILE-P1-PLAN.md)
 - [Renderer 冷启动导航修复](../.scratch/archive/renderer-cold-start-navigation-fix/RENDERER-COLD-START-NAVIGATION-FIX-PLAN.md)
 - [Renderer UI 解耦与扩展性](../.scratch/archive/ui-decoupling-and-extensibility/UI-DECOUPLING-AND-EXTENSIBILITY-PLAN.md)
