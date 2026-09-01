@@ -1,6 +1,9 @@
 name: Windows Installer
 
 on:
+  push:
+    branches:
+      - refactor/generation-simplification
   workflow_dispatch:
     inputs:
       ref:
