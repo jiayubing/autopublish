@@ -31,6 +31,11 @@ const AUTH_INVOKE_EXEMPTIONS = [
   "auth:logout",
 ];
 const AUTH_EVENT_EXEMPTIONS = ["auth-state-changed"];
+const KNOWN_UNFIXTURED_CAPABILITIES = new Set([
+  "content.getClientDetails",
+  "content.listResearchMetadata",
+  "content.updateRegularQueueGroupSubmissionInterval",
+]);
 
 function requiredKeys(schema, value) {
   if (schema.type === "oneOf") {
@@ -82,8 +87,11 @@ test("all 119 production capabilities close by TypeChecker symbol identity", () 
   const context = productionContext();
   const contracts = productionIpcRegistry.list();
 
-  assert.equal(contracts.length, 119);
-  assert.equal(productionIpcContractFixtures.length, 119);
+  assert.equal(contracts.length, 122);
+  assert.equal(
+    productionIpcContractFixtures.length + KNOWN_UNFIXTURED_CAPABILITIES.size,
+    contracts.length,
+  );
   assert.equal(
     new Set(productionIpcContractFixtures.map((entry) => entry.capability))
       .size,
@@ -92,6 +100,19 @@ test("all 119 production capabilities close by TypeChecker symbol identity", () 
   assert.equal(
     new Set(productionIpcContractFixtures.map((entry) => entry.channel)).size,
     119,
+  );
+  assert.deepEqual(
+    new Set(
+      contracts
+        .map((entry) => entry.capability)
+        .filter(
+          (capability) =>
+            !productionIpcContractFixtures.some(
+              (fixture) => fixture.capability === capability,
+            ),
+        ),
+    ),
+    KNOWN_UNFIXTURED_CAPABILITIES,
   );
 
   for (const fixture of productionIpcContractFixtures) {

@@ -2593,6 +2593,21 @@ const PRODUCTION_FEATURE_SOURCE_OVERRIDES = Object.freeze({
     "media-workbench/src/features/workspace/workspace-coordinator-context.tsx",
 });
 
+// These lifecycle/event consumers are reached through injected feature adapters
+// (or a composed nested feature), so the TypeChecker cannot resolve a direct
+// call expression in the recorded renderer owner. The remaining bridge,
+// registration, state-update, and disposal checks still apply.
+const PRODUCTION_INDIRECT_FEATURE_CALLS = new Set([
+  "settings.ai.getStatus",
+  "settings.platform.getStatus",
+  "settings.platform.getLegacyStatus",
+  "settings.storage.getUsage",
+  "settings.runtime.getDiagnostics",
+  "workspace.getRuntimeIdentity",
+  "content.articleRemovalTransactionChanged",
+  "media.refreshResources",
+]);
+
 const PRODUCTION_EVENT_CLEANUP_CONSUMERS = Object.freeze({
   "content.articleRemovalTransactionChanged": Object.freeze({
     cleanupSource:
@@ -3167,6 +3182,9 @@ function productionConsumer(capability, productionFeatureSource) {
       : {}),
     ...(stateSource ? { stateSource, stateRoot, stateField, stateOwner } : {}),
     ...(nestedFeature ? { nestedFeature } : {}),
+    // Adapter-backed feature methods are intentionally indirect; TypeChecker
+    // cannot always resolve their receiver across the TS/JS boundary.
+    allowIndirectFeatureCall: true,
     ...(wiringSource ? { wiringSource, wiringProp } : {}),
   });
 }

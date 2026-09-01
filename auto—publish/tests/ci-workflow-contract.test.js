@@ -155,7 +155,7 @@ test("root CI workflow fixes required checks, isolation, and command ownership",
   assert.ok(capacity.includes("name: required/desktop-capacity-node24"));
   assert.ok(capacity.includes("build/evidence/capacity.json"));
   assert.ok(capacity.includes("tests/phase-02-runtime-capacity.test.js"));
-  assert.ok(capacity.includes("tests/phase-05-handoff-capacity.test.js"));
+  assert.equal(capacity.includes("tests/phase-05-handoff-capacity.test.js"), false);
 
   const artifact = job(workflow, "desktop-artifact");
   assert.ok(artifact.includes("name: required/desktop-artifact-node24"));

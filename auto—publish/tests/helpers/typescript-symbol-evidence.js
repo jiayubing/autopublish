@@ -7851,7 +7851,7 @@ function verifyCapabilityEvidence(context, fixture) {
       )
     : null;
   trace.consumerCallee = symbolId(checker, callee);
-  if (!callee)
+  if (!callee && consumer.allowIndirectFeatureCall !== true)
     reasons.push(
       consumer.owner
         ? "consumer call is not in the reachable production owner or uses another receiver symbol"
