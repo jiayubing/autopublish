@@ -28,14 +28,15 @@ function validateConfig(config) {
     throw aiError("AI_CONFIG_INVALID", "AI client configuration is invalid");
   }
   const isLoopback = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]";
+  const pathname = parsed.pathname.replace(/\/+$/, "");
   if ((parsed.protocol !== "https:" && !(parsed.protocol === "http:" && isLoopback)) ||
-      !/^\/v1\/?$/.test(parsed.pathname) || parsed.search || parsed.hash || parsed.username || parsed.password) {
+      !pathname || /\/chat\/completions$/i.test(pathname) || parsed.search || parsed.hash || parsed.username || parsed.password) {
     throw aiError("AI_CONFIG_INVALID", "AI client configuration is invalid");
   }
 
   return {
     apiKey: apiKey.trim(),
-    baseUrl: parsed.origin + "/v1",
+    baseUrl: parsed.origin + pathname,
     model: model.trim(),
     timeoutMs: timeoutMs,
     fetch: input.fetch || global.fetch

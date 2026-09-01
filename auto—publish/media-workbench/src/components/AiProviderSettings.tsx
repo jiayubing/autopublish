@@ -49,10 +49,10 @@ export function validateAiProviderBaseUrl(value: string): string | null {
   }
   const pathname = url.pathname.replace(/\/+$/, "");
   if (/\/chat\/completions$/i.test(pathname)) {
-    return "请填写到 /v1，不要填写 /chat/completions。";
+    return "请填写 Base URL，不要包含 /chat/completions。";
   }
-  if (!/(^|\/)v1$/i.test(pathname)) {
-    return "Base URL 必须填写到 /v1。";
+  if (!pathname) {
+    return "Base URL 必须包含服务路径，例如 /v1 或 /api/v3。";
   }
   return null;
 }
@@ -215,14 +215,14 @@ export default function AiProviderSettings() {
                 baseUrl: event.target.value,
               }))
             }
-            placeholder="https://provider.example/v1"
+            placeholder="https://provider.example/v1 或 https://ark.cn-beijing.volces.com/api/v3"
             readOnly={environmentOverride}
             disabled={busy || loading}
             aria-label="AI Base URL"
           />
           <span className="font-normal text-slate-500">
-            只允许 HTTPS 或 localhost HTTP，填写到 /v1，不要填写
-            /chat/completions。
+            只允许 HTTPS 或 localhost HTTP，填写提供方的 Base URL（例如
+            /v1 或 /api/v3），不要填写 /chat/completions。
           </span>
         </label>
 

@@ -37,6 +37,7 @@ describe("renderer AI provider settings", function () {
     assert.deepEqual(
       validate([
         "https://provider.example/v1",
+        "https://ark.cn-beijing.volces.com/api/v3",
         "http://localhost:8080/v1",
         "http://provider.example/v1",
         "https://provider.example/v1/chat/completions",
@@ -45,8 +46,9 @@ describe("renderer AI provider settings", function () {
       [
         null,
         null,
+        null,
         "Base URL 只允许 HTTPS，或 localhost 的 HTTP。",
-        "请填写到 /v1，不要填写 /chat/completions。",
+        "请填写 Base URL，不要包含 /chat/completions。",
         "Base URL 不应包含账号、密码、查询参数或片段。",
       ],
     );

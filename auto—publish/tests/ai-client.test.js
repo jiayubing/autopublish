@@ -53,6 +53,21 @@ describe("ai client", function() {
     });
   });
 
+  it("preserves a provider-specific v3 base path", async function() {
+    let requestUrl;
+    const client = createAiClient(config({
+      baseUrl: "https://ark.cn-beijing.volces.com/api/v3/",
+      fetch: async function(url) {
+        requestUrl = url;
+        return response(200, { choices: [{ message: { content: "Generated article" } }] });
+      }
+    }));
+
+    await client.complete([{ role: "user", content: "Write" }]);
+
+    assert.equal(requestUrl, "https://ark.cn-beijing.volces.com/api/v3/chat/completions");
+  });
+
   it("validates required configuration and rejects a full completion endpoint", function() {
     ["apiKey", "baseUrl", "model"].forEach(function(field) {
       const value = config();
