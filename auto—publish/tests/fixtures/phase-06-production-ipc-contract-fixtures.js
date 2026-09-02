@@ -675,8 +675,8 @@ const PRODUCTION_CALLERS = Object.freeze({
     featureBinding: "listAccountProfiles",
   }),
   "platform.confirmAccountProfile": Object.freeze({
-    view: "media-workbench/src/components/content/AccountProfileSelector.tsx",
-    viewSymbol: "AccountProfileSelector",
+    view: "media-workbench/src/components/settings/PlatformAccountSettings.tsx",
+    viewSymbol: "PlatformAccountSettings",
     feature:
       "media-workbench/src/features/platform/platform-feature-context.tsx",
     featureSymbol: "usePlatformFeature",
@@ -690,8 +690,8 @@ const PRODUCTION_CALLERS = Object.freeze({
     featureBinding: "confirmAccountProfile",
   }),
   "platform.bindAccountProfile": Object.freeze({
-    view: "media-workbench/src/components/content/AccountProfileSelector.tsx",
-    viewSymbol: "AccountProfileSelector",
+    view: "media-workbench/src/components/settings/PlatformAccountSettings.tsx",
+    viewSymbol: "PlatformAccountSettings",
     feature:
       "media-workbench/src/features/platform/platform-feature-context.tsx",
     featureSymbol: "usePlatformFeature",
@@ -705,8 +705,8 @@ const PRODUCTION_CALLERS = Object.freeze({
     featureBinding: "bindAccountProfile",
   }),
   "platform.deleteAccountProfile": Object.freeze({
-    view: "media-workbench/src/components/content/AccountProfileSelector.tsx",
-    viewSymbol: "AccountProfileSelector",
+    view: "media-workbench/src/components/settings/PlatformAccountSettings.tsx",
+    viewSymbol: "PlatformAccountSettings",
     feature:
       "media-workbench/src/features/platform/platform-feature-context.tsx",
     featureSymbol: "usePlatformFeature",
@@ -720,8 +720,8 @@ const PRODUCTION_CALLERS = Object.freeze({
     featureBinding: "deleteAccountProfile",
   }),
   "platform.openLogin": Object.freeze({
-    view: "media-workbench/src/components/content/AccountProfileSelector.tsx",
-    viewSymbol: "AccountProfileSelector",
+    view: "media-workbench/src/components/settings/PlatformAccountSettings.tsx",
+    viewSymbol: "PlatformAccountSettings",
     feature:
       "media-workbench/src/features/platform/platform-feature-context.tsx",
     featureSymbol: "usePlatformFeature",
@@ -735,8 +735,8 @@ const PRODUCTION_CALLERS = Object.freeze({
     featureBinding: "openLogin",
   }),
   "platform.checkLogin": Object.freeze({
-    view: "media-workbench/src/components/content/AccountProfileSelector.tsx",
-    viewSymbol: "AccountProfileSelector",
+    view: "media-workbench/src/components/settings/PlatformAccountSettings.tsx",
+    viewSymbol: "PlatformAccountSettings",
     feature:
       "media-workbench/src/features/platform/platform-feature-context.tsx",
     featureSymbol: "usePlatformFeature",
