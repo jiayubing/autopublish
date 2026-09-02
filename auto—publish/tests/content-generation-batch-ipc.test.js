@@ -72,11 +72,11 @@ describe("content generation batch IPC", function() {
         tasks: [{ clientId: "client-1", platform: "media", templateId: "guide", materialIds: ["material-1"], researchQueryIds: ["research-1"] }],
       }; },
       createAndStartBatch: async function() { return { id: "batch-1" }; },
-       pauseBatch: async function() { return null; }, abandonBatch: async function() { return { id: "batch-1", status: "abandoned" }; }, continueBatch: async function() { return null; }, resumeBatch: async function() { return null; }, retryFailed: async function() { return null; }, previewCancelPending: async function() { return { pendingCount: 1, canCancel: true }; }, cancelPending: async function() { return { id: "batch-1", status: "completed" }; }, getState: function() { return { status: "idle" }; },
+       pauseBatch: async function() { return null; }, abandonBatch: async function() { return { id: "batch-1", status: "abandoned" }; }, resumeBatch: async function() { return null; }, retryFailed: async function() { return null; }, previewCancelPending: async function() { return { pendingCount: 1, canCancel: true }; }, cancelPending: async function() { return { id: "batch-1", status: "completed" }; }, getState: function() { return { status: "idle" }; },
       subscribe: function() { return function() {}; }
     };
     registerContentGenerationBatchIpc({ ipcMain, contentGenerationBatchService: service });
-     for (const channel of ["content:preview-generation-batch", "content:create-and-start-generation-batch", "content:pause-generation-batch", "content:abandon-generation-batch", "content:continue-generation-batch", "content:resume-generation-batch", "content:retry-failed-generation-batch", "content:preview-cancel-pending-generation-batch", "content:cancel-pending-generation-batch", "content:get-generation-runtime-snapshot"]) assert.ok(handlers.has(channel), channel);
+     for (const channel of ["content:preview-generation-batch", "content:create-and-start-generation-batch", "content:pause-generation-batch", "content:abandon-generation-batch", "content:resume-generation-batch", "content:retry-failed-generation-batch", "content:preview-cancel-pending-generation-batch", "content:cancel-pending-generation-batch", "content:get-generation-runtime-snapshot"]) assert.ok(handlers.has(channel), channel);
     assert.equal(handlers.has("content:stop-generation-batch"), false);
     assert.deepStrictEqual(await handlers.get("content:preview-generation-batch")({}, { templates: [{ platform: "media", templateId: "guide" }] }), { ok: true, data: {
       clientCount: 1,
@@ -186,27 +186,19 @@ describe("content generation batch IPC", function() {
     }
   });
 
-  it("forwards the batch id and configuration confirmation for continuation commands", async function() {
+  it("forwards the batch id and configuration confirmation through the single resume command", async function() {
     const { ipcMain, handlers } = fakeIpc();
     const calls = [];
     const service = {
-      continueBatch: async function(input) { calls.push(["continue", input]); return { id: input.batchId, status: "running" }; },
-      resumeBatch: async function(input) { calls.push(["resume", input]); return { id: input.batchId, status: "running" }; },
-      get: function(batchId) { calls.push(["get", batchId]); return { id: batchId, status: "refreshed" }; },
+      resumeBatch: async function(input) { calls.push(input); return { id: input.batchId, status: "running" }; },
     };
     registerContentGenerationBatchIpc({ ipcMain, contentGenerationBatchService: service });
 
+    assert.equal(handlers.has("content:continue-generation-batch"), false);
     assert.deepStrictEqual(
-      await handlers.get("content:continue-generation-batch")({}, { batchId: "batch-7", confirmConfigChange: true }),
+      await handlers.get("content:resume-generation-batch")({}, { batchId: "batch-7", confirmConfigChange: true }),
       { ok: true, data: { batch: { id: "batch-7", status: "running", clientSources: [], templates: [], tasks: [], counts: undefined } } },
     );
-    assert.deepStrictEqual(
-      await handlers.get("content:resume-generation-batch")({}, { batchId: "batch-7", confirmConfigChange: false }),
-      { ok: true, data: { batch: { id: "batch-7", status: "running", clientSources: [], templates: [], tasks: [], counts: undefined } } },
-    );
-    assert.deepStrictEqual(calls, [
-      ["continue", { batchId: "batch-7", confirmConfigChange: true }],
-      ["resume", { batchId: "batch-7", confirmConfigChange: false }],
-    ]);
+    assert.deepStrictEqual(calls, [{ batchId: "batch-7", confirmConfigChange: true }]);
   });
 });
