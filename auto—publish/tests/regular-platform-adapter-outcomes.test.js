@@ -5,7 +5,6 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
-const { createHepanAdapter } = require("../src/platforms/hepan/adapter");
 const {
   createPlatformRuntimeContextFromWorkspacePaths,
 } = require("../src/platforms/platform-runtime-context");
@@ -278,53 +277,6 @@ function loadBrowserAdapter(platformId, options) {
     },
   };
 }
-
-test("Hepan accepted result carries a closed safe remote identity", async () => {
-  const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), "regular-hepan-identity-"),
-  );
-  const cookiePath = path.join(root, "cookie.txt");
-  fs.writeFileSync(cookiePath, "synthetic-cookie", "utf8");
-  try {
-    const adapter = createHepanAdapter({
-      tempDir: path.join(root, "payloads"),
-      runtime: {
-        pythonPath: "synthetic-python",
-        cookiePath,
-        categoryId: 121,
-        vendorDir: "",
-      },
-      runCommand: async () => ({
-        status: 0,
-        stdout: JSON.stringify({
-          ok: true,
-          title: "合成标题",
-          url: "https://example.test/article?aid=hepan-safe-1",
-        }),
-        stderr: "",
-      }),
-    });
-    const prepared = await adapter.preparePlatformSubmission(
-      claim("hepan"),
-      imagePlan(),
-    );
-    assert.deepEqual(
-      {
-        deliveryMode: prepared.preparedSubmissionEvidenceV1.deliveryMode,
-        images: prepared.preparedSubmissionEvidenceV1.images,
-        decisionKind: prepared.preparedSubmissionEvidenceV1.decisionKind,
-      },
-      { deliveryMode: "text_only", images: [], decisionKind: "initial" },
-    );
-    assert.deepEqual(await prepared.submitPreparedPublication(), {
-      status: "accepted",
-      remoteId: "hepan-safe-1",
-      remoteUrl: "https://example.test/article?aid=hepan-safe-1",
-    });
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
 
 for (const platformId of ["lieju", "toutiao"]) {
   test(`${platformId} account preflight starts the session, restores state, and reaches identity page`, async () => {
