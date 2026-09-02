@@ -443,7 +443,7 @@ test("Lieju browser runtime is reserved for explicit login session actions", () 
     );
     assert.equal(
       loaded.commands.some(
-        (args) => args[0] === "goto" && args[1] === "https://www.lieju.com/login",
+        (args) => args[0] === "goto" && args[1] === "https://www.lieju.com/login/",
       ),
       true,
     );
