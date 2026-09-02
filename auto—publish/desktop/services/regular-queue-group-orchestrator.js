@@ -409,21 +409,60 @@ function createRegularQueueGroupOrchestrator(options) {
   }
 
   async function startGroup(input) {
-    const preserveManualPause =
-      Boolean(input && input.preserveManualPause === true);
     const group = transitions.setRegularQueueGroupRunIntent({
       queueGroupId: input && input.queueGroupId,
       running: true,
-      ...(preserveManualPause ? { preserveManualPause: true } : {}),
+    });
+    notifyDataInvalidated("REGULAR_QUEUE_GROUP_RUN_INTENT_CHANGED");
+    return runGroup(group.queueGroupId);
+  }
+
+  function kickGroup(input) {
+    const group = transitions.setRegularQueueGroupRunIntent({
+      queueGroupId: input && input.queueGroupId,
+      running: true,
+      preserveManualPause: true,
     });
     if (group.pauseIntent !== "none")
       return Object.freeze({
         queueGroupId: group.queueGroupId,
-        skipped: true,
+        started: false,
         reasonCode: "REGULAR_QUEUE_GROUP_MANUALLY_PAUSED",
       });
+
     notifyDataInvalidated("REGULAR_QUEUE_GROUP_RUN_INTENT_CHANGED");
-    return runGroup(group.queueGroupId);
+    const existing = activeGroups.get(group.queueGroupId);
+    if (existing) {
+      void existing.finally(function () {
+        const latest = snapshot().find(
+          (candidate) => candidate.queueGroupId === group.queueGroupId,
+        );
+        if (
+          latest &&
+          latest.pauseIntent === "none" &&
+          latest.remaining.length > 0 &&
+          !activeGroups.has(group.queueGroupId)
+        ) {
+          void runGroup(group.queueGroupId).catch(function () {
+            diagnose("REGULAR_AUTO_START_FAILED", "auto-start-rerun");
+          });
+        }
+      });
+      return Object.freeze({
+        queueGroupId: group.queueGroupId,
+        started: true,
+        alreadyRunning: true,
+      });
+    }
+
+    void runGroup(group.queueGroupId).catch(function () {
+      diagnose("REGULAR_AUTO_START_FAILED", "auto-start");
+    });
+    return Object.freeze({
+      queueGroupId: group.queueGroupId,
+      started: true,
+      alreadyRunning: false,
+    });
   }
 
   async function startAll() {
@@ -469,6 +508,7 @@ function createRegularQueueGroupOrchestrator(options) {
     snapshot,
     startAll,
     startGroup,
+    kickGroup,
   });
 }
 
