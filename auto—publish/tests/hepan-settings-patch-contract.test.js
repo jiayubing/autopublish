@@ -3,6 +3,9 @@ const assert = require("node:assert/strict");
 
 const { createHepanSettingsAdapter } = require("../desktop/services/platform-settings/hepan-settings-adapter");
 const { createPlatformSettingsService } = require("../desktop/services/platform-settings-service");
+const {
+  productionIpcRegistry,
+} = require("../desktop/ipc/contracts/production-registry");
 
 function createStore(initial) {
   let value = initial ? Object.assign({}, initial) : null;
@@ -50,6 +53,59 @@ describe("Hepan GEO API settings patch contract", () => {
     const result = await value.service.test("hepan", { uid: 54321 });
     assert.equal(result.account.uid, "54321");
     assert.deepEqual(value.store.read(), before);
+  });
+
+  it("production IPC accepts GEO API draft and status contracts", async () => {
+    const value = fixture();
+
+    const saveContract = productionIpcRegistry.byChannel("platform-settings:save");
+    const savePayload = {
+      platformId: "hepan",
+      draft: { uid: 2093208, password: "fixture-password" },
+    };
+    const encodedSave = productionIpcRegistry.encodeRequest(
+      saveContract,
+      savePayload,
+    );
+    assert.deepEqual(
+      productionIpcRegistry.parseRequest(saveContract, encodedSave),
+      savePayload,
+    );
+
+    const getStatusContract = productionIpcRegistry.byChannel(
+      "platform-settings:get-status",
+    );
+    const status = value.service.getStatus("hepan");
+    const encodedStatus = productionIpcRegistry.success(getStatusContract, {
+      platformId: "hepan",
+      status,
+    });
+    assert.deepEqual(
+      productionIpcRegistry.parseSuccess(getStatusContract, encodedStatus),
+      { platformId: "hepan", status },
+    );
+
+    const testContract = productionIpcRegistry.byChannel(
+      "platform-settings:test",
+    );
+    const tested = await value.service.test("hepan", {});
+    const encodedTest = productionIpcRegistry.success(testContract, {
+      platformId: "hepan",
+      result: tested,
+    });
+    assert.deepEqual(
+      productionIpcRegistry.parseSuccess(testContract, encodedTest),
+      { platformId: "hepan", result: tested },
+    );
+
+    assert.throws(
+      () =>
+        productionIpcRegistry.encodeRequest(saveContract, {
+          platformId: "hepan",
+          draft: { pythonPath: "python.exe", cookie: "legacy-cookie" },
+        }),
+      { code: "IPC_UNKNOWN_FIELD" },
+    );
   });
 
   it("keeps environment configuration read-only", async () => {
