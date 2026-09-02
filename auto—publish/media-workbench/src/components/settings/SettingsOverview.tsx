@@ -32,12 +32,10 @@ const EMPTY_MEDIA: MediaProviderStatus = {
 const EMPTY_HEPAN: HepanProviderStatus = {
   source: "application",
   configured: false,
-  pythonConfigured: false,
-  cookieConfigured: false,
-  categoryId: 0,
-  vendorConfigured: false,
-  bundledVendorAvailable: false,
-  siteOrigin: "",
+  uid: 0,
+  uidConfigured: false,
+  passwordConfigured: false,
+  apiUrl: "https://www.hepan.com/geoapi/api.php",
   lastTest: null,
 };
 
@@ -99,7 +97,7 @@ export default function SettingsOverview({
       id: "hepan",
       title: "蓝色河畔",
       detail: hepan.configured
-        ? `已配置 · 栏目 ${hepan.categoryId}`
+        ? `已配置 · UID ${hepan.uid}`
         : "尚未配置",
       configured: hepan.configured,
     },
