@@ -76,7 +76,6 @@ const DEPENDENCY_RULES = [
     allowlist: new Map([
       ["src/platforms/lieju/adapter.js", 1],
       ["src/platforms/media/adapter.js", 1],
-      ["src/platforms/toutiao/adapter.js", 1],
     ]),
     forbidden: (specifier) => /^(?:scripts\/config)(?:\.js)?$/.test(specifier),
   },
