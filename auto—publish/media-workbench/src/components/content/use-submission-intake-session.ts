@@ -102,6 +102,51 @@ export type SubmissionIntakeSessionOptions = SubmissionIntakeCommands & {
   onCommitted: () => void;
 };
 
+type RegularTargetPreference = {
+  platformId: string;
+  accountProfileId: string;
+};
+
+const REGULAR_TARGET_PREFERENCE_KEY =
+  "auto-publish:regular-submission-target";
+
+function loadRegularTargetPreference(): RegularTargetPreference {
+  if (typeof localStorage === "undefined")
+    return { platformId: "", accountProfileId: "" };
+  try {
+    const value = JSON.parse(
+      localStorage.getItem(REGULAR_TARGET_PREFERENCE_KEY) || "null",
+    ) as Partial<RegularTargetPreference> | null;
+    return {
+      platformId: typeof value?.platformId === "string" ? value.platformId : "",
+      accountProfileId:
+        typeof value?.accountProfileId === "string"
+          ? value.accountProfileId
+          : "",
+    };
+  } catch (_) {
+    return { platformId: "", accountProfileId: "" };
+  }
+}
+
+function saveRegularTargetPreference(
+  preference: RegularTargetPreference,
+): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    if (!preference.platformId) {
+      localStorage.removeItem(REGULAR_TARGET_PREFERENCE_KEY);
+      return;
+    }
+    localStorage.setItem(
+      REGULAR_TARGET_PREFERENCE_KEY,
+      JSON.stringify(preference),
+    );
+  } catch (_) {
+    // Preference persistence is optional; submission remains available.
+  }
+}
+
 function initialState(
   feedback: SubmissionIntakeFeedback | null = null,
 ): SessionState {
@@ -215,11 +260,14 @@ export function useSubmissionIntakeSession({
     (articleRefs: ReadonlyArray<ArticleSelection>) => {
       if (!articleRefs.length || mutationPending()) return;
       invalidateAsync();
+      const preferredTarget = loadRegularTargetPreference();
       setState({
         ...initialState(),
         open: true,
         articleRefs: articleRefs.map((article) => ({ ...article })),
         selectionKey: keyOf(articleRefs),
+        platformId: preferredTarget.platformId,
+        accountProfileId: preferredTarget.accountProfileId,
       });
     },
     [invalidateAsync, mutationPending],
@@ -250,6 +298,10 @@ export function useSubmissionIntakeSession({
     (platformId: string) => {
       if (mutationPending()) return;
       invalidateAsync();
+      saveRegularTargetPreference({
+        platformId,
+        accountProfileId: "",
+      });
       setState((current) => ({
         ...current,
         platformId,
@@ -265,12 +317,18 @@ export function useSubmissionIntakeSession({
     (accountProfileId: string) => {
       if (mutationPending()) return;
       invalidateAsync();
-      setState((current) => ({
-        ...current,
-        accountProfileId,
-        error: "",
-        pending: null,
-      }));
+      setState((current) => {
+        saveRegularTargetPreference({
+          platformId: current.platformId,
+          accountProfileId,
+        });
+        return {
+          ...current,
+          accountProfileId,
+          error: "",
+          pending: null,
+        };
+      });
     },
     [invalidateAsync, mutationPending],
   );
