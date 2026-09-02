@@ -1,139 +1,78 @@
 "use strict";
 
-const path = require("node:path");
-
+const crypto = require("node:crypto");
 const domain = require("../../domain");
-const {
-  reportDiagnostic,
-} = require("../../diagnostics/diagnostic-producer");
-const {
-  cleanupExpiredHepanPayloads,
-  createHepanAdapter,
-} = require("./adapter");
+const { createHepanGeoApiClient } = require("./api-client");
+const { toHepanBbcode } = require("./bbcode");
 
-function fail(code) {
-  const error = new Error(code);
-  error.code = code;
-  return error;
-}
-
+function fail(code) { const error = new Error(code); error.code = code; return error; }
 function requireSettingsService(provider) {
   const service = typeof provider === "function" ? provider() : null;
-  if (!service) throw fail("HEPAN_CONFIG_NOT_SET");
+  if (!service || typeof service.getAdapterForRuntime !== "function") throw fail("HEPAN_CONFIG_NOT_SET");
   return service;
 }
-
-function reportTemporaryCredentialCleanupFailure() {
-  reportDiagnostic({
-    code: "HEPAN_TEMPORARY_CLEANUP_FAILED",
-    module: "hepan-settings-backed-runtime",
-    category: "storage",
-    operationId: "temporary-credential-cleanup",
-    metadata: { action: "cleanup" },
-  });
+function idempotencyKey(attemptId) {
+  return `autopublish-${crypto.createHash("sha256").update(String(attemptId), "utf8").digest("hex").slice(0, 40)}`;
+}
+function validAid(value) { return Number.isSafeInteger(value) && value > 0; }
+function mapPublishError(error) {
+  const code = error && error.code;
+  if (["HEPAN_REQUEST_INVALID", "HEPAN_CONTENT_REJECTED"].includes(code))
+    return Object.freeze({ status: "article_rejected", errorCode: code === "HEPAN_CONTENT_REJECTED" ? "HEPAN_CONTENT_REJECTED" : "REGULAR_CONTENT_INVALID" });
+  if (["HEPAN_CREDENTIALS_INVALID", "HEPAN_PLAN_UNAVAILABLE", "HEPAN_QUOTA_EXHAUSTED", "HEPAN_PUBLISH_DISABLED", "HEPAN_RATE_LIMITED", "HEPAN_CONFIG_NOT_SET"].includes(code))
+    return Object.freeze({ status: "group_blocked", errorCode: code, articleRecoverable: true });
+  return Object.freeze({ status: "uncertain", errorCode: typeof code === "string" && /^HEPAN_[A-Z0-9_]+$/.test(code) ? code : "REMOTE_RESULT_UNKNOWN" });
 }
 
 function createHepanSettingsBackedRuntime(options) {
   const value = options || {};
   const getSettingsService = value.getPlatformSettingsService;
-  const createPublicationAdapter = value.createHepanAdapter || createHepanAdapter;
-  const cleanupPayloads =
-    value.cleanupExpiredHepanPayloads || cleanupExpiredHepanPayloads;
-  const tempRoot = value.paths && value.paths.tmp;
-  const payloadRoot =
-    typeof tempRoot === "string" ? path.join(tempRoot, "hepan") : null;
-
+  const createClient = value.createHepanGeoApiClient || createHepanGeoApiClient;
+  const apiClient = createClient(value.apiClientOptions || {});
+  function runtimeConfig() {
+    const runtime = requireSettingsService(getSettingsService).getAdapterForRuntime("hepan");
+    if (!runtime || !runtime.config) throw fail("HEPAN_CONFIG_NOT_SET");
+    return runtime.config;
+  }
   return Object.freeze({
     regularSubmission: Object.freeze({
-      async preparePlatformSubmission(claim, imagePlan) {
-        if (typeof getSettingsService !== "function" || !payloadRoot)
-          throw fail("HEPAN_SETTINGS_RUNTIME_DEPENDENCIES_REQUIRED");
-        const settingsService = requireSettingsService(getSettingsService);
-        if (typeof settingsService.getAdapterForRuntime !== "function")
-          throw fail("HEPAN_CONFIG_NOT_SET");
-        const runtime = settingsService.getAdapterForRuntime("hepan");
-        if (
-          !runtime.adapter ||
-          typeof runtime.adapter.createTemporaryCookie !== "function"
-        )
-          throw fail("HEPAN_CONFIG_NOT_SET");
-        if (typeof runtime.adapter.cleanupExpiredTemporaryFiles === "function")
-          runtime.adapter.cleanupExpiredTemporaryFiles();
-        cleanupPayloads({ tempDir: payloadRoot });
-        const preparedRuntime = {
-          pythonPath: runtime.config.pythonPath,
-          cookiePath: "",
-          categoryId: runtime.config.categoryId,
-          vendorDir: runtime.config.vendorDir || "",
-        };
-        const adapter = createPublicationAdapter({
-          tempDir: payloadRoot,
-          getRuntime: function () {
-            return preparedRuntime;
-          },
-        });
-        const prepared = await adapter.preparePlatformSubmission(
-          claim,
-          imagePlan,
-        );
+      async preparePlatformSubmission(claim) {
+        const evidence = domain.createTextOnlyPreparedSubmissionEvidenceV1(claim);
+        if ([...evidence.title].length > 80) throw fail("REGULAR_CONTENT_INVALID");
+        const message = toHepanBbcode(evidence.body);
+        if (!message) throw fail("REGULAR_CONTENT_INVALID");
+        const publishInput = Object.freeze({ subject: evidence.title, message, idempotencyKey: idempotencyKey(evidence.attemptId) });
         let consumed = false;
         return domain.createPreparedSubmission({
-          preparedSubmissionEvidenceV1: prepared.preparedSubmissionEvidenceV1,
-          submitPreparedPublication: async function () {
-            if (consumed)
-              return Object.freeze({
-                status: "uncertain",
-                errorCode: "REMOTE_RESULT_UNKNOWN",
-              });
+          preparedSubmissionEvidenceV1: evidence,
+          async submitPreparedPublication() {
+            if (consumed) return Object.freeze({ status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" });
             consumed = true;
-            const temporaryCookie = runtime.adapter.createTemporaryCookie(
-              runtime.config,
-            );
-            preparedRuntime.cookiePath = temporaryCookie.cookiePath;
             try {
-              return await prepared.submitPreparedPublication();
-            } finally {
-              preparedRuntime.cookiePath = "";
-              try {
-                temporaryCookie.cleanup();
-              } catch (_) {
-                reportTemporaryCredentialCleanupFailure();
-              }
-            }
+              const response = await apiClient.publish(runtimeConfig(), publishInput);
+              const data = response.data || {};
+              if (!validAid(data.aid)) return Object.freeze({ status: "uncertain", errorCode: "HEPAN_GEO_API_PROTOCOL_ERROR" });
+              const remoteId = String(data.aid);
+              const remoteUrl = typeof data.url === "string" && data.url.trim() ? data.url.trim() : undefined;
+              if (data.review_status === "published") return Object.freeze({ status: "accepted", remoteId, ...(remoteUrl ? { remoteUrl } : {}) });
+              if (["pending", "draft"].includes(data.review_status)) return Object.freeze({ status: "remote_pending", errorCode: "HEPAN_REMOTE_PENDING", remoteId });
+              if (data.review_status === "rejected") return Object.freeze({ status: "article_rejected", errorCode: "HEPAN_CONTENT_REJECTED" });
+              if (data.review_status === "deleted") return Object.freeze({ status: "article_rejected", errorCode: "HEPAN_REMOTE_DELETED" });
+              return Object.freeze({ status: "uncertain", errorCode: "HEPAN_REVIEW_STATUS_UNKNOWN" });
+            } catch (error) { return mapPublishError(error); }
           },
         });
       },
     }),
     accountInspection: Object.freeze({
-      prepare: async function () {},
-      inspect: async function () {
-        try {
-          const settingsService = requireSettingsService(getSettingsService);
-          if (typeof settingsService.test !== "function")
-            return Object.freeze({ verified: false });
-          const result = await settingsService.test("hepan", {});
-          const account = result && result.account;
-          if (
-            !result ||
-            result.ok !== true ||
-            !account ||
-            typeof account.uid !== "string" ||
-            !/^\d{1,20}$/.test(account.uid) ||
-            typeof account.displayName !== "string" ||
-            !account.displayName.trim()
-          )
-            return Object.freeze({ verified: false });
-          return Object.freeze({
-            verified: true,
-            remoteAccountId: account.uid,
-            displayName: account.displayName,
-          });
-        } catch (_) {
-          return Object.freeze({ verified: false });
-        }
+      async prepare() {},
+      async inspect() {
+        const response = await apiClient.status(runtimeConfig());
+        const data = response.data || {};
+        if (!validAid(data.uid)) return Object.freeze({ verified: false });
+        return Object.freeze({ verified: true, remoteAccountId: String(data.uid), displayName: `蓝色河畔 UID ${data.uid}` });
       },
     }),
   });
 }
-
-module.exports = { createHepanSettingsBackedRuntime };
+module.exports = { createHepanSettingsBackedRuntime, idempotencyKey };
