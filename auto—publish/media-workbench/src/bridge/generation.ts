@@ -97,10 +97,6 @@ type GenerationContentApi = {
     batchId: string;
     confirmed: true;
   }) => Promise<GenerationIpcResponse<{ batch: GenerationBatch | null }>>;
-  continueGenerationBatch: (input: {
-    batchId: string;
-    confirmConfigChange?: boolean;
-  }) => Promise<GenerationIpcResponse<{ batch: GenerationBatch }>>;
   resumeGenerationBatch: (input: {
     batchId: string;
     confirmConfigChange?: boolean;
@@ -252,17 +248,6 @@ export async function resumeGenerationBatch(input: {
   return callGeneration(
     (api) => requireBridgeMethod(api.resumeGenerationBatch)(input),
     "Unable to resume generation batch",
-    { map: (data) => data.batch },
-  );
-}
-
-export async function continueGenerationBatch(input: {
-  batchId: string;
-  confirmConfigChange?: boolean;
-}): Promise<GenerationBatch> {
-  return callGeneration(
-    (api) => requireBridgeMethod(api.continueGenerationBatch)(input),
-    "Unable to continue generation batch",
     { map: (data) => data.batch },
   );
 }

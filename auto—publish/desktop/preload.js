@@ -529,12 +529,6 @@ const api = {
     pauseGenerationBatch: function (input) {
       return ipcRenderer.invoke("content:pause-generation-batch", input || {});
     },
-    continueGenerationBatch: function (input) {
-      return ipcRenderer.invoke(
-        "content:continue-generation-batch",
-        input || {},
-      );
-    },
     resumeGenerationBatch: function (input) {
       return ipcRenderer.invoke("content:resume-generation-batch", input || {});
     },

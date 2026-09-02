@@ -114,7 +114,7 @@ function makeHarness(options) {
 
 async function waitForBatch(service, batchId, predicate) {
   for (let attempt = 0; attempt < 100; attempt += 1) {
-    const batch = await service.get(batchId);
+    const batch = await service.getBatch(batchId);
     if (predicate(batch) && !["running", "pausing", "stopping"].includes(service.getState().status)) return batch;
     await new Promise(function(resolve) { setTimeout(resolve, 5); });
   }
@@ -161,7 +161,7 @@ describe("content generation batch service", function() {
         return { generateArticle: async function(input) { await deps.materialStore.getSelectedMaterials(input.clientId, input.materialIds); return { id: "article-" + input.templateId, clientId: input.clientId, title: "Title", content: "Body", status: "generated" }; } };
       },
     });
-    const batch = await harness.service.startBatch({ clientIds: ["c1"], templates: [{ platform: "ctrip", templateId: "one" }, { platform: "ctrip", templateId: "two" }] });
+    const batch = await harness.service.createAndStartBatch({ clientIds: ["c1"], templates: [{ platform: "ctrip", templateId: "one" }, { platform: "ctrip", templateId: "two" }] });
     await waitForBatch(harness.service, batch.id, function(value) { return value.status === "completed"; });
     assert.equal(selectedMaterialReads, 1);
   });
@@ -249,7 +249,7 @@ describe("content generation batch service", function() {
       assert.equal(pending.status, "pending");
       assert.equal(pending.tasks[0].attempts, 0);
 
-      const accepted = await service.continueBatch({ batchId: pending.id });
+      const accepted = await service.resumeBatch({ batchId: pending.id });
       assert.equal(accepted.status, "running");
       const batch = await waitForBatch(service, pending.id, function(value) { return value.status === "completed"; });
       assert.equal(batch.status, "completed");
@@ -289,7 +289,7 @@ describe("content generation batch service", function() {
 
     try {
       const pending = await service.createBatch({ clientIds: ["c1"], templates: [{ platform: "ctrip", templateId: "guide" }] });
-      const accepted = await service.continueBatch({ batchId: pending.id });
+      const accepted = await service.resumeBatch({ batchId: pending.id });
       assert.equal(accepted.status, "running");
       const result = await waitForBatch(service, pending.id, function(value) { return value.status === "failed"; });
       assert.equal(result.status, "failed");
@@ -378,7 +378,7 @@ describe("content generation batch service", function() {
     });
     service = harness.service;
     service.subscribe(function(event) { events.push(event); });
-    const batch = await service.startBatch({ clientIds: ["c1"], templates: [{ platform: "ctrip", templateId: "guide" }] });
+    const batch = await service.createAndStartBatch({ clientIds: ["c1"], templates: [{ platform: "ctrip", templateId: "guide" }] });
     assert.equal(batch.status, "running");
     for (let attempt = 0; attempt < 20 && !events.some((event) => event.status === "interrupted"); attempt += 1)
       await new Promise((resolve) => setTimeout(resolve, 5));
@@ -405,14 +405,14 @@ describe("content generation batch service", function() {
     assert.equal(accepted.status, "running");
     assert.ok(Date.now() - startedAt < 40);
     assert.equal(harness.service.getState().status, "running");
-    await assert.rejects(harness.service.continueBatch({ batchId: batch.id }), function(error) { return error.code === "GENERATION_BATCH_BUSY"; });
+    await assert.rejects(harness.service.resumeBatch({ batchId: batch.id }), function(error) { return error.code === "GENERATION_BATCH_BUSY"; });
     await waitForBatch(harness.service, batch.id, function(value) { return value.status === "completed"; });
     await harness.service.dispose();
   });
 
   it("revalidates sources, reads them at task start, saves generated provenance, and marks the task succeeded", async function() {
     const { service, calls, savedArticles } = makeHarness();
-    const batch = await service.startBatch({ clientIds: ["c1"], templates: [{ platform: "ctrip", templateId: "guide" }] });
+    const batch = await service.createAndStartBatch({ clientIds: ["c1"], templates: [{ platform: "ctrip", templateId: "guide" }] });
     assert.equal(batch.status, "running");
     const completed = await waitForBatch(service, batch.id, function(value) { return value.status === "completed"; });
     assert.deepStrictEqual(calls.run, [[batch.id, "pending"]]);
@@ -438,7 +438,7 @@ describe("content generation batch service", function() {
         contentStore: missingArticleStore,
         runnerFactory: function(options) { return createGenerationBatchRunner(options); }
       });
-      const generated = await missing.service.startBatch({ clientIds: ["c1"], templates: [{ platform: "ctrip", templateId: "guide" }] });
+      const generated = await missing.service.createAndStartBatch({ clientIds: ["c1"], templates: [{ platform: "ctrip", templateId: "guide" }] });
 
       assert.equal(generated.status, "running");
       await waitForBatch(missing.service, generated.id, function(value) { return value.status === "completed"; });
@@ -463,7 +463,7 @@ describe("content generation batch service", function() {
       }
     });
 
-    const accepted = await service.startBatch({ clientIds: ["c1"], templates: [{ platform: "ctrip", templateId: "guide" }] });
+    const accepted = await service.createAndStartBatch({ clientIds: ["c1"], templates: [{ platform: "ctrip", templateId: "guide" }] });
     assert.equal(accepted.status, "running");
     const failed = await waitForBatch(service, accepted.id, function(value) { return value.status === "failed"; });
     assert.equal(failed.status, "failed");
@@ -476,8 +476,8 @@ describe("content generation batch service", function() {
     const batch = await first.service.createBatch({ clientIds: ["c1"], templates: [{ platform: "ctrip", templateId: "guide" }] });
     assert.deepStrictEqual(first.calls.run, []);
     first.setFingerprint("fp-2");
-    await assert.rejects(first.service.continueBatch({ batchId: batch.id }), function(error) { return error.code === "GENERATION_AI_CONFIG_CHANGED"; });
-    const accepted = await first.service.continueBatch({ batchId: batch.id, confirmConfigChange: true });
+    await assert.rejects(first.service.resumeBatch({ batchId: batch.id }), function(error) { return error.code === "GENERATION_AI_CONFIG_CHANGED"; });
+    const accepted = await first.service.resumeBatch({ batchId: batch.id, confirmConfigChange: true });
     assert.equal(accepted.status, "running");
     await waitForBatch(first.service, batch.id, function(value) { return value.status === "completed"; });
   });
@@ -487,8 +487,8 @@ describe("content generation batch service", function() {
     const events = [];
     const unsubscribe = service.subscribe(function(event) { events.push(event); });
     const batch = await service.createBatch({ clientIds: ["c1"], templates: [{ platform: "ctrip", templateId: "guide" }] });
-    assert.equal((await service.get(batch.id)).id, batch.id);
-    assert.equal((await service.list()).length, 1);
+    assert.equal((await service.getBatch(batch.id)).id, batch.id);
+    assert.equal((await service.listBatches()).length, 1);
     const resumed = await service.resumeBatch({ batchId: batch.id });
     assert.equal(resumed.status, "running");
     await waitForBatch(service, batch.id, function(value) { return value.status === "completed"; });

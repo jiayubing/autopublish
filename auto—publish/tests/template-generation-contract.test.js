@@ -69,12 +69,12 @@ describe("template catalog to generation contract", function() {
           (error) => error.code === "GENERATION_TEMPLATE_INVALID" && error.platformId === "broken" && error.templateId === "broken" && !String(error.message).includes(root),
         );
 
-        const accepted = await service.startBatch({ clientIds: ["client-1"], templates: [{ platform: "custom", templateId: "body-only" }] });
+        const accepted = await service.createAndStartBatch({ clientIds: ["client-1"], templates: [{ platform: "custom", templateId: "body-only" }] });
         assert.equal(accepted.status, "running");
         let batch = accepted;
         for (let attempt = 0; attempt < 100 && batch.status !== "completed"; attempt += 1) {
           await new Promise((resolve) => setTimeout(resolve, 5));
-          batch = await service.get(accepted.id);
+          batch = await service.getBatch(accepted.id);
         }
         assert.equal(batch.status, "completed");
         assert.equal(batch.tasks[0].status, "succeeded");

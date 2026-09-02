@@ -55,13 +55,13 @@ test("two platform fixtures and the fake publisher validate the common contract 
     attemptId: "t1",
     target: {
       kind: "platform",
-      platformId: "toutiao",
+      platformId: "lieju",
       accountProfileId: "acct1",
     },
     title: "title",
     body: "body",
   });
-  const fixtures = ["toutiao", "lieju"].map((platformId) =>
+  const fixtures = ["lieju", "hepan"].map((platformId) =>
     validatePublisher(
       createFakePublisher({
         outcome: {
@@ -81,17 +81,16 @@ test("two platform fixtures and the fake publisher validate the common contract 
       (await fixture.publish(input, new AbortController().signal)).status,
       "failed",
     );
-  for (const platformId of ["toutiao", "lieju"]) {
+  for (const platformId of ["lieju", "hepan"]) {
     const platform = require(`../src/platforms/${platformId}/platform`);
     assert.equal(platform.definition.id, platformId);
     assert.equal(platform.definition.publicationTargetKind, "platform");
     const loaded = platform.createPlatform();
-    if (platformId === "lieju")
-      assert.equal(loaded.legacyQueue, undefined);
-    else assert.equal(typeof loaded.legacyQueue.publish, "function");
-    if (platformId === "lieju")
-      assert.equal(typeof loaded.regularSubmission.preparePlatformSubmission, "function");
-    else assert.equal(loaded.regularSubmission, undefined);
+    assert.equal(loaded.legacyQueue, undefined);
+    assert.equal(
+      typeof loaded.regularSubmission.preparePlatformSubmission,
+      "function",
+    );
   }
   assert.equal(
     parsePublishOutcome(
