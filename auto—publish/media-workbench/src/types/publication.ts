@@ -422,6 +422,7 @@ export interface RegularQueueAdmissionInput {
   articleRefs: ArticleSelection[];
   platformId: string;
   accountProfileId: string;
+  autoStart?: boolean;
   queueConfig?: {
     queueGroupId?: string;
     imageCount?: number;
