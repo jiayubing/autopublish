@@ -9,13 +9,11 @@ interface GenerationBatchDetailProps {
   busy: {
     pause: boolean;
     resume: boolean;
-    continue: boolean;
     abandon: boolean;
     retry: boolean;
   };
   onPause: () => void;
   onResume: () => void;
-  onContinue: () => void;
   onAbandon: () => void;
   onRetry: () => void;
   onPreviewCancelPending: (input: { batchId: string }) => Promise<{ canCancel: boolean; pendingCount: number; runningCount: number }>;
@@ -24,7 +22,7 @@ interface GenerationBatchDetailProps {
   onViewBatchArticles?: (batchId: string, clientId?: string) => void;
 }
 
-export default function GenerationBatchDetail({ batch, state, busy, onPause, onResume, onContinue, onAbandon, onRetry, onPreviewCancelPending, onCancelPending, onStartNew, onViewBatchArticles }: GenerationBatchDetailProps) {
+export default function GenerationBatchDetail({ batch, state, busy, onPause, onResume, onAbandon, onRetry, onPreviewCancelPending, onCancelPending, onStartNew, onViewBatchArticles }: GenerationBatchDetailProps) {
   const { confirm } = useConfirmation();
   const [cancelledBatch, setCancelledBatch] = useState<GenerationBatch | null>(null);
   const [cancelBusy, setCancelBusy] = useState(false);
@@ -36,7 +34,6 @@ export default function GenerationBatchDetail({ batch, state, busy, onPause, onR
   const active = effectiveStatus === 'running' || effectiveStatus === 'pausing';
   const running = effectiveStatus === 'running';
   const unfinished = counts.pending > 0 || counts.failed > 0 || counts.interrupted > 0;
-  const canContinue = !active && unfinished;
   const showCostWarning = active || (['paused', 'abandoned'].includes(batch.status) && unfinished);
   const failed = counts.failed > 0;
   const terminal = effectiveStatus === 'completed' || effectiveStatus === 'abandoned';
@@ -60,7 +57,6 @@ export default function GenerationBatchDetail({ batch, state, busy, onPause, onR
     <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${counts.total ? Math.round((counts.succeeded / counts.total) * 100) : 0}%` }} /></div>
     {showCostWarning && <div data-testid="batch-cost-warning" className="mt-3 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">AI 请求可能已产生费用；已发出的请求仍按真实结果记录。</div>}
     {cancelError && <div role="alert" className="mt-2 rounded border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{cancelError}</div>}
-    {canContinue && <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded border border-amber-100 bg-amber-50 p-2 text-xs text-amber-800"><span>批次尚有未完成任务，确认后继续执行。</span><button type="button" onClick={onContinue} disabled={busy.continue} className="rounded bg-amber-700 px-2 py-1 text-white">继续未完成</button></div>}
     {terminal && onStartNew && <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700"><span>该批次已结束，可以开始新的批量生成。</span><button type="button" onClick={onStartNew} disabled={anyCommandBusy} className="rounded bg-slate-900 px-2 py-1 text-white">新建批量生成</button></div>}
     {terminal && onViewBatchArticles && displayedBatch.tasks.some((task) => task.status === 'succeeded' && task.articleId) && <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded border border-blue-100 bg-blue-50 p-2 text-xs"><span>成功 {counts.succeeded} 篇，可在文章库查看本批次文章。</span><button type="button" onClick={() => onViewBatchArticles(displayedBatch.id, displayedBatch.tasks.find((task) => task.status === 'succeeded' && task.articleId)?.clientId)} disabled={anyCommandBusy} className="rounded bg-blue-700 px-2 py-1 text-white disabled:opacity-40">查看本批次文章</button></div>}
     <div className="generation-batch-task-list mt-4 max-h-56 space-y-1 overflow-y-auto">{displayedBatch.tasks.map((task) => <div key={task.id} className="flex flex-wrap items-center justify-between gap-2 rounded border border-slate-100 px-2 py-2 text-xs"><span className="flex min-w-0 items-center gap-2 truncate"><span className="truncate">{task.clientId} · {task.platform} · {task.templateId}</span></span><span className={task.status === 'failed' ? 'text-rose-600' : task.status === 'succeeded' ? 'text-emerald-600' : task.status === 'cancelled' ? 'text-slate-400' : 'text-slate-500'}>{task.status}{task.error?.message ? ` · ${task.error.message}` : ''}</span></div>)}</div>
