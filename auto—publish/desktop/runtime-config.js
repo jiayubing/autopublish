@@ -59,8 +59,8 @@ function loadWorkspaceEnvironment(workspaceRoot) {
 
   const values = dotenv.parse(fs.readFileSync(envPath, "utf8"));
   Object.keys(values).forEach(function(key) {
-    // Tool paths are non-secret compatibility settings. Provider credentials and
-    // cookie paths are legacy-only and must never be loaded from a content library.
+    // Tool paths are non-secret compatibility settings and are the only values
+    // that may be loaded from a content library environment file.
     if (!SUPPORTED_RUNTIME_CONFIG_KEYS.includes(key)) return;
     if (process.env[key] !== undefined) return;
     process.env[key] = values[key];
@@ -71,8 +71,7 @@ function loadWorkspaceEnvironment(workspaceRoot) {
 function validateRuntimeConfiguration(environment) {
   const env = environment || process.env;
   const errors = [];
-  // Provider credentials are optional until configured in Settings. Playwright
-  // and Hepan remain independent capabilities reported by diagnostics.
+  // Provider credentials are optional until configured in Settings.
   void env;
   return errors;
 }
