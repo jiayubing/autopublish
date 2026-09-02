@@ -15,7 +15,7 @@ export default function AccountProfileSelector({
   value,
   onChange,
 }: AccountProfileSelectorProps) {
-  const { snapshot, feature } = usePlatformFeature();
+  const { snapshot } = usePlatformFeature();
   const profiles = snapshot.accountProfiles.items;
   const target = useMemo(
     () => platforms.find((platform) => platform.id === platformId) || null,
@@ -35,10 +35,6 @@ export default function AccountProfileSelector({
       profile.platformId === platformId && profile.bindingStatus !== "bound",
   ).length;
 
-  useEffect(() => {
-    if (!target) return;
-    void feature.refreshAccountProfiles("submission-target").catch(() => undefined);
-  }, [feature, target]);
 
   useEffect(() => {
     if (!target) {
