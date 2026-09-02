@@ -44,6 +44,7 @@ function exposeOperationalStoreTransitionPorts(options, dependencies) {
     confirmRegularAccepted: regularOutcome.confirmRegularAccepted,
     confirmRegularNotAccepted: regularOutcome.confirmRegularNotAccepted,
     getRegularOutcomeSnapshot: regularOutcome.getRegularOutcomeSnapshot,
+    listRegularRemotePending: regularOutcome.listRegularRemotePending,
     markOrphanedRegularAttemptUncertain:
       regularOutcome.markOrphanedRegularAttemptUncertain,
     prepareRegularUncertainResolution:
@@ -51,6 +52,7 @@ function exposeOperationalStoreTransitionPorts(options, dependencies) {
     recordRegularAccepted: regularOutcome.recordRegularAccepted,
     recordRegularArticleRejected: regularOutcome.recordRegularArticleRejected,
     recordRegularGroupBlocked: regularOutcome.recordRegularGroupBlocked,
+    recordRegularRemotePending: regularOutcome.recordRegularRemotePending,
     recordRegularUncertain: regularOutcome.recordRegularUncertain,
   });
   holder.paidAdmissionTransitions = Object.freeze({

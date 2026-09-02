@@ -176,7 +176,7 @@ describe("runtime diagnostics", function () {
     fs.writeFileSync(cli, "bundled cli", "utf8");
   }
 
-  it("keeps a configured browser channel in not_checked and isolates optional Hepan", function () {
+  it("keeps a configured browser channel in not_checked without provider-specific runtimes", function () {
     createBundledPlaywrightFiles();
     const service = createRuntimeDiagnosticsService({
       workspaceRoot: workspace,
@@ -193,18 +193,6 @@ describe("runtime diagnostics", function () {
     assert.equal(diagnostics.browserChannel.configured, true);
     assert.equal(diagnostics.browserChannel.state, "not_checked");
     assert.equal(diagnostics.ok, true);
-    assert.equal(
-      diagnostics.errors.some(function (error) {
-        return error.code === "HEPAN_PYTHON_UNAVAILABLE";
-      }),
-      false,
-    );
-    assert.equal(
-      diagnostics.warnings.some(function (warning) {
-        return warning.code === "HEPAN_PYTHON_UNAVAILABLE";
-      }),
-      true,
-    );
   });
 
   it("retains a successful browser smoke result for the next diagnostic read", async function () {
@@ -287,12 +275,6 @@ describe("runtime diagnostics", function () {
         return error.code;
       }),
       ["PLAYWRIGHT_NODE_UNAVAILABLE", "PLAYWRIGHT_CLI_UNAVAILABLE"],
-    );
-    assert.equal(
-      diagnostics.warnings.some(function (warning) {
-        return warning.code === "HEPAN_PYTHON_UNAVAILABLE";
-      }),
-      true,
     );
     assert.ok(
       diagnostics.errors.every(function (error) {

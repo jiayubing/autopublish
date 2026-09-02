@@ -69,7 +69,6 @@ function adapters(overrides = {}) {
     getLegacyStatus: async () => ({
       discover: {
         media: { available: false, sources: [] },
-        hepan: { available: false, sources: [], cookiePathAvailable: false },
         sources: [],
         importable: false,
       },
@@ -343,7 +342,6 @@ describe("Phase 06 settings feature", () => {
       "clearMedia",
       "saveHepan",
       "testHepan",
-      "clearHepanVendor",
       "clearHepan",
       "importLegacy",
       "runBrowserSelfCheck",
@@ -360,7 +358,6 @@ describe("Phase 06 settings feature", () => {
         "cleanStorageCaches",
         "clearAi",
         "clearHepan",
-        "clearHepanVendor",
         "clearMedia",
         "importLegacy",
         "runBrowserSelfCheck",

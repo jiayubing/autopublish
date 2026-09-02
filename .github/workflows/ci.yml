@@ -2,7 +2,13 @@ name: CI
 
 on:
   push:
+    branches:
+      - master
   pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -13,7 +19,6 @@ jobs:
     runs-on: windows-latest
     env:
       CI_SYNTHETIC_ONLY: "1"
-      HEPAN_VENDOR_DIR: resources/hepan/vendor-pure
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -233,7 +238,6 @@ jobs:
     runs-on: windows-latest
     env:
       CI_SYNTHETIC_ONLY: "1"
-      HEPAN_VENDOR_DIR: resources/hepan/vendor-pure
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

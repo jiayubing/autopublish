@@ -19,7 +19,6 @@ const {
   extractAsarFile,
 } = require("./offline-smoke-runtime");
 const {
-  verifyHepan,
   verifySchemaGate,
   verifyStorageBoundaries,
   verifyPackagedElectronApplication,
@@ -182,13 +181,6 @@ function runOfflineSelfTest(resourcesPath, options) {
       status: 0,
       path: "migration/migrate-content-library-v2.js",
     };
-    checks.hepan = verifyHepan(
-      opts,
-      verification,
-      temporaryRoot,
-      environment,
-      commandRunner,
-    );
     checks.workspaceSchema = verifySchemaGate(temporaryRoot);
     checks.storageBoundaries = verifyStorageBoundaries(temporaryRoot);
     return {

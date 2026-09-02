@@ -199,6 +199,18 @@ async function createWorkspaceRuntimeComposition(deps) {
           return Object.freeze({ id: platform.definition.id, port: platform.accountInspection });
         }),
     );
+    const remoteReviewPorts = Object.freeze(
+      loadedPlatforms
+        .filter(function (platform) {
+          return Boolean(platform.remoteReviewContribution);
+        })
+        .map(function (platform) {
+          return Object.freeze({
+            id: platform.definition.id,
+            port: platform.remoteReviewContribution,
+          });
+        }),
+    );
     const loginSessionPorts = Object.freeze(
       loadedPlatforms
         .filter(function (platform) { return Boolean(platform.loginSession); })
@@ -536,13 +548,6 @@ async function createWorkspaceRuntimeComposition(deps) {
           identityService: platformAccountIdentityService,
         },
       );
-    if (
-      runtime.diagnosticsService &&
-      runtime.diagnosticsService.setPlatformSettingsService
-    )
-      runtime.diagnosticsService.setPlatformSettingsService(
-        platformSettingsService,
-      );
     const legacyProviderSettings =
       require("../runtime-config").createLegacyProviderSettingsMigration({
         configRoot: options.userDataPath,
@@ -690,6 +695,16 @@ async function createWorkspaceRuntimeComposition(deps) {
           onDataInvalidated: invalidation.invalidate,
         },
       );
+    const regularRemoteReviewReconciler = ownService(
+      require("../services/regular-remote-review-reconciler").createRegularRemoteReviewReconciler(
+        {
+          remoteReviewPorts,
+          regularPlatformOutcomeService,
+          onDataInvalidated: invalidation.invalidate,
+        },
+      ),
+    );
+    regularRemoteReviewReconciler.start();
     const paidMediaBatchComposition =
       require("./paid-media-batch-composition").createPaidMediaBatchComposition(
         {

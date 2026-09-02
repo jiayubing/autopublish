@@ -4,7 +4,6 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { execFileSync } = require("node:child_process");
 const asar = require("@electron/asar");
 
 function parseEnabledPlatformIds(configured) {
@@ -86,7 +85,6 @@ const ARCHIVE_FILES = [
   "scripts/config.js",
   "config/platforms.json",
   "config/build-info.json",
-  "resources/hepan/requirements.txt",
   "media-workbench/dist/index.html",
   "build/preload/preload.cjs",
   "node_modules/mammoth/LICENSE",
@@ -116,10 +114,6 @@ const RETIRED_ARCHIVE_FILES = [
 ];
 
 const UNPACKED_FILES = [
-  "src/platforms/hepan/hepan_publish.py",
-  "resources/hepan/vendor-pure/requests/__init__.py",
-  "resources/hepan/vendor-pure/bs4/__init__.py",
-  "resources/hepan/vendor-pure/certifi/cacert.pem",
   "node_modules/@playwright/cli/playwright-cli.js",
   "node_modules/@playwright/cli/package.json",
   "node_modules/@playwright/cli/LICENSE",
@@ -137,7 +131,7 @@ const PRIVATE_NAMES = new Set([
   "questions.json",
   "ai-provider.json",
   "media-provider.json",
-  "hepan-provider.json",
+  "hepan-geo-api-provider.json",
   "platform-settings-migration.json",
   "provider-test-status.json",
   "auth.json",
@@ -220,8 +214,6 @@ function privateEntry(relative) {
     name.endsWith(".sqlite3") ||
     name.endsWith(".db-wal") ||
     name.endsWith(".db-shm") ||
-    (name.includes("hepan-cookie") && name.endsWith(".tmp")) ||
-    (name.includes("hepan-images") && name.endsWith(".tmp")) ||
     parts.some((part) => PRIVATE_SEGMENTS.has(part)) ||
     (parts.includes("tests") && parts.includes("fixtures"))
   );
@@ -297,19 +289,7 @@ function verifyPackage(resourcesDir) {
   RESOURCE_FILES.forEach((file) => {
     if (!regularFile(path.join(resources, file)))
       failures.push("RESOURCE_FILE_MISSING: " + file);
-  });
-  const hepan = path.join(
-    unpacked,
-    "src",
-    "platforms",
-    "hepan",
-    "hepan_publish.py",
-  );
-  if (!regularFile(hepan))
-    failures.push(
-      "HEPAN_SCRIPT_NOT_REGULAR: src/platforms/hepan/hepan_publish.py",
-    );
-  normalizedEntries(archive)
+  });  normalizedEntries(archive)
     .filter(privateEntry)
     .forEach((entry) => failures.push("PRIVATE_ARCHIVE: " + entry));
   findPrivateEntries(unpacked).forEach((entry) =>
@@ -327,56 +307,6 @@ function verifyPackage(resourcesDir) {
     unpacked,
     node: path.join(resources, "tools", "node", "node.exe"),
   };
-}
-
-function verifyHepanSmoke(unpacked) {
-  const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), "autopublish-packaged-hepan-"),
-  );
-  let primaryError = null;
-  try {
-    const payload = path.join(root, "payload.json");
-    fs.writeFileSync(
-      payload,
-      JSON.stringify({
-        title: "safe smoke",
-        contentHtml: "<p>safe</p>",
-        sourceStem: "safe",
-      }),
-    );
-    const output = execFileSync(
-      "python",
-      [
-        path.join(unpacked, "src", "platforms", "hepan", "hepan_publish.py"),
-        "--validate-payload",
-        payload,
-      ],
-      {
-        env: Object.assign({}, process.env, {
-          HEPAN_VENDOR_DIR: path.join(
-            unpacked,
-            "resources",
-            "hepan",
-            "vendor-pure",
-          ),
-        }),
-        encoding: "utf8",
-        windowsHide: true,
-        timeout: 30000,
-      },
-    );
-    const result = JSON.parse(String(output).trim());
-    if (!result || result.ok !== true)
-      throw new Error("Packaged Hepan smoke failed");
-  } catch (error) {
-    primaryError = error;
-  }
-  const cleanup = removeTemporaryRoot(root, "ALPHA_HEPAN_SMOKE_CLEANUP_FAILED");
-  if (primaryError) {
-    if (cleanup) primaryError.cleanupCode = cleanup.code;
-    throw primaryError;
-  }
-  if (cleanup) throw cleanup;
 }
 
 function verifyPackagedPlaywright(resources) {
@@ -474,7 +404,6 @@ function verifyRuntimeSmoke(appDir, resourcesPath) {
 if (require.main === module) {
   try {
     const verified = verifyPackage(process.argv[2]);
-    verifyHepanSmoke(verified.unpacked);
     require("./verify-packaged-playwright-runtime").verifyPackagedRuntime(
       verified.unpacked,
       { staticOnly: false, node: verified.node },
@@ -508,7 +437,6 @@ module.exports = {
     );
   },
   verifyPackage,
-  verifyHepanSmoke,
   verifyPackagedPlaywright,
   verifyRuntimeSmoke,
   findPrivateEntries,

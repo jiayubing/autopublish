@@ -160,14 +160,6 @@ function safeDiagnostics(diagnostics) {
       capabilities.docx ||
         capability("unavailable", "bundled", "DOCX_RUNTIME_UNAVAILABLE"),
     ),
-    hepan: safeCapability(
-      capabilities.hepan ||
-        capability(
-          "optional_unconfigured",
-          "optional",
-          "HEPAN_PYTHON_UNAVAILABLE",
-        ),
-    ),
   };
   const runtimeEvents = safeRuntimeEventsResult(source.runtimeEvents);
   return {
@@ -178,7 +170,6 @@ function safeDiagnostics(diagnostics) {
     tools: {
       playwrightNode: safeCapabilities.playwrightNode,
       playwrightCli: safeCapabilities.playwrightCli,
-      hepanPython: safeCapabilities.hepan,
     },
     errors: safeDiagnosticItems(
       source.errors,

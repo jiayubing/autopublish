@@ -28,20 +28,15 @@ const ERROR_MESSAGES = Object.freeze({
   MEDIA_PROTOCOL_ERROR: "媒体服务响应格式无效，请检查供应商接口。",
   MEDIA_TRANSPORT_UNAVAILABLE: "媒体传输能力不可用，请检查运行环境。",
   MEDIA_CONNECTION_FAILED: "连接测试失败，请检查地址和 API Key。",
-  HEPAN_PYTHON_UNAVAILABLE: "Python 不可用，请检查可执行文件。",
-  HEPAN_DEPENDENCY_MISSING:
-    "Python 依赖缺失，请检查内置依赖、vendor 目录或系统环境。",
-  HEPAN_COOKIE_REJECTED: "Cookie 身份验证失败，请更新 Cookie。",
-  HEPAN_AUTH_REDIRECTED: "Cookie 身份验证失败，请更新 Cookie。",
-  HEPAN_CATEGORY_ACCESS_DENIED:
-    "Cookie 登录有效，但栏目 121 无发文权限或栏目 ID 不正确。",
-  HEPAN_PUBLISH_FORM_CHANGED:
-    "Cookie 已通过身份检查，但河畔发帖页面结构已变化。",
-  HEPAN_UPLOAD_CONTEXT_CHANGED:
-    "Cookie 登录和栏目检查已通过，但图片上传页面结构已变化。",
-  HEPAN_REMOTE_TIMEOUT: "河畔网络请求超时，请稍后重试，无需更换 Cookie。",
-  HEPAN_REMOTE_HTTP_ERROR: "河畔服务暂时异常，请稍后重试，无需更换 Cookie。",
-  HEPAN_CHECK_RUNTIME_FAILED: "河畔检查运行失败，请稍后重试。",
+  HEPAN_CREDENTIALS_INVALID: "用户 ID 或登录密码错误。",
+  HEPAN_PLAN_UNAVAILABLE: "蓝色河畔 GEO 套餐不可用或已到期。",
+  HEPAN_QUOTA_EXHAUSTED: "蓝色河畔本周期发帖额度已用完。",
+  HEPAN_PUBLISH_DISABLED: "蓝色河畔暂时不允许该账号发布，请联系平台管理员。",
+  HEPAN_RATE_LIMITED: "蓝色河畔调用频率过高，请稍后重试。",
+  HEPAN_CONTENT_REJECTED: "文章内容未通过蓝色河畔接口审核。",
+  HEPAN_GEO_API_TIMEOUT: "蓝色河畔 GEO API 请求超时，请稍后重试。",
+  HEPAN_GEO_API_UNAVAILABLE: "蓝色河畔 GEO API 暂时不可用，请检查网络。",
+  HEPAN_GEO_API_PROTOCOL_ERROR: "蓝色河畔 GEO API 返回格式异常。",
   STORAGE_MAINTENANCE_BUSY: "任务运行期间不能清理缓存。",
 });
 
@@ -98,7 +93,6 @@ const COMMAND_NAMES = Object.freeze([
   "clearMedia",
   "saveHepan",
   "testHepan",
-  "clearHepanVendor",
   "clearHepan",
   "importLegacy",
   "runBrowserSelfCheck",
@@ -371,15 +365,6 @@ export function createSettingsFeature(adapters = {}) {
         input,
         "HEPAN_SETTINGS_TEST_FAILED",
         "蓝色河畔连接测试失败。",
-        () => runQuery("hepan", "command-result"),
-      ),
-    clearHepanVendor: (input) =>
-      execute(
-        owners.clearHepanVendor,
-        adapters.saveHepan,
-        input,
-        "HEPAN_VENDOR_CLEAR_FAILED",
-        "自定义 vendor 目录清理失败。",
         () => runQuery("hepan", "command-result"),
       ),
     clearHepan: () =>

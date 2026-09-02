@@ -11,11 +11,13 @@ const methods = [
   "confirmRegularAccepted",
   "confirmRegularNotAccepted",
   "getRegularOutcomeSnapshot",
+  "listRegularRemotePending",
   "markOrphanedRegularAttemptUncertain",
   "prepareRegularUncertainResolution",
   "recordRegularAccepted",
   "recordRegularArticleRejected",
   "recordRegularGroupBlocked",
+  "recordRegularRemotePending",
   "recordRegularUncertain",
 ];
 
@@ -39,7 +41,7 @@ function fixture() {
   };
 }
 
-test("all three regular adapters share one four-outcome application mapping", () => {
+test("regular adapters share one five-outcome application mapping", () => {
   const f = fixture();
   const cases = [
     [
@@ -60,6 +62,15 @@ test("all three regular adapters share one four-outcome application mapping", ()
       "toutiao",
       { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" },
       "recordRegularUncertain",
+    ],
+    [
+      "hepan",
+      {
+        status: "remote_pending",
+        errorCode: "HEPAN_REMOTE_PENDING",
+        remoteId: "98765",
+      },
+      "recordRegularRemotePending",
     ],
     [
       "hepan",

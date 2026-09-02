@@ -15,10 +15,6 @@ const LEGACY_RUNTIME_CONFIG_KEYS = Object.freeze([
   "XQW_BASE_URL",
   "XQW_TIMEOUT_MS",
   "XQW_ALLOW_INSECURE",
-  "HEPAN_COOKIE_PATH",
-  "HEPAN_PYTHON",
-  "HEPAN_VENDOR_DIR",
-  "HEPAN_CATEGORY_ID",
 ]);
 
 function configError(code, message) {

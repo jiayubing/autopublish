@@ -41,6 +41,7 @@ function definition(id, overrides) {
       settings: false,
       clientProfile: false,
       runtimeArtifacts: false,
+      remoteReview: false,
     },
     externalHosts: [],
   };
@@ -69,6 +70,27 @@ test("definition sets reject duplicates and invalid capability invariants", () =
   assert.throws(() => parsePlatformDefinitionsV1([definition("fixture"), definition("fixture")]), { code: "PLATFORM_DEFINITION_ID_DUPLICATE" });
   assert.throws(() => parsePlatformDefinitionV1(definition("fixture", { capabilities: { regularSubmission: false, legacyQueueImport: false, loginSession: false, accountInspection: false, imagePublishing: true } })), { code: "PLATFORM_DEFINITION_INVARIANT_VIOLATION" });
   assert.throws(() => parsePlatformDefinitionV1(definition("resource-fixture", { publicationTargetKind: "resource" })), { code: "PLATFORM_DEFINITION_INVARIANT_VIOLATION" });
+  assert.throws(
+    () =>
+      parsePlatformDefinitionV1(
+        definition("review-without-submission", {
+          capabilities: {
+            regularSubmission: false,
+            legacyQueueImport: false,
+            loginSession: false,
+            accountInspection: false,
+            imagePublishing: false,
+          },
+          contributions: {
+            settings: false,
+            clientProfile: false,
+            runtimeArtifacts: false,
+            remoteReview: true,
+          },
+        }),
+      ),
+    { code: "PLATFORM_DEFINITION_INVARIANT_VIOLATION" },
+  );
 });
 
 test("loader exposes only declared exact ports and isolates each runtime", async () => {
@@ -231,12 +253,13 @@ test("built-in projections and enabled filtering match the frozen four-platform 
     login: Boolean(platform.loginSession),
     inspect: Boolean(platform.accountInspection),
     image: platform.definition.capabilities.imagePublishing,
+    review: Boolean(platform.remoteReviewContribution),
   }]));
   assert.deepEqual(matrix, {
-    lieju: { displayName: "列举网", kind: "platform", regular: true, legacy: false, login: true, inspect: true, image: true },
-    toutiao: { displayName: "头条", kind: "platform", regular: false, legacy: true, login: true, inspect: true, image: false },
-    hepan: { displayName: "蓝色河畔", kind: "platform", regular: true, legacy: true, login: false, inspect: true, image: false },
-    media: { displayName: "付费媒体", kind: "resource", regular: false, legacy: false, login: false, inspect: false, image: false },
+    lieju: { displayName: "列举网", kind: "platform", regular: true, legacy: false, login: true, inspect: true, image: true, review: false },
+    toutiao: { displayName: "头条", kind: "platform", regular: false, legacy: true, login: true, inspect: true, image: false, review: false },
+    hepan: { displayName: "蓝色河畔", kind: "platform", regular: true, legacy: false, login: false, inspect: true, image: false, review: true },
+    media: { displayName: "付费媒体", kind: "resource", regular: false, legacy: false, login: false, inspect: false, image: false, review: false },
   });
   assert.deepEqual(loadPlatforms({ platformIds: ["lieju"] }).map((platform) => platform.definition.id), ["lieju"]);
   assert.equal(Array.isArray(loadPlatforms({ platformIds: ["toutiao"] })[0].legacyQueue.scan()), true);
@@ -256,6 +279,7 @@ test("built-in optional contributions stay platform-owned and exact", async () =
   });
   const byId = Object.fromEntries(loaded.map((platform) => [platform.definition.id, platform]));
   assert.equal(byId.hepan.settingsContribution.createSettingsAdapter({}).id, "hepan");
+  assert.equal(typeof byId.hepan.remoteReviewContribution.reconcile, "function");
   assert.equal(byId.media.settingsContribution.createSettingsAdapter({}).id, "media");
   assert.equal(byId.media.regularSubmission, undefined);
 
@@ -282,7 +306,7 @@ test("settings contributions cannot impersonate another platform adapter", () =>
   const fixture = moduleFor(
     definition("settings-fixture", {
       capabilities: { regularSubmission: false, legacyQueueImport: false, loginSession: false, accountInspection: false, imagePublishing: false },
-      contributions: { settings: true, clientProfile: false, runtimeArtifacts: false },
+      contributions: { settings: true, clientProfile: false, runtimeArtifacts: false, remoteReview: false },
     }),
     () => ({ settingsContribution: { createSettingsAdapter: () => ({ id: "media" }) } }),
   );

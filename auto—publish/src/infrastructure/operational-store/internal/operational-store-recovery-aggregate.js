@@ -371,6 +371,16 @@ function createRecoveryAggregate(context, activeTarget) {
             resolution.decision === "not_accepted"
           )
             return null;
+          const observed =
+            intent.detail && intent.detail.observation
+              ? intent.detail.observation
+              : null;
+          if (
+            row.status === "uncertain" &&
+            observed &&
+            observed.status === "remote_pending"
+          )
+            return null;
           const resolutionAttention =
             projectPaidOrderResolutionAttention(intent);
           const failure =

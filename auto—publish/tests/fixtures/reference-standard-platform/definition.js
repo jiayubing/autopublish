@@ -21,6 +21,7 @@ function createReferenceStandardPlatformDefinition(options) {
       settings: false,
       clientProfile: false,
       runtimeArtifacts: false,
+      remoteReview: false,
     }),
     externalHosts: Object.freeze([]),
   });
