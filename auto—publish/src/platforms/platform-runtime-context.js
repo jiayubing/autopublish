@@ -39,7 +39,6 @@ function createPlatformRuntimeContext(options) {
   return Object.freeze({
     workspacePaths: Object.freeze(Object.assign({}, values.workspacePaths)),
     browserRuntime: browserRuntime(values.browserRuntime),
-    liejuSubmissionMode: values.liejuSubmissionMode,
   });
 }
 
@@ -60,7 +59,6 @@ function createPlatformRuntimeContextFromWorkspacePaths(workspacePaths) {
       stateDir: profileRoot ? path.join(profileRoot, "state") : undefined,
       tempDir: paths.tmp,
     },
-    liejuSubmissionMode: process.env.LIEJU_SUBMISSION_MODE,
   });
 }
 
