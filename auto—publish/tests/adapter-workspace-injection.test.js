@@ -85,10 +85,9 @@ it("platform loader constructs adapters from explicit workspace and browser runt
     const oneAdapters = loadPlatforms({ platformIds: ["hepan", "toutiao", "media"], runtimeContext: oneContext });
     const twoAdapters = loadPlatforms({ platformIds: ["hepan", "toutiao", "media"], runtimeContext: twoContext });
 
-    assert.deepStrictEqual(oneAdapters.find((platform) => platform.definition.id === "hepan").legacyQueue.scan().map((item) => item.filename), ["one.txt"]);
+    assert.equal(oneAdapters.find((platform) => platform.definition.id === "hepan").legacyQueue, undefined);
+    assert.equal(twoAdapters.find((platform) => platform.definition.id === "hepan").legacyQueue, undefined);
     assert.equal(oneAdapters.find((platform) => platform.definition.id === "media").legacyQueue, undefined);
-    assert.deepStrictEqual(twoAdapters.find((platform) => platform.definition.id === "hepan").legacyQueue.scan(), []);
-    assert.notEqual(oneAdapters.find((platform) => platform.definition.id === "hepan").legacyQueue, twoAdapters.find((platform) => platform.definition.id === "hepan").legacyQueue);
     assert.deepStrictEqual(oneAdapters.find((platform) => platform.definition.id === "toutiao").legacyQueue.scan().map((item) => item.filename), ["one.md"]);
     assert.deepStrictEqual(twoAdapters.find((platform) => platform.definition.id === "toutiao").legacyQueue.scan().map((item) => item.filename), ["two.md"]);
     assert.notEqual(oneAdapters.find((platform) => platform.definition.id === "toutiao").loginSession, twoAdapters.find((platform) => platform.definition.id === "toutiao").loginSession);
