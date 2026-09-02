@@ -374,6 +374,46 @@ test("regular admission creates one FIFO group and atomic facts, hides the immut
   }
 });
 
+test("regular preview identifies a profile-blocked idempotent queue for safe resume", () => {
+  const fixture = makeFixture();
+  try {
+    fixture.add(article("article-profile-resume"));
+    const input = admissionInput(fixture, [ref("article-profile-resume")]);
+    const admitted = fixture.application.admitRegularQueueItems(input);
+    const queueGroupId = admitted.items[0].queueGroupId;
+    fixture.transitionPorts.regularQueueGroupTransitions.setRegularQueueGroupRunIntent({
+      queueGroupId,
+      running: true,
+    });
+    const claim =
+      fixture.transitionPorts.regularQueueGroupTransitions.claimRegularQueueGroupHead({
+        queueGroupId,
+        claimToken: "claim-profile-resume",
+        leaseMs: 30000,
+      });
+    fixture.transitionPorts.regularOutcomeTransitions.recordRegularGroupBlocked({
+      regularPublicationAttemptId: claim.regularPublicationAttemptId,
+      observation: {
+        status: "group_blocked",
+        code: "REGULAR_CLIENT_PROFILE_INCOMPLETE",
+        observedAt: "2026-08-07T00:00:00.000Z",
+        articleRecoverable: true,
+      },
+    });
+
+    const preview = fixture.application.previewRegularQueueAdmission(input);
+    assert.equal(preview.idempotentCount, 1);
+    assert.equal(preview.items[0].status, "idempotent");
+    assert.equal(preview.items[0].queueGroupId, queueGroupId);
+    assert.equal(
+      preview.items[0].reasonCode,
+      "REGULAR_CLIENT_PROFILE_INCOMPLETE",
+    );
+  } finally {
+    fixture.close();
+  }
+});
+
 test("regular admission invalidates exactly once for new items and not for idempotent replay", () => {
   const fixture = makeFixture();
   try {
