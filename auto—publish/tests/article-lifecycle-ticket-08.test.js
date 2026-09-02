@@ -1898,17 +1898,11 @@ test("public queue execution preserves an uncertain remote failure without repla
   }
 });
 
-test("Hepan production preparation owns temporary credential cleanup", async () => {
+test("Hepan production preparation uses the official GEO API without temporary credentials", async () => {
   const {
     createHepanSettingsBackedRuntime,
   } = require("../src/platforms/hepan/settings-backed-runtime");
-  let cookieCleanups = 0;
-  let cookieCreations = 0;
-  let expiredCleanups = 0;
-  let readPreparedRuntime = null;
-  let receivedImagePlan = null;
-  let rejectSubmission = false;
-  let rejectCleanup = false;
+  let publishCall = null;
   const claim = {
     platformId: "hepan",
     regularPublicationAttemptId: "attempt-hepan-runtime",
@@ -1925,62 +1919,34 @@ test("Hepan production preparation owns temporary credential cleanup", async () 
     },
     publicationSnapshot: { title: "Title", body: "Body" },
   };
-  const preparedEvidence =
-    domain.createTextOnlyPreparedSubmissionEvidenceV1(claim);
   const adapter = createHepanSettingsBackedRuntime({
-    paths: { tmp: "C:\\synthetic-tmp" },
     getPlatformSettingsService: () => ({
       getAdapterForRuntime: () => ({
-        config: {
-          pythonPath: "C:\\python.exe",
-          categoryId: 121,
-          vendorDir: "",
-        },
-        adapter: {
-          cleanupExpiredTemporaryFiles: () => {
-            expiredCleanups += 1;
-          },
-          createTemporaryCookie: () => {
-            cookieCreations += 1;
-            return {
-              cookiePath: "C:\\synthetic-cookie.tmp",
-              cleanup: () => {
-                cookieCleanups += 1;
-                if (rejectCleanup)
-                  throw new Error("synthetic credential cleanup failure");
-              },
-            };
-          },
-        },
+        config: { uid: 12345, password: "fixture-password" },
       }),
     }),
-    cleanupExpiredHepanPayloads: () => {
-      expiredCleanups += 1;
-    },
-    createHepanAdapter: (options) => {
-      readPreparedRuntime = options.getRuntime;
-      return {
-        preparePlatformSubmission: async (preparedClaim, imagePlanInput) => {
-          assert.strictEqual(preparedClaim, claim);
-          receivedImagePlan = imagePlanInput;
-          return domain.createPreparedSubmission({
-            preparedSubmissionEvidenceV1: preparedEvidence,
-            submitPreparedPublication: async () => {
-              assert.equal(
-                readPreparedRuntime().cookiePath,
-                "C:\\synthetic-cookie.tmp",
-              );
-              if (rejectSubmission) throw new Error("synthetic submit failure");
-              return { status: "accepted" };
-            },
-          });
-        },
-      };
-    },
+    createHepanGeoApiClient: () => ({
+      async status() {
+        return { data: { uid: 12345 } };
+      },
+      async publish(config, input) {
+        publishCall = { config, input };
+        return {
+          data: {
+            aid: 98765,
+            review_status: "published",
+            url: "https://www.hepan.com/portal.php?mod=view&aid=98765",
+          },
+        };
+      },
+      async result() {
+        throw new Error("not used");
+      },
+    }),
   });
-  const selectedPlan = imagePlan(1);
-  const prepared = await adapter.regularSubmission.preparePlatformSubmission(claim, selectedPlan);
-  assert.strictEqual(receivedImagePlan, selectedPlan);
+
+  const prepared =
+    await adapter.regularSubmission.preparePlatformSubmission(claim);
   assert.deepEqual(
     {
       deliveryMode: prepared.preparedSubmissionEvidenceV1.deliveryMode,
@@ -1989,38 +1955,24 @@ test("Hepan production preparation owns temporary credential cleanup", async () 
     },
     { deliveryMode: "text_only", images: [], decisionKind: "initial" },
   );
-  assert.equal(expiredCleanups, 2);
-  assert.equal(cookieCreations, 0);
-  assert.equal(cookieCleanups, 0);
-  assert.equal(readPreparedRuntime().cookiePath, "");
   assert.deepEqual(await prepared.submitPreparedPublication(), {
     status: "accepted",
+    remoteId: "98765",
+    remoteUrl: "https://www.hepan.com/portal.php?mod=view&aid=98765",
   });
-  assert.equal(cookieCreations, 1);
-  assert.equal(cookieCleanups, 1);
-  assert.equal(readPreparedRuntime().cookiePath, "");
-
-  rejectSubmission = true;
-  const rejected = await adapter.regularSubmission.preparePlatformSubmission(claim);
-  await assert.rejects(rejected.submitPreparedPublication(), {
-    message: "synthetic submit failure",
+  assert.deepEqual(publishCall.config, {
+    uid: 12345,
+    password: "fixture-password",
   });
-  assert.equal(cookieCreations, 2);
-  assert.equal(cookieCleanups, 2);
-
-  rejectSubmission = false;
-  rejectCleanup = true;
-  const cleanupRejected =
-    await adapter.regularSubmission.preparePlatformSubmission(claim);
-  assert.deepEqual(await cleanupRejected.submitPreparedPublication(), {
-    status: "accepted",
-  });
-  assert.equal(cookieCreations, 3);
-  assert.equal(cookieCleanups, 3);
-  assert.equal(readPreparedRuntime().cookiePath, "");
+  assert.equal(publishCall.input.subject, "Title");
+  assert.equal(publishCall.input.message, "Body");
+  assert.match(
+    publishCall.input.idempotencyKey,
+    /^autopublish-[a-f0-9]{40}$/,
+  );
 });
 
-test("Hepan does not materialize a temporary credential when submission-start fails", async () => {
+test("Hepan does not call the GEO API when submission-start persistence fails", async () => {
   const {
     createHepanSettingsBackedRuntime,
   } = require("../src/platforms/hepan/settings-backed-runtime");
@@ -2033,7 +1985,7 @@ test("Hepan does not materialize a temporary credential when submission-start fa
       }
     },
   });
-  let cookieCreations = 0;
+  let publishCalls = 0;
   try {
     const profile = addProfile(current, "hepan");
     const admitted = admit(current, {
@@ -2042,33 +1994,28 @@ test("Hepan does not materialize a temporary credential when submission-start fa
       accountProfileId: profile.accountProfileId,
     });
     const adapter = createHepanSettingsBackedRuntime({
-      paths: { tmp: "C:\\synthetic-tmp" },
       getPlatformSettingsService: () => ({
         getAdapterForRuntime: () => ({
-          config: {
-            pythonPath: "C:\\python.exe",
-            categoryId: 121,
-            vendorDir: "",
-          },
-          adapter: {
-            cleanupExpiredTemporaryFiles: () => {},
-            createTemporaryCookie: () => {
-              cookieCreations += 1;
-              return {
-                cookiePath: "C:\\synthetic-cookie.tmp",
-                cleanup: () => {},
-              };
-            },
-          },
+          config: { uid: 12345, password: "fixture-password" },
         }),
       }),
-      cleanupExpiredHepanPayloads: () => {},
-      createHepanAdapter: () => ({
-        preparePlatformSubmission: async (claim) =>
-          domain.createPreparedSubmission({
-            preparedSubmissionEvidenceV1: evidence(claim),
-            submitPreparedPublication: async () => ({ status: "accepted" }),
-          }),
+      createHepanGeoApiClient: () => ({
+        async status() {
+          return { data: { uid: 12345 } };
+        },
+        async publish() {
+          publishCalls += 1;
+          return {
+            data: {
+              aid: 98765,
+              review_status: "published",
+              url: "https://www.hepan.com/portal.php?mod=view&aid=98765",
+            },
+          };
+        },
+        async result() {
+          throw new Error("not used");
+        },
       }),
     });
     const orchestrator = createRegularQueueGroupOrchestrator({
@@ -2082,7 +2029,7 @@ test("Hepan does not materialize a temporary credential when submission-start fa
       orchestrator.startGroup({ queueGroupId: admitted.queueGroupId }),
       { code: "SYNTHETIC_BEGIN_FAULT" },
     );
-    assert.equal(cookieCreations, 0);
+    assert.equal(publishCalls, 0);
   } finally {
     current.close();
   }
