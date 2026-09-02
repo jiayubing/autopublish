@@ -68,11 +68,6 @@ export interface HepanProviderStatus {
 export type PlatformProviderStatus = MediaProviderStatus | HepanProviderStatus;
 export interface LegacyProviderSettingsDiscovery {
   media: { available: boolean; sources: string[] };
-  hepan: {
-    available: boolean;
-    sources: string[];
-    cookiePathAvailable: boolean;
-  };
   sources: string[];
   importable: boolean;
 }

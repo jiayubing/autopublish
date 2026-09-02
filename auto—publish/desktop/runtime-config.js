@@ -127,7 +127,6 @@ function readLegacyRuntimeValues(store) {
 function legacyCandidate(values, source) {
   const value = values || {};
   const media = typeof value.XQW_API_KEY === "string" && value.XQW_API_KEY.trim() !== "";
-  const hepan = typeof value.HEPAN_COOKIE_PATH === "string" && value.HEPAN_COOKIE_PATH.trim() !== "";
   return {
     source: source,
     media: media ? {
@@ -135,12 +134,6 @@ function legacyCandidate(values, source) {
       baseUrl: value.XQW_BASE_URL,
       timeoutMs: value.XQW_TIMEOUT_MS,
       allowInsecure: value.XQW_ALLOW_INSECURE
-    } : null,
-    hepan: hepan ? {
-      cookiePath: value.HEPAN_COOKIE_PATH,
-      pythonPath: value.HEPAN_PYTHON,
-      vendorDir: value.HEPAN_VENDOR_DIR,
-      categoryId: value.HEPAN_CATEGORY_ID
     } : null
   };
 }
@@ -159,10 +152,10 @@ function createLegacyProviderSettingsMigration(options) {
   function candidates() {
     const result = [];
     const runtime = legacyCandidate(readLegacyRuntimeValues(runtimeConfigStore), "application-runtime-config");
-    if (runtime.media || runtime.hepan) result.push(runtime);
+    if (runtime.media) result.push(runtime);
     if (workspaceRoot) {
       const workspace = legacyCandidate(readLegacyEnvironmentFile(pathApi.join(workspaceRoot, ".env"), io), "workspace-env");
-      if (workspace.media || workspace.hepan) result.push(workspace);
+      if (workspace.media) result.push(workspace);
     }
     return result;
   }
@@ -170,10 +163,8 @@ function createLegacyProviderSettingsMigration(options) {
   function publicReport() {
     const sourceList = candidates();
     const mediaSources = sourceList.filter((item) => item.media).map((item) => item.source);
-    const hepanSources = sourceList.filter((item) => item.hepan).map((item) => item.source);
     return {
       media: { available: mediaSources.length > 0, sources: mediaSources },
-      hepan: { available: hepanSources.length > 0, sources: hepanSources, cookiePathAvailable: hepanSources.length > 0 },
       sources: sourceList.map((item) => item.source),
       importable: mediaSources.length > 0
     };
@@ -275,23 +266,8 @@ function createLegacyProviderSettingsMigration(options) {
         }
       }
     }
-    const hepan = mergeSource("hepan", sourceList);
-    if (hepan) {
-      entries.push({
-        platform: "hepan",
-        source: hepan.source,
-        status: hasApplicationConfig("hepan")
-          ? "skipped-existing"
-          : isEnvironmentOverride("hepan")
-            ? "skipped-environment"
-            : "skipped-incompatible",
-        ...(!hasApplicationConfig("hepan") && !isEnvironmentOverride("hepan")
-          ? { code: "HEPAN_LEGACY_COOKIE_INCOMPATIBLE" }
-          : {}),
-      });
-    }
     const record = writeRecord(entries);
-    return { imported, entries: record.entries, record: record, legacyCookieFilesRemain: entries.some((entry) => entry.platform === "hepan") };
+    return { imported, entries: record.entries, record: record };
   }
 
   return { discover: publicReport, getRecord: readRecord, importLegacy };
