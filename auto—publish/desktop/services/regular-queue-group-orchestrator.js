@@ -409,10 +409,19 @@ function createRegularQueueGroupOrchestrator(options) {
   }
 
   async function startGroup(input) {
+    const preserveManualPause =
+      Boolean(input && input.preserveManualPause === true);
     const group = transitions.setRegularQueueGroupRunIntent({
       queueGroupId: input && input.queueGroupId,
       running: true,
+      ...(preserveManualPause ? { preserveManualPause: true } : {}),
     });
+    if (group.pauseIntent !== "none")
+      return Object.freeze({
+        queueGroupId: group.queueGroupId,
+        skipped: true,
+        reasonCode: "REGULAR_QUEUE_GROUP_MANUALLY_PAUSED",
+      });
     notifyDataInvalidated("REGULAR_QUEUE_GROUP_RUN_INTENT_CHANGED");
     return runGroup(group.queueGroupId);
   }
