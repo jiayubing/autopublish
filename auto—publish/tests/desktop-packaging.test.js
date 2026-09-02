@@ -368,8 +368,6 @@ describe("source assembly and packaging contract", function() {
     assert.match(config, /asarUnpack:/);
     assert.doesNotMatch(config, /asarUnpack:\s*\r?\n\s*-\s+["']?\*\*\/\*["']?/);
     for (const runtimeBoundary of [
-      "src/platforms/hepan/hepan_publish.py",
-      "resources/hepan/vendor-pure/**/*",
       "node_modules/@playwright/cli/**/*",
       "node_modules/playwright/**/*",
       "node_modules/playwright-core/**/*"
@@ -382,7 +380,7 @@ describe("source assembly and packaging contract", function() {
     for (const pattern of [
       "!**/ai-provider.json",
       "!**/media-provider.json",
-      "!**/hepan-provider.json",
+      "!**/hepan-geo-api-provider.json",
       "!**/platform-settings-migration.json",
       "!**/content-generation-batches/**",
       "!**/client-material-cache/**",
@@ -622,7 +620,6 @@ describe("source assembly and packaging contract", function() {
       "!input/media/**",
       "!input/lieju/**",
       "!input/toutiao/**",
-      "!input/hepan/**",
       "!tests/**"
     ]) assert.equal(config.includes(redundantPattern), false, redundantPattern + " should not duplicate a parent boundary");
   });
@@ -632,9 +629,8 @@ describe("source assembly and packaging contract", function() {
     const cases = [
       ["nested/.env", ".env"],
       ["config/media-provider.json", "config/media-provider.json"],
-      ["config/hepan-provider.json", "config/hepan-provider.json"],
+      ["config/hepan-geo-api-provider.json", "config/hepan-geo-api-provider.json"],
       ["config/platform-settings-migration.json", "config/platform-settings-migration.json"],
-      ["local-state/tmp/.hepan-cookie-test.tmp", "local-state/tmp/.hepan-cookie-test.tmp"],
       ["workspace-location.json", "workspace-location.json"],
       ["nested/.autopublish-workspace.json", "nested/.autopublish-workspace.json"],
       ["clients/client-1/questions.json", "questions.json"],
