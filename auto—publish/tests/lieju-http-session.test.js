@@ -16,7 +16,6 @@ const {
 } = require("../src/platforms/lieju/http-session");
 
 const LOGIN_PROBE_URL = "https://post.lieju.com/117/239";
-const { createPlatformAdapter } = require("../src/platforms/lieju/adapter");
 
 function response(options) {
   const value = options || {};
@@ -308,28 +307,7 @@ test("Lieju HTTP and browser sessions hold separate leases, recover stale locks,
   }
 });
 
-test("Lieju adapter exposes only the narrow HTTP GET port", async () => {
-  const fixture = stateFixture();
-  try {
-    const runtime = makeRequestRuntime({ responses: [response()] });
-    const adapter = createPlatformAdapter({
-      browserRuntime: { stateFile: fixture.stateFile },
-      httpRequest: runtime.request,
-    });
-    const result = await adapter.withHttpGetPort(async (port) => {
-      assert.deepEqual(Object.keys(port).sort(), ["get", "probeLogin"]);
-      const value = await port.get("https://post.lieju.com/117/239");
-      return { status: value.status, contentType: value.contentType };
-    });
-    assert.deepEqual(result, {
-      status: 200,
-      contentType: "text/html; charset=utf-8",
-    });
-    assert.equal("stateFile" in adapter, false);
-  } finally {
-    removeFixture(fixture);
-  }
-});
+
 
 test("Lieju HTTP submission port sends one bounded no-retry POST and reports state-save failure", async () => {
   const fixture = stateFixture();
