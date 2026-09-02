@@ -49,6 +49,9 @@ export type SubmissionIntakeCommands = {
   admitRegularQueueItems: (
     input: RegularQueueAdmissionInput,
   ) => Promise<SubmissionIntakeCommandResult<RegularQueueAdmissionResult>>;
+  startRegularQueueGroup: (input: {
+    queueGroupId: string;
+  }) => Promise<SubmissionIntakeCommandResult<unknown>>;
   previewPaidMediaPreflight: (
     input: PaidMediaPreflightInput,
   ) => Promise<SubmissionIntakeCommandResult<PaidMediaPreflight>>;
@@ -133,6 +136,7 @@ export function useSubmissionIntakeSession({
   availableArticleRefs,
   previewRegularQueueAdmission,
   admitRegularQueueItems,
+  startRegularQueueGroup,
   previewPaidMediaPreflight,
   confirmPaidMediaBatch,
   commandStates,
@@ -304,7 +308,11 @@ export function useSubmissionIntakeSession({
       !state.platformId ||
       !state.accountProfileId ||
       pendingRef.current !== null ||
-      commandBusy("previewRegularQueueAdmission", "admitRegularQueueItems")
+      commandBusy(
+        "previewRegularQueueAdmission",
+        "admitRegularQueueItems",
+        "startRegularQueueGroup",
+      )
     )
       return;
     const requestedScope = scopeKey;
@@ -331,9 +339,21 @@ export function useSubmissionIntakeSession({
       }
       if (!preview.queueableCount && !preview.idempotentCount)
         throw new Error("没有符合普通平台队列规则的文章");
+      const resumableQueueGroupIds = [
+        ...new Set(
+          preview.items
+            .filter(
+              (item) =>
+                item.status === "idempotent" &&
+                item.reasonCode === "REGULAR_CLIENT_PROFILE_INCOMPLETE" &&
+                Boolean(item.queueGroupId),
+            )
+            .map((item) => item.queueGroupId as string),
+        ),
+      ];
       const accepted = await confirm({
         title: "确认发起普通平台投稿",
-        message: `将新增 ${preview.queueableCount} 项普通平台投稿，已存在跳过 ${preview.idempotentCount} 项，缺失 ${preview.missingCount} 项，冲突 ${preview.conflictCount} 项。`,
+        message: `将新增 ${preview.queueableCount} 项普通平台投稿，已存在跳过 ${preview.idempotentCount} 项，缺失 ${preview.missingCount} 项，冲突 ${preview.conflictCount} 项。${resumableQueueGroupIds.length ? ` 其中 ${resumableQueueGroupIds.length} 个因客户资料不完整而暂停的已有队列将重新启动。` : ""}`,
         confirmLabel: "确认发起投稿",
       });
       if (!isCurrent(requestedScope, epoch)) return;
@@ -351,11 +371,30 @@ export function useSubmissionIntakeSession({
         setState((current) => ({ ...current, pending: null }));
         return;
       }
+      let resumedCount = 0;
+      for (const queueGroupId of resumableQueueGroupIds) {
+        const stillQueued = result.items.some(
+          (item) =>
+            item.status === "idempotent" &&
+            item.queueGroupId === queueGroupId,
+        );
+        if (!stillQueued) continue;
+        const resumed = await startRegularQueueGroup({ queueGroupId });
+        if (!isCurrent(requestedScope, epoch)) return;
+        if (isContentCommandStaleResult(resumed)) {
+          pendingRef.current = null;
+          setState((current) => ({ ...current, pending: null }));
+          return;
+        }
+        resumedCount += 1;
+      }
       pendingRef.current = null;
       setState(
         initialState({
           kind: "status",
-          text: `已发起 ${result.admittedCount || 0} 项普通平台投稿。`,
+          text: resumedCount
+            ? `已发起 ${result.admittedCount || 0} 项普通平台投稿，并重新启动 ${resumedCount} 个因客户资料不完整而暂停的队列。`
+            : `已发起 ${result.admittedCount || 0} 项普通平台投稿。`,
         }),
       );
       onCommitted();
@@ -468,7 +507,11 @@ export function useSubmissionIntakeSession({
       regularBusy:
         state.pending === "regular_preview" ||
         state.pending === "regular_admit" ||
-        commandBusy("previewRegularQueueAdmission", "admitRegularQueueItems"),
+        commandBusy(
+          "previewRegularQueueAdmission",
+          "admitRegularQueueItems",
+          "startRegularQueueGroup",
+        ),
       paidPreviewBusy:
         state.pending === "paid_preview" ||
         commandBusy("previewPaidMediaPreflight"),

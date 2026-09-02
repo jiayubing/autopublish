@@ -283,13 +283,38 @@ function createRegularQueueApplication(options) {
       }
       const existing = itemForTarget(facts, ref, key);
       if (existing && existing.status === "queued" && existing.queueGroupId) {
+        let recoverableReasonCode = null;
+        if (
+          groupTransitions &&
+          typeof groupTransitions.listRegularQueueGroupSnapshots === "function"
+        ) {
+          const group = (
+            groupTransitions.listRegularQueueGroupSnapshots({
+              queueGroupId: existing.queueGroupId,
+            }) || []
+          ).find(function (candidate) {
+            return candidate && candidate.queueGroupId === existing.queueGroupId;
+          });
+          if (
+            group &&
+            group.pauseIntent === "system" &&
+            group.actions &&
+            group.actions.reasonCode === "REGULAR_CLIENT_PROFILE_INCOMPLETE"
+          ) {
+            recoverableReasonCode = group.actions.reasonCode;
+          }
+        }
         return Object.freeze({
           articleRef: ref,
           articleId: ref.articleId,
           itemId: existing.itemId,
           batchId: existing.batchId,
           targetKey: key,
+          queueGroupId: existing.queueGroupId,
           status: "idempotent",
+          ...(recoverableReasonCode
+            ? { reasonCode: recoverableReasonCode }
+            : {}),
         });
       }
       const workflow = deriveArticleLifecycle({

@@ -19,6 +19,7 @@ const COMMAND_SCOPES = Object.freeze({
   saveArticle: "management",
   previewRegularQueueAdmission: null,
   admitRegularQueueItems: "management",
+  startRegularQueueGroup: "management",
   previewPaidMediaPreflight: null,
   confirmPaidMediaBatch: "management",
   previewContentArticleRemoval: null,
@@ -479,6 +480,8 @@ export function createArticleManagementFeature(adapters = {}) {
       runCommand("previewRegularQueueAdmission", input),
     admitRegularQueueItems: (input) =>
       runCommand("admitRegularQueueItems", input),
+    startRegularQueueGroup: (input) =>
+      runCommand("startRegularQueueGroup", input),
     previewPaidMediaPreflight: (input) =>
       runCommand("previewPaidMediaPreflight", input),
     confirmPaidMediaBatch: (input) =>
