@@ -126,11 +126,6 @@ function diagnosticWarnings(tools, capabilities) {
       code: "BROWSER_CHANNEL_NOT_CHECKED",
       message: "Browser channel has not been checked in this process",
     });
-  if (!tools.hepanPython.command)
-    warnings.push({
-      code: "HEPAN_PYTHON_UNAVAILABLE",
-      message: "Hepan is not configured; only Hepan publishing is affected",
-    });
   return warnings;
 }
 

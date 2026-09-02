@@ -52,7 +52,6 @@ function createRuntimeDiagnosticsService(options) {
   const workspaceRoot = path.resolve(workspaceValue);
   const appRoot = path.resolve(appValue);
   const execFile = opts.execFile || childProcess.execFile;
-  let platformSettingsService = opts.platformSettingsService || null;
   let browserProbe = {
     channel: null,
     state: "not_checked",
@@ -129,16 +128,7 @@ function createRuntimeDiagnosticsService(options) {
   }
 
   function diagnose() {
-    const tools = resolvePlaywrightRuntime(
-      Object.assign({}, opts, {
-        appRoot,
-        hepanProvider: platformSettingsService
-          ? function () {
-              return platformSettingsService.getRuntimeConfig("hepan");
-            }
-          : opts.hepanProvider,
-      }),
-    );
+    const tools = resolvePlaywrightRuntime(Object.assign({}, opts, { appRoot }));
     const mammoth = probeBundledMammoth(appRoot, opts.docxAvailable);
     const capabilities = {
       playwrightNode: capability(
@@ -156,11 +146,6 @@ function createRuntimeDiagnosticsService(options) {
         mammoth.available ? "ready" : "unavailable",
         "bundled",
         mammoth.available ? null : "DOCX_RUNTIME_UNAVAILABLE",
-      ),
-      hepan: capability(
-        tools.hepanPython.command ? "ready" : "optional_unconfigured",
-        tools.hepanPython.source || "optional",
-        tools.hepanPython.command ? null : "HEPAN_PYTHON_UNAVAILABLE",
       ),
     };
     const errors = diagnosticErrors(tools, capabilities);
@@ -241,9 +226,6 @@ function createRuntimeDiagnosticsService(options) {
     memorySink,
     fileSink,
     getDiagnosticSinkStatus: diagnosticSinkStatus,
-    setPlatformSettingsService: function (service) {
-      platformSettingsService = service || null;
-    },
   });
 }
 

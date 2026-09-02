@@ -6,11 +6,13 @@ const TRANSITION_METHODS = Object.freeze([
   "confirmRegularAccepted",
   "confirmRegularNotAccepted",
   "getRegularOutcomeSnapshot",
+  "listRegularRemotePending",
   "markOrphanedRegularAttemptUncertain",
   "prepareRegularUncertainResolution",
   "recordRegularAccepted",
   "recordRegularArticleRejected",
   "recordRegularGroupBlocked",
+  "recordRegularRemotePending",
   "recordRegularUncertain",
 ]);
 
@@ -46,9 +48,7 @@ function createRegularPlatformOutcomeService(options) {
   function canonicalObservation(raw) {
     const result = raw || {};
     if (
-      !["accepted", "article_rejected", "group_blocked", "uncertain"].includes(
-        result.status,
-      )
+      !["accepted", "remote_pending", "article_rejected", "group_blocked", "uncertain"].includes(result.status)
     )
       throw fail("REGULAR_ADAPTER_OUTCOME_INVALID");
     if (
@@ -66,8 +66,7 @@ function createRegularPlatformOutcomeService(options) {
           : `REGULAR_${result.status.toUpperCase()}`),
       observedAt: result.observedAt || observedAt(),
     };
-    if (result.providerEventAt)
-      observation.providerEventAt = result.providerEventAt;
+    if (result.providerEventAt) observation.providerEventAt = result.providerEventAt;
     if (
       result.remoteId !== undefined &&
       (typeof result.remoteId !== "string" ||
@@ -80,12 +79,10 @@ function createRegularPlatformOutcomeService(options) {
       if (!remoteUrl) throw fail("REGULAR_ADAPTER_OUTCOME_INVALID");
       observation.remoteUrl = remoteUrl;
     }
-    if (
-      result.status === "accepted" &&
-      !observation.remoteId &&
-      !observation.remoteUrl
-    )
+    if (result.status === "accepted" && !observation.remoteId && !observation.remoteUrl)
       throw fail("REGULAR_ACCEPTED_REMOTE_IDENTITY_REQUIRED");
+    if (result.status === "remote_pending" && !observation.remoteId)
+      throw fail("REGULAR_REMOTE_PENDING_REMOTE_ID_REQUIRED");
     if (result.status === "group_blocked") {
       if (typeof result.articleRecoverable !== "boolean")
         throw fail("REGULAR_ADAPTER_OUTCOME_INVALID");
@@ -99,12 +96,10 @@ function createRegularPlatformOutcomeService(options) {
     const attemptId = request.regularPublicationAttemptId;
     const observation = canonicalObservation(request.outcome);
     const command = { regularPublicationAttemptId: attemptId, observation };
-    if (observation.status === "accepted")
-      return transitions.recordRegularAccepted(command);
-    if (observation.status === "article_rejected")
-      return transitions.recordRegularArticleRejected(command);
-    if (observation.status === "group_blocked")
-      return transitions.recordRegularGroupBlocked(command);
+    if (observation.status === "accepted") return transitions.recordRegularAccepted(command);
+    if (observation.status === "remote_pending") return transitions.recordRegularRemotePending(command);
+    if (observation.status === "article_rejected") return transitions.recordRegularArticleRejected(command);
+    if (observation.status === "group_blocked") return transitions.recordRegularGroupBlocked(command);
     return transitions.recordRegularUncertain(command);
   }
 
@@ -113,10 +108,9 @@ function createRegularPlatformOutcomeService(options) {
     confirmRegularAccepted: transitions.confirmRegularAccepted,
     confirmRegularNotAccepted: transitions.confirmRegularNotAccepted,
     getRegularOutcomeSnapshot: transitions.getRegularOutcomeSnapshot,
-    markOrphanedRegularAttemptUncertain:
-      transitions.markOrphanedRegularAttemptUncertain,
-    prepareRegularUncertainResolution:
-      transitions.prepareRegularUncertainResolution,
+    listRegularRemotePending: transitions.listRegularRemotePending,
+    markOrphanedRegularAttemptUncertain: transitions.markOrphanedRegularAttemptUncertain,
+    prepareRegularUncertainResolution: transitions.prepareRegularUncertainResolution,
   });
 }
 

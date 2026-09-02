@@ -48,36 +48,26 @@ export interface MediaProviderStatus {
 export interface HepanProviderStatus {
   source: PlatformProviderSource;
   configured: boolean;
-  pythonConfigured: boolean;
-  cookieConfigured: boolean;
-  categoryId: number;
-  vendorConfigured: boolean;
-  bundledVendorAvailable?: boolean;
-  siteOrigin: string;
+  uid: number;
+  uidConfigured: boolean;
+  passwordConfigured: boolean;
+  apiUrl: string;
   lastTest:
     | (PlatformProviderTestResult & {
         authenticated?: boolean;
         publishAccess?: boolean;
-        uploadContext?: "available" | "changed" | "not_checked";
-        stage?:
-          | "authentication"
-          | "publish_access"
-          | "upload_context"
-          | "dependency"
-          | string;
-        warnings?: string[];
+        stage?: string;
         account?: { displayName: string; uid: string };
+        planName?: string;
+        postLimit?: number;
+        usedCount?: number;
+        remainingCount?: number;
       })
     | null;
 }
 export type PlatformProviderStatus = MediaProviderStatus | HepanProviderStatus;
 export interface LegacyProviderSettingsDiscovery {
   media: { available: boolean; sources: string[] };
-  hepan: {
-    available: boolean;
-    sources: string[];
-    cookiePathAvailable: boolean;
-  };
   sources: string[];
   importable: boolean;
 }

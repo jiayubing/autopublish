@@ -22,40 +22,6 @@ it("media adapters scan only their injected workspace input without module reloa
   } finally { fs.rmSync(one, { recursive: true, force: true }); fs.rmSync(two, { recursive: true, force: true }); }
 });
 
-it("Hepan workspace config overrides inherited global configuration", function() {
-  const { resolveHepanRuntime } = require("../src/platforms/hepan/adapter");
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hepan-workspace-"));
-  try {
-    fs.mkdirSync(path.join(root, "config"));
-    fs.writeFileSync(path.join(root, "config", "hepan.json"), JSON.stringify({ cookiePath: "workspace-cookie", pythonPath: "workspace-python" }));
-    assert.deepStrictEqual(resolveHepanRuntime(root, { HEPAN_COOKIE_PATH: "global-cookie", HEPAN_PYTHON: "global-python" }), { cookiePath: "workspace-cookie", pythonPath: "workspace-python" });
-  } finally { fs.rmSync(root, { recursive: true, force: true }); }
-});
-
-it("Hepan adapter resolves workspace input from the definition-owned scan directory", function() {
-  const { createPlatformAdapter } = require("../src/platforms/hepan/adapter");
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hepan-scan-dir-"));
-  try {
-    const input = path.join(root, "input");
-    const configured = path.join(input, "definition-owned");
-    const legacy = path.join(input, "hepan");
-    fs.mkdirSync(configured, { recursive: true });
-    fs.mkdirSync(legacy, { recursive: true });
-    fs.writeFileSync(path.join(configured, "configured.txt"), "configured");
-    fs.writeFileSync(path.join(legacy, "legacy.txt"), "legacy");
-    const adapter = createPlatformAdapter({
-      workspacePaths: { input },
-      scanDir: "definition-owned",
-    });
-    assert.deepStrictEqual(
-      adapter.scanArticles().map((item) => item.filename),
-      ["configured.txt"],
-    );
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
-
 it("platform loader constructs adapters from explicit workspace and browser runtime dependencies", function() {
   const one = fs.mkdtempSync(path.join(os.tmpdir(), "platform-runtime-one-"));
   const two = fs.mkdtempSync(path.join(os.tmpdir(), "platform-runtime-two-"));
@@ -85,10 +51,9 @@ it("platform loader constructs adapters from explicit workspace and browser runt
     const oneAdapters = loadPlatforms({ platformIds: ["hepan", "toutiao", "media"], runtimeContext: oneContext });
     const twoAdapters = loadPlatforms({ platformIds: ["hepan", "toutiao", "media"], runtimeContext: twoContext });
 
-    assert.deepStrictEqual(oneAdapters.find((platform) => platform.definition.id === "hepan").legacyQueue.scan().map((item) => item.filename), ["one.txt"]);
+    assert.equal(oneAdapters.find((platform) => platform.definition.id === "hepan").legacyQueue, undefined);
+    assert.equal(twoAdapters.find((platform) => platform.definition.id === "hepan").legacyQueue, undefined);
     assert.equal(oneAdapters.find((platform) => platform.definition.id === "media").legacyQueue, undefined);
-    assert.deepStrictEqual(twoAdapters.find((platform) => platform.definition.id === "hepan").legacyQueue.scan(), []);
-    assert.notEqual(oneAdapters.find((platform) => platform.definition.id === "hepan").legacyQueue, twoAdapters.find((platform) => platform.definition.id === "hepan").legacyQueue);
     assert.deepStrictEqual(oneAdapters.find((platform) => platform.definition.id === "toutiao").legacyQueue.scan().map((item) => item.filename), ["one.md"]);
     assert.deepStrictEqual(twoAdapters.find((platform) => platform.definition.id === "toutiao").legacyQueue.scan().map((item) => item.filename), ["two.md"]);
     assert.notEqual(oneAdapters.find((platform) => platform.definition.id === "toutiao").loginSession, twoAdapters.find((platform) => platform.definition.id === "toutiao").loginSession);

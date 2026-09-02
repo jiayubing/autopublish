@@ -74,7 +74,6 @@ const DEPENDENCY_RULES = [
     name: "platform-adapter-to-global-runtime-config",
     roots: ["src/platforms"],
     allowlist: new Map([
-      ["src/platforms/hepan/adapter.js", 1],
       ["src/platforms/lieju/adapter.js", 1],
       ["src/platforms/media/adapter.js", 1],
       ["src/platforms/toutiao/adapter.js", 1],

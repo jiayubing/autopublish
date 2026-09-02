@@ -81,11 +81,8 @@ const mediaDraft = exactObject({
   thirdPartyId: optionalField(text(128)),
 });
 const hepanDraft = exactObject({
-  pythonPath: optionalField(text(1024, 1)),
-  cookie: optionalField(text(16384, 1)),
-  categoryId: optionalField(integerField({ min: 1, max: 2147483647 })),
-  vendorDir: optionalField(text(1024, 1)),
-  clearVendorDir: optionalField(literalField(true)),
+  uid: optionalField(integerField({ min: 1, max: Number.MAX_SAFE_INTEGER })),
+  password: optionalField(text(1024, 1)),
 });
 const platformDraft = oneOf([mediaDraft, hepanDraft]);
 const platformQueryRequest = exactObject({ platformId });
@@ -118,28 +115,23 @@ const hepanTestResult = exactObject({
   code: token(),
   authenticated: optionalField("boolean"),
   publishAccess: optionalField("boolean"),
-  uploadContext: optionalField(enumField(["available", "changed", "not_checked"])),
-  stage: optionalField(enumField([
-    "authentication",
-    "publish_access",
-    "upload_context",
-    "dependency",
-  ])),
-  warnings: optionalField(arrayField(token(), { max: 8 })),
+  stage: optionalField(enumField(["publish_access"])),
   account: optionalField(exactObject({
     displayName: text(160, 1),
     uid: stringField({ min: 1, max: 20, pattern: /^\d{1,20}$/u }),
   })),
+  planName: optionalField(text(160, 1)),
+  postLimit: optionalField(integerField({ min: 0 })),
+  usedCount: optionalField(integerField({ min: 0 })),
+  remainingCount: optionalField(integerField({ min: 0 })),
 });
 const hepanStatus = exactObject({
   source: enumField(["application", "environment"]),
   configured: "boolean",
-  pythonConfigured: "boolean",
-  cookieConfigured: "boolean",
-  categoryId: integerField({ min: 0, max: 2147483647 }),
-  vendorConfigured: "boolean",
-  bundledVendorAvailable: optionalField("boolean"),
-  siteOrigin: text(2048),
+  uid: integerField({ min: 0, max: Number.MAX_SAFE_INTEGER }),
+  uidConfigured: "boolean",
+  passwordConfigured: "boolean",
+  apiUrl: text(2048, 1),
   lastTest: nullableField(hepanTestResult),
 });
 const platformStatusResult = exactObject({
@@ -327,16 +319,31 @@ const PLATFORM_ERRORS = Object.fromEntries([
   "PLATFORM_CONFIG_ENCRYPTION_UNAVAILABLE", "PLATFORM_CONFIG_STORAGE_INVALID",
   "PLATFORM_CONFIG_STORAGE_WRITE_FAILED", "PLATFORM_CONFIG_BUSY",
   "PLATFORM_CONFIG_PLATFORM_NOT_FOUND", "PLATFORM_CONNECTION_FAILED",
-  "MEDIA_CONNECTION_FAILED", "MEDIA_HTTP_CONFIRMATION_REQUIRED", "HEPAN_CONNECTION_FAILED",
-  "HEPAN_PYTHON_UNAVAILABLE", "HEPAN_DEPENDENCY_MISSING", "HEPAN_COOKIE_REJECTED",
-  "HEPAN_AUTH_REDIRECTED", "HEPAN_CATEGORY_ACCESS_DENIED", "HEPAN_PUBLISH_FORM_CHANGED",
-  "HEPAN_UPLOAD_CONTEXT_CHANGED", "HEPAN_REMOTE_TIMEOUT", "HEPAN_REMOTE_HTTP_ERROR",
-  "HEPAN_CHECK_RUNTIME_FAILED", "HEPAN_PAYLOAD_RUNTIME_FAILED",
+  "MEDIA_CONNECTION_FAILED", "MEDIA_HTTP_CONFIRMATION_REQUIRED",
+  "HEPAN_REQUEST_INVALID", "HEPAN_CREDENTIALS_INVALID", "HEPAN_PLAN_UNAVAILABLE",
+  "HEPAN_QUOTA_EXHAUSTED", "HEPAN_CONTENT_REJECTED", "HEPAN_PUBLISH_DISABLED",
+  "HEPAN_RATE_LIMITED", "HEPAN_REMOTE_SERVER_ERROR", "HEPAN_GEO_API_TIMEOUT",
+  "HEPAN_GEO_API_UNAVAILABLE", "HEPAN_GEO_API_PROTOCOL_ERROR",
   "PLATFORM_CONFIG_MIGRATION_CONFIRMATION_REQUIRED", "PLATFORM_CONFIG_MIGRATION_UNAVAILABLE",
   "PLATFORM_CONFIG_MIGRATION_FAILED", "HEPAN_COOKIE_IMPORT_INVALID",
 ].map((code) => [code, {
-  category: code.includes("CONNECTION") || code.includes("REMOTE") ? "remote" : "validation",
-  retryability: code.includes("BUSY") || code.includes("FAILED") || code.includes("TIMEOUT") ? "safe" : "never",
+  category:
+    code.includes("GEO_API") || code.includes("REMOTE") || code.includes("RATE")
+      ? "remote"
+      : code.includes("CONFIG_STORAGE") || code.includes("ENCRYPTION")
+        ? "storage"
+        : code.includes("BUSY")
+          ? "conflict"
+          : "validation",
+  retryability:
+    code.includes("BUSY") ||
+    code.includes("TIMEOUT") ||
+    code.includes("UNAVAILABLE") ||
+    code.includes("REMOTE_SERVER") ||
+    code.includes("RATE_LIMITED") ||
+    code.includes("WRITE_FAILED")
+      ? "safe"
+      : "never",
   userMessage: "平台设置操作未完成，请检查配置后重试。",
 }]));
 Object.assign(PLATFORM_ERRORS, {

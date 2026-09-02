@@ -72,6 +72,14 @@ function createOperationalStoreFactReader(context) {
           }
         }
         const intent = fromText(row.intent_payload) || {};
+        const observed =
+          intent.detail && intent.detail.observation
+            ? intent.detail.observation
+            : null;
+        const remotePending =
+          row.status === "uncertain" &&
+          observed &&
+          observed.status === "remote_pending";
         const failure =
           row.status === "failed"
             ? domain.projectRegularPublicationFailure(
@@ -85,7 +93,11 @@ function createOperationalStoreFactReader(context) {
           articleId: row.article_id,
           targetKey: row.target_key,
           ...targetFields(target),
-          status: cancellation ? "cancelled" : row.status,
+          status: cancellation
+            ? "cancelled"
+            : remotePending
+              ? "remote_pending"
+              : row.status,
           ...(cancellation
             ? {
                 reasonCode:
@@ -99,7 +111,9 @@ function createOperationalStoreFactReader(context) {
             ? successEvidence.version === 2
               ? successEvidence.remoteId
               : successEvidence.orderNumber
-            : null,
+            : remotePending
+              ? observed.remoteId
+              : null,
           remoteUrl:
             domain.normalizePublishedArticleUrl(
               successEvidence

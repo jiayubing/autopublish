@@ -316,7 +316,6 @@ test("offline self-test uses packaged paths and emits only safe relative evidenc
       result.checks.migrationCli.path,
       "migration/migrate-content-library-v2.js",
     );
-    assert.equal(result.checks.hepan.status, "SKIPPED_OPTIONAL");
     assert.equal(result.checks.storageBoundaries.cleanup.status, "passed");
     assert.doesNotMatch(
       serialized,

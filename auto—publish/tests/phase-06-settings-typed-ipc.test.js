@@ -219,7 +219,6 @@ test("platform settings wire results retain platform identity and never echo dra
     legacyProviderSettings: {
       discover: () => ({
         media: { available: false, sources: [] },
-        hepan: { available: false, sources: [], cookiePathAvailable: false },
         sources: [],
         importable: false,
       }),

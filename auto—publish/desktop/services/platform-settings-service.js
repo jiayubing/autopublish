@@ -37,6 +37,11 @@ function safeTestDiagnostics(value) {
     const uid = String(value.account.uid == null ? "" : value.account.uid).trim();
     if (displayName && Array.from(displayName).length <= 80 && /^\d{1,20}$/.test(uid)) output.account = { displayName, uid };
   }
+  if (typeof value.planName === "string" && value.planName.trim() && Array.from(value.planName.trim()).length <= 80)
+    output.planName = value.planName.trim();
+  ["postLimit", "usedCount", "remainingCount"].forEach((key) => {
+    if (Number.isSafeInteger(value[key]) && value[key] >= 0) output[key] = value[key];
+  });
   return output;
 }
 
@@ -164,7 +169,7 @@ function createPlatformSettingsService(options) {
     const context = Object.assign({ source, lastTest: lastTest(adapter) }, extraContext || {});
     let result = typeof adapter.status === "function" ? adapter.status(config, context) : { configured: Boolean(config), source, lastTest: context.lastTest };
     result = isObject(result) ? Object.assign({}, result) : {};
-    ["apiKey", "cookie", "cookieValue", "secret", "secrets", "decrypted", "buffer", "sourcePath", "cookiePath", "pythonPath"].forEach((key) => { delete result[key]; });
+    ["apiKey", "password", "cookie", "cookieValue", "secret", "secrets", "decrypted", "buffer", "sourcePath", "cookiePath", "pythonPath"].forEach((key) => { delete result[key]; });
     result.source = source;
     result.configured = Boolean(config);
     result.lastTest = context.lastTest;

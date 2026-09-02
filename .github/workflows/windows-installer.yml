@@ -3,7 +3,10 @@ name: Windows Installer
 on:
   push:
     branches:
-      - refactor/generation-simplification
+      - master
+  pull_request:
+    paths:
+      - .github/workflows/windows-installer.yml
   workflow_dispatch:
     inputs:
       ref:
@@ -19,7 +22,6 @@ jobs:
     runs-on: windows-latest
     env:
       CI_SYNTHETIC_ONLY: "1"
-      HEPAN_VENDOR_DIR: resources/hepan/vendor-pure
     steps:
       - name: Checkout requested ref
         uses: actions/checkout@v4

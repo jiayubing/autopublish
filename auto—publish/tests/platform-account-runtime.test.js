@@ -9,7 +9,6 @@ const {
 test("Hepan account inspection uses the configured settings test result", async () => {
   let calls = 0;
   const platform = createPlatform({
-    workspacePaths: { tmp: "C:\\synthetic-tmp" },
     getPlatformSettingsService: () => ({
       test: async (platformId, input) => {
         calls += 1;

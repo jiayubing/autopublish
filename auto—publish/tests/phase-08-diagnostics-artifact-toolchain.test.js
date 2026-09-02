@@ -125,7 +125,7 @@ test("artifact verifier rejects the retired manifest version compatibility field
   );
 });
 
-test("offline storage cleanup repeats with deterministic stale fixtures", () => {
+test("offline storage boundaries repeat without retired Hepan temporary cleanup", () => {
   const fixture = temporaryRoot();
   const originalUtimesSync = fs.utimesSync;
   const calls = [];
@@ -136,19 +136,15 @@ test("offline storage cleanup repeats with deterministic stale fixtures", () => 
   try {
     const result = verifyStorageBoundaries(path.join(fixture.root, "run-0"));
     assert.equal(result.cleanup.status, "passed");
-    assert.equal(result.cleanup.removed, 2);
+    assert.equal(result.cleanup.removed, 0);
     fs.utimesSync = originalUtimesSync;
-    assert.equal(calls.length, 2);
-    calls.forEach((args) => {
-      assert.equal(args[1].getTime(), 0);
-      assert.equal(args[2].getTime(), 0);
-    });
+    assert.equal(calls.length, 0);
     for (let index = 1; index < 20; index += 1) {
       const repeated = verifyStorageBoundaries(
         path.join(fixture.root, "run-" + index),
       );
       assert.equal(repeated.cleanup.status, "passed");
-      assert.equal(repeated.cleanup.removed, 2);
+      assert.equal(repeated.cleanup.removed, 0);
     }
   } finally {
     fs.utimesSync = originalUtimesSync;
