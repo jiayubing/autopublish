@@ -442,7 +442,7 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
       const existingObservation = row.intent.detail.observation;
       const supersedesRemotePending =
         status === "article_rejected" &&
-        row.publication_status === "submitted" &&
+        row.publication_status === "uncertain" &&
         existingObservation &&
         existingObservation.status === "remote_pending";
       if (existingObservation && !supersedesRemotePending) {
@@ -486,7 +486,7 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
         const allowedStatuses =
           row.attempt_status === "queued"
             ? "('queued')"
-            : "('remote_started','submitted','uncertain')";
+            : "('remote_started','uncertain')";
         db.prepare(
           `UPDATE publication_attempts SET status='failed',finished_at=? WHERE attempt_id=? AND status IN${allowedStatuses}`,
         ).run(stamp, id);
@@ -528,7 +528,7 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
       if (row.publication_status === "published")
         return Object.freeze({ attemptId: id, status: "published", firstWins: true });
       const existing = row.intent.detail && row.intent.detail.observation;
-      if (row.publication_status === "submitted" && existing) {
+      if (row.publication_status === "uncertain" && existing) {
         if (
           existing.status === "remote_pending" &&
           existing.fingerprint === observed.fingerprint
@@ -544,20 +544,20 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
       if (existing) throw fail("REGULAR_OUTCOME_CONFLICT");
       const attemptChanged = db
         .prepare(
-          "UPDATE publication_attempts SET status='submitted' WHERE attempt_id=? AND status='remote_started'",
+          "UPDATE publication_attempts SET status='uncertain' WHERE attempt_id=? AND status='remote_started'",
         )
         .run(id).changes;
       if (attemptChanged !== 1) throw fail("REGULAR_OUTCOME_STATE_CONFLICT");
       const publicationChanged = db
         .prepare(
-          "UPDATE publication_records SET status='submitted',updated_at=? WHERE publication_id=? AND status='remote_started'",
+          "UPDATE publication_records SET status='uncertain',updated_at=? WHERE publication_id=? AND status='remote_started'",
         )
         .run(stamp, row.publication_id).changes;
       if (publicationChanged !== 1)
         throw fail("REGULAR_OUTCOME_STATE_CONFLICT");
       const activeTargetChanged = db
         .prepare(
-          "UPDATE article_active_targets SET state='submitted',updated_at=? WHERE attempt_id=? AND state='remote_started'",
+          "UPDATE article_active_targets SET state='uncertain',updated_at=? WHERE attempt_id=? AND state='remote_started'",
         )
         .run(stamp, id).changes;
       if (activeTargetChanged !== 1)
@@ -566,7 +566,7 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
         row,
         "completed",
         Object.assign({}, fromText(row.item_payload) || {}, {
-          outcomeStatus: "submitted",
+          outcomeStatus: "remote_pending",
           remoteId: observed.remoteId,
         }),
         stamp,
