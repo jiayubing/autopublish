@@ -1140,21 +1140,6 @@ const PRODUCTION_CALLERS = Object.freeze({
     application: "service.pauseBatch",
     featureBinding: "pause",
   }),
-  "generation.continueBatch": Object.freeze({
-    view: "media-workbench/src/components/content/BatchGenerationView.tsx",
-    viewSymbol: "useGenerationFeature",
-    feature:
-      "media-workbench/src/features/generation/use-generation-feature.ts",
-    featureSymbol: "useGenerationFeature",
-    bridge: "media-workbench/src/bridge/generation.ts",
-    bridgeSymbol: "continueGenerationBatch",
-    preloadMethod: "continueGenerationBatch",
-    command: "generation.continueBatch",
-    channel: "content:continue-generation-batch",
-    registrar: "desktop/ipc/content-generation-batch-ipc.js",
-    application: "service.continueBatch",
-    featureBinding: "continue",
-  }),
   "generation.resumeBatch": Object.freeze({
     view: "media-workbench/src/components/content/BatchGenerationView.tsx",
     viewSymbol: "useGenerationFeature",
@@ -2181,11 +2166,6 @@ const PRODUCTION_CONSUMERS = Object.freeze({
     "media-workbench/src/components/content/BatchGenerationView.tsx",
     "pause",
   ],
-  "generation.continueBatch": [
-    "direct",
-    "media-workbench/src/components/content/BatchGenerationView.tsx",
-    "continue",
-  ],
   "generation.resumeBatch": [
     "direct",
     "media-workbench/src/components/content/BatchGenerationView.tsx",
@@ -2950,7 +2930,6 @@ const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
           "generation.createAndStartBatch",
           "generation.abandonBatch",
           "generation.pauseBatch",
-          "generation.continueBatch",
           "generation.resumeBatch",
           "generation.retryFailed",
         ],
@@ -4332,32 +4311,6 @@ const rawProductionIpcContractFixtures = [
     request: {},
     result: {
       batch: null,
-    },
-  },
-  {
-    capability: "generation.continueBatch",
-    channel: "content:continue-generation-batch",
-    owner: "generation",
-    productionCaller: "desktop/preload.js:content:continue-generation-batch",
-    request: {
-      batchId: "fixture-1",
-    },
-    result: {
-      batch: {
-        id: "fixture-1",
-        status: "pending",
-        clientSources: [],
-        templates: [],
-        tasks: [],
-        counts: {
-          total: 0,
-          succeeded: 0,
-          failed: 0,
-          pending: 0,
-          interrupted: 0,
-          cancelled: 0,
-        },
-      },
     },
   },
   {
