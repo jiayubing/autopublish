@@ -32,23 +32,17 @@ function parseArguments(argv) {
     );
   while (args.length) {
     const arg = args.shift();
-    if (["--python", "--application", "--output"].includes(arg)) {
+    if (["--application", "--output"].includes(arg)) {
       const value = args.shift();
       if (!value || value.startsWith("--"))
         throw packageEvidenceError(
           "PRODUCTION_PACKAGE_ARGUMENT_INVALID",
           arg + " requires a value",
         );
-      const key =
-        arg === "--python"
-          ? "pythonPath"
-          : arg === "--application"
-            ? "applicationPath"
-            : "output";
+      const key = arg === "--application" ? "applicationPath" : "output";
       options[key] =
         key === "output" ? resolveEvidenceOutput(value) : path.resolve(value);
-    } else if (arg === "--require-python") options.requirePython = true;
-    else if (arg === "--static-only") options.staticOnly = true;
+    } else if (arg === "--static-only") options.staticOnly = true;
     else
       throw Object.assign(new Error("Unknown production package argument"), {
         code: "PRODUCTION_PACKAGE_ARGUMENT_INVALID",

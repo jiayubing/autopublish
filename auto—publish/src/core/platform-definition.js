@@ -2,7 +2,7 @@
 
 const TOP_LEVEL_KEYS = Object.freeze(["schemaVersion", "id", "displayName", "publicationTargetKind", "scanDir", "capabilities", "contributions", "externalHosts"]);
 const CAPABILITY_KEYS = Object.freeze(["regularSubmission", "legacyQueueImport", "loginSession", "accountInspection", "imagePublishing"]);
-const CONTRIBUTION_KEYS = Object.freeze(["settings", "clientProfile", "runtimeArtifacts"]);
+const CONTRIBUTION_KEYS = Object.freeze(["settings", "clientProfile", "runtimeArtifacts", "remoteReview"]);
 const SAFE_SEGMENT = /^[a-z][a-z0-9-]{0,63}$/;
 const SAFE_HOST = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const UNSAFE_DISPLAY = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u;
@@ -63,6 +63,8 @@ function parsePlatformDefinitionV1(input) {
     throw platformError("PLATFORM_DEFINITION_INVARIANT_VIOLATION", { platformId });
   if (capabilities.imagePublishing && !capabilities.regularSubmission)
     throw platformError("PLATFORM_DEFINITION_INVARIANT_VIOLATION", { platformId, capability: "imagePublishing" });
+  if (contributions.remoteReview && !capabilities.regularSubmission)
+    throw platformError("PLATFORM_DEFINITION_INVARIANT_VIOLATION", { platformId, capability: "remoteReview" });
   return Object.freeze({ schemaVersion: 1, id: platformId, displayName: input.displayName, publicationTargetKind: input.publicationTargetKind, scanDir: input.scanDir, capabilities, contributions, externalHosts: Object.freeze(externalHosts) });
 }
 

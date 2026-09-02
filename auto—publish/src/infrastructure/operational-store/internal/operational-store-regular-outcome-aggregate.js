@@ -583,6 +583,41 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
     });
   }
 
+  function listRegularRemotePending() {
+    open();
+    return Object.freeze(
+      db
+        .prepare(
+          "SELECT i.attempt_id,i.payload_json,p.target_json FROM recovery_intents i JOIN publication_attempts a ON a.attempt_id=i.attempt_id JOIN publication_records p ON p.publication_id=a.publication_id WHERE i.state='outcome_pending' AND p.status='uncertain' ORDER BY i.updated_at,i.attempt_id",
+        )
+        .all()
+        .map((row) => {
+          const intent = fromText(row.payload_json) || {};
+          const observed =
+            intent.detail && intent.detail.observation
+              ? intent.detail.observation
+              : null;
+          const target = fromText(row.target_json) || {};
+          if (
+            !observed ||
+            observed.status !== "remote_pending" ||
+            typeof observed.remoteId !== "string" ||
+            !observed.remoteId ||
+            target.kind !== "platform" ||
+            typeof target.platformId !== "string" ||
+            !target.platformId
+          )
+            return null;
+          return Object.freeze({
+            regularPublicationAttemptId: row.attempt_id,
+            platformId: target.platformId,
+            remoteId: observed.remoteId,
+          });
+        })
+        .filter(Boolean),
+    );
+  }
+
   function prepareRegularUncertainResolution(input) {
     open();
     const id = attemptId(input);
@@ -935,6 +970,7 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
     confirmRegularAccepted,
     confirmRegularNotAccepted,
     getRegularOutcomeSnapshot,
+    listRegularRemotePending,
     markOrphanedRegularAttemptUncertain,
     prepareRegularUncertainResolution,
     recordRegularAccepted,

@@ -73,7 +73,6 @@ test("architecture guards cover Workstream D boundaries with a bounded legacy al
     (rule) => rule.name === "platform-adapter-to-global-runtime-config",
   );
   assert.deepEqual([...runtimeRule.allowlist.keys()].sort(), [
-    "src/platforms/hepan/adapter.js",
     "src/platforms/lieju/adapter.js",
     "src/platforms/media/adapter.js",
     "src/platforms/toutiao/adapter.js",

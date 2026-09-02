@@ -6,6 +6,7 @@ const TRANSITION_METHODS = Object.freeze([
   "confirmRegularAccepted",
   "confirmRegularNotAccepted",
   "getRegularOutcomeSnapshot",
+  "listRegularRemotePending",
   "markOrphanedRegularAttemptUncertain",
   "prepareRegularUncertainResolution",
   "recordRegularAccepted",
@@ -107,6 +108,7 @@ function createRegularPlatformOutcomeService(options) {
     confirmRegularAccepted: transitions.confirmRegularAccepted,
     confirmRegularNotAccepted: transitions.confirmRegularNotAccepted,
     getRegularOutcomeSnapshot: transitions.getRegularOutcomeSnapshot,
+    listRegularRemotePending: transitions.listRegularRemotePending,
     markOrphanedRegularAttemptUncertain: transitions.markOrphanedRegularAttemptUncertain,
     prepareRegularUncertainResolution: transitions.prepareRegularUncertainResolution,
   });

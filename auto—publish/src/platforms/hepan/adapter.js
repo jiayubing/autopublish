@@ -17,11 +17,67 @@ function idempotencyKey(attemptId) {
 function validAid(value) { return Number.isSafeInteger(value) && value > 0; }
 function mapPublishError(error) {
   const code = error && error.code;
-  if (["HEPAN_REQUEST_INVALID", "HEPAN_CONTENT_REJECTED"].includes(code))
-    return Object.freeze({ status: "article_rejected", errorCode: code === "HEPAN_CONTENT_REJECTED" ? "HEPAN_CONTENT_REJECTED" : "REGULAR_CONTENT_INVALID" });
-  if (["HEPAN_CREDENTIALS_INVALID", "HEPAN_PLAN_UNAVAILABLE", "HEPAN_QUOTA_EXHAUSTED", "HEPAN_PUBLISH_DISABLED", "HEPAN_RATE_LIMITED", "HEPAN_CONFIG_NOT_SET"].includes(code))
-    return Object.freeze({ status: "group_blocked", errorCode: code, articleRecoverable: true });
-  return Object.freeze({ status: "uncertain", errorCode: typeof code === "string" && /^HEPAN_[A-Z0-9_]+$/.test(code) ? code : "REMOTE_RESULT_UNKNOWN" });
+  if (code === "HEPAN_CONTENT_REJECTED")
+    return Object.freeze({
+      status: "article_rejected",
+      errorCode: "HEPAN_CONTENT_REJECTED",
+    });
+  if (
+    [
+      "HEPAN_REQUEST_INVALID",
+      "HEPAN_CREDENTIALS_INVALID",
+      "HEPAN_PLAN_UNAVAILABLE",
+      "HEPAN_QUOTA_EXHAUSTED",
+      "HEPAN_PUBLISH_DISABLED",
+      "HEPAN_RATE_LIMITED",
+      "HEPAN_CONFIG_NOT_SET",
+    ].includes(code)
+  )
+    return Object.freeze({
+      status: "group_blocked",
+      errorCode: code,
+      articleRecoverable: true,
+    });
+  return Object.freeze({
+    status: "uncertain",
+    errorCode:
+      typeof code === "string" && /^HEPAN_[A-Z0-9_]+$/.test(code)
+        ? code
+        : "REMOTE_RESULT_UNKNOWN",
+  });
+}
+
+function outcomeFromReviewData(data) {
+  const value = data || {};
+  if (!validAid(value.aid)) throw fail("HEPAN_GEO_API_PROTOCOL_ERROR");
+  const remoteId = String(value.aid);
+  const remoteUrl =
+    typeof value.url === "string" && value.url.trim()
+      ? value.url.trim()
+      : undefined;
+  if (value.review_status === "published")
+    return Object.freeze({
+      status: "accepted",
+      remoteId,
+      ...(remoteUrl ? { remoteUrl } : {}),
+    });
+  if (["pending", "draft"].includes(value.review_status))
+    return Object.freeze({
+      status: "remote_pending",
+      errorCode: "HEPAN_REMOTE_PENDING",
+      remoteId,
+    });
+  if (value.review_status === "rejected")
+    return Object.freeze({
+      status: "article_rejected",
+      errorCode: "HEPAN_CONTENT_REJECTED",
+    });
+  if (value.review_status === "deleted")
+    return Object.freeze({
+      status: "article_rejected",
+      errorCode: "HEPAN_REMOTE_DELETED",
+    });
+  throw fail("HEPAN_REVIEW_STATUS_UNKNOWN");
 }
 
 function createHepanAdapter(options) {
@@ -49,19 +105,25 @@ function createHepanAdapter(options) {
             if (consumed) return Object.freeze({ status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" });
             consumed = true;
             try {
-              const response = await apiClient.publish(runtimeConfig(), publishInput);
-              const data = response.data || {};
-              if (!validAid(data.aid)) return Object.freeze({ status: "uncertain", errorCode: "HEPAN_GEO_API_PROTOCOL_ERROR" });
-              const remoteId = String(data.aid);
-              const remoteUrl = typeof data.url === "string" && data.url.trim() ? data.url.trim() : undefined;
-              if (data.review_status === "published") return Object.freeze({ status: "accepted", remoteId, ...(remoteUrl ? { remoteUrl } : {}) });
-              if (["pending", "draft"].includes(data.review_status)) return Object.freeze({ status: "remote_pending", errorCode: "HEPAN_REMOTE_PENDING", remoteId });
-              if (data.review_status === "rejected") return Object.freeze({ status: "article_rejected", errorCode: "HEPAN_CONTENT_REJECTED" });
-              if (data.review_status === "deleted") return Object.freeze({ status: "article_rejected", errorCode: "HEPAN_REMOTE_DELETED" });
-              return Object.freeze({ status: "uncertain", errorCode: "HEPAN_REVIEW_STATUS_UNKNOWN" });
+              const response = await apiClient.publish(
+                runtimeConfig(),
+                publishInput,
+              );
+              return outcomeFromReviewData(response.data);
             } catch (error) { return mapPublishError(error); }
           },
         });
+      },
+    }),
+    remoteReview: Object.freeze({
+      async reconcile(input) {
+        const remoteId = String((input && input.remoteId) || "");
+        if (!/^\d+$/.test(remoteId)) throw fail("HEPAN_REQUEST_INVALID");
+        const aid = Number(remoteId);
+        if (!Number.isSafeInteger(aid) || aid < 1)
+          throw fail("HEPAN_REQUEST_INVALID");
+        const response = await apiClient.result(runtimeConfig(), aid);
+        return outcomeFromReviewData(response.data);
       },
     }),
     accountInspection: Object.freeze({

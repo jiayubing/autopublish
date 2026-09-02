@@ -43,6 +43,7 @@ const PORT_SPECS = Object.freeze({
   settingsContribution: Object.freeze(["createSettingsAdapter"]),
   clientProfileContribution: Object.freeze(["requirement", "createProfileReader"]),
   runtimeArtifactContribution: Object.freeze(["describe"]),
+  remoteReviewContribution: Object.freeze(["reconcile"]),
 });
 const DECLARATIONS = Object.freeze([
   ["capabilities", "regularSubmission", "regularSubmission"],
@@ -52,6 +53,7 @@ const DECLARATIONS = Object.freeze([
   ["contributions", "settings", "settingsContribution"],
   ["contributions", "clientProfile", "clientProfileContribution"],
   ["contributions", "runtimeArtifacts", "runtimeArtifactContribution"],
+  ["contributions", "remoteReview", "remoteReviewContribution"],
 ]);
 const PORT_NAMES = Object.freeze(Object.keys(PORT_SPECS));
 const BUILTIN_MODULE_LOAD_FAILED = Symbol("BUILTIN_MODULE_LOAD_FAILED");

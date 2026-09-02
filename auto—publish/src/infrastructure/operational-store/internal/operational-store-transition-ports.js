@@ -44,6 +44,7 @@ function exposeOperationalStoreTransitionPorts(options, dependencies) {
     confirmRegularAccepted: regularOutcome.confirmRegularAccepted,
     confirmRegularNotAccepted: regularOutcome.confirmRegularNotAccepted,
     getRegularOutcomeSnapshot: regularOutcome.getRegularOutcomeSnapshot,
+    listRegularRemotePending: regularOutcome.listRegularRemotePending,
     markOrphanedRegularAttemptUncertain:
       regularOutcome.markOrphanedRegularAttemptUncertain,
     prepareRegularUncertainResolution:

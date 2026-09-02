@@ -11,6 +11,7 @@ const methods = [
   "confirmRegularAccepted",
   "confirmRegularNotAccepted",
   "getRegularOutcomeSnapshot",
+  "listRegularRemotePending",
   "markOrphanedRegularAttemptUncertain",
   "prepareRegularUncertainResolution",
   "recordRegularAccepted",

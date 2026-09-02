@@ -3,9 +3,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const {
-  createPackagedRuntimeResolver,
-} = require("../src/infrastructure/runtime/packaged-runtime-resolver");
-const {
   CURRENT_WORKSPACE_SCHEMA_VERSION,
   readWorkspaceSchemaMarker,
 } = require("../desktop/workspace-schema-gate");
@@ -13,12 +10,6 @@ const {
   createStoragePaths,
 } = require("../src/infrastructure/workspace/storage-paths");
 const { smokeError, runCommand, lastJson } = require("./offline-smoke-runtime");
-
-const HEPAN_PAYLOAD = JSON.stringify({
-  title: "offline packaging smoke",
-  contentHtml: "<p>offline packaging smoke</p>",
-  sourceStem: "offline-packaging-smoke",
-});
 
 function verifyStorageBoundaries(tempRoot) {
   const roots = {
@@ -123,103 +114,6 @@ function verifySchemaGate(tempRoot) {
   };
 }
 
-function verifyHepan(
-  options,
-  verification,
-  tempRoot,
-  environment,
-  commandRunner,
-) {
-  const pythonPath = options && options.pythonPath;
-  if (!pythonPath) {
-    if (options && options.requirePython)
-      throw smokeError(
-        "OFFLINE_PYTHON_UNAVAILABLE",
-        "Offline Hepan Python path was not supplied",
-      );
-    return {
-      status: "SKIPPED_OPTIONAL",
-      reason: "optional-python-not-supplied",
-    };
-  }
-  const resolver = createPackagedRuntimeResolver({
-    packaged: true,
-    resourcesPath: verification.resourcesPath,
-    env: environment,
-  });
-  const python = resolver.tryResolve({
-    explicit: pythonPath,
-    allowExplicitPackaged: true,
-    executable: true,
-    errorCode: "OFFLINE_PYTHON_UNAVAILABLE",
-  });
-  if (!python.ok)
-    throw smokeError(
-      "OFFLINE_PYTHON_UNAVAILABLE",
-      "Offline Hepan Python path is unavailable",
-    );
-  const script = path.join(
-    verification.unpackedPath,
-    "src",
-    "platforms",
-    "hepan",
-    "hepan_publish.py",
-  );
-  const vendor = path.join(
-    verification.unpackedPath,
-    "resources",
-    "hepan",
-    "vendor-pure",
-  );
-  const payload = path.join(tempRoot, "hepan-payload.json");
-  fs.writeFileSync(payload, HEPAN_PAYLOAD, { encoding: "utf8", mode: 0o600 });
-  let resultValue = null;
-  let primaryError = null;
-  try {
-    const result = runCommand(
-      python.value.path,
-      [script, "--validate-payload", payload],
-      {
-        cwd: tempRoot,
-        env: Object.assign({}, environment, {
-          PYTHONPATH: vendor,
-          HEPAN_VENDOR_DIR: vendor,
-        }),
-        timeout: 30000,
-      },
-      commandRunner,
-    );
-    const output = lastJson(result.stdout);
-    if (!output || output.ok !== true)
-      throw smokeError(
-        "OFFLINE_HEPAN_SMOKE_FAILED",
-        "Offline Hepan payload smoke failed",
-      );
-    resultValue = {
-      status: "passed",
-      script: "app.asar.unpacked/src/platforms/hepan/hepan_publish.py",
-    };
-  } catch (error) {
-    primaryError = error;
-  }
-  try {
-    fs.unlinkSync(payload);
-  } catch (error) {
-    if (!error || error.code !== "ENOENT") {
-      if (primaryError) {
-        primaryError.cleanupCode = "OFFLINE_HEPAN_PAYLOAD_CLEANUP_FAILED";
-      } else {
-        primaryError = smokeError(
-          "OFFLINE_HEPAN_PAYLOAD_CLEANUP_FAILED",
-          "Offline Hepan payload cleanup could not be verified",
-        );
-      }
-    }
-  }
-  if (primaryError) throw primaryError;
-  return resultValue;
-}
-
 function verifyPackagedElectronApplication(
   options,
   verification,
@@ -307,6 +201,5 @@ function verifyPackagedElectronApplication(
 module.exports = {
   verifyStorageBoundaries,
   verifySchemaGate,
-  verifyHepan,
   verifyPackagedElectronApplication,
 };
