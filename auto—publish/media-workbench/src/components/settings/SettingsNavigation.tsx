@@ -1,12 +1,13 @@
 import React from 'react';
 
-export type SettingsSection = 'overview' | 'ai' | 'media' | 'hepan' | 'workspace' | 'runtime' | 'storage';
+export type SettingsSection = 'overview' | 'ai' | 'media' | 'hepan' | 'platformAccounts' | 'workspace' | 'runtime' | 'storage';
 
 const ITEMS: Array<{ id: SettingsSection; label: string; group?: string }> = [
   { id: 'overview', label: '概览' },
   { id: 'ai', label: 'AI 生成', group: '服务配置' },
   { id: 'media', label: '付费媒体', group: '服务配置' },
   { id: 'hepan', label: '蓝色河畔', group: '服务配置' },
+  { id: 'platformAccounts', label: '平台账号', group: '服务配置' },
   { id: 'workspace', label: '工作区', group: '系统' },
   { id: 'runtime', label: '运行环境', group: '系统' },
   { id: 'storage', label: '存储与清理', group: '系统' },
