@@ -46,6 +46,7 @@ function createSubmissionInterface(maintenance, regularQueueService, regularQueu
         "updateRegularQueueGroupSubmissionInterval",
       ),
       start: bind(regularQueueGroups, "startGroup"),
+      kick: bind(regularQueueGroups, "kickGroup"),
       pause: bind(regularQueueGroups, "pauseGroup"),
       startAll: bind(regularQueueGroups, "startAll"),
       pauseAll: bind(regularQueueGroups, "pauseAll"),
@@ -143,6 +144,7 @@ function regularAdmissionInput(input, confirmed) {
           "platformId",
           "accountProfileId",
           "queueConfig",
+          "autoStart",
           "confirmed",
         ].indexOf(key) === -1
       );
@@ -155,6 +157,11 @@ function regularAdmissionInput(input, confirmed) {
   if (confirmed && input.confirmed !== true) {
     const error = new Error("Regular queue confirmation is required");
     error.code = "REGULAR_QUEUE_CONFIRMATION_REQUIRED";
+    throw error;
+  }
+  if (input.autoStart !== undefined && typeof input.autoStart !== "boolean") {
+    const error = new Error("Invalid regular queue auto-start intent");
+    error.code = "REGULAR_QUEUE_INPUT_INVALID";
     throw error;
   }
   return input;
@@ -295,10 +302,39 @@ function registerContentSubmissionIpc(deps) {
     "content:admit-regular-queue-items",
     function (event, input) {
       return wrap(function () {
-        return projectRegularAdmission(
-          workflow.regularQueue.admit(regularAdmissionInput(input, true)),
-          "admit",
-        );
+        const request = regularAdmissionInput(input, true);
+        const result = workflow.regularQueue.admit(request);
+        if (
+          request.autoStart === true &&
+          workflow.regularQueueGroups &&
+          typeof workflow.regularQueueGroups.kick === "function"
+        ) {
+          const queueGroupIds = [
+            ...new Set(
+              (result.items || [])
+                .filter(function (item) {
+                  return (
+                    item &&
+                    (item.status === "queued" || item.status === "idempotent") &&
+                    typeof item.queueGroupId === "string" &&
+                    item.queueGroupId
+                  );
+                })
+                .map(function (item) {
+                  return item.queueGroupId;
+                }),
+            ),
+          ];
+          queueGroupIds.forEach(function (queueGroupId) {
+            try {
+              workflow.regularQueueGroups.kick({ queueGroupId });
+            } catch (_) {
+              // Admission has already committed. Auto-start is best-effort;
+              // the queue remains visible and can still be started manually.
+            }
+          });
+        }
+        return projectRegularAdmission(result, "admit");
       });
     },
   );
