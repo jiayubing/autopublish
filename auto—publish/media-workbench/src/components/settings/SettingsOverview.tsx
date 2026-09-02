@@ -55,7 +55,6 @@ export default function SettingsOverview({
     snapshot.ai.query.error?.userMessage ||
     snapshot.media.query.error?.userMessage ||
     snapshot.hepan.query.error?.userMessage ||
-    snapshot.legacy.query.error?.userMessage ||
     snapshot.commands.importLegacy.error?.userMessage;
   const legacyNotice = snapshot.commands.importLegacy.result
     ? "旧媒体配置已处理。"

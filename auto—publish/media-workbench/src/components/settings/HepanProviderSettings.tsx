@@ -179,9 +179,6 @@ export default function HepanProviderSettings() {
           <p>检查代码：{status.lastTest.code}</p>
         </div>
       )}
-      <p className="text-xs text-slate-500">
-        当前第一阶段只发布文字。图片仍保留本地选图能力，后续通过公网 HTTPS 图片地址接入蓝色河畔 BBCode。
-      </p>
       {error && <p role="alert" aria-live="assertive" className="text-sm text-rose-700">{error}</p>}
       {notice && <p role="status" aria-live="polite" className="text-sm text-emerald-700">{notice}</p>}
       <div className="flex min-w-0 flex-wrap gap-2">
