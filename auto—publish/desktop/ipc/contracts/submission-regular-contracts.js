@@ -56,6 +56,7 @@ const regularAdmissionFields = {
   articleRefs: arrayField(articleRef, { min: 1, max: 1000 }),
   platformId: id,
   accountProfileId: id,
+  autoStart: optionalField("boolean"),
   queueConfig: optionalField(regularQueueConfig),
 };
 const regularAdmissionPreview = exactObject({
