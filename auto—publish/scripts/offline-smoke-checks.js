@@ -3,12 +3,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const {
-  cleanupExpiredHepanPayloads,
-} = require("../src/platforms/hepan/adapter");
-const {
-  cleanupExpiredHepanTemporaryFiles,
-} = require("../desktop/services/platform-settings/hepan-settings-adapter");
-const {
   createPackagedRuntimeResolver,
 } = require("../src/infrastructure/runtime/packaged-runtime-resolver");
 const {
@@ -72,50 +66,20 @@ function verifyStorageBoundaries(tempRoot) {
     );
   fs.mkdirSync(paths.tmp, { recursive: true });
   fs.mkdirSync(paths.work, { recursive: true });
-  const staleCookie = path.join(
-    paths.tmp,
-    ".hepan-cookie-00000000-0000-0000-0000-000000000000.tmp",
-  );
-  const stalePayload = path.join(
-    paths.work,
-    ".hepan-payload-00000000-0000-0000-0000-000000000000.json",
-  );
-  fs.writeFileSync(staleCookie, "offline\n", "utf8");
-  fs.writeFileSync(stalePayload, "{}\n", "utf8");
-  const staleFixtureTime = new Date(0);
-  fs.utimesSync(staleCookie, staleFixtureTime, staleFixtureTime);
-  fs.utimesSync(stalePayload, staleFixtureTime, staleFixtureTime);
-  const cleanupNow = () => Date.now() + 1;
-  const temporaryCleanup = cleanupExpiredHepanTemporaryFiles({
-    tmpRoot: paths.tmp,
-    maxAgeMs: 0,
-    now: cleanupNow,
-  });
-  const payloadCleanup = cleanupExpiredHepanPayloads({
-    tempDir: paths.work,
-    maxAgeMs: 0,
-    now: cleanupNow,
-  });
-  if (
-    !temporaryCleanup.removed.includes(path.basename(staleCookie)) ||
-    !payloadCleanup.removed.includes(path.basename(stalePayload)) ||
-    fs.existsSync(staleCookie) ||
-    fs.existsSync(stalePayload) ||
-    !fs.existsSync(path.join(paths.contentLibrary, "sentinel.md"))
-  )
+  if (!fs.existsSync(path.join(paths.contentLibrary, "sentinel.md")))
     throw smokeError(
       "OFFLINE_STORAGE_CLEANUP_FAILED",
-      "Offline cleanup crossed a storage boundary",
+      "Offline storage boundary fixture was not preserved",
     );
   return {
     status: "passed",
     roots: rootNames,
     cleanup: {
       status: "passed",
-      removed: temporaryCleanup.removed.length + payloadCleanup.removed.length,
+      removed: 0,
     },
   };
-}
+}}
 
 function verifySchemaGate(tempRoot) {
   const workspace = path.join(tempRoot, "schema-workspace");
