@@ -137,9 +137,9 @@ test("a missing enabled built-in module is quarantined without hiding another va
   const restore = setDiagnosticReporter((record) => { diagnostics.push(record); return true; });
   try {
     const configPath = path.join(root, "platforms.json");
-    fs.writeFileSync(configPath, JSON.stringify({ enabled: ["missing-module", "toutiao"] }), "utf8");
+    fs.writeFileSync(configPath, JSON.stringify({ enabled: ["missing-module", "lieju"] }), "utf8");
     const loaded = loadPlatformModules({ configPath });
-    assert.deepEqual(loaded.map((platform) => platform.definition.id), ["toutiao"]);
+    assert.deepEqual(loaded.map((platform) => platform.definition.id), ["lieju"]);
     assert.equal(diagnostics.length, 1);
     assert.equal(diagnostics[0].code, "PLATFORM_MODULE_LOAD_FAILED");
     assert.deepEqual(diagnostics[0].metadata, { action: "module-load", platformId: "missing-module" });
@@ -196,7 +196,7 @@ test("loader quarantines every enabled platform that shares a scan directory", (
 });
 
 test("enabled definition security projection rejects folder identity mismatches and duplicate identities", () => {
-  const definitionPaths = ["toutiao", "lieju"].map((id) =>
+  const definitionPaths = ["lieju", "hepan"].map((id) =>
     require.resolve(`../src/platforms/${id}/definition`),
   );
   const originals = definitionPaths.map((filename) => require.cache[filename]);
@@ -207,7 +207,7 @@ test("enabled definition security projection rejects folder identity mismatches 
       id: definitionPaths[0],
       filename: definitionPaths[0],
       loaded: true,
-      exports: definition("lieju", {
+      exports: definition("hepan", {
         scanDir: "shared",
         externalHosts: ["unexpected.example"],
       }),
@@ -216,19 +216,19 @@ test("enabled definition security projection rejects folder identity mismatches 
       id: definitionPaths[1],
       filename: definitionPaths[1],
       loaded: true,
-      exports: definition("lieju", {
+      exports: definition("hepan", {
         scanDir: "shared",
         externalHosts: ["duplicate.example"],
       }),
     };
 
     const definitions = loadEnabledPlatformDefinitions({
-      enabledIds: ["toutiao", "lieju", "hepan"],
+      enabledIds: ["lieju", "hepan", "media"],
     });
     const { createExternalLinkPolicy } = require("../desktop/security/external-links");
     const policy = createExternalLinkPolicy({ definitions });
 
-    assert.deepEqual(definitions.map((item) => item.id), ["hepan"]);
+    assert.deepEqual(definitions.map((item) => item.id), ["media"]);
     assert.equal(policy.hosts.includes("unexpected.example"), false);
     assert.equal(policy.hosts.includes("duplicate.example"), false);
     assert.equal(diagnostics.some((record) => record.code === "PLATFORM_DEFINITION_ID_MISMATCH"), true);
@@ -243,7 +243,7 @@ test("enabled definition security projection rejects folder identity mismatches 
   }
 });
 
-test("built-in projections and enabled filtering match the frozen four-platform matrix", () => {
+test("built-in projections and enabled filtering match the current three-platform matrix", () => {
   const loaded = loadPlatforms();
   const matrix = Object.fromEntries(loaded.map((platform) => [platform.definition.id, {
     displayName: platform.definition.displayName,
@@ -257,13 +257,10 @@ test("built-in projections and enabled filtering match the frozen four-platform 
   }]));
   assert.deepEqual(matrix, {
     lieju: { displayName: "列举网", kind: "platform", regular: true, legacy: false, login: true, inspect: true, image: true, review: false },
-    toutiao: { displayName: "头条", kind: "platform", regular: false, legacy: true, login: true, inspect: true, image: false, review: false },
     hepan: { displayName: "蓝色河畔", kind: "platform", regular: true, legacy: false, login: false, inspect: true, image: false, review: true },
     media: { displayName: "付费媒体", kind: "resource", regular: false, legacy: false, login: false, inspect: false, image: false, review: false },
   });
   assert.deepEqual(loadPlatforms({ platformIds: ["lieju"] }).map((platform) => platform.definition.id), ["lieju"]);
-  assert.equal(Array.isArray(loadPlatforms({ platformIds: ["toutiao"] })[0].legacyQueue.scan()), true);
-  assert.equal(createSubmissionTargetCatalog().find("toutiao"), null);
   assert.deepEqual(createSubmissionTargetCatalog().list().map((platform) => platform.id), ["lieju", "hepan"]);
 });
 
@@ -352,7 +349,7 @@ test("disabled modules are packaged as code but never executed", () => {
   const loaded = loadPlatformModules({ platformModules: [fixture, moduleFor(definition("enabled"))], enabledIds: ["enabled"] });
   assert.deepEqual(loaded.map((platform) => platform.definition.id), ["enabled"]);
   assert.equal(executed, false);
-  for (const id of ["lieju", "toutiao", "hepan", "media"]) {
+  for (const id of ["lieju", "hepan", "media"]) {
     assert.equal(typeof require(`../src/platforms/${id}/definition`).id, "string");
     assert.equal(typeof require(`../src/platforms/${id}/platform`).createPlatform, "function");
     assert.equal(Object.hasOwn(require(`../src/platforms/${id}/adapter`), "id"), false);
