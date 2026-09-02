@@ -214,8 +214,6 @@ function privateEntry(relative) {
     name.endsWith(".sqlite3") ||
     name.endsWith(".db-wal") ||
     name.endsWith(".db-shm") ||
-    (name.includes("hepan-cookie") && name.endsWith(".tmp")) ||
-    (name.includes("hepan-images") && name.endsWith(".tmp")) ||
     parts.some((part) => PRIVATE_SEGMENTS.has(part)) ||
     (parts.includes("tests") && parts.includes("fixtures"))
   );
