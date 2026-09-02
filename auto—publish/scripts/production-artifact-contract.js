@@ -78,18 +78,6 @@ const DEFINITIONS = Object.freeze([
     source: "node_modules/playwright-core/LICENSE",
   },
   {
-    name: "hepan-script",
-    location: "unpacked",
-    target: "src/platforms/hepan/hepan_publish.py",
-    source: "src/platforms/hepan/hepan_publish.py",
-  },
-  {
-    name: "hepan-vendor",
-    location: "unpacked",
-    target: "resources/hepan/vendor-pure/requests/__init__.py",
-    source: "resources/hepan/vendor-pure/requests/__init__.py",
-  },
-  {
     name: "migration-cli",
     location: "resources",
     target: "migration/migrate-content-library-v2.js",

@@ -19,7 +19,6 @@ jobs:
     runs-on: windows-latest
     env:
       CI_SYNTHETIC_ONLY: "1"
-      HEPAN_VENDOR_DIR: resources/hepan/vendor-pure
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -239,7 +238,6 @@ jobs:
     runs-on: windows-latest
     env:
       CI_SYNTHETIC_ONLY: "1"
-      HEPAN_VENDOR_DIR: resources/hepan/vendor-pure
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
