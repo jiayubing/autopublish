@@ -2013,7 +2013,7 @@ const PRODUCTION_CONSUMERS = Object.freeze({
   ],
   "platform.confirmAccountProfile": [
     "direct",
-    "media-workbench/src/components/content/AccountProfileSelector.tsx",
+    "media-workbench/src/components/settings/PlatformAccountSettings.tsx",
     "confirmAccountProfile",
   ],
   "platform.bindAccountProfile": [
