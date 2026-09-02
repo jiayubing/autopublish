@@ -19,7 +19,6 @@ const CHANNELS = [
   "content:create-and-start-generation-batch",
   "content:abandon-generation-batch",
   "content:pause-generation-batch",
-  "content:continue-generation-batch",
   "content:resume-generation-batch",
   "content:retry-failed-generation-batch",
   "content:preview-cancel-pending-generation-batch",
@@ -27,8 +26,8 @@ const CHANNELS = [
   "content:get-generation-runtime-snapshot",
 ];
 
-test("generation inventory has ten invokes with real feature consumers and one event", () => {
-  assert.equal(generationContracts.length, 10);
+test("generation inventory has nine invokes with real feature consumers and one event", () => {
+  assert.equal(generationContracts.length, 9);
   assert.equal(
     generationContracts.every((contract) => contract.kind !== "event"),
     true,
@@ -52,7 +51,7 @@ test("generation preload forwards named methods as exact versioned requests", as
   });
   const plan = {
     clientIds: ["client-1"],
-    templates: [{ platform: "toutiao", templateId: "template-1" }],
+    templates: [{ platform: "lieju", templateId: "template-1" }],
     clientSources: [],
   };
   const methodCalls = [
@@ -60,20 +59,19 @@ test("generation preload forwards named methods as exact versioned requests", as
     ["createAndStartGenerationBatch", CHANNELS[1], [plan]],
     ["abandonGenerationBatch", CHANNELS[2], [{ batchId: "batch-1", confirmed: true }]],
     ["pauseGenerationBatch", CHANNELS[3], [{ batchId: "batch-1" }]],
-    ["continueGenerationBatch", CHANNELS[4], [{ batchId: "batch-1" }]],
-    ["resumeGenerationBatch", CHANNELS[5], [{ batchId: "batch-1" }]],
-    ["retryFailedGenerationBatch", CHANNELS[6], [{ batchId: "batch-1" }]],
+    ["resumeGenerationBatch", CHANNELS[4], [{ batchId: "batch-1" }]],
+    ["retryFailedGenerationBatch", CHANNELS[5], [{ batchId: "batch-1" }]],
     [
       "previewCancelPendingGenerationBatch",
-      CHANNELS[7],
+      CHANNELS[6],
       [{ batchId: "batch-1" }],
     ],
     [
       "cancelPendingGenerationBatch",
-      CHANNELS[8],
+      CHANNELS[7],
       [{ batchId: "batch-1", confirmed: true }],
     ],
-    ["getGenerationRuntimeSnapshot", CHANNELS[9], []],
+    ["getGenerationRuntimeSnapshot", CHANNELS[8], []],
   ];
   for (const [method, channel, args] of methodCalls) {
     await preload.api.content[method](...args);
