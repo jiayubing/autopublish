@@ -71,19 +71,30 @@ describe('legacy platform settings migration', function() {
     const fixture = makeFixture();
     try {
       const first = await fixture.migration.importLegacy({ confirmed: true });
-      assert.deepEqual(first.imported.sort(), ['hepan', 'media']);
+      assert.deepEqual(first.imported, ['media']);
       const mediaDisk = fs.readFileSync(path.join(fixture.configRoot, 'media-provider.json'), 'utf8');
-      const hepanDisk = fs.readFileSync(path.join(fixture.configRoot, 'hepan-provider.json'), 'utf8');
       assert.equal(mediaDisk.includes('application-media-key'), false);
-      assert.equal(hepanDisk.includes('legacy-cookie-value'), false);
+      assert.equal(fs.existsSync(path.join(fixture.configRoot, 'hepan-geo-api-provider.json')), false);
       assert.equal(fixture.runtimeConfigStore.readLegacy().XQW_API_KEY, undefined);
-      assert.equal(fixture.runtimeConfigStore.readLegacy().HEPAN_COOKIE_PATH, undefined);
+      assert.notEqual(fixture.runtimeConfigStore.readLegacy().HEPAN_COOKIE_PATH, undefined);
       assert.equal(fs.existsSync(fixture.cookiePath), true);
+      assert.equal(first.legacyCookieFilesRemain, true);
+      assert.equal(
+        first.entries.find((entry) => entry.platform === 'hepan').status,
+        'skipped-incompatible'
+      );
+      assert.equal(
+        first.entries.find((entry) => entry.platform === 'hepan').code,
+        'HEPAN_LEGACY_COOKIE_INCOMPATIBLE'
+      );
       assert.equal(JSON.stringify(first.record).includes('legacy-cookie-value'), false);
 
       const second = await fixture.migration.importLegacy({ confirmed: true });
       assert.deepEqual(second.imported, []);
-      assert.deepEqual(second.entries.map((entry) => entry.status).sort(), ['skipped-existing', 'skipped-existing']);
+      assert.deepEqual(
+        second.entries.map((entry) => entry.status).sort(),
+        ['skipped-existing', 'skipped-incompatible']
+      );
       assert.equal(fixture.service.getStatus('media').apiKeyMask, 'appl****-key');
     } finally {
       fs.rmSync(fixture.root, { recursive: true, force: true });
