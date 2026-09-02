@@ -393,15 +393,6 @@ function createContentGenerationBatchService(options) {
     };
   }
 
-  async function prepareBatch(input) {
-    const result = await preview(input);
-    return Object.assign({ preparedAt: new Date().toISOString() }, result);
-  }
-
-  async function revalidateBatch(input) {
-    return preview(input);
-  }
-
   function assertAvailable() {
     if (disposed) throw generationError("GENERATION_RUNNER_DISPOSED");
     if (activeRun || activeStatus === "running" || activeStatus === "pausing") throw generationError("GENERATION_BATCH_BUSY");
@@ -508,7 +499,7 @@ function createContentGenerationBatchService(options) {
 
   async function createBatch(input) {
     assertAvailable();
-    const previewResult = await prepareBatch(input);
+    const previewResult = await preview(input);
     if (!previewResult.executableTaskCount) throw generationError("GENERATION_NO_EXECUTABLE_TASKS");
     const requestedConcurrency = input && input.concurrency !== undefined ? input.concurrency : 2;
     if (!Number.isInteger(requestedConcurrency) || requestedConcurrency < 1 || requestedConcurrency > 4) throw generationError("GENERATION_CONCURRENCY_INVALID");
@@ -602,12 +593,10 @@ function createContentGenerationBatchService(options) {
 
   async function startBatch(input) {
     const value = assertObject(input);
-    if (value.batchId) return runBatch(assertId(value.batchId, "batch id"), "pending", value.confirmConfigChange === true);
-    const batch = await createBatch(value);
-    return runBatch(batch.id, "pending", false);
+    return runBatch(assertId(value.batchId, "batch id"), "pending", value.confirmConfigChange === true);
   }
 
-  async function continueBatch(input) {
+  async function resumeBatch(input) {
     const value = assertObject(input);
     return runBatch(assertId(value.batchId, "batch id"), "unfinished", value.confirmConfigChange === true);
   }
@@ -698,8 +687,8 @@ function createContentGenerationBatchService(options) {
     return clone(batch);
   }
 
-  function get(batchId) { return clone(batchStore.getBatch(assertId(batchId, "batch id"))); }
-  function list() { return clone(batchStore.listBatches()); }
+  function getBatch(batchId) { return clone(batchStore.getBatch(assertId(batchId, "batch id"))); }
+  function listBatches() { return clone(batchStore.listBatches()); }
   function subscribe(listener) {
     if (typeof listener !== "function") throw generationError("GENERATION_INPUT_INVALID", "Listener is invalid");
     listeners.add(listener);
@@ -731,15 +720,22 @@ function createContentGenerationBatchService(options) {
   }
 
   return {
-    preview: preview, previewBatch: preview, prepare: prepareBatch, prepareBatch: prepareBatch, revalidate: revalidateBatch, revalidateBatch: revalidateBatch,
-    createBatch: createBatch, createAndStartBatch: createAndStartBatch, createAndStartGenerationBatch: createAndStartBatch, startBatch: startBatch, startGenerationBatch: startBatch, startPreparedBatch: startBatch,
-    continueBatch: continueBatch, continueGenerationBatch: continueBatch, resumeBatch: continueBatch, resumeGenerationBatch: continueBatch,
-    pauseBatch: pauseBatch, pauseGenerationBatch: pauseBatch, abandonBatch: abandonBatch, abandonGenerationBatch: abandonBatch,
-    retryFailed: retryFailed, retryFailedBatch: retryFailed, retryFailedGenerationBatch: retryFailed,
-    previewCancelPending: previewCancelPending, previewCancelPendingGenerationBatch: previewCancelPending,
-    cancelPending: cancelPending, cancelPendingGenerationBatch: cancelPending,
-    get: get, getBatch: get, getGenerationBatch: get, list: list, listBatches: list, listGenerationBatches: list,
-    getState: currentState, getGenerationBatchState: currentState, getRuntimeSnapshot: runtimeSnapshot, getGenerationRuntimeSnapshot: runtimeSnapshot, subscribe: subscribe, dispose: dispose
+    preview,
+    createBatch,
+    startBatch,
+    createAndStartBatch,
+    pauseBatch,
+    resumeBatch,
+    abandonBatch,
+    retryFailed,
+    previewCancelPending,
+    cancelPending,
+    getBatch,
+    listBatches,
+    getState: currentState,
+    getRuntimeSnapshot: runtimeSnapshot,
+    subscribe,
+    dispose,
   };
 }
 
