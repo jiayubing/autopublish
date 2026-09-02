@@ -357,13 +357,11 @@ it("workspace runtime gives the Hepan task service its configured platform setti
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "workspace-runtime-hepan-"));
   const taskServicePath = desktopTaskServicePath;
   const originalTaskServiceModule = require.cache[taskServicePath];
-  const originalPython = process.env.HEPAN_PYTHON;
-  const originalCookie = process.env.HEPAN_COOKIE_PATH;
-  const cookiePath = path.join(root, "hepan-cookie.txt");
+  const originalUid = process.env.HEPAN_UID;
+  const originalPassword = process.env.HEPAN_PASSWORD;
   let taskServiceOptions = null;
-  fs.writeFileSync(cookiePath, "sessionid=test-session");
-  process.env.HEPAN_PYTHON = process.execPath;
-  process.env.HEPAN_COOKIE_PATH = cookiePath;
+  process.env.HEPAN_UID = "12345";
+  process.env.HEPAN_PASSWORD = "fixture-password";
   require.cache[taskServicePath] = {
     id: taskServicePath,
     filename: taskServicePath,
@@ -388,16 +386,16 @@ it("workspace runtime gives the Hepan task service its configured platform setti
     await runtime.start({ workspacePath: path.join(root, "workspace") });
     const hepanRuntime = taskServiceOptions.platformSettingsService.getAdapterForRuntime("hepan");
     assert.ok(hepanRuntime.adapter);
-    assert.equal(hepanRuntime.config.pythonPath, process.execPath);
-    assert.equal(hepanRuntime.config.cookiePath, cookiePath);
+    assert.equal(hepanRuntime.config.uid, 12345);
+    assert.equal(hepanRuntime.config.password, "fixture-password");
     await runtime.dispose();
   } finally {
     if (originalTaskServiceModule) require.cache[taskServicePath] = originalTaskServiceModule;
     else delete require.cache[taskServicePath];
-    if (originalPython === undefined) delete process.env.HEPAN_PYTHON;
-    else process.env.HEPAN_PYTHON = originalPython;
-    if (originalCookie === undefined) delete process.env.HEPAN_COOKIE_PATH;
-    else process.env.HEPAN_COOKIE_PATH = originalCookie;
+    if (originalUid === undefined) delete process.env.HEPAN_UID;
+    else process.env.HEPAN_UID = originalUid;
+    if (originalPassword === undefined) delete process.env.HEPAN_PASSWORD;
+    else process.env.HEPAN_PASSWORD = originalPassword;
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
