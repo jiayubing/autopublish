@@ -1,7 +1,6 @@
 "use strict";
 
 const assert = require("node:assert/strict");
-const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -10,24 +9,23 @@ const test = require("node:test");
 const adapterModulePath = require.resolve("../src/platforms/lieju/adapter");
 const playwrightModulePath = require.resolve("../src/core/playwright");
 const operatorFlowModulePath = require.resolve("../src/core/operator-flow");
-const { createPlatformAdapter } = require("../src/platforms/lieju/adapter");
 const { loadPlatformModules } = require("../src/core/platforms");
 const { normalizeRuntimeConfig } = require("../desktop/runtime-config-store");
 
 function claim(city) {
   return {
     platformId: "lieju",
-    regularPublicationAttemptId: "attempt-lieju-transport-policy",
+    regularPublicationAttemptId: "attempt-lieju-http-policy",
     articleIdentityV1: {
       version: 1,
-      clientId: "client-lieju-transport-policy",
-      articleId: "article-lieju-transport-policy",
+      clientId: "client-lieju-http-policy",
+      articleId: "article-lieju-http-policy",
     },
     targetIdentityV1: {
       version: 1,
       kind: "platform",
       platformId: "lieju",
-      accountProfileId: "account-lieju-transport-policy",
+      accountProfileId: "account-lieju-http-policy",
     },
     publicationProfile: {
       city: city || "上海",
@@ -92,7 +90,7 @@ function accountPage() {
 
 function stateFixture() {
   const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), "autopublish-lieju-transport-policy-"),
+    path.join(os.tmpdir(), "autopublish-lieju-http-policy-"),
   );
   const stateFile = path.join(root, "lieju.json");
   fs.writeFileSync(stateFile, '{"cookies":[]}', "utf8");
@@ -143,75 +141,14 @@ function createHttpRuntime(options) {
   };
 }
 
-function png(width, height) {
-  const value = Buffer.alloc(45);
-  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(value, 0);
-  value.writeUInt32BE(13, 8);
-  value.write("IHDR", 12, "ascii");
-  value.writeUInt32BE(width, 16);
-  value.writeUInt32BE(height, 20);
-  value.writeUInt32BE(0, 33);
-  value.write("IEND", 37, "ascii");
-  return value;
-}
-
-function imagePlan() {
-  return {
-    version: 1,
-    requestedCount: 1,
-    selectedCount: 1,
-    textOnly: false,
-    images: [
-      {
-        imageId: "client-image:transport-policy",
-        name: "transport-policy.png",
-        extension: ".png",
-        mimeType: "image/png",
-        width: 4,
-        height: 3,
-        size: 45,
-      },
-    ],
-    warnings: [],
-  };
-}
-
-function createImageAssetReader(root) {
-  const image = path.join(root, "transport-policy.png");
-  const bytes = png(4, 3);
-  fs.writeFileSync(image, bytes);
-  return {
-    read: () => ({
-      name: "transport-policy.png",
-      extension: ".png",
-      mimeType: "image/png",
-      width: 4,
-      height: 3,
-      size: bytes.length,
-      bytes,
-      assetFingerprint: crypto
-        .createHash("sha256")
-        .update(bytes)
-        .digest("hex"),
-    }),
-  };
-}
-
-function loadAdapterWithBrowser(options) {
+function loadAdapter(options) {
   const value = options || {};
   const originalPlaywright = require.cache[playwrightModulePath];
   const originalOperatorFlow = require.cache[operatorFlowModulePath];
   const originalAdapter = require.cache[adapterModulePath];
   const commands = [];
-  const codeSources = [];
   let alive = false;
-  let currentUrl = "";
-  const session = "lieju-transport-policy";
-  const stopError = () => {
-    const error = new Error("stop requested");
-    error.code = "STOP_REQUESTED";
-    return error;
-  };
+  const session = "lieju-http-policy";
 
   require.cache[playwrightModulePath] = {
     id: playwrightModulePath,
@@ -231,43 +168,16 @@ function loadAdapterWithBrowser(options) {
           alive = true;
           return "";
         }
-        if (args[0] === "goto") {
-          currentUrl = args[1];
-          return "";
-        }
         if (args[0] === "close") {
           alive = false;
           return "";
         }
         return "";
       },
-      runCode: (source) => {
-        codeSources.push(source);
-        if (source.includes("page.content()")) {
-          return currentUrl.includes("city.php?post=239")
-            ? cityDirectory()
-            : publicationForm();
-        }
-        if (source.includes("responseHandler")) {
-          return (
-            value.browserEvidence || {
-              url: "https://ly.lieju.com/shanghai/654321.html",
-              responseUrls: [],
-              detailUrls: [],
-              dialogMessages: [],
-              hasDetailPageSignals: false,
-              hasExplicitRejection: false,
-              hasSubmissionForm: false,
-            }
-          );
-        }
-        if (source.includes("fileField.inputValue")) {
-          return value.frozenFormMatches !== false;
-        }
-        return true;
-      },
+      runCode: () => true,
     },
   };
+
   if (value.stopped === true) {
     const original = require(operatorFlowModulePath);
     require.cache[operatorFlowModulePath] = {
@@ -276,55 +186,55 @@ function loadAdapterWithBrowser(options) {
       loaded: true,
       exports: {
         ...original,
-        throwIfStopped: () => {
-          throw stopError();
+        throwIfStopped() {
+          const error = new Error("stop requested");
+          error.code = "STOP_REQUESTED";
+          throw error;
         },
       },
     };
   }
+
   delete require.cache[adapterModulePath];
   const loaded = require(adapterModulePath);
-
   return {
     commands,
-    codeSources,
     adapter: loaded.createPlatformAdapter(value.runtimeContext),
-    restore: () => {
+    restore() {
       delete require.cache[adapterModulePath];
       if (originalAdapter) require.cache[adapterModulePath] = originalAdapter;
       if (originalPlaywright)
         require.cache[playwrightModulePath] = originalPlaywright;
-      else delete require.cache[playwrightModulePath];
+      else
+        delete require.cache[playwrightModulePath];
       if (originalOperatorFlow)
         require.cache[operatorFlowModulePath] = originalOperatorFlow;
-      else delete require.cache[operatorFlowModulePath];
+      else
+        delete require.cache[operatorFlowModulePath];
     },
   };
 }
 
-test("Lieju runtime configuration admits only the platform-level modes", () => {
+test("retired Lieju transport mode is no longer runtime configuration", () => {
   assert.deepEqual(
     normalizeRuntimeConfig({ LIEJU_SUBMISSION_MODE: "playwright_only" }),
-    { LIEJU_SUBMISSION_MODE: "playwright_only" },
-  );
-  assert.throws(
-    () => normalizeRuntimeConfig({ LIEJU_SUBMISSION_MODE: "per_article" }),
-    { code: "RUNTIME_CONFIG_INVALID" },
+    {},
   );
 });
 
-test("Lieju registers only its prepared-submission contract", () => {
-  const platform = loadPlatformModules({ platformModules: [require("../src/platforms/lieju/platform")], enabledIds: ["lieju"], runtimeContext: { liejuSubmissionMode: "playwright_only" } })[0];
+test("Lieju exposes one regular submission port and no legacy queue", () => {
+  const platform = loadPlatformModules({
+    platformModules: [require("../src/platforms/lieju/platform")],
+    enabledIds: ["lieju"],
+    runtimeContext: { workspacePaths: {} },
+  })[0];
   assert.equal(typeof platform.regularSubmission.preparePlatformSubmission, "function");
+  assert.equal(typeof platform.loginSession.open, "function");
+  assert.equal(typeof platform.accountInspection.inspect, "function");
   assert.equal(platform.legacyQueue, undefined);
 });
 
-test("Lieju declares the existing image capability after multipart support is ready", () => {
-  const adapter = createPlatformAdapter({ liejuSubmissionMode: "auto" });
-  assert.deepEqual(adapter.imagePublishingCapability, { supported: true });
-});
-
-test("Lieju auto verifies the account and freezes HTTP preparation without starting a browser", async () => {
+test("Lieju account inspection and publication preparation stay HTTP-only", async () => {
   const fixture = stateFixture();
   const http = createHttpRuntime({
     getResponses: [
@@ -336,79 +246,54 @@ test("Lieju auto verifies the account and freezes HTTP preparation without start
       response(),
       response({ body: cityDirectory() }),
       response({ body: publicationForm() }),
-      response(),
-      response({
-        url: "https://www.lieju.com/member/upage.php",
-        body: accountPage(),
-      }),
     ],
   });
-  const loaded = loadAdapterWithBrowser({
+  const loaded = loadAdapter({
     runtimeContext: {
       browserRuntime: { stateFile: fixture.stateFile },
       httpRequest: http.request,
     },
   });
   try {
-    await loaded.adapter.ensureAccountInspectionReady({});
+    await loaded.adapter.ensureAccountInspectionReady();
     assert.deepEqual(loaded.adapter.inspectAccount(), {
       verified: true,
       remoteAccountId: "759917",
       displayName: "合成账号",
     });
     const prepared = await loaded.adapter.preparePlatformSubmission(claim());
-    await loaded.adapter.ensureAccountInspectionReady({
-      preserveCurrentPage: true,
-    });
-    assert.equal(
-      loaded.commands.filter((args) => args[0] === "open").length,
-      0,
-    );
-    assert.deepEqual(
-      http.getCalls.map((call) => call.url),
-      [
-        "https://post.lieju.com/117/239",
-        "https://www.lieju.com/member/upage.php",
-        "https://post.lieju.com/117/239",
-        "https://www.lieju.com/city.php?post=239",
-        "https://post.lieju.com/3/239",
-        "https://post.lieju.com/117/239",
-        "https://www.lieju.com/member/upage.php",
-      ],
-    );
     assert.equal(prepared.preparedSubmissionEvidenceV1.body, "合成正文");
+    assert.equal(loaded.commands.some((args) => args[0] === "open"), false);
+    assert.equal(http.newContexts.length, 2);
   } finally {
     loaded.restore();
     fs.rmSync(fixture.root, { recursive: true, force: true });
   }
 });
 
-test("Lieju auto blocks before POST when HTTP preparation fails and never opens a browser", async () => {
+test("Lieju HTTP preparation failure blocks before POST and never starts browser publication", async () => {
   const fixture = stateFixture();
-  const http = createHttpRuntime({
-    getResponses: [new Error("synthetic timeout")],
-  });
-  const loaded = loadAdapterWithBrowser({
+  const http = createHttpRuntime({ getResponses: [new Error("synthetic timeout")] });
+  const loaded = loadAdapter({
     runtimeContext: {
       browserRuntime: { stateFile: fixture.stateFile },
       httpRequest: http.request,
-      imageAssetReader: createImageAssetReader(fixture.root),
     },
   });
   try {
     await assert.rejects(
-      () => loaded.adapter.preparePlatformSubmission(claim(), imagePlan()),
+      () => loaded.adapter.preparePlatformSubmission(claim()),
       { code: "LIEJU_HTTP_GET_FAILED" },
     );
     assert.equal(http.postCalls.length, 0);
-    assert.equal(loaded.commands.filter((args) => args[0] === "open").length, 0);
+    assert.equal(loaded.commands.some((args) => args[0] === "open"), false);
   } finally {
     loaded.restore();
     fs.rmSync(fixture.root, { recursive: true, force: true });
   }
 });
 
-test("Lieju never turns an HTTP POST timeout into a browser submission or a second POST", async () => {
+test("Lieju POST uncertainty is single-shot and never starts browser publication", async () => {
   const fixture = stateFixture();
   const http = createHttpRuntime({
     getResponses: [
@@ -418,7 +303,7 @@ test("Lieju never turns an HTTP POST timeout into a browser submission or a seco
     ],
     postResponses: [new Error("synthetic post timeout")],
   });
-  const loaded = loadAdapterWithBrowser({
+  const loaded = loadAdapter({
     runtimeContext: {
       browserRuntime: { stateFile: fixture.stateFile },
       httpRequest: http.request,
@@ -433,34 +318,35 @@ test("Lieju never turns an HTTP POST timeout into a browser submission or a seco
     assert.deepEqual(await prepared.submitPreparedPublication(), expected);
     assert.deepEqual(await prepared.submitPreparedPublication(), expected);
     assert.equal(http.postCalls.length, 1);
-    assert.equal(
-      loaded.commands.filter((args) => args[0] === "open").length,
-      0,
-    );
+    assert.equal(loaded.commands.some((args) => args[0] === "open"), false);
   } finally {
     loaded.restore();
     fs.rmSync(fixture.root, { recursive: true, force: true });
   }
 });
 
-test("Lieju auto blocks on HTTP account inspection failure without opening a browser", async () => {
+test("Lieju HTTP account inspection failure never starts browser publication", async () => {
   const fixture = stateFixture();
   const http = createHttpRuntime({ getResponses: [new Error("synthetic timeout")] });
-  const loaded = loadAdapterWithBrowser({
-    runtimeContext: { browserRuntime: { stateFile: fixture.stateFile }, httpRequest: http.request },
+  const loaded = loadAdapter({
+    runtimeContext: {
+      browserRuntime: { stateFile: fixture.stateFile },
+      httpRequest: http.request,
+    },
   });
   try {
-    await assert.rejects(() => loaded.adapter.ensureAccountInspectionReady({}), {
-      code: "LIEJU_HTTP_GET_FAILED",
-    });
-    assert.equal(loaded.commands.filter((args) => args[0] === "open").length, 0);
+    await assert.rejects(
+      () => loaded.adapter.ensureAccountInspectionReady(),
+      { code: "LIEJU_HTTP_GET_FAILED" },
+    );
+    assert.equal(loaded.commands.some((args) => args[0] === "open"), false);
   } finally {
     loaded.restore();
     fs.rmSync(fixture.root, { recursive: true, force: true });
   }
 });
 
-test("Lieju preserves remote accepted identity when HTTP session state save fails", async () => {
+test("Lieju keeps a confirmed remote identity when HTTP state persistence later fails", async () => {
   const fixture = stateFixture();
   const http = createHttpRuntime({
     stateSaveError: true,
@@ -481,7 +367,7 @@ test("Lieju preserves remote accepted identity when HTTP session state save fail
       }),
     ],
   });
-  const loaded = loadAdapterWithBrowser({
+  const loaded = loadAdapter({
     runtimeContext: {
       browserRuntime: { stateFile: fixture.stateFile },
       httpRequest: http.request,
@@ -501,7 +387,7 @@ test("Lieju preserves remote accepted identity when HTTP session state save fail
   }
 });
 
-test("Lieju concurrent HTTP preparation retains the state lease instead of switching a second call to browser", async () => {
+test("Lieju concurrent HTTP preparation fails on the shared state lease instead of changing transport", async () => {
   const fixture = stateFixture();
   let releaseCity;
   let cityEntered;
@@ -520,7 +406,7 @@ test("Lieju concurrent HTTP preparation retains the state lease instead of switc
       response({ body: publicationForm() }),
     ],
   });
-  const loaded = loadAdapterWithBrowser({
+  const loaded = loadAdapter({
     runtimeContext: {
       browserRuntime: { stateFile: fixture.stateFile },
       httpRequest: http.request,
@@ -533,10 +419,7 @@ test("Lieju concurrent HTTP preparation retains the state lease instead of switc
       () => loaded.adapter.preparePlatformSubmission(claim()),
       { code: "BROWSER_SESSION_STATE_LEASE_UNAVAILABLE" },
     );
-    assert.equal(
-      loaded.commands.filter((args) => args[0] === "open").length,
-      0,
-    );
+    assert.equal(loaded.commands.some((args) => args[0] === "open"), false);
     releaseCity();
     await first;
   } finally {
@@ -545,95 +428,24 @@ test("Lieju concurrent HTTP preparation retains the state lease instead of switc
   }
 });
 
-test("Lieju playwright_only never creates an HTTP request context or HTTP POST", async () => {
+test("Lieju browser runtime is reserved for explicit login session actions", () => {
   const fixture = stateFixture();
-  const http = createHttpRuntime();
-  const loaded = loadAdapterWithBrowser({
+  const loaded = loadAdapter({
     runtimeContext: {
-      liejuSubmissionMode: "playwright_only",
       browserRuntime: { stateFile: fixture.stateFile },
-      httpRequest: http.request,
     },
   });
   try {
-    const prepared = await loaded.adapter.preparePlatformSubmission(claim());
-    assert.equal(http.newContexts.length, 0);
-    assert.equal(http.postCalls.length, 0);
+    loaded.adapter.openLogin();
     assert.equal(
       loaded.commands.filter((args) => args[0] === "open").length,
       1,
     );
-    assert.deepEqual(await prepared.submitPreparedPublication(), {
-      status: "accepted",
-      remoteId: "654321",
-      remoteUrl: "https://ly.lieju.com/shanghai/654321.html",
-    });
-    assert.equal(http.postCalls.length, 0);
-  } finally {
-    loaded.restore();
-    fs.rmSync(fixture.root, { recursive: true, force: true });
-  }
-});
-
-for (const errorCode of [
-  "LOGIN_REQUIRED",
-  "CAPTCHA_REQUIRED",
-  "RISK_CONTROL_REQUIRED",
-]) {
-  test(`Lieju browser fallback preserves ${errorCode} as a recoverable blocking outcome`, async () => {
-    const fixture = stateFixture();
-    const loaded = loadAdapterWithBrowser({
-      runtimeContext: {
-        liejuSubmissionMode: "playwright_only",
-        browserRuntime: { stateFile: fixture.stateFile },
-      },
-      browserEvidence: {
-        url: "https://post.lieju.com/3/239",
-        responseUrls: [],
-        detailUrls: [],
-        dialogMessages: [],
-        blockingCode: errorCode,
-        hasDetailPageSignals: false,
-        hasExplicitRejection: false,
-        hasSubmissionForm: true,
-      },
-    });
-    try {
-      const prepared = await loaded.adapter.preparePlatformSubmission(claim());
-      assert.deepEqual(await prepared.submitPreparedPublication(), {
-        status: "group_blocked",
-        errorCode,
-        articleRecoverable: true,
-      });
-    } finally {
-      loaded.restore();
-      fs.rmSync(fixture.root, { recursive: true, force: true });
-    }
-  });
-}
-
-test("Lieju browser submit fails closed when a frozen image input no longer matches", async () => {
-  const fixture = stateFixture();
-  const loaded = loadAdapterWithBrowser({
-    runtimeContext: {
-      liejuSubmissionMode: "playwright_only",
-      browserRuntime: { stateFile: fixture.stateFile },
-      imageAssetReader: createImageAssetReader(fixture.root),
-    },
-    frozenFormMatches: false,
-  });
-  try {
-    const prepared = await loaded.adapter.preparePlatformSubmission(
-      claim(),
-      imagePlan(),
-    );
-    assert.deepEqual(await prepared.submitPreparedPublication(), {
-      status: "uncertain",
-      errorCode: "PREPARED_CONTENT_DRIFT",
-    });
     assert.equal(
-      loaded.codeSources.some((source) => source.includes("responseHandler")),
-      false,
+      loaded.commands.some(
+        (args) => args[0] === "goto" && args[1] === "https://www.lieju.com/login",
+      ),
+      true,
     );
   } finally {
     loaded.restore();
@@ -641,10 +453,10 @@ test("Lieju browser submit fails closed when a frozen image input no longer matc
   }
 });
 
-test("Lieju stop and invalid mode fail closed before either transport starts", async () => {
+test("Lieju stop fails closed before HTTP or browser publication starts", async () => {
   const fixture = stateFixture();
   const http = createHttpRuntime();
-  const stopped = loadAdapterWithBrowser({
+  const loaded = loadAdapter({
     stopped: true,
     runtimeContext: {
       browserRuntime: { stateFile: fixture.stateFile },
@@ -653,26 +465,13 @@ test("Lieju stop and invalid mode fail closed before either transport starts", a
   });
   try {
     await assert.rejects(
-      () => stopped.adapter.preparePlatformSubmission(claim()),
+      () => loaded.adapter.preparePlatformSubmission(claim()),
       { code: "STOP_REQUESTED" },
     );
     assert.equal(http.newContexts.length, 0);
-    assert.equal(
-      stopped.commands.some((args) => args[0] === "open"),
-      false,
-    );
+    assert.equal(loaded.commands.some((args) => args[0] === "open"), false);
   } finally {
-    stopped.restore();
+    loaded.restore();
     fs.rmSync(fixture.root, { recursive: true, force: true });
   }
-
-  const invalid = createPlatformAdapter({
-    liejuSubmissionMode: "browser_and_http",
-    browserRuntime: {
-      stateFile: path.join(os.tmpdir(), "unused-lieju-state.json"),
-    },
-  });
-  await assert.rejects(() => invalid.preparePlatformSubmission(claim()), {
-    code: "LIEJU_SUBMISSION_MODE_INVALID",
-  });
 });
