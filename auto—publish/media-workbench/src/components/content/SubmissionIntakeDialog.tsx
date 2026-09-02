@@ -35,6 +35,31 @@ export default function SubmissionIntakeDialog({
     setSelectedFavoriteMedia(null);
   }, [snapshot.open]);
 
+  useEffect(() => {
+    if (
+      !snapshot.open ||
+      snapshot.mode !== "regular" ||
+      snapshot.mutationBusy
+    )
+      return;
+    const selectedPlatformExists = submissionPlatforms.some(
+      (platform) => platform.id === snapshot.platformId,
+    );
+    if (snapshot.platformId && !selectedPlatformExists) {
+      intents.setRegularPlatform("");
+      return;
+    }
+    if (!snapshot.platformId && submissionPlatforms.length === 1)
+      intents.setRegularPlatform(submissionPlatforms[0].id);
+  }, [
+    intents,
+    snapshot.mode,
+    snapshot.mutationBusy,
+    snapshot.open,
+    snapshot.platformId,
+    submissionPlatforms,
+  ]);
+
   function openFavoriteMediaSelector() {
     if (snapshot.mutationBusy) return;
     setFavoriteSelectorOpen(true);
@@ -118,6 +143,9 @@ export default function SubmissionIntakeDialog({
                   ))}
                 </select>
               </label>
+              <p className="text-[11px] leading-5 text-slate-400">
+                登录和账号绑定统一在“设置 → 平台账号”维护；这里仅选择本次投稿目标。
+              </p>
               <AccountProfileSelector
                 platforms={submissionPlatforms}
                 platformId={snapshot.platformId}
@@ -135,7 +163,7 @@ export default function SubmissionIntakeDialog({
                 }
                 className="justify-self-end rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
               >
-                {snapshot.regularBusy ? "检查中…" : "确认发起投稿"}
+                {snapshot.regularBusy ? "检查中…" : "检查投稿"}
               </button>
             </div>
           ) : (
