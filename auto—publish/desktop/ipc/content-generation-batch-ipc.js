@@ -169,7 +169,6 @@ function registerContentGenerationBatchIpc(deps) {
   ipcMain.handle("content:create-and-start-generation-batch", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.createAndStartBatch(input(value))) }; }); });
   ipcMain.handle("content:pause-generation-batch", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.pauseBatch(value === undefined ? undefined : input(value))) }; }); });
   ipcMain.handle("content:abandon-generation-batch", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.abandonBatch(input(value))) }; }); });
-  ipcMain.handle("content:continue-generation-batch", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.continueBatch(input(value))) }; }); });
   ipcMain.handle("content:resume-generation-batch", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.resumeBatch(input(value))) }; }); });
   ipcMain.handle("content:retry-failed-generation-batch", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.retryFailed(input(value))) }; }); });
   ipcMain.handle("content:preview-cancel-pending-generation-batch", function(event, value) { return invoke(function() { return service.previewCancelPending(input(value)); }); });
