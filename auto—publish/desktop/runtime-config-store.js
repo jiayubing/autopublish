@@ -8,7 +8,6 @@ const SUPPORTED_RUNTIME_CONFIG_KEYS = Object.freeze([
   "PLAYWRIGHT_CLI_JS",
   "BROWSER_CHANNEL",
   "AUTO_PUBLISH_NODE_EXEC_PATH",
-  "LIEJU_SUBMISSION_MODE",
 ]);
 const LEGACY_RUNTIME_CONFIG_KEYS = Object.freeze([
   "XQW_API_KEY",
@@ -50,15 +49,6 @@ function normalizeRuntimeConfig(input) {
     if (input[key] === undefined || input[key] === null || input[key] === "")
       return;
     if (typeof input[key] !== "string" || input[key].includes("\0")) {
-      throw configError(
-        "RUNTIME_CONFIG_INVALID",
-        "Runtime configuration is invalid",
-      );
-    }
-    if (
-      key === "LIEJU_SUBMISSION_MODE" &&
-      !["auto", "playwright_only"].includes(input[key])
-    ) {
       throw configError(
         "RUNTIME_CONFIG_INVALID",
         "Runtime configuration is invalid",
