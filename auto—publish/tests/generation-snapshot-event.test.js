@@ -57,7 +57,7 @@ function createEventFixture(options) {
     clientKnowledge: { getClient: () => null },
     materialStore: { listMaterials: async () => [] },
     researchStore: { listResearch: () => [] },
-    templateStore: { getTemplate: () => null },
+    templateStore: { getCatalogTemplate: () => null },
     contentStore: { saveArticle: (article) => article, findByGenerationTaskId: () => ({ kind: "none" }) },
     now: () => '2026-07-21T00:00:00.000Z',
     runnerFactory: () => runner,

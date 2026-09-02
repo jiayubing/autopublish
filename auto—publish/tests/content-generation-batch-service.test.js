@@ -101,7 +101,7 @@ function makeHarness(options) {
     clientKnowledge: clientKnowledge,
     materialStore: materialStore,
     researchStore: researchStore,
-    templateStore: settings.templateStore || { getTemplate: function(platform, id) { return templates[platform + ":" + id]; }, listTemplates: function() { return Object.values(templates); } },
+    templateStore: settings.templateStore || { getCatalogTemplate: function(input) { return templates[input.platformId + ":" + input.templateId]; }, listTemplates: function() { return Object.values(templates); } },
     contentStore: articleStore,
     articleGeneratorFactory: settings.articleGeneratorFactory || function() { return { generateArticle: async function(input) { calls.generate.push(input); return { id: "article-1", clientId: input.clientId, title: "Title", content: "Body", status: "generated" }; } }; },
     aiProviderService: { getFingerprint: function() { return currentFingerprint; }, createClient: function() { return {}; } },
@@ -147,7 +147,7 @@ describe("content generation batch service", function() {
     let selectedMaterialReads = 0;
     const harness = makeHarness({
       templateStore: {
-        getTemplate: function(platform, id) { return { id: id, platform: platform, name: id, scenario: id, body: "write" }; },
+        getCatalogTemplate: function(input) { return { id: input.templateId, platform: input.platformId, name: input.templateId, scenario: input.templateId, body: "write" }; },
         listTemplates: function() { return []; },
       },
       materialStore: {
@@ -233,7 +233,7 @@ describe("content generation batch service", function() {
       clientKnowledge: { getClient: function(clientId) { return { id: clientId, name: "Client 1" }; } },
       materialStore: { listMaterials: async function() { return [{ id: "brand.md", status: "ready", content: "facts" }]; } },
       researchStore: { listResearch: function() { return [{ id: "q1", answerText: "answer" }]; } },
-      templateStore: { getTemplate: function() { return { id: "guide", body: "write" }; } },
+      templateStore: { getCatalogTemplate: function() { return { id: "guide", body: "write" }; } },
       contentStore: articleStore,
       articleGeneratorFactory: function() {
         return { generateArticle: async function() {
@@ -279,7 +279,7 @@ describe("content generation batch service", function() {
       clientKnowledge: { getClient: function(clientId) { return { id: clientId, name: "Client 1" }; } },
       materialStore: { listMaterials: async function() { return [{ id: "brand.md", status: "ready", content: "facts" }]; } },
       researchStore: { listResearch: function() { return [{ id: "q1", answerText: "answer" }]; } },
-      templateStore: { getTemplate: function() { return { id: "guide", body: "write" }; } },
+      templateStore: { getCatalogTemplate: function() { return { id: "guide", body: "write" }; } },
       contentStore: articleStore,
       articleGeneratorFactory: function() {
         return { generateArticle: async function() { throw new Error("must not generate"); } };
@@ -314,7 +314,7 @@ describe("content generation batch service", function() {
         clientKnowledge: { getClient: function(id) { return getClient(workspaceRoot, id); } },
         materialStore: createClientMaterialStore({ workspaceRoot: workspaceRoot }),
         researchStore: { listResearch: function() { return [{ id: "q1", answerText: "answer" }]; } },
-        templateStore: { getTemplate: function() { return { id: "guide", body: "body" }; } },
+        templateStore: { getCatalogTemplate: function() { return { id: "guide", body: "body" }; } },
         contentStore: { saveArticle: function(article) { return article; }, findByGenerationTaskId: function() { return { kind: "none" }; } },
         aiProviderService: { getFingerprint: function() { return "test"; } }
       });
