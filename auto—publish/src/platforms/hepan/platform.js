@@ -1,16 +1,16 @@
 "use strict";
 
 const definition = require("./definition");
-const { createHepanSettingsBackedRuntime } = require("./settings-backed-runtime");
+const { createHepanAdapter } = require("./adapter");
 
 function createPlatform(runtimeContext) {
   const context = runtimeContext || {};
-  const settingsRuntime = createHepanSettingsBackedRuntime({
+  const adapter = createHepanAdapter({
     getPlatformSettingsService: context.getPlatformSettingsService,
   });
   return {
-    regularSubmission: settingsRuntime.regularSubmission,
-    accountInspection: settingsRuntime.accountInspection,
+    regularSubmission: adapter.regularSubmission,
+    accountInspection: adapter.accountInspection,
     settingsContribution: {
       createSettingsAdapter(settingsContext) {
         return require("../../../desktop/services/platform-settings/hepan-settings-adapter").createHepanSettingsAdapter(settingsContext || {});

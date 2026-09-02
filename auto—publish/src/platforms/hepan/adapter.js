@@ -24,7 +24,7 @@ function mapPublishError(error) {
   return Object.freeze({ status: "uncertain", errorCode: typeof code === "string" && /^HEPAN_[A-Z0-9_]+$/.test(code) ? code : "REMOTE_RESULT_UNKNOWN" });
 }
 
-function createHepanSettingsBackedRuntime(options) {
+function createHepanAdapter(options) {
   const value = options || {};
   const getSettingsService = value.getPlatformSettingsService;
   const createClient = value.createHepanGeoApiClient || createHepanGeoApiClient;

@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const { createHepanGeoApiClient, HEPAN_GEO_API_URL } = require("../src/platforms/hepan/api-client");
 const { toHepanBbcode } = require("../src/platforms/hepan/bbcode");
-const { createHepanSettingsBackedRuntime } = require("../src/platforms/hepan/settings-backed-runtime");
+const { createHepanAdapter } = require("../src/platforms/hepan/adapter");
 
 function jsonResponse(payload) {
   return { ok: true, async json() { return payload; } };
@@ -69,7 +69,7 @@ test("Hepan regular submission maps published and pending responses without Pyth
     { reviewStatus: "pending", expectedStatus: "remote_pending", url: null },
   ]) {
     let publishedInput;
-    const runtime = createHepanSettingsBackedRuntime({
+    const runtime = createHepanAdapter({
       getPlatformSettingsService: () => ({ getAdapterForRuntime: () => ({ config: { uid: 12345, password: "fixture-password" } }) }),
       createHepanGeoApiClient: () => ({
         async status() { return { data: { uid: 12345 } }; },
@@ -95,7 +95,7 @@ test("Hepan regular submission maps content and account failures by operational 
     { code: "HEPAN_QUOTA_EXHAUSTED", status: "group_blocked" },
     { code: "HEPAN_GEO_API_TIMEOUT", status: "uncertain" },
   ]) {
-    const runtime = createHepanSettingsBackedRuntime({
+    const runtime = createHepanAdapter({
       getPlatformSettingsService: () => ({ getAdapterForRuntime: () => ({ config: { uid: 12345, password: "fixture-password" } }) }),
       createHepanGeoApiClient: () => ({
         async status() { return { data: { uid: 12345 } }; },
