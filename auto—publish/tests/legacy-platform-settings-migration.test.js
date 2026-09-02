@@ -76,7 +76,7 @@ describe('legacy platform settings migration', function() {
       assert.equal(mediaDisk.includes('application-media-key'), false);
       assert.equal(fs.existsSync(path.join(fixture.configRoot, 'hepan-geo-api-provider.json')), false);
       assert.equal(fixture.runtimeConfigStore.readLegacy().XQW_API_KEY, undefined);
-      assert.notEqual(fixture.runtimeConfigStore.readLegacy().HEPAN_COOKIE_PATH, undefined);
+      assert.equal(fixture.runtimeConfigStore.readLegacy().HEPAN_COOKIE_PATH, undefined);
       assert.equal(fs.existsSync(fixture.cookiePath), true);
       assert.equal(first.legacyCookieFilesRemain, true);
       assert.equal(
