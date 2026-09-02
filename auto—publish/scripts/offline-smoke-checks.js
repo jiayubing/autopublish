@@ -79,7 +79,7 @@ function verifyStorageBoundaries(tempRoot) {
       removed: 0,
     },
   };
-}}
+}
 
 function verifySchemaGate(tempRoot) {
   const workspace = path.join(tempRoot, "schema-workspace");
