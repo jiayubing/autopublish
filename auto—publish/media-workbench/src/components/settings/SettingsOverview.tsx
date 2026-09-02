@@ -58,7 +58,7 @@ export default function SettingsOverview({
     snapshot.legacy.query.error?.userMessage ||
     snapshot.commands.importLegacy.error?.userMessage;
   const legacyNotice = snapshot.commands.importLegacy.result
-    ? "旧配置已处理。请按提示手工清理旧 Cookie 文件。"
+    ? "旧媒体配置已处理。旧河畔 Cookie 无法转换为 GEO API 账号密码，请在蓝色河畔设置中重新配置。"
     : "";
 
   const importLegacy = async () => {
@@ -66,7 +66,7 @@ export default function SettingsOverview({
       !(await confirm({
         title: "导入旧配置",
         message:
-          "将发现的旧媒体 Key 或河畔 Cookie 加密导入应用配置，不会自动删除旧 Cookie 文件。",
+          "将发现的旧媒体 Key 加密导入应用配置。旧河畔 Cookie 与新的 GEO API 鉴权不兼容，不会自动导入。",
         confirmLabel: "导入配置",
         tone: "warning",
       }))
@@ -125,9 +125,8 @@ export default function SettingsOverview({
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           <p className="font-semibold">发现可导入的旧配置</p>
           <p className="mt-1">
-            旧媒体 Key 或河畔 Cookie
-            路径只会在你确认后导入并加密保存，不会在页面显示秘密，也不会自动删除旧
-            Cookie 文件。
+            旧媒体 Key 会在你确认后导入并加密保存。旧河畔 Cookie 无法转换为
+            GEO API 所需的 UID 和登录密码，需要在蓝色河畔设置中重新配置。
           </p>
           <button
             type="button"
