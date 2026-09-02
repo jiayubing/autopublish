@@ -396,7 +396,12 @@ it("workspace runtime gives the Hepan task service its configured platform setti
     else process.env.HEPAN_UID = originalUid;
     if (originalPassword === undefined) delete process.env.HEPAN_PASSWORD;
     else process.env.HEPAN_PASSWORD = originalPassword;
-    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(root, {
+      recursive: true,
+      force: true,
+      maxRetries: process.platform === "win32" ? 8 : 0,
+      retryDelay: process.platform === "win32" ? 100 : 0,
+    });
   }
 });
 

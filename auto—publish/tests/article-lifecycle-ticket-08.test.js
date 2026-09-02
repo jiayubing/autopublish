@@ -1900,8 +1900,8 @@ test("public queue execution preserves an uncertain remote failure without repla
 
 test("Hepan production preparation uses the official GEO API without temporary credentials", async () => {
   const {
-    createHepanSettingsBackedRuntime,
-  } = require("../src/platforms/hepan/settings-backed-runtime");
+    createHepanAdapter,
+  } = require("../src/platforms/hepan/adapter");
   let publishCall = null;
   const claim = {
     platformId: "hepan",
@@ -1919,7 +1919,7 @@ test("Hepan production preparation uses the official GEO API without temporary c
     },
     publicationSnapshot: { title: "Title", body: "Body" },
   };
-  const adapter = createHepanSettingsBackedRuntime({
+  const adapter = createHepanAdapter({
     getPlatformSettingsService: () => ({
       getAdapterForRuntime: () => ({
         config: { uid: 12345, password: "fixture-password" },
@@ -1974,8 +1974,8 @@ test("Hepan production preparation uses the official GEO API without temporary c
 
 test("Hepan does not call the GEO API when submission-start persistence fails", async () => {
   const {
-    createHepanSettingsBackedRuntime,
-  } = require("../src/platforms/hepan/settings-backed-runtime");
+    createHepanAdapter,
+  } = require("../src/platforms/hepan/adapter");
   const current = fixture({
     fault(point) {
       if (point === "after-evidence-freeze") {
@@ -1993,7 +1993,7 @@ test("Hepan does not call the GEO API when submission-start persistence fails", 
       platformId: "hepan",
       accountProfileId: profile.accountProfileId,
     });
-    const adapter = createHepanSettingsBackedRuntime({
+    const adapter = createHepanAdapter({
       getPlatformSettingsService: () => ({
         getAdapterForRuntime: () => ({
           config: { uid: 12345, password: "fixture-password" },

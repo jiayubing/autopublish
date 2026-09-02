@@ -91,4 +91,4 @@ function createHepanAdapter(options) {
     }),
   });
 }
-module.exports = { createHepanSettingsBackedRuntime, idempotencyKey };
+module.exports = { createHepanAdapter, idempotencyKey };
