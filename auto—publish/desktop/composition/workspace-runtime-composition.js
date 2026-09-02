@@ -536,13 +536,6 @@ async function createWorkspaceRuntimeComposition(deps) {
           identityService: platformAccountIdentityService,
         },
       );
-    if (
-      runtime.diagnosticsService &&
-      runtime.diagnosticsService.setPlatformSettingsService
-    )
-      runtime.diagnosticsService.setPlatformSettingsService(
-        platformSettingsService,
-      );
     const legacyProviderSettings =
       require("../runtime-config").createLegacyProviderSettingsMigration({
         configRoot: options.userDataPath,
