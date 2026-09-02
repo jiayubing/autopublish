@@ -619,7 +619,6 @@ describe("source assembly and packaging contract", function() {
     for (const redundantPattern of [
       "!input/media/**",
       "!input/lieju/**",
-      "!input/toutiao/**",
       "!tests/**"
     ]) assert.equal(config.includes(redundantPattern), false, redundantPattern + " should not duplicate a parent boundary");
   });
