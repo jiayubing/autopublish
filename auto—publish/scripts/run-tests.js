@@ -21,6 +21,7 @@ const DEFAULT_PROFILE_OUTPUT = path.join(
   "evidence",
   "root-test-timings.json",
 );
+const TEST_GROUP_TIMEOUT_MS = 15 * 60 * 1000;
 
 function collectTestFiles(excludedFiles) {
   const files = [];
@@ -233,11 +234,21 @@ function runProgrammaticGroup(group) {
     let reporterFinished = false;
     let settled = false;
     const output = [];
+    const controller = new AbortController();
     const stream = run({
       files: group.files.map((file) => path.resolve(ROOT, file)),
       concurrency: group.concurrency,
       isolation: "process",
+      forceExit: true,
+      signal: controller.signal,
     });
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      const error = new Error("TEST_RUNNER_GROUP_TIMEOUT");
+      error.code = "TEST_RUNNER_GROUP_TIMEOUT";
+      streamError = streamError || error;
+      controller.abort(error);
+    }, TEST_GROUP_TIMEOUT_MS);
 
     const captureTiming = (event, requireFileEvent) => {
       if (!event || !event.file) return;
@@ -345,6 +356,7 @@ function runProgrammaticGroup(group) {
     };
 
     stream.once("close", () => {
+      clearTimeout(timeout);
       streamClosed = true;
       finalize();
     });
