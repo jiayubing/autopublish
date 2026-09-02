@@ -175,7 +175,7 @@ function createLegacyProviderSettingsMigration(options) {
       media: { available: mediaSources.length > 0, sources: mediaSources },
       hepan: { available: hepanSources.length > 0, sources: hepanSources, cookiePathAvailable: hepanSources.length > 0 },
       sources: sourceList.map((item) => item.source),
-      importable: mediaSources.length > 0 || hepanSources.length > 0
+      importable: mediaSources.length > 0
     };
   }
 
@@ -234,21 +234,6 @@ function createLegacyProviderSettingsMigration(options) {
     return platformSettingsService.getStatus(platformId).source === "environment";
   }
 
-  function readCookieFile(filename) {
-    if (typeof filename !== "string" || !pathApi.isAbsolute(filename) || !safeLegacyFile(filename, io)) {
-      const error = new Error("Legacy Hepan cookie file is unavailable");
-      error.code = "HEPAN_COOKIE_IMPORT_INVALID";
-      throw error;
-    }
-    const cookie = String(io.readFileSync(filename, "utf8")).trim();
-    if (!cookie || cookie.length > 2 * 1024 * 1024) {
-      const error = new Error("Legacy Hepan cookie file is unavailable");
-      error.code = "HEPAN_COOKIE_IMPORT_INVALID";
-      throw error;
-    }
-    return cookie;
-  }
-
   function mergeSource(platform, sourceList) {
     for (const item of sourceList) {
       if (item[platform]) return { source: item.source, value: item[platform] };
@@ -292,27 +277,21 @@ function createLegacyProviderSettingsMigration(options) {
     }
     const hepan = mergeSource("hepan", sourceList);
     if (hepan) {
-      if (hasApplicationConfig("hepan")) entries.push({ platform: "hepan", source: hepan.source, status: "skipped-existing" });
-      else if (isEnvironmentOverride("hepan")) entries.push({ platform: "hepan", source: hepan.source, status: "skipped-environment" });
-      else {
-        try {
-          const cookie = readCookieFile(hepan.value.cookiePath);
-          platformSettingsService.save("hepan", {
-            pythonPath: hepan.value.pythonPath,
-            cookie: cookie,
-            categoryId: hepan.value.categoryId,
-            vendorDir: hepan.value.vendorDir
-          });
-          entries.push({ platform: "hepan", source: hepan.source, status: "imported" });
-          imported.push("hepan");
-          if (runtimeConfigStore && hepan.source === "application-runtime-config" && typeof runtimeConfigStore.removeKeys === "function") runtimeConfigStore.removeKeys(["HEPAN_COOKIE_PATH", "HEPAN_PYTHON", "HEPAN_VENDOR_DIR", "HEPAN_CATEGORY_ID"]);
-        } catch (error) {
-          entries.push({ platform: "hepan", source: hepan.source, status: "failed", code: error && error.code || "PLATFORM_CONFIG_MIGRATION_FAILED" });
-        }
-      }
+      entries.push({
+        platform: "hepan",
+        source: hepan.source,
+        status: hasApplicationConfig("hepan")
+          ? "skipped-existing"
+          : isEnvironmentOverride("hepan")
+            ? "skipped-environment"
+            : "skipped-incompatible",
+        ...(!hasApplicationConfig("hepan") && !isEnvironmentOverride("hepan")
+          ? { code: "HEPAN_LEGACY_COOKIE_INCOMPATIBLE" }
+          : {}),
+      });
     }
     const record = writeRecord(entries);
-    return { imported, entries: record.entries, record: record, legacyCookieFilesRemain: entries.some((entry) => entry.platform === "hepan" && entry.status === "imported") };
+    return { imported, entries: record.entries, record: record, legacyCookieFilesRemain: entries.some((entry) => entry.platform === "hepan") };
   }
 
   return { discover: publicReport, getRecord: readRecord, importLegacy };
