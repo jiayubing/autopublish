@@ -67,8 +67,9 @@ function createHepanSettingsBackedRuntime(options) {
     accountInspection: Object.freeze({
       async prepare() {},
       async inspect() {
-        const settingsService = requireSettingsService(getSettingsService);
-        if (typeof settingsService.test !== "function")
+        const settingsService =
+          typeof getSettingsService === "function" ? getSettingsService() : null;
+        if (!settingsService || typeof settingsService.test !== "function")
           throw fail("HEPAN_CONFIG_NOT_SET");
         const result = await settingsService.test("hepan", {});
         const account = result && result.ok === true ? result.account : null;
