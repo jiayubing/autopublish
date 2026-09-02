@@ -1,259 +1,78 @@
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const os = require("node:os");
-const path = require("node:path");
 
-const { createHepanSettingsAdapter, HEPAN_SITE_ORIGIN } = require("../desktop/services/platform-settings/hepan-settings-adapter");
-const { createPlatformSettingsService } = require("../desktop/services/platform-settings-service");
+const {
+  createHepanSettingsAdapter,
+  HEPAN_GEO_API_URL,
+} = require("../desktop/services/platform-settings/hepan-settings-adapter");
+const {
+  createPlatformSettingsService,
+} = require("../desktop/services/platform-settings-service");
 
-function tempDirectory() { return fs.mkdtempSync(path.join(os.tmpdir(), "auto-publish-hepan-settings-")); }
 function fakeStore(initial) {
   let value = initial || null;
-  return { read: () => value, write: (next) => { value = Object.assign({}, next); return value; }, clear: () => { value = null; return { cleared: true }; } };
+  return {
+    read: () => value,
+    write: (next) => { value = Object.assign({}, next); return value; },
+    clear: () => { value = null; return { cleared: true }; },
+  };
 }
 
-describe("Hepan provider settings", () => {
-  it("accepts only a real Python file, keeps the site fixed and defaults category 121", () => {
-    const root = tempDirectory();
-    try {
-      const pythonPath = path.join(root, "python.exe");
-      fs.writeFileSync(pythonPath, "fixture python", "utf8");
-      const adapter = createHepanSettingsAdapter({ localStateRoot: root });
-      const config = adapter.validate({ pythonPath, cookie: "fixture-cookie" });
-      assert.deepStrictEqual(config, { pythonPath, cookie: "fixture-cookie", categoryId: 121, vendorDir: "", siteOrigin: HEPAN_SITE_ORIGIN });
-      const status = adapter.status(config, { source: "application", lastTest: null });
-      assert.equal(status.siteOrigin, HEPAN_SITE_ORIGIN);
-      assert.equal(status.cookieConfigured, true);
-      assert.equal(JSON.stringify(status).includes("fixture-cookie"), false);
-      assert.throws(() => adapter.validate({ pythonPath: root, cookie: "fixture-cookie" }), (error) => error.code === "PLATFORM_CONFIG_INVALID");
-    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+describe("Hepan GEO API provider settings", () => {
+  it("stores UID plus password semantics and exposes only safe status", () => {
+    const adapter = createHepanSettingsAdapter({
+      createHepanGeoApiClient: () => ({ async status() { return { data: { uid: 12345 } }; } }),
+    });
+    const config = adapter.validate({ uid: 12345, password: "fixture-password" });
+    assert.deepEqual(config, { uid: 12345, password: "fixture-password" });
+    const status = adapter.status(config, { source: "application", lastTest: null });
+    assert.equal(status.uid, 12345);
+    assert.equal(status.passwordConfigured, true);
+    assert.equal(status.apiUrl, HEPAN_GEO_API_URL);
+    assert.equal(JSON.stringify(status).includes("fixture-password"), false);
+    assert.throws(() => adapter.validate({ uid: 0, password: "fixture-password" }), (error) => error.code === "PLATFORM_CONFIG_INVALID");
   });
 
-  it("reads environment credentials without exposing secrets", () => {
-    const root = tempDirectory();
-    try {
-      const pythonPath = path.join(root, "python.exe");
-      const cookiePath = path.join(root, "cookie.txt");
-      fs.writeFileSync(pythonPath, "fixture python", "utf8");
-      fs.writeFileSync(cookiePath, "fixture cookie", "utf8");
-      const adapter = createHepanSettingsAdapter({ localStateRoot: root });
-      const config = adapter.environment({ HEPAN_PYTHON: pythonPath, HEPAN_COOKIE_PATH: cookiePath });
-      assert.equal(Object.hasOwn(config, "publishIntervalSeconds"), false);
-      assert.equal(Object.hasOwn(adapter.status(config, { source: "environment", lastTest: null }), "publishIntervalSeconds"), false);
-    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  it("supports HEPAN_UID and HEPAN_PASSWORD environment override", () => {
+    const adapter = createHepanSettingsAdapter({
+      createHepanGeoApiClient: () => ({ async status() {} }),
+    });
+    const config = adapter.environment({ HEPAN_UID: "2093208", HEPAN_PASSWORD: "fixture-password" });
+    assert.equal(config.uid, 2093208);
+    assert.equal(config.password, "fixture-password");
+    assert.equal(adapter.environment({}), null);
   });
 
-  it("uses bundled vendor dependencies when no custom vendor directory is configured", async () => {
-    const root = tempDirectory();
-    const vendorDir = path.resolve(__dirname, "..", "resources", "hepan", "vendor-pure");
-    let importEnvironment;
-    try {
-      const pythonPath = path.join(root, "python.exe");
-      fs.writeFileSync(pythonPath, "fixture python", "utf8");
-      const adapter = createHepanSettingsAdapter({
-        localStateRoot: root,
-        runCommand: async (command, args, options) => {
-          if (args.includes("--validate-payload")) return { status: 0, stdout: '{"ok":true,"titleLength":24,"contentHtmlLength":25}\n', stderr: "" };
-          if (args.includes("--version")) return { status: 0, stdout: "Python 3.12\n", stderr: "" };
-          if (args.includes("-c")) {
-            importEnvironment = options && options.env && options.env.PYTHONPATH;
-            return { status: 0, stdout: "", stderr: "" };
-          }
-          return { status: 0, stdout: '{"ok":true,"code":"HEPAN_AUTH_OK","authenticated":true,"publishAccess":true,"uploadContext":"not_checked","stage":"publish_access"}\n', stderr: "" };
-        }
-      });
-      const service = createPlatformSettingsService({ adapters: [Object.assign(adapter, { createStore: () => fakeStore() })] });
-      await service.test("hepan", { pythonPath, cookie: "fixture-cookie" });
-      assert.equal(importEnvironment, vendorDir);
-    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  it("tests account status and preserves quota diagnostics without persisting the test patch", async () => {
+    const store = fakeStore({ uid: 12345, password: "stored-password" });
+    let received;
+    const base = createHepanSettingsAdapter({
+      createHepanGeoApiClient: () => ({
+        async status(config) {
+          received = config;
+          return { data: { uid: 12345, groupid: 20, plan_name: "GEO标准版", post_limit: 30, used_count: 7, remaining_count: 23 } };
+        },
+      }),
+    });
+    const service = createPlatformSettingsService({
+      adapters: [Object.assign({}, base, { createStore: () => store })],
+      now: () => "2026-09-02T01:00:00.000Z",
+    });
+    const result = await service.test("hepan", {});
+    assert.equal(received.password, "stored-password");
+    assert.deepEqual(result, {
+      testedAt: "2026-09-02T01:00:00.000Z",
+      ok: true,
+      code: "HEPAN_GEO_API_OK",
+      authenticated: true,
+      publishAccess: true,
+      stage: "publish_access",
+      account: { displayName: "蓝色河畔 UID 12345", uid: "12345" },
+      planName: "GEO标准版",
+      postLimit: 30,
+      usedCount: 7,
+      remainingCount: 23,
+    });
+    assert.equal(JSON.stringify(service.getStatus("hepan")).includes("stored-password"), false);
   });
-
-  it("checks Python, imports, and login through a temporary cookie file that is always removed", async () => {
-    const root = tempDirectory();
-    const calls = [];
-    try {
-      const pythonPath = path.join(root, "python.exe");
-      fs.writeFileSync(pythonPath, "fixture python", "utf8");
-      const adapter = createHepanSettingsAdapter({
-        localStateRoot: root,
-        runCommand: async (command, args) => {
-          calls.push({ command, args });
-          if (args.includes("--validate-payload")) return { status: 0, stdout: '{"ok":true,"titleLength":24,"contentHtmlLength":25}\n', stderr: "" };
-          if (args.includes("--check-login")) return { status: 0, stdout: '{"ok":true,"code":"HEPAN_AUTH_OK","authenticated":true,"publishAccess":true,"uploadContext":"not_checked","stage":"publish_access"}\n', stderr: "" };
-          return { status: 0, stdout: "Python 3.12\n", stderr: "" };
-        }
-      });
-      const service = createPlatformSettingsService({ adapters: [Object.assign(adapter, { createStore: () => fakeStore() })], now: () => "2026-07-17T03:00:00.000Z" });
-      const result = await service.test("hepan", { pythonPath, cookie: "fixture-cookie", categoryId: 121 });
-      assert.deepStrictEqual(result, { testedAt: "2026-07-17T03:00:00.000Z", ok: true, code: "HEPAN_AUTH_OK", authenticated: true, publishAccess: true, uploadContext: "not_checked", stage: "publish_access" });
-      assert.equal(calls[0].args.includes("--validate-payload"), true);
-      assert.equal(calls[0].args.includes("--cookie-path"), false);
-      assert.equal(calls[0].args.includes("--image-dir"), false);
-      assert.equal(calls.some((call) => call.args.includes("--version")), true);
-      assert.equal(calls.some((call) => call.args.includes("--check-login")), true);
-      assert.equal(calls.some((call) => call.args.includes("fixture-cookie")), false);
-      assert.equal(fs.existsSync(path.join(root, "tmp")) ? fs.readdirSync(path.join(root, "tmp"), { withFileTypes: true }).length : 0, 0);
-    } finally { fs.rmSync(root, { recursive: true, force: true }); }
-  });
-
-  it("recovers only expired, owned Hepan temporary regular files", () => {
-    const root = tempDirectory();
-    try {
-      const tmp = path.join(root, "tmp");
-      fs.mkdirSync(tmp);
-      const expiredCookie = path.join(tmp, ".hepan-cookie-11111111-1111-1111-1111-111111111111.tmp");
-      const expiredPayload = path.join(tmp, ".hepan-payload-22222222-2222-2222-2222-222222222222.json");
-      const freshCookie = path.join(tmp, ".hepan-cookie-33333333-3333-3333-3333-333333333333.tmp");
-      const unrelated = path.join(tmp, "notes.txt");
-      fs.writeFileSync(expiredCookie, "synthetic secret", { mode: 0o600 });
-      fs.writeFileSync(expiredPayload, "{}", { mode: 0o600 });
-      fs.writeFileSync(freshCookie, "synthetic secret", { mode: 0o600 });
-      fs.writeFileSync(unrelated, "preserve");
-      const now = Date.now();
-      fs.utimesSync(expiredCookie, new Date(now - 172800000), new Date(now - 172800000));
-      fs.utimesSync(expiredPayload, new Date(now - 172800000), new Date(now - 172800000));
-      const adapter = createHepanSettingsAdapter({ localStateRoot: root });
-      const result = adapter.cleanupExpiredTemporaryFiles({ now: () => now, maxAgeMs: 86400000 });
-      assert.deepStrictEqual(result.removed.sort(), [path.basename(expiredCookie), path.basename(expiredPayload)].sort());
-      assert.equal(fs.existsSync(expiredCookie), false);
-      assert.equal(fs.existsSync(expiredPayload), false);
-      assert.equal(fs.existsSync(freshCookie), true);
-      assert.equal(fs.existsSync(unrelated), true);
-    } finally { fs.rmSync(root, { recursive: true, force: true }); }
-  });
-
-  it("maps a failed login to a stable error without leaking cookie or temp path", async () => {
-    const root = tempDirectory();
-    try {
-      const pythonPath = path.join(root, "python.exe");
-      fs.writeFileSync(pythonPath, "fixture python", "utf8");
-      const adapter = createHepanSettingsAdapter({
-        localStateRoot: root,
-        runCommand: async (command, args) => {
-          if (args.includes("--validate-payload")) return { status: 0, stdout: '{"ok":true}\n', stderr: "" };
-          if (args.includes("--version")) return { status: 0, stdout: "Python 3.12\n", stderr: "" };
-          if (args.includes("-c")) return { status: 0, stdout: "\n", stderr: "" };
-          return { status: 0, stdout: '{"ok":false,"needsLogin":true,"error":"cookie rejected"}\n', stderr: "cookie rejected" };
-        }
-      });
-      const service = createPlatformSettingsService({ adapters: [Object.assign(adapter, { createStore: () => fakeStore() })] });
-      await assert.rejects(service.test("hepan", { pythonPath, cookie: "fixture-cookie" }), (error) => error.code === "HEPAN_CHECK_RUNTIME_FAILED" && !error.message.includes("fixture-cookie") && !error.message.includes(root));
-      assert.equal(fs.existsSync(path.join(root, "tmp")), false);
-    } finally { fs.rmSync(root, { recursive: true, force: true }); }
-  });
-
-  it("preserves safe warnings and account identity without carrying an error code on success", async () => {
-    const root = tempDirectory();
-    try {
-      const pythonPath = path.join(root, "python.exe");
-      fs.writeFileSync(pythonPath, "fixture python", "utf8");
-      const adapter = createHepanSettingsAdapter({
-        localStateRoot: root,
-        runCommand: async (command, args) => {
-          if (args.includes("--validate-payload")) return { status: 0, stdout: '{"ok":true}\n', stderr: "" };
-          if (args.includes("--version")) return { status: 0, stdout: "Python 3.12\n", stderr: "" };
-          if (args.includes("-c")) return { status: 0, stdout: "", stderr: "" };
-          return { status: 0, stdout: JSON.stringify({ ok: true, code: "HEPAN_AUTH_OK", authenticated: true, publishAccess: true, uploadContext: "changed", stage: "upload_context", warnings: ["HEPAN_UPLOAD_CONTEXT_CHANGED"], errorCode: "HEPAN_UPLOAD_CONTEXT_CHANGED", account: { displayName: "\u0001fixture-user", uid: "2093208" } }), stderr: "" };
-        }
-      });
-      const service = createPlatformSettingsService({ adapters: [Object.assign(adapter, { createStore: () => fakeStore() })], now: () => "2026-07-17T04:00:00.000Z" });
-      const result = await service.test("hepan", { pythonPath, cookie: "fixture-cookie" });
-      assert.deepStrictEqual(result, {
-        testedAt: "2026-07-17T04:00:00.000Z",
-        ok: true,
-        code: "HEPAN_AUTH_OK",
-        authenticated: true,
-        publishAccess: true,
-        uploadContext: "changed",
-        stage: "upload_context",
-        warnings: ["HEPAN_UPLOAD_CONTEXT_CHANGED"],
-        account: { displayName: "fixture-user", uid: "2093208" }
-      });
-      assert.equal("errorCode" in result, false);
-    } finally { fs.rmSync(root, { recursive: true, force: true }); }
-  });
-
-  it("uses a safe Python error code when the login command exits non-zero", async () => {
-    const root = tempDirectory();
-    try {
-      const pythonPath = path.join(root, "python.exe");
-      fs.writeFileSync(pythonPath, "fixture python", "utf8");
-      const adapter = createHepanSettingsAdapter({
-        localStateRoot: root,
-        runCommand: async (command, args) => {
-          if (args.includes("--validate-payload")) return { status: 0, stdout: '{"ok":true}\n', stderr: "" };
-          if (args.includes("--version")) return { status: 0, stdout: "Python 3.12\n", stderr: "" };
-          if (args.includes("-c")) return { status: 0, stdout: "", stderr: "" };
-          return { status: 1, stdout: '{"ok":false,"authenticated":true,"publishAccess":false,"stage":"publish_access","errorCode":"HEPAN_CATEGORY_ACCESS_DENIED"}\n', stderr: "remote details omitted" };
-        }
-      });
-      const service = createPlatformSettingsService({ adapters: [Object.assign(adapter, { createStore: () => fakeStore() })] });
-      await assert.rejects(service.test("hepan", { pythonPath, cookie: "fixture-cookie" }), (error) => error.code === "HEPAN_CATEGORY_ACCESS_DENIED");
-      assert.equal(service.getStatus("hepan").lastTest.code, "HEPAN_CATEGORY_ACCESS_DENIED");
-      assert.equal(service.getStatus("hepan").lastTest.publishAccess, false);
-      assert.equal(fs.existsSync(path.join(root, "tmp")), false);
-    } finally { fs.rmSync(root, { recursive: true, force: true }); }
-  });
-
-  it("fails the payload self-test before dependency or login checks", async () => {
-    const root = tempDirectory();
-    const calls = [];
-    try {
-      const pythonPath = path.join(root, "python.exe");
-      fs.writeFileSync(pythonPath, "fixture python", "utf8");
-      const adapter = createHepanSettingsAdapter({
-        localStateRoot: root,
-        runCommand: async (command, args) => {
-          calls.push(args.slice());
-          if (args.includes("--validate-payload")) return { status: 1, stdout: '{"ok":false,"errorCode":"HEPAN_PAYLOAD_JSON_INVALID"}\n', stderr: "" };
-          throw new Error("later checks must not run");
-        }
-      });
-      const service = createPlatformSettingsService({ adapters: [Object.assign(adapter, { createStore: () => fakeStore() })] });
-
-      await assert.rejects(service.test("hepan", { pythonPath, cookie: "fixture-cookie" }), (error) => error.code === "HEPAN_PAYLOAD_RUNTIME_FAILED");
-      assert.equal(calls.length, 1);
-      assert.equal(calls[0].includes("--validate-payload"), true);
-      assert.equal(fs.existsSync(path.join(root, "tmp")), false);
-    } finally { fs.rmSync(root, { recursive: true, force: true }); }
-  });
-
-  it("materializes and cleans a temporary worker credential only for its own tasks", () => {
-    const root = tempDirectory();
-    try {
-      const adapter = createHepanSettingsAdapter({ localStateRoot: root });
-      let configReads = 0;
-      const getConfig = () => {
-        configReads += 1;
-        return {
-          pythonPath: "C:\\python.exe",
-          cookie: "sessionid=synthetic",
-          categoryId: 121,
-          vendorDir: "",
-        };
-      };
-      assert.equal(adapter.prepareWorkerRuntime({
-        plan: { tasks: [{ targetPlatformId: "toutiao" }] },
-        tempRoot: path.join(root, "tmp"),
-        getConfig,
-      }), null);
-      assert.equal(configReads, 0);
-
-      const prepared = adapter.prepareWorkerRuntime({
-        plan: { tasks: [{ targetPlatformId: "hepan" }] },
-        tempRoot: path.join(root, "tmp"),
-        getConfig,
-      });
-      const cookiePath = prepared.runtimeContext.hepanRuntime.cookiePath;
-      assert.equal(configReads, 1);
-      assert.equal(Object.hasOwn(prepared, "intervalMs"), false);
-      assert.equal(prepared.timeoutMs, 120000);
-      assert.equal(fs.readFileSync(cookiePath, "utf8"), "sessionid=synthetic");
-      prepared.cleanup();
-      prepared.cleanup();
-      assert.equal(fs.existsSync(cookiePath), false);
-    } finally { fs.rmSync(root, { recursive: true, force: true }); }
-  });
-
 });
