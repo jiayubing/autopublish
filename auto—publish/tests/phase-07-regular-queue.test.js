@@ -1175,3 +1175,37 @@ test("regular queue capabilities stay isolated from the full operational store a
     fixture.close();
   }
 });
+
+
+test("automatic queue start preserves a manual pause while explicit start can resume it", () => {
+  const fixture = makeFixture();
+  try {
+    fixture.add(article("manual-pause-article"));
+    const result = fixture.application.admitRegularQueueItems(
+      admissionInput(fixture, [ref("manual-pause-article")]),
+    );
+    const queueGroupId = result.items[0].queueGroupId;
+    const transitions = fixture.transitionPorts.regularQueueGroupTransitions;
+
+    const manuallyPaused = transitions.setRegularQueueGroupRunIntent({
+      queueGroupId,
+      running: false,
+    });
+    assert.equal(manuallyPaused.pauseIntent, "manual");
+
+    const automaticAttempt = transitions.setRegularQueueGroupRunIntent({
+      queueGroupId,
+      running: true,
+      preserveManualPause: true,
+    });
+    assert.equal(automaticAttempt.pauseIntent, "manual");
+
+    const explicitStart = transitions.setRegularQueueGroupRunIntent({
+      queueGroupId,
+      running: true,
+    });
+    assert.equal(explicitStart.pauseIntent, "none");
+  } finally {
+    fixture.close();
+  }
+});
