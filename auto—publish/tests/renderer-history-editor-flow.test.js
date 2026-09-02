@@ -231,13 +231,34 @@ function installDesktopFixture(page, fixture) {
       pausePaidMediaBatch: () => ok({}),
       previewRegularQueueAdmission: (input) => {
         state.calls.regularPreview.push(input);
-        return ok({ queueableCount: input.articleRefs.length, idempotentCount: 0, missingCount: 0, conflictCount: 0 });
+        return ok({
+          items: input.articleRefs.map((articleRef) => ({
+            articleRef,
+            articleId: articleRef.articleId,
+            status: "queueable",
+          })),
+          queueableCount: input.articleRefs.length,
+          idempotentCount: 0,
+          missingCount: 0,
+          conflictCount: 0,
+        });
       },
       admitRegularQueueItems: (input) => {
         state.calls.regularAdmission.push(input);
         state.submittedArticleIds.push(...input.articleRefs.map((article) => article.articleId));
-        return ok({ admittedCount: input.articleRefs.length });
+        return ok({
+          items: input.articleRefs.map((articleRef) => ({
+            articleRef,
+            articleId: articleRef.articleId,
+            status: "queued",
+          })),
+          admittedCount: input.articleRefs.length,
+          idempotentCount: 0,
+          missingCount: 0,
+          conflictCount: 0,
+        });
       },
+      startRegularQueueGroup: () => ok({ items: [] }),
       previewPaidMediaPreflight: ({ articleRefs, mediaResourceId }) => {
         state.calls.paidPreview.push(mediaResourceId);
         const model = {

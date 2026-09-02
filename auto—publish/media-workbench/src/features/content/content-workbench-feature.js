@@ -130,6 +130,7 @@ export function createContentWorkbenchFeature(adapters = {}) {
     saveArticle: management.commands.saveArticle,
     previewRegularQueueAdmission: management.commands.previewRegularQueueAdmission,
     admitRegularQueueItems: management.commands.admitRegularQueueItems,
+    startRegularQueueGroup: management.commands.startRegularQueueGroup,
     previewPaidMediaPreflight: management.commands.previewPaidMediaPreflight,
     confirmPaidMediaBatch: management.commands.confirmPaidMediaBatch,
     previewContentArticleRemoval: management.commands.previewContentArticleRemoval,

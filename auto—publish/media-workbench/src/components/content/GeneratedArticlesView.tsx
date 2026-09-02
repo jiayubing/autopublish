@@ -242,6 +242,7 @@ export default function GeneratedArticlesView({
     })),
     previewRegularQueueAdmission: commands.previewRegularQueueAdmission,
     admitRegularQueueItems: commands.admitRegularQueueItems,
+    startRegularQueueGroup: commands.startRegularQueueGroup,
     previewPaidMediaPreflight: commands.previewPaidMediaPreflight,
     confirmPaidMediaBatch: commands.confirmPaidMediaBatch,
     commandStates,

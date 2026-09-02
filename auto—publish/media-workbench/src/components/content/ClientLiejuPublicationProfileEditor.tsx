@@ -74,7 +74,9 @@ export default function ClientLiejuPublicationProfileEditor({
     }
   }
 
-  const configured = Boolean(draft.city.trim() || draft.contact.trim() || draft.phone.trim());
+  const configured = [draft.city, draft.contact, draft.phone].every((value) =>
+    Boolean(value.trim()),
+  );
 
   return (
     <details className="min-w-0 rounded-md border border-slate-200 bg-white">
