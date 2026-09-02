@@ -1,6 +1,5 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import {
-  continueGenerationBatch,
   cancelPendingGenerationBatch,
   createAndStartGenerationBatch,
   getGenerationRuntimeSnapshot,
@@ -26,7 +25,6 @@ export function useGenerationFeature() {
       pause: pauseGenerationBatch,
       resume: resumeGenerationBatch,
       abandon: abandonGenerationBatch,
-      continue: continueGenerationBatch,
       retry: retryFailedGenerationBatch,
       previewCancelPending: previewCancelPendingGenerationBatch,
       cancelPending: cancelPendingGenerationBatch,
@@ -53,7 +51,6 @@ export function useGenerationFeature() {
     pause: feature.pause,
     resume: feature.resume,
     abandon: feature.abandon,
-    continue: feature.continue,
     retry: feature.retry,
     previewCancelPending: feature.previewCancelPending,
     cancelPending: feature.cancelPending,
