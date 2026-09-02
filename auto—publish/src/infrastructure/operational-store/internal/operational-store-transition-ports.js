@@ -51,6 +51,7 @@ function exposeOperationalStoreTransitionPorts(options, dependencies) {
     recordRegularAccepted: regularOutcome.recordRegularAccepted,
     recordRegularArticleRejected: regularOutcome.recordRegularArticleRejected,
     recordRegularGroupBlocked: regularOutcome.recordRegularGroupBlocked,
+    recordRegularRemotePending: regularOutcome.recordRegularRemotePending,
     recordRegularUncertain: regularOutcome.recordRegularUncertain,
   });
   holder.paidAdmissionTransitions = Object.freeze({

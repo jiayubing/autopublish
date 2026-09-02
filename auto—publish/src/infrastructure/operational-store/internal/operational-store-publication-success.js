@@ -36,19 +36,19 @@ function createPublicationSuccessPrimitive(context) {
   function freezeCompetingTargets(articleId, winningAttemptId, stamp) {
     const competitors = db
       .prepare(
-        "SELECT a.attempt_id,a.status attempt_status,p.publication_id,p.status publication_status,i.payload_json intent_payload,s.item_id,s.batch_id,s.status item_status,s.payload_json item_payload,q.queue_group_id FROM publication_attempts a JOIN publication_records p ON p.publication_id=a.publication_id LEFT JOIN recovery_intents i ON i.attempt_id=a.attempt_id LEFT JOIN submission_items s ON json_extract(s.payload_json,'$.attemptId')=a.attempt_id LEFT JOIN submission_queue_items q ON q.item_id=s.item_id WHERE p.article_id=? AND a.attempt_id<>? AND (p.status IN('queued','remote_started','uncertain') OR s.status IN('queued','claimed','remote_started','uncertain'))",
+        "SELECT a.attempt_id,a.status attempt_status,p.publication_id,p.status publication_status,i.payload_json intent_payload,s.item_id,s.batch_id,s.status item_status,s.payload_json item_payload,q.queue_group_id FROM publication_attempts a JOIN publication_records p ON p.publication_id=a.publication_id LEFT JOIN recovery_intents i ON i.attempt_id=a.attempt_id LEFT JOIN submission_items s ON json_extract(s.payload_json,'$.attemptId')=a.attempt_id LEFT JOIN submission_queue_items q ON q.item_id=s.item_id WHERE p.article_id=? AND a.attempt_id<>? AND (p.status IN('queued','remote_started','submitted','uncertain') OR s.status IN('queued','claimed','remote_started','uncertain'))",
       )
       .all(articleId, winningAttemptId);
     for (const competitor of competitors) {
-      const crossedBoundary = ["remote_started", "uncertain"].includes(
+      const crossedBoundary = ["remote_started", "submitted", "uncertain"].includes(
         competitor.attempt_status,
       );
       const terminalStatus = crossedBoundary ? "uncertain" : "failed";
       db.prepare(
-        "UPDATE publication_attempts SET status=?,finished_at=? WHERE attempt_id=? AND status IN('queued','remote_started','uncertain')",
+        "UPDATE publication_attempts SET status=?,finished_at=? WHERE attempt_id=? AND status IN('queued','remote_started','submitted','uncertain')",
       ).run(terminalStatus, stamp, competitor.attempt_id);
       db.prepare(
-        "UPDATE publication_records SET status=?,updated_at=? WHERE publication_id=? AND status IN('queued','remote_started','uncertain')",
+        "UPDATE publication_records SET status=?,updated_at=? WHERE publication_id=? AND status IN('queued','remote_started','submitted','uncertain')",
       ).run(terminalStatus, stamp, competitor.publication_id);
       if (competitor.item_id) {
         const payload = Object.assign(
@@ -154,13 +154,13 @@ function createPublicationSuccessPrimitive(context) {
     }
     const attemptChanged = db
       .prepare(
-        "UPDATE publication_attempts SET status='published',finished_at=? WHERE attempt_id=? AND status IN('remote_started','uncertain','failed')",
+        "UPDATE publication_attempts SET status='published',finished_at=? WHERE attempt_id=? AND status IN('remote_started','submitted','uncertain','failed')",
       )
       .run(value.stamp, attemptId).changes;
     if (attemptChanged !== 1) throw fail("PUBLICATION_SUCCESS_STATE_CONFLICT");
     const publicationChanged = db
       .prepare(
-        "UPDATE publication_records SET status='published',updated_at=? WHERE publication_id=? AND status IN('remote_started','uncertain','failed')",
+        "UPDATE publication_records SET status='published',updated_at=? WHERE publication_id=? AND status IN('remote_started','submitted','uncertain','failed')",
       )
       .run(value.stamp, row.publication_id).changes;
     if (publicationChanged !== 1)

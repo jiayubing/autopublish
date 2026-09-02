@@ -104,6 +104,8 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
       !normalized.remoteUrl
     )
       throw fail("REGULAR_ACCEPTED_REMOTE_IDENTITY_REQUIRED");
+    if (expectedStatus === "remote_pending" && !normalized.remoteId)
+      throw fail("REGULAR_REMOTE_PENDING_REMOTE_ID_REQUIRED");
     return Object.freeze({
       ...normalized,
       fingerprint: stableFingerprint(normalized),
@@ -437,13 +439,19 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
           status: "published",
           firstWins: true,
         });
-      if (row.intent.detail.observation) {
+      const existingObservation = row.intent.detail.observation;
+      const supersedesRemotePending =
+        status === "article_rejected" &&
+        row.publication_status === "submitted" &&
+        existingObservation &&
+        existingObservation.status === "remote_pending";
+      if (existingObservation && !supersedesRemotePending) {
         if (
-          row.intent.detail.observation.fingerprint === observed.fingerprint ||
+          existingObservation.fingerprint === observed.fingerprint ||
           (options &&
             options.idempotentExistingOrphanedUncertain === true &&
-            row.intent.detail.observation.status === "uncertain" &&
-            row.intent.detail.observation.code ===
+            existingObservation.status === "uncertain" &&
+            existingObservation.code ===
               "REGULAR_ORPHANED_REMOTE_ATTEMPT")
         )
           return Object.freeze({ attemptId: id, status, idempotent: true });
@@ -478,7 +486,7 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
         const allowedStatuses =
           row.attempt_status === "queued"
             ? "('queued')"
-            : "('remote_started','uncertain')";
+            : "('remote_started','submitted','uncertain')";
         db.prepare(
           `UPDATE publication_attempts SET status='failed',finished_at=? WHERE attempt_id=? AND status IN${allowedStatuses}`,
         ).run(stamp, id);
@@ -507,6 +515,71 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
       }
       fault(`after-${status}`, { attemptId: id });
       return Object.freeze({ attemptId: id, status, idempotent: false });
+    });
+  }
+
+  function recordRegularRemotePending(input) {
+    open();
+    const id = attemptId(input);
+    const stamp = iso(clock);
+    const observed = observation(input, "remote_pending", stamp);
+    return transaction(() => {
+      const row = loadAttempt(id);
+      if (row.publication_status === "published")
+        return Object.freeze({ attemptId: id, status: "published", firstWins: true });
+      const existing = row.intent.detail && row.intent.detail.observation;
+      if (row.publication_status === "submitted" && existing) {
+        if (
+          existing.status === "remote_pending" &&
+          existing.fingerprint === observed.fingerprint
+        )
+          return Object.freeze({
+            attemptId: id,
+            status: "remote_pending",
+            remoteId: observed.remoteId,
+            idempotent: true,
+          });
+        throw fail("REGULAR_OUTCOME_CONFLICT");
+      }
+      if (existing) throw fail("REGULAR_OUTCOME_CONFLICT");
+      const attemptChanged = db
+        .prepare(
+          "UPDATE publication_attempts SET status='submitted' WHERE attempt_id=? AND status='remote_started'",
+        )
+        .run(id).changes;
+      if (attemptChanged !== 1) throw fail("REGULAR_OUTCOME_STATE_CONFLICT");
+      const publicationChanged = db
+        .prepare(
+          "UPDATE publication_records SET status='submitted',updated_at=? WHERE publication_id=? AND status='remote_started'",
+        )
+        .run(stamp, row.publication_id).changes;
+      if (publicationChanged !== 1)
+        throw fail("REGULAR_OUTCOME_STATE_CONFLICT");
+      const activeTargetChanged = db
+        .prepare(
+          "UPDATE article_active_targets SET state='submitted',updated_at=? WHERE attempt_id=? AND state='remote_started'",
+        )
+        .run(stamp, id).changes;
+      if (activeTargetChanged !== 1)
+        throw fail("REGULAR_OUTCOME_STATE_CONFLICT");
+      closeItem(
+        row,
+        "completed",
+        Object.assign({}, fromText(row.item_payload) || {}, {
+          outcomeStatus: "submitted",
+          remoteId: observed.remoteId,
+        }),
+        stamp,
+      );
+      db.prepare(
+        "UPDATE recovery_intents SET state='outcome_pending',payload_json=?,updated_at=? WHERE attempt_id=? AND state IN('remote_started','outcome_pending')",
+      ).run(text(observedIntent(row, observed)), stamp, id);
+      return Object.freeze({
+        attemptId: id,
+        status: "remote_pending",
+        remoteId: observed.remoteId,
+        idempotent: false,
+      });
     });
   }
 
@@ -871,6 +944,7 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
     recordRegularGroupBlocked(input) {
       return recordTerminal(input, "group_blocked");
     },
+    recordRegularRemotePending,
     recordRegularUncertain(input) {
       return recordTerminal(input, "uncertain");
     },
