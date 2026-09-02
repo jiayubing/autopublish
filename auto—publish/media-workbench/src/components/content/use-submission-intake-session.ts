@@ -414,12 +414,6 @@ export function useSubmissionIntakeSession({
         return;
       }
       pendingRef.current = null;
-          setState((current) => ({ ...current, pending: null }));
-          return;
-        }
-        resumedCount += 1;
-      }
-      pendingRef.current = null;
       setState(
         initialState({
           kind: "status",
