@@ -203,7 +203,6 @@ const generationBridgeExports = [
   "pauseGenerationBatch",
   "abandonGenerationBatch",
   "resumeGenerationBatch",
-  "continueGenerationBatch",
   "retryFailedGenerationBatch",
   "subscribeGenerationBatchState",
   "getGenerationRuntimeSnapshot",
