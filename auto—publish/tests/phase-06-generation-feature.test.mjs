@@ -26,7 +26,6 @@ test("generation exposes named commands whose tokens do not finalize one another
     pause: () => new Promise((resolve) => { resolvePause = resolve; }),
     resume: async () => ({ id: "batch-1", status: "running" }),
     abandon: async () => ({ id: "batch-1", status: "abandoned" }),
-    continue: async () => ({ id: "batch-1" }),
     retry: async () => ({ id: "batch-1" }),
   }));
   feature.setScope({ workspaceRuntimeId: "w1", batchId: "batch-1" });
@@ -51,7 +50,6 @@ test("generation rejects stale batch results after a scope switch", async () => 
     pause: async () => null,
     resume: async () => null,
     abandon: async () => null,
-    continue: async () => null,
     retry: async () => null,
     previewBatch: async () => ({}),
     previewCancelPending: async () => ({}),
@@ -85,7 +83,6 @@ test("generation hydrates its runtime snapshot and owns the event subscription l
     pause: async () => null,
     resume: async () => null,
     abandon: async () => null,
-    continue: async () => null,
     retry: async () => null,
     previewBatch: async () => ({}),
     previewCancelPending: async () => ({}),
@@ -128,7 +125,6 @@ test("generation exposes an incomplete hydration observation when the runtime re
     pause: async () => null,
     resume: async () => null,
     abandon: async () => null,
-    continue: async () => null,
     retry: async () => null,
   }));
   feature.setScope({ workspaceRuntimeId: "workspace-hydration-failure", batchId: "batch-1" });
@@ -163,7 +159,6 @@ test("generation keeps a successful action result when its follow-up refresh fai
     pause: async () => null,
     resume: async () => null,
     abandon: async () => null,
-    continue: async () => null,
     retry: async () => null,
     reportDiagnostic: (code) => reports.push(code),
   }));
@@ -197,7 +192,6 @@ test("generation accepts only newer events from the hydrated runtime and display
     pause: async () => null,
     resume: async () => null,
     abandon: async () => null,
-    continue: async () => null,
     retry: async () => null,
   }));
   feature.setScope({ workspaceRuntimeId: "workspace-1", batchId: "batch-1" });
