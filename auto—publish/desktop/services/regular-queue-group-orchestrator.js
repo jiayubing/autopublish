@@ -433,21 +433,25 @@ function createRegularQueueGroupOrchestrator(options) {
     notifyDataInvalidated("REGULAR_QUEUE_GROUP_RUN_INTENT_CHANGED");
     const existing = activeGroups.get(group.queueGroupId);
     if (existing) {
-      void existing.finally(function () {
-        const latest = snapshot().find(
-          (candidate) => candidate.queueGroupId === group.queueGroupId,
-        );
-        if (
-          latest &&
-          latest.pauseIntent === "none" &&
-          latest.remaining.length > 0 &&
-          !activeGroups.has(group.queueGroupId)
-        ) {
-          void runGroup(group.queueGroupId).catch(function () {
-            diagnose("REGULAR_AUTO_START_FAILED", "auto-start-rerun");
-          });
-        }
-      });
+      void existing
+        .finally(function () {
+          const latest = snapshot().find(
+            (candidate) => candidate.queueGroupId === group.queueGroupId,
+          );
+          if (
+            latest &&
+            latest.pauseIntent === "none" &&
+            latest.remaining.length > 0 &&
+            !activeGroups.has(group.queueGroupId)
+          ) {
+            void runGroup(group.queueGroupId).catch(function () {
+              diagnose("REGULAR_AUTO_START_FAILED", "auto-start-rerun");
+            });
+          }
+        })
+        .catch(function () {
+          // The active run owns its own failure reporting.
+        });
       return Object.freeze({
         queueGroupId: group.queueGroupId,
         started: true,
