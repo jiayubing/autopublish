@@ -67,10 +67,25 @@ function createHepanSettingsBackedRuntime(options) {
     accountInspection: Object.freeze({
       async prepare() {},
       async inspect() {
-        const response = await apiClient.status(runtimeConfig());
-        const data = response.data || {};
-        if (!validAid(data.uid)) return Object.freeze({ verified: false });
-        return Object.freeze({ verified: true, remoteAccountId: String(data.uid), displayName: `蓝色河畔 UID ${data.uid}` });
+        const settingsService = requireSettingsService(getSettingsService);
+        if (typeof settingsService.test !== "function")
+          throw fail("HEPAN_CONFIG_NOT_SET");
+        const result = await settingsService.test("hepan", {});
+        const account = result && result.ok === true ? result.account : null;
+        const remoteAccountId =
+          account && /^\d{1,20}$/.test(String(account.uid || ""))
+            ? String(account.uid)
+            : "";
+        if (!remoteAccountId) return Object.freeze({ verified: false });
+        const displayName =
+          typeof account.displayName === "string" && account.displayName.trim()
+            ? account.displayName.trim()
+            : `蓝色河畔 UID ${remoteAccountId}`;
+        return Object.freeze({
+          verified: true,
+          remoteAccountId,
+          displayName,
+        });
       },
     }),
   });
