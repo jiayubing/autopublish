@@ -36,6 +36,7 @@ function renderArticleManagement() {
           const noop = async () => undefined;
           const commands = {
             admitRegularQueueItems: noop,
+            startRegularQueueGroup: noop,
             getContentArticleRemovalTransaction: noop,
             permanentlyDeleteContentArticle: noop,
             preparePermanentDeleteContentArticle: noop,
