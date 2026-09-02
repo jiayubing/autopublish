@@ -83,11 +83,11 @@ function productionContext() {
   return cachedProductionContext;
 }
 
-test("all 119 production capabilities close by TypeChecker symbol identity", () => {
+test("all 118 production capabilities close by TypeChecker symbol identity", () => {
   const context = productionContext();
   const contracts = productionIpcRegistry.list();
 
-  assert.equal(contracts.length, 122);
+  assert.equal(contracts.length, 121);
   assert.equal(
     productionIpcContractFixtures.length + KNOWN_UNFIXTURED_CAPABILITIES.size,
     contracts.length,
@@ -95,11 +95,11 @@ test("all 119 production capabilities close by TypeChecker symbol identity", () 
   assert.equal(
     new Set(productionIpcContractFixtures.map((entry) => entry.capability))
       .size,
-    119,
+    118,
   );
   assert.equal(
     new Set(productionIpcContractFixtures.map((entry) => entry.channel)).size,
-    119,
+    118,
   );
   assert.deepEqual(
     new Set(
