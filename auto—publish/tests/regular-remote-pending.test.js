@@ -48,7 +48,7 @@ function fixture() {
   return { root, store, claim, service, transitions: transitionPorts.regularOutcomeTransitions };
 }
 
-test("remote pending closes the queue item as submitted without claiming publication success", () => {
+test("remote pending closes the queue item without claiming publication success", () => {
   const f = fixture();
   try {
     const result = f.service.applyRegularOutcome({
@@ -57,10 +57,10 @@ test("remote pending closes the queue item as submitted without claiming publica
     });
     assert.equal(result.status, "remote_pending");
     const snapshot = f.transitions.getRegularOutcomeSnapshot({ regularPublicationAttemptId: f.claim.regularPublicationAttemptId });
-    assert.equal(snapshot.publicationStatus, "submitted");
-    assert.equal(snapshot.attemptStatus, "submitted");
+    assert.equal(snapshot.publicationStatus, "uncertain");
+    assert.equal(snapshot.attemptStatus, "uncertain");
     assert.equal(snapshot.itemStatus, "completed");
-    assert.equal(snapshot.activeTargetState, "submitted");
+    assert.equal(snapshot.activeTargetState, "uncertain");
     assert.equal(snapshot.intentState, "outcome_pending");
     assert.equal(snapshot.publicationEvidence, null);
     assert.equal(snapshot.observation.remoteId, "98765");
@@ -70,7 +70,7 @@ test("remote pending closes the queue item as submitted without claiming publica
   }
 });
 
-test("a later published observation promotes submitted to published", () => {
+test("a later published observation promotes remote pending to published", () => {
   const f = fixture();
   try {
     f.service.applyRegularOutcome({
@@ -92,7 +92,7 @@ test("a later published observation promotes submitted to published", () => {
   }
 });
 
-test("a later rejection can close a submitted review without manual uncertainty", () => {
+test("a later rejection can close a remote pending review without pausing the queue", () => {
   const f = fixture();
   try {
     f.service.applyRegularOutcome({
