@@ -112,7 +112,7 @@ function createDoubaoCollectionDesktopService(options) {
 
   function hasPendingWork(state) {
     return state && state.status === "paused" && Array.isArray(state.tasks) && state.tasks.some(function(task) {
-      return task.status === "pending" || task.status === "waiting_login" || task.status === "running";
+      return task.status === "pending" || task.status === "waiting_login" || task.status === "waiting_human" || task.status === "running";
     });
   }
 
