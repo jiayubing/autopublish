@@ -88,6 +88,7 @@ export interface GenerationBatchTask {
   attempts: number;
   error?: { code?: string; message?: string } | null;
   articleId?: string | null;
+  articleTitle?: string | null;
 }
 export interface GenerationBatch {
   id: string;
