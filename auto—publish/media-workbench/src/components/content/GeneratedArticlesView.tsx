@@ -8,6 +8,7 @@ import React, {
 import {
   articleSelectionKey,
   groupArticlesByTemplate,
+  groupPublishedArticlesByTarget,
   selectableArticles,
 } from "../../article-history-logic";
 import type {
@@ -218,7 +219,17 @@ export default function GeneratedArticlesView({
       return stageMatches && batchMatches && textMatches && createdFromMatches && createdToMatches;
     });
   }, [articles, createdFrom, createdTo, filter, generationBatchId, selectedStage, workflowByArticle]);
-  const groups = useMemo(() => groupArticlesByTemplate(filtered), [filtered]);
+  const groups = useMemo(
+    () =>
+      selectedStage === "published"
+        ? groupPublishedArticlesByTarget(
+            filtered,
+            publishedArchives,
+            publicationRecords,
+          )
+        : groupArticlesByTemplate(filtered),
+    [filtered, publicationRecords, publishedArchives, selectedStage],
+  );
   const operable = useMemo(
     () => selectableArticles(filtered, clientId).filter(isArticleSelectable),
     [filtered, clientId, workflowByArticle, dirtyArticleId],

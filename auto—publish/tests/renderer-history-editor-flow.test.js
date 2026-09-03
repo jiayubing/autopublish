@@ -426,6 +426,26 @@ describe("renderer history editor flow", { concurrency: false }, () => {
     }
   });
 
+  it("groups the published stage by the real publication target", async () => {
+    const { page, fixture } = await openHistory();
+    try {
+      await page.getByRole("tab", { name: "已发布 (1)" }).click();
+      const targetGroup = page.getByRole("button", { name: /测试发布目标/ });
+      await targetGroup.waitFor();
+      assert.equal(
+        await page.getByRole("button", { name: /fixture-platform.*历史文章超长模板名称/ }).count(),
+        0,
+      );
+      await targetGroup.click();
+      assert.equal(
+        await page.getByText(fixture.publishedArticle.title, { exact: true }).count(),
+        1,
+      );
+    } finally {
+      await page.close();
+    }
+  });
+
   it("keeps history mounted and restores filter, expansion, selection, scroll, and focus", async () => {
     const { page, fixture } = await openHistory();
     try {

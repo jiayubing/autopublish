@@ -2,6 +2,7 @@ const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 
 let groupArticlesByTemplate;
+let groupPublishedArticlesByTarget;
 let resolveAvailableTemplateId;
 let summarizeTemplateSnapshot;
 let articleSelectionKey;
@@ -26,6 +27,7 @@ function item(id, platform, templateId, createdAt, overrides) {
 describe("article history grouping", async function() {
   const historyLogic = await import("../media-workbench/src/article-history-logic.js");
   groupArticlesByTemplate = historyLogic.groupArticlesByTemplate;
+  groupPublishedArticlesByTarget = historyLogic.groupPublishedArticlesByTarget;
   resolveAvailableTemplateId = historyLogic.resolveAvailableTemplateId;
   summarizeTemplateSnapshot = historyLogic.summarizeTemplateSnapshot;
   articleSelectionKey = historyLogic.articleSelectionKey;
@@ -64,6 +66,91 @@ describe("article history grouping", async function() {
 
     assert.deepStrictEqual(groups.map((group) => group.key), ["toutiao:old-news", "ctrip:old-guide"]);
     assert.deepStrictEqual(groups.map((group) => group.articles.map((article) => article.id)), [["toutiao-legacy"], ["ctrip-legacy"]]);
+  });
+
+  it("groups published articles by the real publication platform instead of the generation template", function() {
+    const article = item("published-lieju", "generation-platform", "generation-template", "2026-07-15T00:00:00.000Z");
+    const groups = groupPublishedArticlesByTarget(
+      [article],
+      [{
+        publicationId: "publication-lieju",
+        publicationEvidence: {
+          articleIdentityV1: { articleId: article.id },
+          targetSnapshotV1: {
+            kind: "platform",
+            platformId: "lieju",
+            platformName: "列举网",
+          },
+        },
+      }],
+      [],
+    );
+
+    assert.equal(groups.length, 1);
+    assert.equal(groups[0].key, "published:platform:lieju");
+    assert.equal(groups[0].displayTitle, "列举网");
+    assert.deepStrictEqual(groups[0].articles.map((value) => value.id), [article.id]);
+  });
+
+  it("keeps all paid media in one published group and labels the media on each article", function() {
+    const first = item("paid-a", "generation-platform", "generation-template", "2026-07-15T00:00:00.000Z");
+    const second = item("paid-b", "generation-platform", "generation-template", "2026-07-14T00:00:00.000Z");
+    const groups = groupPublishedArticlesByTarget(
+      [first, second],
+      [
+        {
+          publicationId: "publication-a",
+          publicationEvidence: {
+            articleIdentityV1: { articleId: first.id },
+            targetSnapshotV1: {
+              kind: "media",
+              mediaResourceId: "media-a",
+              mediaName: "中华网",
+            },
+          },
+        },
+        {
+          publicationId: "publication-b",
+          publicationEvidence: {
+            articleIdentityV1: { articleId: second.id },
+            targetSnapshotV1: {
+              kind: "media",
+              mediaResourceId: "media-b",
+              mediaName: "中国网",
+            },
+          },
+        },
+      ],
+      [],
+    );
+
+    assert.equal(groups.length, 1);
+    assert.equal(groups[0].key, "published:media");
+    assert.equal(groups[0].displayTitle, "付费媒体");
+    assert.deepStrictEqual(groups[0].articles.map((value) => value.id), [first.id, second.id]);
+    assert.deepStrictEqual(groups[0].articleAnnotations, {
+      [first.id]: "媒体：中华网",
+      [second.id]: "媒体：中国网",
+    });
+  });
+
+  it("falls back to a published history record when legacy data has no archive", function() {
+    const article = item("legacy-published", "generation-platform", "generation-template", "2026-07-15T00:00:00.000Z");
+    const groups = groupPublishedArticlesByTarget(
+      [article],
+      [],
+      [{
+        publicationId: "legacy-publication",
+        articleId: article.id,
+        status: "published",
+        platformId: "hepan",
+        mediaResourceId: null,
+        displayName: "蓝色河畔",
+      }],
+    );
+
+    assert.equal(groups[0].displayTitle, "蓝色河畔");
+    assert.equal(groups[0].key, "published:platform:hepan");
   });
 
   it("selects a manually saved result without a review status gate", function() {

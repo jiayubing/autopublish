@@ -84,3 +84,98 @@ export function groupArticlesByTemplate(articles) {
   });
   return result;
 }
+
+function publishedTargetFromArchive(entry) {
+  const snapshot = entry?.publicationEvidence?.targetSnapshotV1;
+  if (!snapshot || typeof snapshot !== "object") return null;
+  if (snapshot.kind === "media") {
+    const mediaName = snapshot.mediaName || snapshot.mediaResourceId || "媒体未记录";
+    return {
+      key: "published:media",
+      displayTitle: "付费媒体",
+      articleLabel: "媒体：" + mediaName,
+    };
+  }
+  if (snapshot.kind === "platform" || snapshot.kind === "legacy-unknown-account") {
+    const platformId = snapshot.platformId || "";
+    const platformName = snapshot.platformName || platformId || "历史发布";
+    return {
+      key: "published:platform:" + (platformId || platformName),
+      displayTitle: platformName,
+      articleLabel: null,
+    };
+  }
+  return null;
+}
+
+function publishedTargetFromRecord(record) {
+  if (!record || record.status !== "published") return null;
+  if (record.mediaResourceId) {
+    return {
+      key: "published:media",
+      displayTitle: "付费媒体",
+      articleLabel: "媒体：" + (record.displayName || record.mediaResourceId),
+    };
+  }
+  if (record.platformId || record.displayName) {
+    const platformName = record.displayName || record.platformId;
+    return {
+      key: "published:platform:" + (record.platformId || platformName),
+      displayTitle: platformName,
+      articleLabel: null,
+    };
+  }
+  return null;
+}
+
+export function groupPublishedArticlesByTarget(articles, publishedArchives, publicationRecords) {
+  const targetsByArticle = new Map();
+
+  (Array.isArray(publishedArchives) ? publishedArchives : []).forEach(function(entry) {
+    const articleId = entry?.publicationEvidence?.articleIdentityV1?.articleId;
+    if (!articleId || targetsByArticle.has(articleId)) return;
+    const target = publishedTargetFromArchive(entry);
+    if (target) targetsByArticle.set(articleId, target);
+  });
+
+  (Array.isArray(publicationRecords) ? publicationRecords : []).forEach(function(record) {
+    const articleId = record?.articleId;
+    if (!articleId || targetsByArticle.has(articleId)) return;
+    const target = publishedTargetFromRecord(record);
+    if (target) targetsByArticle.set(articleId, target);
+  });
+
+  const groups = new Map();
+  (Array.isArray(articles) ? articles : []).forEach(function(article) {
+    const target = targetsByArticle.get(article?.id) || {
+      key: "published:legacy",
+      displayTitle: "历史发布",
+      articleLabel: null,
+    };
+    let group = groups.get(target.key);
+    if (!group) {
+      group = {
+        key: target.key,
+        platform: target.displayTitle,
+        label: target.displayTitle,
+        templateSnapshot: null,
+        displayTitle: target.displayTitle,
+        articleAnnotations: {},
+        articles: [],
+      };
+      groups.set(target.key, group);
+    }
+    group.articles.push(article);
+    if (target.articleLabel) group.articleAnnotations[article.id] = target.articleLabel;
+  });
+
+  const result = Array.from(groups.values());
+  result.forEach(function(group) { group.articles.sort(compareCreatedAt); });
+  result.sort(function(left, right) {
+    const leftLatest = left.articles[0]?.createdAt || "";
+    const rightLatest = right.articles[0]?.createdAt || "";
+    return String(rightLatest).localeCompare(String(leftLatest)) || left.key.localeCompare(right.key);
+  });
+  return result;
+}
+
