@@ -1,4 +1,5 @@
 name: Windows Installer
+# Temporary PR trigger for PR #7 installer smoke build.
 
 on:
   push:
