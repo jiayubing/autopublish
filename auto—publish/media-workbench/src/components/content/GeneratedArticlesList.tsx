@@ -12,6 +12,8 @@ export interface ArticleGroup {
   platform: string;
   label: string;
   templateSnapshot: GeneratedContentArticle['templateSnapshot'] | null;
+  displayTitle?: string;
+  articleAnnotations?: Record<string, string>;
   articles: GeneratedContentArticle[];
 }
 
@@ -45,7 +47,7 @@ export default function GeneratedArticlesList({ groups, visibleError, clientId, 
         <div className="flex w-full max-w-full min-w-0 items-center gap-3 border-b border-slate-100 p-3">
           <input type="checkbox" aria-label={`全选 ${group.label}`} checked={groupSelection.checked} ref={(element) => { if (element) element.indeterminate = groupSelection.indeterminate; }} onChange={() => onToggleGroup(group.articles)} disabled={groupSelection.disabled} />
           <button type="button" onClick={() => onToggleCollapsed(group.key)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
-            <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-slate-800">{group.platform} · {group.label}</span><span className="mt-1 block text-xs text-slate-500">{group.articles.length} 篇 · 可投稿 {groupSubmittable.length} · 最新 {formatBeijingTime(group.articles[0]?.createdAt)}</span>{group.templateSnapshot?.scenario && <span className="mt-1 block truncate text-xs text-slate-400">场景：{group.templateSnapshot.scenario}</span>}</span>
+            <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-slate-800">{group.displayTitle || `${group.platform} · ${group.label}`}</span><span className="mt-1 block text-xs text-slate-500">{group.articles.length} 篇 · 可投稿 {groupSubmittable.length} · 最新 {formatBeijingTime(group.articles[0]?.createdAt)}</span>{group.templateSnapshot?.scenario && <span className="mt-1 block truncate text-xs text-slate-400">场景：{group.templateSnapshot.scenario}</span>}</span>
           </button>
         </div>
         {!isCollapsed && <div className="min-w-0 divide-y divide-slate-100">{group.articles.map((article) => {
@@ -57,7 +59,7 @@ export default function GeneratedArticlesList({ groups, visibleError, clientId, 
           <input type="checkbox" aria-label={`选择 ${article.title}`} checked={selected.includes(articleSelectionKey(article))} onChange={() => onToggleArticle(article)} disabled={!isArticleSelectable(article)} className="mt-1 shrink-0" />
           <FileText className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
           <div className="min-w-0 overflow-hidden">
-            <button type="button" disabled={!workflow} aria-disabled={!workflow} title={!workflow ? '文章流程状态不可用，暂不能打开编辑器' : undefined} onClick={(event) => { if (!workflow) return; onOpenArticle(article, event.currentTarget, workflow.stage === 'published'); }} className="block w-full min-w-0 overflow-hidden text-left hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-60"><span className="block truncate text-sm font-semibold text-slate-800">{article.title}</span><span className="mt-1 block truncate text-xs text-slate-500">阶段：{stageLabel} · {formatBeijingTime(article.createdAt)} · 投稿记录：{summaryLabel}</span></button>
+            <button type="button" disabled={!workflow} aria-disabled={!workflow} title={!workflow ? '文章流程状态不可用，暂不能打开编辑器' : undefined} onClick={(event) => { if (!workflow) return; onOpenArticle(article, event.currentTarget, workflow.stage === 'published'); }} className="block w-full min-w-0 overflow-hidden text-left hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-60"><span className="block truncate text-sm font-semibold text-slate-800">{article.title}</span>{group.articleAnnotations?.[article.id] && <span className="mt-1 block truncate text-xs font-medium text-slate-600">{group.articleAnnotations[article.id]}</span>}<span className="mt-1 block truncate text-xs text-slate-500">阶段：{stageLabel} · {formatBeijingTime(article.createdAt)} · 投稿记录：{summaryLabel}</span></button>
           </div>
           <button type="button" onClick={() => workflow?.orderSummary?.status === 'processing' && onOpenOrder ? onOpenOrder() : onOpenPublication(article)} className="shrink-0 self-center whitespace-nowrap rounded border border-slate-300 px-2 py-1.5 text-xs text-slate-600 hover:border-blue-400 hover:text-blue-700">{workflow?.orderSummary?.status === 'processing' ? '查看订单' : '发布详情'}</button>
         </div>})}</div>}
