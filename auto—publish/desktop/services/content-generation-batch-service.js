@@ -226,6 +226,16 @@ function createContentGenerationBatchService(options) {
     return value || "unconfigured";
   }
 
+  function projectedArticleTitle(value) {
+    if (typeof value !== "string") return null;
+    const title = value
+      .replace(/[\x00-\x1f\x7f]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 300);
+    return title || null;
+  }
+
   function enrichBatch(batch) {
     if (!batch || !Array.isArray(batch.tasks)) return batch;
     const enriched = clone(batch);
@@ -241,25 +251,17 @@ function createContentGenerationBatchService(options) {
           const article = entry && entry.result && entry.result.kind === "one"
             ? entry.result.article
             : null;
-          if (
-            article &&
-            typeof article.id === "string" &&
-            typeof article.title === "string" &&
-            article.title.trim()
-          )
-            articleByTaskId.set(entry.id, article);
+          const title = projectedArticleTitle(article && article.title);
+          if (article && typeof article.id === "string" && title)
+            articleByTaskId.set(entry.id, { id: article.id, title });
         });
       } else {
         taskIds.forEach(function(taskIdValue) {
           const resolved = contentStore.findByGenerationTaskId(taskIdValue);
           const article = resolved && resolved.kind === "one" ? resolved.article : null;
-          if (
-            article &&
-            typeof article.id === "string" &&
-            typeof article.title === "string" &&
-            article.title.trim()
-          )
-            articleByTaskId.set(taskIdValue, article);
+          const title = projectedArticleTitle(article && article.title);
+          if (article && typeof article.id === "string" && title)
+            articleByTaskId.set(taskIdValue, { id: article.id, title });
         });
       }
     } catch (_) {
@@ -268,7 +270,7 @@ function createContentGenerationBatchService(options) {
     enriched.tasks = enriched.tasks.map(function(task) {
       const article = articleByTaskId.get(task.id);
       if (!article || article.id !== task.articleId) return task;
-      return Object.assign({}, task, { articleTitle: article.title.slice(0, 300) });
+      return Object.assign({}, task, { articleTitle: article.title });
     });
     return enriched;
   }
