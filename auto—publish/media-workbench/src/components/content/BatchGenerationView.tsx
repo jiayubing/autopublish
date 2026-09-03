@@ -4,6 +4,7 @@ import type { ContentClient, ContentCommandStaleResult, ContentMaterial, Content
 import type { GenerationBatch, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState } from '../../types/generation';
 import BaseCollapsibleSourceItem, { CollapsibleSourceItemProps } from './CollapsibleSourceItem';
 import GenerationBatchDetail from './GenerationBatchDetail';
+import BatchRegularSubmissionDialog from './BatchRegularSubmissionDialog';
 import { BATCH_GENERATION_STEPS, countGenerationTasks, formatGenerationPreflightError, GENERATION_BATCH_RISK_THRESHOLD, getMaterialId, groupTemplatesByPlatform, isExecutableSource, isUsableMaterial, isUsableResearch, normalizeGenerationMaterial, preserveSelection, reconcileSourceSelection, shouldAutoSelectCurrentClient, sourceCharacterCount, templatePlatformDisplayName, templateScenarioLabel, templateSourceLabel, templateTitle, visibleGenerationTemplates } from '../../content-generation-ui-logic';
 import { useGenerationFeature } from '../../features/generation/use-generation-feature';
 import { useConfirmation } from '../../confirmation';
@@ -65,6 +66,8 @@ export default function BatchGenerationView({ clients, currentClientId, research
   const [previewResult, setPreviewResult] = useState<GenerationBatchPreview | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [batchSubmissionOpen, setBatchSubmissionOpen] = useState(false);
+  const [batchSubmissionFeedback, setBatchSubmissionFeedback] = useState('');
   const preflightErrorRef = useRef<HTMLDivElement | null>(null);
   const clientSelectionTouchedRef = useRef(false);
   const templateSelectionTouchedRef = useRef(false);
@@ -274,6 +277,8 @@ export default function BatchGenerationView({ clients, currentClientId, research
 
   function startNewBatch() {
     newBatchWizardRef.current = true;
+    setBatchSubmissionOpen(false);
+    setBatchSubmissionFeedback('');
     setPreviewResult(null);
     setError('');
     setStep(0);
@@ -320,11 +325,13 @@ export default function BatchGenerationView({ clients, currentClientId, research
       {step === 3 && <section className="rounded-md border border-slate-200 bg-white p-4"><h2 className="text-sm font-semibold">确认任务并启动</h2><p className="mt-1 text-xs text-slate-500">客户数 × 模板数 = AI 调用任务数</p><div className="mt-4 grid gap-2 sm:grid-cols-3"><div className="rounded bg-slate-50 p-3 text-sm">{selectedCount} × {selectedTemplates.length} = {previewResult?.taskCount ?? potentialTaskCount}</div><div className="rounded bg-emerald-50 p-3 text-sm text-emerald-700">可执行任务数：{executableTaskCount}</div><div className="rounded bg-rose-50 p-3 text-sm text-rose-700">排除客户/任务：{previewResult?.excludedClients.length ?? Math.max(0, selectedCount - executableClients.length)} / {previewResult?.excludedTaskCount ?? Math.max(0, potentialTaskCount - executableTaskCount)}</div></div>{riskWarning && <div className="mt-3 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">费用风险提示：任务数较多，启动前请再次确认。</div>}{previewResult?.excludedClients.length ? <div className="mt-4 rounded border border-rose-100 bg-rose-50 p-3 text-xs text-rose-700"><p className="font-semibold">被排除客户与原因</p>{previewResult.excludedClients.map((item) => <p key={item.clientId} className="mt-1">{clientMap.get(item.clientId)?.name || item.clientId}：{item.codes.map(errorReason).join('、')}</p>)}</div> : <p className="mt-4 text-xs text-emerald-700">没有被排除的客户。</p>}<button type="button" onClick={() => void start()} disabled={loading || !previewResult?.executableTaskCount} className="mt-4 h-10 w-full rounded-md bg-blue-600 text-sm font-semibold text-white disabled:opacity-40">{loading ? '启动中…' : '确认并启动批量生成'}</button></section>}
       </>}
       {viewMode === 'monitoring' && batch && <div className="generation-batch-control-area">
-         <GenerationBatchDetail batch={batch} state={batchState} busy={{ pause: generationCommands.pause.busy, resume: generationCommands.resume.busy, abandon: generationCommands.abandon.busy, retry: generationCommands.retry.busy }} onPause={() => void pause()} onResume={() => void resume()} onAbandon={() => void abandon()} onRetry={() => void retryFailed()} onPreviewCancelPending={generation.previewCancelPending} onCancelPending={generation.cancelPending} onStartNew={startNewBatch} onViewBatchArticles={onViewBatchArticles} />
+         <GenerationBatchDetail batch={batch} state={batchState} busy={{ pause: generationCommands.pause.busy, resume: generationCommands.resume.busy, abandon: generationCommands.abandon.busy, retry: generationCommands.retry.busy }} onPause={() => void pause()} onResume={() => void resume()} onAbandon={() => void abandon()} onRetry={() => void retryFailed()} onPreviewCancelPending={generation.previewCancelPending} onCancelPending={generation.cancelPending} onStartNew={startNewBatch} onViewBatchArticles={onViewBatchArticles} onBulkSubmit={() => { setBatchSubmissionFeedback(''); setBatchSubmissionOpen(true); }} />
+        {batchSubmissionFeedback && <div role="status" aria-live="polite" className="mt-3 rounded-md border border-emerald-100 bg-emerald-50 p-2 text-xs text-emerald-700">{batchSubmissionFeedback}</div>}
         {error && <div role="alert" aria-live="polite" className="mt-3 rounded-md border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{error}</div>}
       </div>}
       {viewMode === 'wizard' && error && <div ref={preflightErrorRef} tabIndex={-1} role="alert" aria-live="assertive" className="mt-3 rounded-md border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{error}</div>}
     </div>
     {viewMode === 'wizard' && <div className="flex shrink-0 items-center justify-between border-t border-slate-200 bg-white px-4 py-3"><button type="button" onClick={() => setStep((current) => Math.max(0, current - 1))} disabled={step === 0} className="inline-flex items-center gap-1 rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40"><ChevronLeft className="h-3.5 w-3.5" />上一步</button><button type="button" onClick={() => { if (step === 2) void preview(); else setStep((current) => Math.min(3, current + 1)); }} disabled={loading || (step === 0 && !selectedCount) || (step === 1 && !selectedTemplates.length) || (step === 2 && !selectedClientIds.length)} className="inline-flex items-center gap-1 rounded bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{step === 2 ? (loading ? '预览中…' : '检查并确认') : '下一步'}<ChevronRight className="h-3.5 w-3.5" /></button></div>}
+    {batch && <BatchRegularSubmissionDialog open={batchSubmissionOpen} batch={batch} clients={resolvedClients} onClose={() => setBatchSubmissionOpen(false)} onCommitted={(summary) => setBatchSubmissionFeedback(`已批量处理 ${summary.clientCount} 个客户：新增投稿 ${summary.admittedCount} 项，已存在跳过 ${summary.idempotentCount} 项，队列已请求自动开始。`)} />}
   </div>;
 }
