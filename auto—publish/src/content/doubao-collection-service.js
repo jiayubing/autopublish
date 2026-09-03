@@ -124,6 +124,18 @@ function createDoubaoCollectionService(deps) {
     }
   }
 
+  function normalizeQuestionText(value) {
+    return typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
+  }
+
+  function getCurrentResearch(clientId, question) {
+    const existing = getExistingResearch(clientId, question.id);
+    if (!existing) return null;
+    return normalizeQuestionText(existing.question) === normalizeQuestionText(question.text)
+      ? existing
+      : null;
+  }
+
   function previewBatch(input) {
     if (!input || typeof input !== "object" || Array.isArray(input)) {
       throw serviceError("DOUBAO_BATCH_INPUT_INVALID", "Batch preview input is invalid");
@@ -147,7 +159,7 @@ function createDoubaoCollectionService(deps) {
           disabledQuestions += 1;
           return;
         }
-        const existing = getExistingResearch(clientId, question.id);
+        const existing = getCurrentResearch(clientId, question);
         if (input.mode === "missing" && existing) {
           skippedExisting += 1;
           return;
@@ -184,7 +196,7 @@ function createDoubaoCollectionService(deps) {
       const question = getQuestion(task);
       if (question.enabled !== true) throw serviceError("DOUBAO_QUESTION_DISABLED", "Question is disabled");
       const force = task.force === true;
-      if (!force && getExistingResearch(task.clientId, task.questionId)) {
+      if (!force && getCurrentResearch(task.clientId, question)) {
         throw serviceError("DOUBAO_RESEARCH_EXISTS", "Research already exists; force is required to recollect");
       }
       return { clientId: task.clientId, questionId: task.questionId, force: force };
@@ -214,11 +226,14 @@ function createDoubaoCollectionService(deps) {
     if (input.force !== undefined && typeof input.force !== "boolean") {
       throw serviceError("DOUBAO_FORCE_INVALID", "Force flag is invalid");
     }
-    if (input.force !== true && getExistingResearch(input.clientId, input.questionId)) {
+    if (input.force !== true && getCurrentResearch(input.clientId, question)) {
       throw serviceError("DOUBAO_RESEARCH_EXISTS", "Research already exists; force is required to recollect");
     }
 
-    const result = await browserAdapter.collect(question.text);
+    const result = await browserAdapter.collect({
+      clientId: input.clientId,
+      question: question.text
+    });
     if (!result || typeof result !== "object" || Array.isArray(result)) {
       throw serviceError("DOUBAO_COLLECTION_INVALID", "Doubao collection result is invalid");
     }
