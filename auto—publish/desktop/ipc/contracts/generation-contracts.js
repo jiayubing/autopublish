@@ -12,6 +12,8 @@ const {
 
 const text = (max, min = 0) =>
   stringField({ min, max, pattern: /^[^\x00-\x1f\x7f\\/]*$/u });
+const displayText = (max, min = 1) =>
+  stringField({ min, max, pattern: /^[^\x00-\x1f\x7f]*$/u });
 const id = stringField({
   min: 1,
   max: 200,
@@ -58,6 +60,7 @@ const task = exactObject({
     message: literalField("生成任务失败，请检查诊断信息。"),
   }))),
   articleId: optionalField(nullableField(id)),
+  articleTitle: optionalField(displayText(300)),
   createdAt: optionalField(timestamp),
   updatedAt: optionalField(timestamp),
 });
@@ -195,6 +198,17 @@ function generationOptionalText(value, max) {
   return value === undefined || value === null ? value : generationText(value, max);
 }
 
+function generationDisplayText(value, max) {
+  if (
+    typeof value !== "string" ||
+    !value ||
+    value.length > max ||
+    /[\x00-\x1f\x7f]/.test(value)
+  )
+    generationEventError();
+  return value;
+}
+
 function generationStringArray(value, maxItems) {
   if (!Array.isArray(value) || value.length > maxItems) generationEventError();
   return value.map((item) => generationText(item, 200));
@@ -226,6 +240,7 @@ function generationTask(value) {
     attempts: value.attempts,
   };
   if (value.articleId !== undefined) output.articleId = generationOptionalText(value.articleId, 200);
+  if (value.articleTitle !== undefined) output.articleTitle = generationDisplayText(value.articleTitle, 300);
   if (value.error !== undefined && value.error !== null) {
     exactKeys(value.error, ["code", "message"], []);
     output.error = {
