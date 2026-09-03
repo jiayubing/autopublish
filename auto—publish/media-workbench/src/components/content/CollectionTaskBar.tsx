@@ -27,6 +27,8 @@ export default function CollectionTaskBar({ queue, busy = false, onPause, onResu
       </div>
       <div className="min-w-0 truncate">
         {currentTask && <span>当前问题：{currentTask.questionId}</span>}
+        {currentTask?.status === 'waiting_login' && <span className="ml-2 text-amber-700">豆包需要登录，处理后点击继续</span>}
+        {currentTask?.status === 'waiting_human' && <span className="ml-2 text-amber-700">豆包需要人工验证，处理后点击继续</span>}
         {latestFailed?.error && <span className="ml-2 text-rose-600">最近失败：{latestFailed?.error?.code} {latestFailed?.error?.message}</span>}
       </div>
     </div>

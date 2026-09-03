@@ -12,7 +12,7 @@ const {
 } = require("./doubao-page-parser");
 
 const DOUBAO_CHAT_URL = "https://www.doubao.com/chat/";
-const POLL_INTERVAL_MS = 2000;
+const POLL_INTERVAL_MS = 1000;
 const COLLECTION_TIMEOUT_MS = 120000;
 const MAX_DIAGNOSTICS = 20;
 const DIAGNOSTIC_TIMEOUT_MS = 5000;
@@ -83,7 +83,8 @@ function inspectPageScript() {
     "    var label = (node.getAttribute('aria-label') || node.innerText || node.textContent || '').trim();",
     "    return visible(node) && stopPattern.test(label);",
     "  });",
-    "  var messageNodes = Array.from(document.querySelectorAll('[data-message-id]'));",
+    "  var allMessageNodes = Array.from(document.querySelectorAll('[data-message-id]'));",
+    "  var messageNodes = allMessageNodes.slice(Math.max(0, allMessageNodes.length - 80));",
     "  var messageCandidates = messageNodes.map(function(node) {",
     "    var ancestorClassNames = [];",
     "    var ancestor = node.parentElement;",
@@ -161,6 +162,21 @@ function sendQuestionScript(questionJson) {
   ].join("\n");
 }
 
+function navigateConversationScript(urlJson) {
+  return [
+    "var targetUrl = " + urlJson + ";",
+    "await page.goto(targetUrl, { waitUntil: 'domcontentloaded' });",
+    "return { url: page.url() };"
+  ].join("\n");
+}
+
+function newConversationScript() {
+  return [
+    "await page.goto(" + JSON.stringify(DOUBAO_CHAT_URL) + ", { waitUntil: 'domcontentloaded' });",
+    "return { url: page.url(), created: true };"
+  ].join("\n");
+}
+
 function safeTimestamp(value) {
   const date = new Date(value);
   const iso = Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
@@ -214,6 +230,12 @@ function createDoubaoBrowserAdapter(options) {
   let sessionReady = false;
   let openingPromise = null;
   let sessionGeneration = 0;
+  let activeClientId = null;
+  const conversationStore = opts.conversationStore || {
+    get: function() { return null; },
+    set: function() { return false; },
+    remove: function() { return false; }
+  };
 
   async function openPage(input) {
     return runtime.open(Object.assign({
@@ -323,9 +345,43 @@ function createDoubaoBrowserAdapter(options) {
     return getLoginState();
   }
 
-  async function collect(question) {
+  async function ensureClientConversation(clientId, evaluateWithDeadline) {
+    if (!clientId || activeClientId === clientId) return;
+    const savedUrl = conversationStore.get(clientId);
+    if (savedUrl) {
+      try {
+        await evaluateWithDeadline({
+          action: "switch-conversation",
+          script: navigateConversationScript(JSON.stringify(savedUrl))
+        });
+        activeClientId = clientId;
+        return;
+      } catch (_) {
+        conversationStore.remove(clientId);
+      }
+    }
+    await evaluateWithDeadline({
+      action: "new-conversation",
+      script: newConversationScript()
+    });
+    activeClientId = clientId;
+  }
+
+  function rememberClientConversation(clientId, snapshot) {
+    if (!clientId || !snapshot || typeof snapshot.url !== "string") return;
+    conversationStore.set(clientId, snapshot.url);
+  }
+
+  async function collect(input) {
     if (mode === "background") throw codedError("DOUBAO_BACKGROUND_UNAVAILABLE", "Background Doubao collection is not available");
-    const requestedQuestion = String(question == null ? "" : question);
+    const clientId = input && typeof input === "object" && !Array.isArray(input)
+      ? String(input.clientId || "")
+      : "";
+    const requestedQuestion = String(
+      input && typeof input === "object" && !Array.isArray(input)
+        ? input.question
+        : input == null ? "" : input
+    );
     if (!requestedQuestion.trim()) throw codedError("DOUBAO_INVALID_QUESTION", "Doubao question is required");
 
     const deadline = clock() + timeoutMs;
@@ -356,8 +412,10 @@ function createDoubaoBrowserAdapter(options) {
       }
       throw error;
     }
+    await ensureClientConversation(clientId, evaluateWithDeadline);
     const initialSnapshot = await evaluateWithDeadline({ action: "inspect-page", script: inspectPageScript() });
     await assertPageCollectable(initialSnapshot);
+    rememberClientConversation(clientId, initialSnapshot);
     const baselineAnswer = getAnswerIdentity(initialSnapshot, requestedQuestion);
     const questionJson = JSON.stringify(requestedQuestion);
     const sendResult = await evaluateWithDeadline({
@@ -377,6 +435,7 @@ function createDoubaoBrowserAdapter(options) {
       const snapshot = await evaluateWithDeadline({ action: "inspect-page", script: inspectPageScript() });
       lastSnapshot = snapshot;
       await assertPageCollectable(snapshot);
+      rememberClientConversation(clientId, snapshot);
 
       const answerIdentity = getAnswerIdentity(snapshot, requestedQuestion);
       if (isFreshAnswer(answerIdentity, baselineAnswer) && isAnswerComplete(snapshot, requestedQuestion)) {
@@ -386,7 +445,7 @@ function createDoubaoBrowserAdapter(options) {
           previousText = answer.answerText;
           stableCount = 1;
         }
-        if (stableCount >= 3) {
+        if (stableCount >= 2) {
           return {
             answerText: answer.answerText,
             references: answer.references,
@@ -414,6 +473,7 @@ function createDoubaoBrowserAdapter(options) {
     sessionGeneration += 1;
     sessionReady = false;
     openingPromise = null;
+    activeClientId = null;
     if (runtime.close) return runtime.close({ session: session });
     return undefined;
   }

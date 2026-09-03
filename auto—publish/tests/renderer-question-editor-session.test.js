@@ -146,13 +146,6 @@ function installQuestionFixture(page, options = {}) {
                     taskCount: 1,
                     skippedExisting: 0,
                     disabledQuestions: 0,
-                    tasks: [
-                      {
-                        clientId: "client-a",
-                        questionId: "question-1",
-                        force: true,
-                      },
-                    ],
                   },
                 }),
               );
@@ -164,9 +157,6 @@ function installQuestionFixture(page, options = {}) {
             taskCount: 1,
             skippedExisting: 0,
             disabledQuestions: 0,
-            tasks: [
-              { clientId: "client-a", questionId: "question-1", force: true },
-            ],
           },
         });
       },
@@ -460,7 +450,7 @@ describe(
       await page.close();
     });
 
-    it("rejects a prepared batch when its client selection changes during deferred preview", async function () {
+    it("locks batch client selection while deferred preview is running", async function () {
       const page = await browser.newPage({
         viewport: { width: 1024, height: 800 },
       });
@@ -476,20 +466,26 @@ describe(
           window.__questionFixture.previewCalls === 1 &&
           typeof window.__questionFixture.resolvePreview === "function",
       );
-      const clientB = page.getByRole("checkbox", { name: "客户 B" });
-      assert.equal(await clientB.isDisabled(), true);
-      await page.evaluate(() => {
-        const input = Array.from(
-          document.querySelectorAll('input[type="checkbox"]'),
-        ).find((item) => item.parentElement?.textContent?.includes("客户 B"));
-        if (!input) throw new Error("batch client B checkbox not found");
-        input.disabled = false;
-        input.click();
-      });
+
+      assert.equal(
+        await page.getByRole("checkbox", { name: "客户 B" }).isDisabled(),
+        true,
+      );
+      assert.equal(
+        await page.getByRole("button", { name: "全选客户" }).isDisabled(),
+        true,
+      );
+      assert.equal(
+        await page.evaluate(() => window.__questionFixture.executeCalls),
+        0,
+      );
+
       await page.evaluate(() => window.__questionFixture.resolvePreview());
-      await page
-        .getByText("批次客户选择已变化，请重新预览", { exact: true })
-        .waitFor();
+      const confirmation = page.getByRole("dialog", {
+        name: "重新采集选中客户",
+      });
+      await confirmation.waitFor();
+      await confirmation.getByRole("button", { name: "取消" }).click();
       assert.equal(
         await page.evaluate(() => window.__questionFixture.executeCalls),
         0,

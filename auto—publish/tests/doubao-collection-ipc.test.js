@@ -58,22 +58,30 @@ describe("Doubao desktop IPC", function() {
     assert.deepEqual(Array.from(handlers.keys()), CHANNELS);
   });
 
-  it("routes batch preview and prepared start through validated public inputs", async function() {
+  it("routes batch preview and start through validated client selection", async function() {
     const queue = { status: "running", currentTaskId: null, completed: 0, total: 1, waitRemainingMs: 0, tasks: [] };
+    let startInput = null;
     const handlers = registered({
       ...fakeService(),
-      previewBatch: function(input) { return { mode: input.mode, clientCount: input.clientIds.length, taskCount: 0, skippedExisting: 0, disabledQuestions: 0, tasks: [] }; },
-      startPreparedBatch: function() { return queue; }
+      previewBatch: function(input) {
+        return { mode: input.mode, clientCount: input.clientIds.length, taskCount: 0, skippedExisting: 0, disabledQuestions: 0 };
+      },
+      startPreparedBatch: function(input) {
+        startInput = input;
+        return queue;
+      }
     });
     const preview = await handlers.get("content:preview-doubao-batch")(null, {
       clientIds: ["client-a", "client-b"],
       mode: "missing"
     });
-    assert.deepEqual(preview, { ok: true, data: { preview: { mode: "missing", clientCount: 2, taskCount: 0, skippedExisting: 0, disabledQuestions: 0, tasks: [] } } });
+    assert.deepEqual(preview, { ok: true, data: { preview: { mode: "missing", clientCount: 2, taskCount: 0, skippedExisting: 0, disabledQuestions: 0 } } });
 
     const prepared = await handlers.get("content:start-prepared-doubao-batch")(null, {
-      tasks: [{ clientId: "client-a", questionId: "question-a", force: true }]
+      clientIds: ["client-a", "client-b"],
+      mode: "recollect"
     });
+    assert.deepEqual(startInput, { clientIds: ["client-a", "client-b"], mode: "recollect" });
     assert.deepEqual(prepared, { ok: true, data: { queue: queue } });
   });
 

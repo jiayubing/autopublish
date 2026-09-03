@@ -131,16 +131,17 @@ function registerDoubaoCollectionIpc(deps) {
   });
   ipcMain.handle("content:start-prepared-doubao-batch", function(event, input) {
     return safeWrap(function() {
-      const value = objectInput(input, ["tasks"], "Start prepared batch input");
-      if (!Array.isArray(value.tasks) || value.tasks.length > 500) throw ipcError("Batch tasks are invalid or exceed 500 tasks");
-      const tasks = value.tasks.map(function(task) {
-        const item = objectInput(task, ["clientId", "questionId", "force"], "Prepared batch task");
-        if (!isSafeId(item.clientId) || !isSafeId(item.questionId)) throw ipcError("Batch task ids are invalid");
-        optionalForce(item);
-        return { clientId: item.clientId, questionId: item.questionId, force: item.force };
+      const value = objectInput(input, ["clientIds", "mode"], "Start batch input");
+      if (!Array.isArray(value.clientIds) || value.clientIds.length === 0 || value.clientIds.length > 500) {
+        throw ipcError("Batch client ids are invalid or exceed 500 clients");
+      }
+      if (value.mode !== "missing" && value.mode !== "recollect") throw ipcError("Batch mode is invalid");
+      const clientIds = value.clientIds.map(function(clientId) {
+        if (!isSafeId(clientId)) throw ipcError("Batch client id is invalid");
+        return clientId;
       });
       assertPlaywrightAvailable(deps.runtimeDiagnosticsService);
-      return Promise.resolve(service.startPreparedBatch({ tasks: tasks })).then(function(result) { return { queue: projectQueue(result) }; });
+      return Promise.resolve(service.startPreparedBatch({ clientIds: clientIds, mode: value.mode })).then(function(result) { return { queue: projectQueue(result) }; });
     });
   });
   ipcMain.handle("content:pause-doubao-batch", function(event, input) {

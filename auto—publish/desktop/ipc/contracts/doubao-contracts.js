@@ -50,18 +50,12 @@ const research = exactObject({
   createdAt: optionalField(text(64, 1)),
   isAnswerComplete: optionalField("boolean"),
 });
-const batchTask = exactObject({
-  clientId: id,
-  questionId: id,
-  force: optionalField("boolean"),
-});
 const preview = exactObject({
   mode: enumField(["missing", "recollect"]),
   clientCount: integerField({ min: 0, max: 500 }),
   taskCount: integerField({ min: 0, max: 500 }),
   skippedExisting: integerField({ min: 0, max: 100000 }),
   disabledQuestions: integerField({ min: 0, max: 100000 }),
-  tasks: arrayField(batchTask, { max: 500 }),
 });
 const taskError = exactObject({
   code,
@@ -74,6 +68,7 @@ const queueTask = exactObject({
   status: enumField([
     "pending",
     "waiting_login",
+    "waiting_human",
     "running",
     "waiting_interval",
     "paused",
@@ -188,13 +183,6 @@ function projectPreview(value) {
     taskCount: value.taskCount,
     skippedExisting: value.skippedExisting,
     disabledQuestions: value.disabledQuestions,
-    tasks: Array.isArray(value.tasks)
-      ? value.tasks.map((task) => ({
-          clientId: task.clientId,
-          questionId: task.questionId,
-          ...(task.force === undefined ? {} : { force: task.force }),
-        }))
-      : [],
   };
 }
 
@@ -341,7 +329,10 @@ const doubaoContracts = Object.freeze([
     capability: "content.startPreparedDoubaoBatch",
     channel: "content:start-prepared-doubao-batch",
     kind: "command",
-    request: exactObject({ tasks: arrayField(batchTask, { max: 500 }) }),
+    request: exactObject({
+      clientIds: arrayField(id, { min: 1, max: 500 }),
+      mode: enumField(["missing", "recollect"]),
+    }),
     success: inputResult("queue", queue),
     fromArgs: directArgs,
     toArgs: directInput,

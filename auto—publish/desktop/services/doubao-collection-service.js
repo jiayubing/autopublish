@@ -1,6 +1,8 @@
+const path = require("node:path");
 const { createQuestionStore } = require("../../src/content/question-store");
 const { createResearchStore } = require("../../src/content/research-store");
 const { createDoubaoBrowserAdapter } = require("../../src/content/doubao-browser-adapter");
+const { createDoubaoConversationStore } = require("../../src/content/doubao-conversation-store");
 const { createDoubaoCollectionService: createSourceCollectionService } = require("../../src/content/doubao-collection-service");
 const { createDoubaoCollectionQueue } = require("../../src/content/doubao-collection-queue");
 const { pwSessionConfig } = require("../../src/core/playwright");
@@ -32,11 +34,15 @@ function createDoubaoCollectionDesktopService(options) {
   const researchStore = opts.researchStore || createResearchStore(workspaceRoot, { paths: paths });
   const profileId = opts.profileId || "default";
   const session = opts.session || pwSessionConfig({ session: "doubao", profileId: profileId, profileDir: paths && paths.doubaoBrowser });
+  const conversationStore = opts.conversationStore || createDoubaoConversationStore(
+    path.join(workspaceRoot, "data", "doubao-conversations.json")
+  );
   const browserAdapter = opts.browserAdapter || createDoubaoBrowserAdapter({
     session: session,
     profileId: profileId,
     diagnosticsDir: paths && paths.doubaoDiagnostics,
-    profileDir: paths && paths.doubaoBrowser
+    profileDir: paths && paths.doubaoBrowser,
+    conversationStore: conversationStore
   });
   const collectionService = opts.collectionService || createSourceCollectionService({
     questionStore: questionStore,
@@ -90,12 +96,43 @@ function createDoubaoCollectionDesktopService(options) {
   }
 
   function updateQuestion(input) {
-    const result = questionStore.updateQuestion(input.clientId, input.questionId, {
-      text: input.text,
-      enabled: input.enabled
-    });
-    notifyContentSources("CONTENT_QUESTION_UPDATED");
-    return result;
+    const current = questionStore.getQuestion(input.clientId, input.questionId);
+    const nextText = input.text === undefined ? current.text : input.text;
+    const textChanged = typeof nextText === "string" &&
+      nextText.trim().replace(/\s+/g, " ") !== String(current.text || "").trim().replace(/\s+/g, " ");
+    let staleResearch = null;
+
+    if (textChanged) {
+      try {
+        staleResearch = researchStore.getResearch(input.clientId, input.questionId);
+      } catch (error) {
+        if (!error || error.code !== "RESEARCH_NOT_FOUND") throw error;
+      }
+      if (staleResearch && researchStore.deleteResearch(input.clientId, input.questionId) !== true) {
+        throw serviceError("DOUBAO_RESEARCH_DELETE_FAILED", "Old research could not be invalidated");
+      }
+    }
+
+    try {
+      const result = questionStore.updateQuestion(input.clientId, input.questionId, {
+        text: input.text,
+        enabled: input.enabled
+      });
+      notifyContentSources("CONTENT_QUESTION_UPDATED");
+      return result;
+    } catch (error) {
+      if (staleResearch) {
+        try {
+          researchStore.saveResearch(input.clientId, staleResearch);
+        } catch (restoreError) {
+          const failure = serviceError("DOUBAO_RESEARCH_RESTORE_FAILED", "Old research could not be restored after question update failed");
+          failure.cause = error;
+          failure.restoreError = restoreError;
+          throw failure;
+        }
+      }
+      throw error;
+    }
   }
 
   function deleteQuestion(input) {
@@ -106,7 +143,7 @@ function createDoubaoCollectionDesktopService(options) {
 
   function hasPendingWork(state) {
     return state && state.status === "paused" && Array.isArray(state.tasks) && state.tasks.some(function(task) {
-      return task.status === "pending" || task.status === "waiting_login" || task.status === "running";
+      return task.status === "pending" || task.status === "waiting_login" || task.status === "waiting_human" || task.status === "running";
     });
   }
 
@@ -189,12 +226,12 @@ function createDoubaoCollectionDesktopService(options) {
   }
 
   function startPreparedBatch(input) {
-    if (typeof collectionService.validatePreparedBatch !== "function") {
-      return Promise.reject(serviceError("DOUBAO_ADAPTER_UNSUPPORTED", "Doubao collection service does not support prepared batches"));
+    if (typeof collectionService.prepareBatch !== "function") {
+      return Promise.reject(serviceError("DOUBAO_ADAPTER_UNSUPPORTED", "Doubao collection service does not support batch preparation"));
     }
     let tasks;
     try {
-      tasks = collectionService.validatePreparedBatch(input);
+      tasks = collectionService.prepareBatch(input);
     } catch (error) {
       return Promise.reject(error);
     }

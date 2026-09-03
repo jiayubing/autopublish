@@ -26,7 +26,6 @@ import type {
   ContentTemplateCatalog,
   DoubaoBatchMode,
   DoubaoBatchPreview,
-  DoubaoBatchTask,
   DoubaoLoginState,
   DoubaoQueueState,
 } from "../types/content";
@@ -144,7 +143,8 @@ type DoubaoContentApi = {
     mode: DoubaoBatchMode;
   }) => Promise<ContentIpcResponse<{ preview: DoubaoBatchPreview }>>;
   startPreparedDoubaoBatch: (input: {
-    tasks: DoubaoBatchTask[];
+    clientIds: string[];
+    mode: DoubaoBatchMode;
   }) => Promise<ContentIpcResponse<{ queue: DoubaoQueueState }>>;
   pauseDoubaoBatch: () => Promise<
     ContentIpcResponse<{ queue: DoubaoQueueState }>
@@ -429,12 +429,13 @@ export async function previewDoubaoBatch(input: {
     (wire) => wire.preview,
   );
 }
-export async function startPreparedDoubaoBatch(
-  tasks: DoubaoBatchTask[],
-): Promise<DoubaoQueueState> {
+export async function startPreparedDoubaoBatch(input: {
+  clientIds: string[];
+  mode: DoubaoBatchMode;
+}): Promise<DoubaoQueueState> {
   return callDoubao(
-    (api) => requireBridgeMethod(api.startPreparedDoubaoBatch)({ tasks }),
-    "Unable to start prepared Doubao batch",
+    (api) => requireBridgeMethod(api.startPreparedDoubaoBatch)(input),
+    "Unable to start Doubao batch",
     (wire) => wire.queue,
   );
 }

@@ -153,7 +153,7 @@ describe("Doubao collection service", function() {
       return {
         clientId: clientId,
         id: "q-existing",
-        question: "已存在问题",
+        question: "问题 " + clientId + " q-existing 足够长的采集问题文本",
         answerText: "这是已经保存的足够长度研究回答。",
         references: [],
         collectionMethod: "automatic",
@@ -173,15 +173,27 @@ describe("Doubao collection service", function() {
       researchRecords: [existing("client-1"), existing("client-2")]
     });
 
-    const missing = context.service.previewBatch({ clientIds: ["client-1", "client-2"], mode: "missing" });
-    assert.deepStrictEqual(missing.tasks.map(function(task) { return [task.clientId, task.questionId, task.force]; }), [
-      ["client-1", "q-new", false],
-      ["client-2", "q-new", false]
-    ]);
+    const missingInput = { clientIds: ["client-1", "client-2"], mode: "missing" };
+    const missing = context.service.previewBatch(missingInput);
+    assert.equal(missing.taskCount, 2);
     assert.equal(missing.skippedExisting, 2);
+    assert.deepStrictEqual(
+      context.service.prepareBatch(missingInput).map(function(task) {
+        return [task.clientId, task.questionId, task.force];
+      }),
+      [
+        ["client-1", "q-new", false],
+        ["client-2", "q-new", false]
+      ]
+    );
 
-    const force = context.service.previewBatch({ clientIds: ["client-1", "client-2"], mode: "recollect" });
-    assert.deepStrictEqual(force.tasks.map(function(task) { return task.force; }), [true, true, true, true]);
+    const forceInput = { clientIds: ["client-1", "client-2"], mode: "recollect" };
+    const force = context.service.previewBatch(forceInput);
+    assert.equal(force.taskCount, 4);
+    assert.deepStrictEqual(
+      context.service.prepareBatch(forceInput).map(function(task) { return task.force; }),
+      [true, true, true, true]
+    );
     assert.equal(force.disabledQuestions, 2);
   });
 
@@ -198,15 +210,16 @@ describe("Doubao collection service", function() {
 
     const disabled = createContext({ question: { enabled: false } });
     const preview = disabled.service.previewBatch({ clientIds: ["client-1"], mode: "recollect" });
-    assert.equal(preview.tasks.length, 0);
+    assert.equal(preview.taskCount, 0);
     assert.equal(preview.disabledQuestions, 1);
   });
 
-  it("revalidates prepared tasks against the current question and research state", function() {
+  it("prepares batch tasks from the current question state at start time", function() {
     const context = createContext({ question: { enabled: false } });
-    assert.throws(function() {
-      context.service.validatePreparedBatch({ tasks: [{ clientId: "client-1", questionId: "question-1", force: false }] });
-    }, function(error) { return error.code === "DOUBAO_QUESTION_DISABLED"; });
+    assert.deepStrictEqual(
+      context.service.prepareBatch({ clientIds: ["client-1"], mode: "missing" }),
+      []
+    );
   });
 
   it("collects an existing question and saves normalized research", async function() {

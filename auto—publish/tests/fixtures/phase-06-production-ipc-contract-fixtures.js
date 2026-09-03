@@ -4932,7 +4932,6 @@ const rawProductionIpcContractFixtures = [
         taskCount: 0,
         skippedExisting: 0,
         disabledQuestions: 0,
-        tasks: [],
       },
     },
   },
@@ -4942,7 +4941,8 @@ const rawProductionIpcContractFixtures = [
     owner: "content",
     productionCaller: "desktop/preload.js:content:start-prepared-doubao-batch",
     request: {
-      tasks: [],
+      clientIds: ["fixture-1"],
+      mode: "missing",
     },
     result: {
       queue: {
