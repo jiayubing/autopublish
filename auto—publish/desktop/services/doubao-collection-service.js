@@ -1,6 +1,8 @@
+const path = require("node:path");
 const { createQuestionStore } = require("../../src/content/question-store");
 const { createResearchStore } = require("../../src/content/research-store");
 const { createDoubaoBrowserAdapter } = require("../../src/content/doubao-browser-adapter");
+const { createDoubaoConversationStore } = require("../../src/content/doubao-conversation-store");
 const { createDoubaoCollectionService: createSourceCollectionService } = require("../../src/content/doubao-collection-service");
 const { createDoubaoCollectionQueue } = require("../../src/content/doubao-collection-queue");
 const { pwSessionConfig } = require("../../src/core/playwright");
@@ -32,11 +34,15 @@ function createDoubaoCollectionDesktopService(options) {
   const researchStore = opts.researchStore || createResearchStore(workspaceRoot, { paths: paths });
   const profileId = opts.profileId || "default";
   const session = opts.session || pwSessionConfig({ session: "doubao", profileId: profileId, profileDir: paths && paths.doubaoBrowser });
+  const conversationStore = opts.conversationStore || createDoubaoConversationStore(
+    path.join(workspaceRoot, "data", "doubao-conversations.json")
+  );
   const browserAdapter = opts.browserAdapter || createDoubaoBrowserAdapter({
     session: session,
     profileId: profileId,
     diagnosticsDir: paths && paths.doubaoDiagnostics,
-    profileDir: paths && paths.doubaoBrowser
+    profileDir: paths && paths.doubaoBrowser,
+    conversationStore: conversationStore
   });
   const collectionService = opts.collectionService || createSourceCollectionService({
     questionStore: questionStore,
