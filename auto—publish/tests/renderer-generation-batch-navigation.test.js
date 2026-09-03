@@ -101,6 +101,7 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
             attempts: 1,
             error: null,
             articleId: article.id,
+            articleTitle: article.title,
           },
         ],
         counts: {
@@ -273,13 +274,13 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
           "nav-item-settings",
         ],
       );
-      assert.equal(await page.locator("#nav-item-article-library .sidebar-badge").innerText(), "1");
+      assert.equal(await page.locator("#nav-item-article-library .sidebar-badge").count(), 0);
       assert.equal(await page.locator("#nav-item-platforms").count(), 0);
       assert.equal(await page.locator("#nav-item-workbench").count(), 0);
       await page.locator("#nav-item-content-production").click();
-      await page.getByRole("button", { name: "文章生成" }).click();
-      await page.getByRole("tab", { name: "批量生成" }).click();
-      await page.getByRole("button", { name: "查看本批次文章" }).click();
+      await page.getByRole("button", { name: "批量生成" }).click();
+      assert.equal(await page.getByText("本批次文章", { exact: true }).count(), 1);
+      await page.getByRole("button", { name: "查看文章" }).click();
       await page.getByTestId("generation-batch-filter").waitFor();
       assert.match(
         await page.getByTestId("generation-batch-filter").innerText(),
@@ -298,9 +299,8 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
       assert.equal(await page.getByTestId("generation-batch-filter").count(), 0);
 
       await page.locator("#nav-item-content-production").click();
-      await page.getByRole("button", { name: "文章生成" }).click();
-      await page.getByRole("tab", { name: "批量生成" }).click();
-      await page.getByRole("button", { name: "查看本批次文章" }).click();
+      await page.getByRole("button", { name: "批量生成" }).click();
+      await page.getByRole("button", { name: "查看文章" }).click();
       await page.getByTestId("generation-batch-filter").waitFor();
       assert.equal(
         await page.getByText("fixture-platform · 测试模板 · 批次导航回归", { exact: true }).count(),
