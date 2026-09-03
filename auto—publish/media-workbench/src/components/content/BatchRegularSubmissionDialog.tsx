@@ -329,7 +329,7 @@ export default function BatchRegularSubmissionDialog({
                 >
                   <input
                     type="checkbox"
-                    aria-label={`选择投稿 ${clientName} ${task.articleId}`}
+                    aria-label={`选择投稿 ${clientName} ${task.articleTitle || task.articleId}`}
                     checked={selectedTaskIds.has(task.id)}
                     onChange={(event) =>
                       toggleTask(task.id, event.target.checked)
@@ -341,11 +341,11 @@ export default function BatchRegularSubmissionDialog({
                     <span className="block truncate font-semibold text-slate-700">
                       {clientName}
                     </span>
-                    <span className="mt-0.5 block truncate text-slate-500">
-                      {task.platform} · {task.templateId}
+                    <span className="mt-0.5 block truncate text-slate-700">
+                      {task.articleTitle || `文章 ${task.articleId}`}
                     </span>
                     <span className="mt-0.5 block truncate text-[11px] text-slate-400">
-                      文章 {task.articleId}
+                      {task.platform} · {task.templateId}
                     </span>
                   </span>
                 </label>
