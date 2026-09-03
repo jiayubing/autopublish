@@ -1,6 +1,8 @@
 const MAX_TASKS = 500;
-const MIN_DELAY_MS = 15000;
-const MAX_DELAY_MS = 30000;
+const SAME_CLIENT_MIN_DELAY_MS = 3000;
+const SAME_CLIENT_MAX_DELAY_MS = 8000;
+const CLIENT_SWITCH_MIN_DELAY_MS = 6000;
+const CLIENT_SWITCH_MAX_DELAY_MS = 12000;
 const DEFAULT_COUNTDOWN_INTERVAL_MS = 1000;
 const { reportDiagnostic } = require("../diagnostics/diagnostic-producer");
 
@@ -20,10 +22,10 @@ function safeError(error) {
   return { code: code, message: message };
 }
 
-function clampDelay(value) {
+function clampDelay(value, min, max) {
   const number = Number(value);
-  if (!Number.isFinite(number)) return MIN_DELAY_MS;
-  return Math.max(MIN_DELAY_MS, Math.min(MAX_DELAY_MS, Math.floor(number)));
+  if (!Number.isFinite(number)) return min;
+  return Math.max(min, Math.min(max, Math.floor(number)));
 }
 
 function createDoubaoCollectionQueue(options) {
@@ -35,9 +37,17 @@ function createDoubaoCollectionQueue(options) {
   const collectOne = opts.collectOne;
   const hasCustomSleep = typeof opts.sleep === "function";
   const sleep = hasCustomSleep ? opts.sleep : defaultSleep;
-  const randomDelayMs = typeof opts.randomDelayMs === "function" ? opts.randomDelayMs : function() {
-    return MIN_DELAY_MS + Math.floor(Math.random() * (MAX_DELAY_MS - MIN_DELAY_MS + 1));
-  };
+  const legacyDelay = typeof opts.randomDelayMs === "function" ? opts.randomDelayMs : null;
+  const sameClientDelayMs = typeof opts.sameClientDelayMs === "function"
+    ? opts.sameClientDelayMs
+    : legacyDelay || function() {
+        return SAME_CLIENT_MIN_DELAY_MS + Math.floor(Math.random() * (SAME_CLIENT_MAX_DELAY_MS - SAME_CLIENT_MIN_DELAY_MS + 1));
+      };
+  const clientSwitchDelayMs = typeof opts.clientSwitchDelayMs === "function"
+    ? opts.clientSwitchDelayMs
+    : legacyDelay || function() {
+        return CLIENT_SWITCH_MIN_DELAY_MS + Math.floor(Math.random() * (CLIENT_SWITCH_MAX_DELAY_MS - CLIENT_SWITCH_MIN_DELAY_MS + 1));
+      };
   const countdownIntervalMs = Number.isFinite(Number(opts.countdownIntervalMs)) && Number(opts.countdownIntervalMs) > 0
     ? Number(opts.countdownIntervalMs) : DEFAULT_COUNTDOWN_INTERVAL_MS;
 
@@ -105,6 +115,20 @@ function createDoubaoCollectionQueue(options) {
     });
   }
 
+  function orderByClient(inputTasks) {
+    const order = [];
+    const groups = new Map();
+    inputTasks.forEach(function(input) {
+      const clientId = input && input.clientId;
+      if (!groups.has(clientId)) {
+        groups.set(clientId, []);
+        order.push(clientId);
+      }
+      groups.get(clientId).push(input);
+    });
+    return order.flatMap(function(clientId) { return groups.get(clientId); });
+  }
+
   function createTask(input, sourceId) {
     if (!input || typeof input !== "object" || Array.isArray(input) ||
         typeof input.clientId !== "string" || !input.clientId.trim() ||
@@ -156,7 +180,7 @@ function createDoubaoCollectionQueue(options) {
 
   function cancelPendingTasks() {
     tasks.forEach(function(task) {
-      if (task.status === "pending" || task.status === "waiting_login") {
+      if (task.status === "pending" || task.status === "waiting_login" || task.status === "waiting_human") {
         markTerminal(task, "cancelled");
       }
     });
@@ -278,12 +302,12 @@ function createDoubaoCollectionQueue(options) {
         markTerminal(task, "succeeded");
         emit("task_succeeded");
       } catch (error) {
-        if (error && error.code === "DOUBAO_LOGIN_REQUIRED" && !stopRequested) {
-          task.status = "waiting_login";
+        if (error && (error.code === "DOUBAO_LOGIN_REQUIRED" || error.code === "DOUBAO_CHALLENGE") && !stopRequested) {
+          task.status = error.code === "DOUBAO_LOGIN_REQUIRED" ? "waiting_login" : "waiting_human";
           task.error = safeError(error);
           status = "paused";
           pauseRequested = true;
-          emit("waiting_login");
+          emit(task.status);
           await waitUntilResumed();
           continue;
         }
@@ -295,9 +319,14 @@ function createDoubaoCollectionQueue(options) {
       currentTaskId = null;
       emit("task_finished");
       if (stopRequested) continue;
-      if (!tasks.some(function(item) { return item.status === "pending"; })) return finishRun();
+      const nextTask = tasks.find(function(item) { return item.status === "pending"; });
+      if (!nextTask) return finishRun();
       if (pauseRequested) continue;
-      await waitBetweenTasks(clampDelay(randomDelayMs()));
+      const sameClient = nextTask.clientId === task.clientId;
+      const delay = sameClient
+        ? clampDelay(sameClientDelayMs(task.input, nextTask.input), SAME_CLIENT_MIN_DELAY_MS, SAME_CLIENT_MAX_DELAY_MS)
+        : clampDelay(clientSwitchDelayMs(task.input, nextTask.input), CLIENT_SWITCH_MIN_DELAY_MS, CLIENT_SWITCH_MAX_DELAY_MS);
+      await waitBetweenTasks(delay);
     }
   }
 
@@ -310,7 +339,7 @@ function createDoubaoCollectionQueue(options) {
     emit("started");
     processQueue().catch(function(error) {
       tasks.forEach(function(task) {
-        if (task.status === "pending" || task.status === "running" || task.status === "waiting_login") {
+        if (task.status === "pending" || task.status === "running" || task.status === "waiting_login" || task.status === "waiting_human") {
           task.error = safeError(error);
           markTerminal(task, "failed");
         }
@@ -327,7 +356,7 @@ function createDoubaoCollectionQueue(options) {
     if (inputTasks.length > MAX_TASKS) return Promise.reject(queueError("DOUBAO_QUEUE_LIMIT", "Queue cannot contain more than 500 tasks"));
     const nextTasks = [];
     try {
-      inputTasks.forEach(function(input) { nextTasks.push(createTask(input)); });
+      orderByClient(inputTasks).forEach(function(input) { nextTasks.push(createTask(input)); });
     } catch (error) {
       return Promise.reject(error);
     }
@@ -365,7 +394,7 @@ function createDoubaoCollectionQueue(options) {
     if (disposed || status === "completed" || status === "idle" || status === "stopping") return snapshot();
     pauseRequested = false;
     tasks.forEach(function(task) {
-      if (task.status === "waiting_login") task.status = "pending";
+      if (task.status === "waiting_login" || task.status === "waiting_human") task.status = "pending";
     });
     status = "running";
     notifyControl();
@@ -393,12 +422,16 @@ function createDoubaoCollectionQueue(options) {
     if (disposed) return Promise.reject(queueError("DOUBAO_QUEUE_DISPOSED", "Queue has been disposed"));
     if (status !== "completed") return Promise.reject(queueError("DOUBAO_QUEUE_ACTIVE", "Queue is already active or not completed"));
     const failed = tasks.filter(function(task) { return task.status === "failed"; });
-    if (total + failed.length > MAX_TASKS) return Promise.reject(queueError("DOUBAO_QUEUE_LIMIT", "Queue cannot contain more than 500 tasks"));
-    failed.forEach(function(task) {
-      tasks.push(createTask(task.input));
-    });
-    total = tasks.length;
     if (failed.length === 0) return Promise.resolve(snapshot());
+    failed.forEach(function(task) {
+      task.status = "pending";
+      task.answerLength = 0;
+      task.referenceCount = 0;
+      task.error = null;
+    });
+    completed = Math.max(0, completed - failed.length);
+    currentTaskId = null;
+    waitRemainingMs = 0;
     return beginRun();
   }
 
