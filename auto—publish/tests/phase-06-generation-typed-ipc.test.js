@@ -186,6 +186,7 @@ const batchFixture = {
         stack: "provider stack must not cross IPC",
       },
       articleId: null,
+      articleTitle: "测试标题 / 可安全显示",
       createdAt: "2026-07-26T00:00:00.000Z",
       updatedAt: "2026-07-26T00:01:00.000Z",
     },
@@ -231,6 +232,10 @@ test("generation production wire validates exact input and projects task failure
     code: "AI_SERVER_ERROR",
     message: "生成任务失败，请检查诊断信息。",
   });
+  assert.equal(
+    response.data.batch.tasks[0].articleTitle,
+    "测试标题 / 可安全显示",
+  );
   assert.equal(createCalls, 1);
   assert.doesNotMatch(
     JSON.stringify(response),
