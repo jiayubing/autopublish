@@ -50,7 +50,7 @@ import {
   restoreContentArticle,
   trashContentArticles,
 } from "../../bridge/content-removal";
-import type { DoubaoBatchTask } from "../../types/content";
+import type { DoubaoBatchMode } from "../../types/content";
 import type { GeneratedContentArticle } from "../../types/generation";
 import {
   useWorkspaceRuntimeIdentity,
@@ -87,8 +87,8 @@ export function useContentWorkbenchFeature() {
       }) => saveContentArticle(input.article, input.expectedFingerprint),
       generateArticle: generateContentArticle,
       collectDoubaoQuestion,
-      startPreparedDoubaoBatch: (input: { tasks: DoubaoBatchTask[] }) =>
-        startPreparedDoubaoBatch(input.tasks),
+      startPreparedDoubaoBatch: (input: { clientIds: string[]; mode: DoubaoBatchMode }) =>
+        startPreparedDoubaoBatch(input),
       pauseDoubaoBatch,
       resumeDoubaoBatch,
       stopDoubaoBatch,
