@@ -399,11 +399,14 @@ describe("renderer history editor flow", { concurrency: false }, () => {
   });
   after(closeRenderer);
 
-  it("opens on the current client's pending-submission articles and badges that count", async () => {
+  it("opens on the current client's pending-submission articles without treating normal backlog as an alert", async () => {
     const page = await browser.newPage({ viewport: { width: 1128, height: 527 } });
     page.setDefaultTimeout(5000);
     const fixture = createFixture();
     await installDesktopFixture(page, fixture);
+    await page.addInitScript(() => {
+      localStorage.removeItem("auto-publish:article-library-stage");
+    });
     try {
       await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
       await page.getByRole("heading", { name: "文章库" }).waitFor();
@@ -412,12 +415,8 @@ describe("renderer history editor flow", { concurrency: false }, () => {
         "true",
       );
       assert.equal(
-        await page.locator("#nav-item-article-library .sidebar-badge").innerText(),
-        "12",
-      );
-      assert.equal(
-        await page.locator("#nav-item-article-library .sidebar-badge").getAttribute("title"),
-        "当前客户待投稿文章数",
+        await page.locator("#nav-item-article-library .sidebar-badge").count(),
+        0,
       );
       await page.getByRole("button", { name: /fixture-platform.*历史文章超长模板名称/ }).click();
       assert.equal(await page.getByText(fixture.publishedArticle.title, { exact: true }).count(), 0);
@@ -644,7 +643,7 @@ describe("renderer history editor flow", { concurrency: false }, () => {
       await page.getByLabel("当前客户").selectOption("history-editor-other", { force: true });
       await page.waitForTimeout(400);
       assert.equal(
-        await page.getByRole("tab", { name: "待投稿 (12)" }).getAttribute("aria-selected"),
+        await page.getByRole("tab", { name: /^全部/ }).getAttribute("aria-selected"),
         "true",
       );
       assert.equal(await page.getByRole("dialog", { name: "发起投稿" }).count(), 0);

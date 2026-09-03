@@ -226,8 +226,40 @@ function createContentGenerationBatchService(options) {
     return value || "unconfigured";
   }
 
+  function projectedArticleTitle(value) {
+    if (typeof value !== "string") return null;
+    const title = value
+      .replace(/[\x00-\x1f\x7f]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 300);
+    return title || null;
+  }
+
+  function enrichBatch(batch) {
+    if (!batch || !Array.isArray(batch.tasks)) return batch;
+    const enriched = clone(batch);
+    if (typeof contentStore.getArticle !== "function") return enriched;
+
+    enriched.tasks = enriched.tasks.map(function(task) {
+      if (!task || task.status !== "succeeded" || !task.articleId) return task;
+      try {
+        const article = contentStore.getArticle(task.clientId, task.articleId);
+        const title = projectedArticleTitle(article && article.title);
+        return title
+          ? Object.assign({}, task, { articleTitle: title })
+          : task;
+      } catch (_) {
+        return task;
+      }
+    });
+    return enriched;
+  }
   function emit(value) {
-    const event = safeEvent(value);
+    const source = value && value.batch
+      ? Object.assign({}, value, { batch: enrichBatch(value.batch) })
+      : value;
+    const event = safeEvent(source);
     if (!event.capabilities && event.batch) {
       event.capabilities = {
         canResume: canResume(event.batch),
@@ -436,7 +468,7 @@ function createContentGenerationBatchService(options) {
       runtimeId: runtimeId,
       sequence: sequence,
       runtime: runtime,
-      batch: clone(batch),
+      batch: enrichBatch(batch),
       capabilities: {
         canResume: canResume(batch),
         canContinue: canResume(batch),
@@ -507,7 +539,7 @@ function createContentGenerationBatchService(options) {
       aiConfigFingerprint: await fingerprint(), concurrency: requestedConcurrency });
     emitBatch(batch);
     notifyData("GENERATION_BATCH_CREATED");
-    return clone(batch);
+    return enrichBatch(batch);
   }
 
   async function runBatch(batchId, selection, confirmConfigChange) {
@@ -530,7 +562,7 @@ function createContentGenerationBatchService(options) {
         .then(function(result) {
           emitBatch(result, result && result.status);
           if (result && ["completed", "failed", "abandoned", "interrupted", "paused_configuration", "paused"].includes(result.status)) notifyData("GENERATION_BATCH_TERMINAL");
-          return clone(result);
+          return enrichBatch(result);
         })
         .catch(function(error) {
           let failedBatch = null;
@@ -631,7 +663,7 @@ function createContentGenerationBatchService(options) {
     const batch = batchStore.cancelPending(batchId);
     emitBatch(batch);
     notifyData("GENERATION_PENDING_TASKS_CANCELLED");
-    return clone(batch);
+    return enrichBatch(batch);
   }
 
   async function requestPause(input) {
@@ -684,11 +716,11 @@ function createContentGenerationBatchService(options) {
     const batch = batchStore.abandonBatch(batchId);
     emitBatch(batch, "abandoned");
     notifyData("GENERATION_BATCH_TERMINAL");
-    return clone(batch);
+    return enrichBatch(batch);
   }
 
-  function getBatch(batchId) { return clone(batchStore.getBatch(assertId(batchId, "batch id"))); }
-  function listBatches() { return clone(batchStore.listBatches()); }
+  function getBatch(batchId) { return enrichBatch(batchStore.getBatch(assertId(batchId, "batch id"))); }
+  function listBatches() { return batchStore.listBatches().map(enrichBatch); }
   function subscribe(listener) {
     if (typeof listener !== "function") throw generationError("GENERATION_INPUT_INVALID", "Listener is invalid");
     listeners.add(listener);

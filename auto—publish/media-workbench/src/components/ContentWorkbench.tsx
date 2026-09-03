@@ -16,7 +16,51 @@ import type { FavoriteMediaPage } from "./content/GeneratedArticlesView.types";
 import type { ArticleLibraryNavigationIntent } from "../article-library-navigation";
 
 type RefreshState = "idle" | "refreshing" | "error";
+type ProductionTab = "questions" | "single" | "batch";
+type WorkbenchTab = ProductionTab | "history";
+
 const REFRESH_CONFIRMATION_MS = 3000;
+const PRODUCTION_TAB_KEY = "auto-publish:content-production-tab";
+const ARTICLE_STAGE_KEY = "auto-publish:article-library-stage";
+const SELECTED_CLIENT_KEY = "auto-publish:selected-client";
+const ARTICLE_STAGE_VALUES: ArticleWorkflowFilter[] = [
+  "all",
+  "pending_submission",
+  "needs_completion",
+  "in_submission",
+  "published",
+  "trash",
+];
+
+function loadProductionTab(): ProductionTab {
+  if (typeof localStorage === "undefined") return "questions";
+  const value = localStorage.getItem(PRODUCTION_TAB_KEY);
+  return value === "single" || value === "batch" || value === "questions"
+    ? value
+    : "questions";
+}
+
+function loadArticleStage(): ArticleWorkflowFilter {
+  if (typeof localStorage === "undefined") return "pending_submission";
+  const value = localStorage.getItem(ARTICLE_STAGE_KEY) as ArticleWorkflowFilter | null;
+  return value && ARTICLE_STAGE_VALUES.includes(value)
+    ? value
+    : "pending_submission";
+}
+
+function loadSelectedClientId() {
+  if (typeof localStorage === "undefined") return "";
+  return localStorage.getItem(SELECTED_CLIENT_KEY) || "";
+}
+
+function remember(key: string, value: string) {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(key, value);
+  } catch (_) {
+    // UI position memory is optional.
+  }
+}
 
 interface ContentWorkbenchProps {
   content: ContentWorkbenchFeature;
@@ -71,12 +115,12 @@ export default function ContentWorkbench({
   const [historyEditingFingerprint, setHistoryEditingFingerprint] = useState<
     string | null
   >(null);
-  const [tab, setTab] = useState<"questions" | "generate" | "history">(
-    mode === "library" ? "history" : "questions",
+  const [tab, setTab] = useState<WorkbenchTab>(
+    mode === "library" ? "history" : loadProductionTab(),
   );
   const [articleStageFilter, setArticleStageFilter] = useState<
     ArticleWorkflowFilter
-  >(mode === "library" ? "pending_submission" : "all");
+  >(mode === "library" ? loadArticleStage() : "all");
   const [generationBatchFilter, setGenerationBatchFilter] = useState<
     string | null
   >(null);
@@ -108,8 +152,21 @@ export default function ContentWorkbench({
   }
 
   useEffect(() => {
-    setTab(mode === "library" ? "history" : "questions");
+    setTab(mode === "library" ? "history" : loadProductionTab());
+    if (mode === "library") setArticleStageFilter(loadArticleStage());
   }, [mode]);
+
+  useEffect(() => {
+    if (!clients.length) return;
+    const rememberedClientId = loadSelectedClientId();
+    if (
+      rememberedClientId &&
+      rememberedClientId !== clientId &&
+      clients.some((client) => client.id === rememberedClientId)
+    ) {
+      void content.selectClient(rememberedClientId);
+    }
+  }, [clientId, clients, content]);
 
   useEffect(() => {
     if (!refreshConfirmationVisible) return;
@@ -236,12 +293,10 @@ export default function ContentWorkbench({
     if (nextClientId === clientId) return;
     requestHistoryLeave(() => {
       closeHistoryEditor(true);
+      remember(SELECTED_CLIENT_KEY, nextClientId);
       content.selectClient(nextClientId);
       setError("");
       setGenerationBatchFilter(null);
-      setArticleStageFilter(
-        mode === "library" ? "pending_submission" : "all",
-      );
     });
   }
 
@@ -250,20 +305,32 @@ export default function ContentWorkbench({
     if (await content.refresh("manual")) setRefreshConfirmationVisible(true);
   }
 
-  function changeTab(nextTab: "questions" | "generate" | "history") {
+  function changeTab(nextTab: WorkbenchTab) {
     if (nextTab === tab) return;
     requestHistoryLeave(() => {
       closeHistoryEditor(true);
       setTab(nextTab);
+      if (nextTab === "questions" || nextTab === "single" || nextTab === "batch")
+        remember(PRODUCTION_TAB_KEY, nextTab);
     });
   }
 
-  function openGenerationBatchArticles(batchId: string, targetClientId?: string) {
+  function changeArticleStageFilter(nextStage: ArticleWorkflowFilter) {
+    setArticleStageFilter(nextStage);
+    remember(ARTICLE_STAGE_KEY, nextStage);
+  }
+
+  function openGenerationBatchArticles(
+    batchId: string,
+    targetClientId?: string,
+    articleId?: string,
+  ) {
     if (!batchId) return;
     if (onOpenArticleLibrary) {
       onOpenArticleLibrary({
         generationBatchId: batchId,
         clientId: targetClientId || clientId || undefined,
+        ...(articleId ? { articleId, destination: "article" as const } : {}),
       });
       return;
     }
@@ -286,7 +353,7 @@ export default function ContentWorkbench({
       : "idle";
   const visibleError = error || query.error?.userMessage || "";
   const tabs = mode === "production"
-    ? (["questions", "generate"] as const)
+    ? (["questions", "single", "batch"] as const)
     : ([] as const);
   if (loading)
     return (
@@ -298,22 +365,26 @@ export default function ContentWorkbench({
   return (
     <div className="content-workbench relative flex h-full min-h-0 flex-col overflow-hidden">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-4 py-3">
-        {tabs.map((id) => (
-          <button
-            id={id}
-            type="button"
-            key={id}
-            aria-label={id === "questions" ? "问题与采集" : "文章生成"}
-            onClick={() => changeTab(id)}
-            className={`rounded-md px-3 py-2 text-xs font-semibold ${tab === id ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-100"}`}
-          >
-            {id === "questions"
-              ? "问题与采集"
-              : id === "generate"
-                ? "文章生成"
-              : "文章生成"}
-          </button>
-        ))}
+        {tabs.map((id) => {
+          const label =
+            id === "questions"
+              ? "问题采集"
+              : id === "single"
+                ? "单篇生成"
+                : "批量生成";
+          return (
+            <button
+              id={id}
+              type="button"
+              key={id}
+              aria-label={label}
+              onClick={() => changeTab(id)}
+              className={`rounded-md px-3 py-2 text-xs font-semibold ${tab === id ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-100"}`}
+            >
+              {label}
+            </button>
+          );
+        })}
         <div className="ml-auto flex items-center gap-2">
           <label className="text-xs text-slate-500">
             当前客户
@@ -380,7 +451,7 @@ export default function ContentWorkbench({
             loginQuery={doubaoLoginQuery}
           />
         )}
-        {tab === "generate" && (
+        {(tab === "single" || tab === "batch") && (
           <ArticleGenerationView
             client={clients.find((item) => item.id === clientId)}
             clients={clients}
@@ -394,6 +465,7 @@ export default function ContentWorkbench({
             commands={content.commands}
             commandStates={content.snapshot.commands}
             generationFeature={content.generation}
+            generationMode={tab}
             onViewBatchArticles={openGenerationBatchArticles}
           />
         )}
@@ -401,7 +473,7 @@ export default function ContentWorkbench({
           <div className="flex h-full min-w-0 min-h-0 flex-col gap-3 p-3">
             <ArticleLibraryFilters
               value={articleStageFilter}
-              onChange={setArticleStageFilter}
+              onChange={changeArticleStageFilter}
               counts={management.lifecycleCounts}
             />
             <div className="relative flex min-h-0 min-w-0 flex-1 flex-col gap-3 lg:flex-row">
@@ -430,7 +502,7 @@ export default function ContentWorkbench({
                   favoriteMediaPage={favoriteMediaPage}
                   onFavoriteMediaPageChange={onFavoriteMediaPageChange}
                   onArticleSelect={openHistoryEditor}
-                  onStageFilterChange={setArticleStageFilter}
+                  onStageFilterChange={changeArticleStageFilter}
                   onOpenOrders={onOpenOrders}
                   onOpenAttention={onOpenAttention}
                 />

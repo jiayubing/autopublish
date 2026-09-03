@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import type { ViewMode } from "./types/view";
 import Sidebar from "./components/Sidebar";
 import ContentWorkbench from "./components/ContentWorkbench";
@@ -18,6 +18,31 @@ import { useContentWorkbenchFeature } from "./features/content/use-content-workb
 import { SettingsFeatureProvider } from "./features/settings/settings-context";
 import { useSubmissionCenterFeature } from "./features/submission-center/use-submission-center-feature";
 import type { ArticleLibraryNavigationIntent } from "./article-library-navigation";
+
+const LAST_VIEW_KEY = "auto-publish:last-main-view";
+const VIEW_MODES: ViewMode[] = [
+  "content-production",
+  "article-library",
+  "submission-center",
+  "orders",
+  "resources",
+  "settings",
+];
+
+function loadLastView(): ViewMode {
+  if (typeof localStorage === "undefined") return "article-library";
+  const value = localStorage.getItem(LAST_VIEW_KEY) as ViewMode | null;
+  return value && VIEW_MODES.includes(value) ? value : "article-library";
+}
+
+function rememberLastView(view: ViewMode) {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(LAST_VIEW_KEY, view);
+  } catch (_) {
+    // UI position memory is optional.
+  }
+}
 
 export default function App() {
   return (
@@ -41,7 +66,7 @@ export function WorkspaceScopedConfirmationHost({
 }
 
 function AppContent() {
-  const [currentView, setCurrentView] = useState<ViewMode>("article-library");
+  const [currentView, setCurrentView] = useState<ViewMode>(loadLastView);
   const [submissionCenterSection, setSubmissionCenterSection] = useState<
     "regular" | "paid" | "attention"
   >("regular");
@@ -68,7 +93,7 @@ function AppContent() {
   const isCheckingBalance = mediaSnapshot.commands.checkBalance.busy;
   const navigationBadges = useMemo(() => {
     const lifecycleCount =
-      content.snapshot.management.lifecycleCounts?.pending_submission;
+      content.snapshot.management.lifecycleCounts?.needs_completion;
     const articleLibrary =
       typeof lifecycleCount === "number"
         ? lifecycleCount
@@ -78,15 +103,28 @@ function AppContent() {
                 workflow &&
                   typeof workflow === "object" &&
                   "stage" in workflow &&
-                  workflow.stage === "pending_submission",
+                  workflow.stage === "needs_completion",
               ),
           ).length;
+    const orderAttention = orders.filter(
+      (order) =>
+        Boolean(order.anomaly) ||
+        Boolean(order.cancellation?.manualResolutionRequired),
+    ).length;
     return {
       articleLibrary,
-      submissionCenter: submissionCenter.snapshot.data.counts.total,
-      orders: orders.length,
+      submissionCenter: submissionCenter.snapshot.data.counts.attentionItems,
+      orders: orderAttention,
     };
-  }, [content.snapshot, orders.length, submissionCenter.snapshot.data.counts.total]);
+  }, [
+    content.snapshot,
+    orders,
+    submissionCenter.snapshot.data.counts.attentionItems,
+  ]);
+
+  useEffect(() => {
+    rememberLastView(currentView);
+  }, [currentView]);
 
   function openArticleLibrary(intent?: ArticleLibraryNavigationIntent) {
     setArticleLibraryIntent(intent || null);
@@ -94,7 +132,6 @@ function AppContent() {
   }
 
   function changeView(view: ViewMode) {
-    if (view === "submission-center") setSubmissionCenterSection("regular");
     setCurrentView(view);
   }
 
