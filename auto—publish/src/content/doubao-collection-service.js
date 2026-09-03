@@ -136,9 +136,9 @@ function createDoubaoCollectionService(deps) {
       : null;
   }
 
-  function previewBatch(input) {
+  function buildBatch(input) {
     if (!input || typeof input !== "object" || Array.isArray(input)) {
-      throw serviceError("DOUBAO_BATCH_INPUT_INVALID", "Batch preview input is invalid");
+      throw serviceError("DOUBAO_BATCH_INPUT_INVALID", "Batch input is invalid");
     }
     assertBatchMode(input.mode);
     assertClientIds(input.clientIds);
@@ -183,24 +183,19 @@ function createDoubaoCollectionService(deps) {
     };
   }
 
-  function validatePreparedBatch(input) {
-    const tasks = Array.isArray(input) ? input : input && input.tasks;
-    if (!Array.isArray(tasks)) throw serviceError("DOUBAO_BATCH_TASKS_INVALID", "Prepared batch tasks are invalid");
-    if (tasks.length > 500) throw serviceError("DOUBAO_QUEUE_LIMIT", "Queue cannot contain more than 500 tasks");
-    const seen = new Set();
-    return tasks.map(function(task) {
-      assertBatchTask(task);
-      const key = task.clientId + ":" + task.questionId;
-      if (seen.has(key)) throw serviceError("DOUBAO_BATCH_TASK_DUPLICATE", "Prepared batch tasks must be unique");
-      seen.add(key);
-      const question = getQuestion(task);
-      if (question.enabled !== true) throw serviceError("DOUBAO_QUESTION_DISABLED", "Question is disabled");
-      const force = task.force === true;
-      if (!force && getCurrentResearch(task.clientId, question)) {
-        throw serviceError("DOUBAO_RESEARCH_EXISTS", "Research already exists; force is required to recollect");
-      }
-      return { clientId: task.clientId, questionId: task.questionId, force: force };
-    });
+  function previewBatch(input) {
+    const batch = buildBatch(input);
+    return {
+      mode: batch.mode,
+      clientCount: batch.clientCount,
+      taskCount: batch.taskCount,
+      skippedExisting: batch.skippedExisting,
+      disabledQuestions: batch.disabledQuestions
+    };
+  }
+
+  function prepareBatch(input) {
+    return buildBatch(input).tasks;
   }
 
   async function getLoginState() {
@@ -311,7 +306,7 @@ function createDoubaoCollectionService(deps) {
 
   return {
     previewBatch: previewBatch,
-    validatePreparedBatch: validatePreparedBatch,
+    prepareBatch: prepareBatch,
     getLoginState: getLoginState,
     openLogin: openLogin,
     collectOne: collectOne,
