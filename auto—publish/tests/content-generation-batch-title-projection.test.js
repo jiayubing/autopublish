@@ -60,13 +60,15 @@ describe("generation batch article title projection", function () {
       templateStore: {},
       contentStore: {
         saveArticle: (value) => value,
+        getArticle: (clientId, articleId) => {
+          assert.equal(clientId, "client-a");
+          assert.equal(articleId, "article-title-1");
+          return article;
+        },
         findByGenerationTaskId: () => ({ kind: "one", article }),
-        resolveIdentities: ({ generationTaskIds }) => ({
-          generationTaskIds: generationTaskIds.map((id) => ({
-            id,
-            result: { kind: "one", article },
-          })),
-        }),
+        resolveIdentities: () => {
+          throw new Error("direct article lookup should be preferred");
+        },
       },
       aiProviderService: {
         getFingerprint: () => "fp",
