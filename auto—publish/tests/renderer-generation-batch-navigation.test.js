@@ -278,7 +278,7 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
       assert.equal(await page.locator("#nav-item-platforms").count(), 0);
       assert.equal(await page.locator("#nav-item-workbench").count(), 0);
       await page.locator("#nav-item-content-production").click();
-      await page.getByRole("button", { name: "批量生成" }).click();
+      await page.getByRole("button", { name: "批量生成", exact: true }).click();
       assert.equal(await page.getByText("本批次文章", { exact: true }).count(), 1);
       await page.getByRole("button", { name: "查看文章" }).click();
       await page.getByTestId("generation-batch-filter").waitFor();
@@ -299,7 +299,7 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
       assert.equal(await page.getByTestId("generation-batch-filter").count(), 0);
 
       await page.locator("#nav-item-content-production").click();
-      await page.getByRole("button", { name: "批量生成" }).click();
+      await page.getByRole("button", { name: "批量生成", exact: true }).click();
       await page.getByRole("button", { name: "查看文章" }).click();
       await page.getByTestId("generation-batch-filter").waitFor();
       assert.equal(
