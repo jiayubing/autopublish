@@ -45,6 +45,12 @@ function safeTask(value) {
     message: "生成任务失败，请检查诊断信息。",
   };
   if (task.articleId !== undefined) result.articleId = task.articleId;
+  if (
+    typeof task.articleTitle === "string" &&
+    task.articleTitle.length > 0 &&
+    task.articleTitle.length <= 300 &&
+    !/[\u0000-\u001F\u007F]/.test(task.articleTitle)
+  ) result.articleTitle = task.articleTitle;
   if (task.createdAt !== undefined) result.createdAt = task.createdAt;
   if (task.updatedAt !== undefined) result.updatedAt = task.updatedAt;
   return result;
