@@ -9,7 +9,7 @@ interface QuestionBatchControlsProps {
   isCollecting: boolean;
   commands: {
     previewDoubaoBatch: (input: { clientIds: string[]; mode: DoubaoBatchMode }) => Promise<DoubaoBatchPreview | ContentCommandStaleResult>;
-    startPreparedDoubaoBatch: (input: Record<string, unknown>) => Promise<DoubaoQueueState | ContentCommandStaleResult>;
+    startPreparedDoubaoBatch: (input: { clientIds: string[]; mode: DoubaoBatchMode }) => Promise<DoubaoQueueState | ContentCommandStaleResult>;
   };
   onError: (message: string) => void;
 }
@@ -30,118 +30,73 @@ export function getBatchSelectionState(clientIds: string[], selectedClientIds: s
   };
 }
 
-function sameStringArray(left: string[], right: string[]) {
-  return left.length === right.length && left.every((value, index) => value === right[index]);
-}
-
 export default function QuestionBatchControls({ clients, initialClientId, isCollecting, commands, onError }: QuestionBatchControlsProps) {
   const { confirm } = useConfirmation();
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>(initialClientId ? [initialClientId] : []);
   const [batchPreview, setBatchPreview] = useState<DoubaoBatchPreview | null>(null);
   const [batchActionPending, setBatchActionPending] = useState(false);
-  const selectionRevisionRef = useRef(0);
-  const runRevisionRef = useRef(0);
-  const mountedRef = useRef(true);
   const selectAllRef = useRef<HTMLInputElement>(null);
   const clientIds = clients.map((client) => client.id);
   const batchSelection = getBatchSelectionState(clientIds, selectedClientIds);
-  const clientIdsRef = useRef(clientIds);
-  const selectedClientIdsRef = useRef(selectedClientIds);
-  clientIdsRef.current = clientIds;
-  selectedClientIdsRef.current = selectedClientIds;
-
-  useEffect(() => () => {
-    mountedRef.current = false;
-    runRevisionRef.current += 1;
-  }, []);
 
   useEffect(() => {
-    setSelectedClientIds((current) => {
-      const next = current.filter((id) => clientIds.includes(id));
-      if (sameStringArray(current, next)) return current;
-      selectionRevisionRef.current += 1;
-      return next;
-    });
+    setSelectedClientIds((current) => current.filter((id) => clientIds.includes(id)));
   }, [clients]);
+
   useEffect(() => {
     if (selectAllRef.current) selectAllRef.current.indeterminate = batchSelection.indeterminate;
   }, [batchSelection.indeterminate]);
 
-  function clearPreview() {
-    setBatchPreview(null);
-  }
-
   function updateSelection(next: string[] | ((current: string[]) => string[])) {
-    selectionRevisionRef.current += 1;
     setSelectedClientIds(next);
-    clearPreview();
-  }
-
-  function selectionStillMatches(previewRequest: { revision: number; clientFingerprint: string; selectedFingerprint: string }) {
-    return selectionRevisionRef.current === previewRequest.revision
-      && clientIdsRef.current.join('\u001f') === previewRequest.clientFingerprint
-      && selectedClientIdsRef.current.join('\u001f') === previewRequest.selectedFingerprint;
+    setBatchPreview(null);
   }
 
   async function startBatch(mode: DoubaoBatchMode) {
     if (isCollecting || batchActionPending) return;
-    if (!selectedClientIds.length) {
+    const selection = selectedClientIds.filter((id) => clientIds.includes(id));
+    if (!selection.length) {
       onError('请先选择批次客户');
       return;
     }
-    const runRevision = ++runRevisionRef.current;
-    const runIsCurrent = () => mountedRef.current && runRevisionRef.current === runRevision;
+
+    setBatchActionPending(true);
     try {
-      const previewRequest = {
-        revision: selectionRevisionRef.current,
-        clientFingerprint: clientIds.join('\u001f'),
-        selectedFingerprint: selectedClientIds.join('\u001f'),
-      };
-      setBatchActionPending(true);
-      const preview = await commands.previewDoubaoBatch({ clientIds: selectedClientIds, mode });
-      if (!runIsCurrent()) return;
+      const preview = await commands.previewDoubaoBatch({ clientIds: selection, mode });
       if (isContentCommandStaleResult(preview)) return;
-      if (!selectionStillMatches(previewRequest)) {
-        clearPreview();
-        onError('批次客户选择已变化，请重新预览');
-        return;
-      }
       setBatchPreview(preview);
       if (!preview.taskCount) {
         onError('所选客户没有可采集的已启用问题');
         return;
       }
+
       if (mode === 'recollect') {
         const confirmed = await confirm({
           title: '重新采集选中客户',
-          message: `将重新采集 ${preview.clientCount} 个客户的 ${preview.taskCount} 个问题，覆盖模式只在新回答成功后替换旧回答。`,
+          message: `将重新采集 ${preview.clientCount} 个客户的 ${preview.taskCount} 个问题。只有新回答成功后才会替换旧回答。`,
           confirmLabel: '开始重新采集',
           tone: 'warning',
         });
-        if (!runIsCurrent() || !confirmed) return;
+        if (!confirmed) return;
       }
-      if (!selectionStillMatches(previewRequest)) {
-        clearPreview();
-        onError('批次客户选择已变化，请重新预览');
-        return;
-      }
-      if (!runIsCurrent()) return;
-      const result = await commands.startPreparedDoubaoBatch({ tasks: preview.tasks });
-      if (!runIsCurrent()) return;
+
+      const result = await commands.startPreparedDoubaoBatch({
+        clientIds: selection,
+        mode,
+      });
       if (isContentCommandStaleResult(result)) return;
     } catch (value) {
-      if (!runIsCurrent()) return;
       const code = value && typeof value === 'object' && 'code' in value ? String(value.code) : '';
       onError(code === 'DOUBAO_PREVIEW_FAILED' ? '批次预览失败' : value instanceof Error ? value.message : '无法开始批量采集');
     } finally {
-      if (runIsCurrent()) setBatchActionPending(false);
+      setBatchActionPending(false);
     }
   }
 
   const batchActionBusy = isCollecting || batchActionPending;
   return <section className="rounded-md border border-slate-200 bg-white p-3">
     <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-      <div><h2 className="text-sm font-semibold">批次客户</h2><p className="mt-1 text-xs text-slate-500">批次客户独立于当前客户：已选 {batchSelection.selectedCount} 个</p></div>
+      <div><h2 className="text-sm font-semibold">批次客户</h2><p className="mt-1 text-xs text-slate-500">已选 {batchSelection.selectedCount} 个客户；同一客户连续使用同一个豆包对话。</p></div>
       <div className="flex flex-wrap gap-2">
         <button type="button" onClick={() => updateSelection(toggleAllClientIds(clientIds, selectedClientIds))} disabled={batchActionBusy} className="rounded border border-slate-300 px-2 py-1 text-xs disabled:opacity-40">全选客户</button>
         <button type="button" onClick={() => updateSelection([])} disabled={batchActionBusy || !batchSelection.selectedCount} className="rounded border border-slate-300 px-2 py-1 text-xs disabled:opacity-40">取消全选</button>
