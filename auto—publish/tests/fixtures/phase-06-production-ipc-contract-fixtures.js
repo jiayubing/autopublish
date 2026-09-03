@@ -2018,22 +2018,22 @@ const PRODUCTION_CONSUMERS = Object.freeze({
   ],
   "platform.bindAccountProfile": [
     "direct",
-    "media-workbench/src/components/content/AccountProfileSelector.tsx",
+    "media-workbench/src/components/settings/PlatformAccountSettings.tsx",
     "bindAccountProfile",
   ],
   "platform.deleteAccountProfile": [
     "direct",
-    "media-workbench/src/components/content/AccountProfileSelector.tsx",
+    "media-workbench/src/components/settings/PlatformAccountSettings.tsx",
     "deleteAccountProfile",
   ],
   "platform.openLogin": [
     "direct",
-    "media-workbench/src/components/content/AccountProfileSelector.tsx",
+    "media-workbench/src/components/settings/PlatformAccountSettings.tsx",
     "openLogin",
   ],
   "platform.checkLogin": [
     "direct",
-    "media-workbench/src/components/content/AccountProfileSelector.tsx",
+    "media-workbench/src/components/settings/PlatformAccountSettings.tsx",
     "checkLogin",
   ],
   "content.listClients": [
@@ -3077,6 +3077,8 @@ const PRODUCTION_SOURCE_OWNERS = Object.freeze({
     "MediaProviderSettings",
   "media-workbench/src/components/settings/SettingsOverview.tsx":
     "SettingsOverview",
+  "media-workbench/src/components/settings/PlatformAccountSettings.tsx":
+    "PlatformAccountSettings",
   "media-workbench/src/App.tsx": "AppContent",
   "media-workbench/src/components/PlatformWorkbench.tsx": "PlatformWorkbench",
   "media-workbench/src/components/PaidMediaWorkbench.tsx": "PaidMediaWorkbench",
@@ -3105,7 +3107,7 @@ const PRODUCTION_OWNER_OVERRIDES = Object.freeze({
   "workspace.openCurrent": "WorkspaceSettings",
   "settings.storage.cleanCaches": "StorageSettings",
   "settings.runtime.browserSmoke": "RuntimeSettings",
-  "platform.confirmAccountProfile": "confirmAccountProfileSelection",
+  "platform.confirmAccountProfile": "createProfile",
   "platform.bindAccountProfile": "bindSelected",
   "platform.deleteAccountProfile": "deleteSelected",
 });
