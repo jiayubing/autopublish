@@ -671,7 +671,7 @@ function createContentGenerationBatchService(options) {
     const batch = batchStore.cancelPending(batchId);
     emitBatch(batch);
     notifyData("GENERATION_PENDING_TASKS_CANCELLED");
-    return clone(batch);
+    return enrichBatch(batch);
   }
 
   async function requestPause(input) {
