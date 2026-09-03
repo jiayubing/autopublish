@@ -226,8 +226,48 @@ function createContentGenerationBatchService(options) {
     return value || "unconfigured";
   }
 
+  function enrichBatch(batch) {
+    if (!batch || !Array.isArray(batch.tasks)) return batch;
+    const enriched = clone(batch);
+    const taskIds = enriched.tasks
+      .filter(function(task) { return task && task.status === "succeeded" && task.articleId; })
+      .map(function(task) { return task.id; });
+    if (!taskIds.length) return enriched;
+    const articleByTaskId = new Map();
+    try {
+      if (typeof contentStore.resolveIdentities === "function") {
+        const resolved = contentStore.resolveIdentities({ generationTaskIds: taskIds });
+        (resolved && Array.isArray(resolved.generationTaskIds) ? resolved.generationTaskIds : []).forEach(function(entry) {
+          const article = entry && entry.result && entry.result.kind === "one"
+            ? entry.result.article
+            : null;
+          if (article && typeof article.id === "string" && typeof article.title === "string")
+            articleByTaskId.set(entry.id, article);
+        });
+      } else {
+        taskIds.forEach(function(taskIdValue) {
+          const resolved = contentStore.findByGenerationTaskId(taskIdValue);
+          const article = resolved && resolved.kind === "one" ? resolved.article : null;
+          if (article && typeof article.id === "string" && typeof article.title === "string")
+            articleByTaskId.set(taskIdValue, article);
+        });
+      }
+    } catch (_) {
+      return enriched;
+    }
+    enriched.tasks = enriched.tasks.map(function(task) {
+      const article = articleByTaskId.get(task.id);
+      if (!article || article.id !== task.articleId) return task;
+      return Object.assign({}, task, { articleTitle: article.title.slice(0, 300) });
+    });
+    return enriched;
+  }
+
   function emit(value) {
-    const event = safeEvent(value);
+    const source = value && value.batch
+      ? Object.assign({}, value, { batch: enrichBatch(value.batch) })
+      : value;
+    const event = safeEvent(source);
     if (!event.capabilities && event.batch) {
       event.capabilities = {
         canResume: canResume(event.batch),
@@ -436,7 +476,7 @@ function createContentGenerationBatchService(options) {
       runtimeId: runtimeId,
       sequence: sequence,
       runtime: runtime,
-      batch: clone(batch),
+      batch: enrichBatch(batch),
       capabilities: {
         canResume: canResume(batch),
         canContinue: canResume(batch),
@@ -507,7 +547,7 @@ function createContentGenerationBatchService(options) {
       aiConfigFingerprint: await fingerprint(), concurrency: requestedConcurrency });
     emitBatch(batch);
     notifyData("GENERATION_BATCH_CREATED");
-    return clone(batch);
+    return enrichBatch(batch);
   }
 
   async function runBatch(batchId, selection, confirmConfigChange) {
@@ -530,7 +570,7 @@ function createContentGenerationBatchService(options) {
         .then(function(result) {
           emitBatch(result, result && result.status);
           if (result && ["completed", "failed", "abandoned", "interrupted", "paused_configuration", "paused"].includes(result.status)) notifyData("GENERATION_BATCH_TERMINAL");
-          return clone(result);
+          return enrichBatch(result);
         })
         .catch(function(error) {
           let failedBatch = null;
@@ -684,11 +724,11 @@ function createContentGenerationBatchService(options) {
     const batch = batchStore.abandonBatch(batchId);
     emitBatch(batch, "abandoned");
     notifyData("GENERATION_BATCH_TERMINAL");
-    return clone(batch);
+    return enrichBatch(batch);
   }
 
-  function getBatch(batchId) { return clone(batchStore.getBatch(assertId(batchId, "batch id"))); }
-  function listBatches() { return clone(batchStore.listBatches()); }
+  function getBatch(batchId) { return enrichBatch(batchStore.getBatch(assertId(batchId, "batch id"))); }
+  function listBatches() { return batchStore.listBatches().map(enrichBatch); }
   function subscribe(listener) {
     if (typeof listener !== "function") throw generationError("GENERATION_INPUT_INVALID", "Listener is invalid");
     listeners.add(listener);
