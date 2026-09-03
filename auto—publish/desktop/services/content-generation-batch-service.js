@@ -239,10 +239,28 @@ function createContentGenerationBatchService(options) {
   function enrichBatch(batch) {
     if (!batch || !Array.isArray(batch.tasks)) return batch;
     const enriched = clone(batch);
-    const taskIds = enriched.tasks
-      .filter(function(task) { return task && task.status === "succeeded" && task.articleId; })
-      .map(function(task) { return task.id; });
-    if (!taskIds.length) return enriched;
+    const succeededTasks = enriched.tasks.filter(function(task) {
+      return task && task.status === "succeeded" && task.articleId;
+    });
+    if (!succeededTasks.length) return enriched;
+
+    if (typeof contentStore.getArticle === "function") {
+      enriched.tasks = enriched.tasks.map(function(task) {
+        if (!task || task.status !== "succeeded" || !task.articleId) return task;
+        try {
+          const article = contentStore.getArticle(task.clientId, task.articleId);
+          const title = projectedArticleTitle(article && article.title);
+          return title
+            ? Object.assign({}, task, { articleTitle: title })
+            : task;
+        } catch (_) {
+          return task;
+        }
+      });
+      return enriched;
+    }
+
+    const taskIds = succeededTasks.map(function(task) { return task.id; });
     const articleByTaskId = new Map();
     try {
       if (typeof contentStore.resolveIdentities === "function") {
@@ -274,7 +292,6 @@ function createContentGenerationBatchService(options) {
     });
     return enriched;
   }
-
   function emit(value) {
     const source = value && value.batch
       ? Object.assign({}, value, { batch: enrichBatch(value.batch) })
