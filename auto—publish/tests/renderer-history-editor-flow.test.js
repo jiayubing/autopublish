@@ -588,7 +588,7 @@ describe("renderer history editor flow", { concurrency: false }, () => {
       assert.deepEqual(await page.evaluate(() => window.__historyEditorFlow.calls.regularAdmission), []);
 
       await intake.getByRole("button", { name: "检查投稿" }).click();
-      await confirmation.getByRole("button", { name: "检查投稿" }).click();
+      await confirmation.getByRole("button", { name: "确认发起投稿" }).click();
       await page.getByRole("status").filter({ hasText: "已发起 1 项普通平台投稿" }).waitFor();
       const calls = await page.evaluate(() => window.__historyEditorFlow.calls);
       assert.equal(calls.regularPreview.length, 2);
