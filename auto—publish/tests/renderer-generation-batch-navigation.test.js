@@ -286,10 +286,12 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
         await page.getByTestId("generation-batch-filter").innerText(),
         /generation-batch-a/,
       );
-      assert.equal(
-        await page.getByText("fixture-platform · 测试模板 · 批次导航回归", { exact: true }).count(),
-        1,
+      const batchGroup = page.getByText(
+        "fixture-platform · 测试模板 · 批次导航回归",
+        { exact: true },
       );
+      await batchGroup.waitFor();
+      assert.equal(await batchGroup.count(), 1);
       assert.equal(
         await page.evaluate(() => window.__generationBatchNavigation.submissionMutations),
         0,
@@ -302,10 +304,8 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
       await page.getByRole("button", { name: "批量生成", exact: true }).click();
       await page.getByRole("button", { name: "查看文章" }).click();
       await page.getByTestId("generation-batch-filter").waitFor();
-      assert.equal(
-        await page.getByText("fixture-platform · 测试模板 · 批次导航回归", { exact: true }).count(),
-        1,
-      );
+      await batchGroup.waitFor();
+      assert.equal(await batchGroup.count(), 1);
       assert.equal(
         await page.evaluate(() => window.__generationBatchNavigation.submissionMutations),
         0,
