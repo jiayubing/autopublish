@@ -15,7 +15,7 @@ function tick() {
 }
 
 describe("Doubao collection queue", { concurrency: false }, function() {
-  it("runs tasks serially with a 15-30 second interval", async function() {
+  it("runs tasks serially and caps client-switch delay at 12 seconds", async function() {
     const calls = [];
     const sleeps = [];
     const queue = createDoubaoCollectionQueue({
@@ -33,7 +33,7 @@ describe("Doubao collection queue", { concurrency: false }, function() {
     ]);
 
     assert.deepStrictEqual(calls, ["q1", "q2"]);
-    assert.deepStrictEqual(sleeps, [15000]);
+    assert.deepStrictEqual(sleeps, [12000]);
     assert.deepStrictEqual(result.tasks.map(function(task) { return task.status; }), ["succeeded", "succeeded"]);
   });
 
@@ -289,7 +289,7 @@ describe("Doubao collection queue", { concurrency: false }, function() {
     assert.deepStrictEqual(result.tasks.map(function(task) { return task.status; }), ["succeeded", "cancelled", "cancelled"]);
   });
 
-  it("retryFailed only appends failed tasks and preserves terminal states", async function() {
+  it("retryFailed reruns failed tasks in place without growing history", async function() {
     let firstAttempt = true;
     const calls = [];
     const queue = createDoubaoCollectionQueue({
@@ -309,11 +309,14 @@ describe("Doubao collection queue", { concurrency: false }, function() {
       { clientId: "client", questionId: "q2" }
     ]);
     assert.deepStrictEqual(firstResult.tasks.map(function(task) { return task.status; }), ["failed", "succeeded"]);
+    const originalIds = firstResult.tasks.map(function(task) { return task.id; });
 
     const retryResult = await queue.retryFailed();
     assert.deepStrictEqual(calls, ["q1", "q2", "q1"]);
-    assert.deepStrictEqual(retryResult.tasks.map(function(task) { return task.status; }), ["failed", "succeeded", "succeeded"]);
-    assert.equal(retryResult.tasks[0].id === retryResult.tasks[2].id, false);
+    assert.deepStrictEqual(retryResult.tasks.map(function(task) { return task.status; }), ["succeeded", "succeeded"]);
+    assert.deepStrictEqual(retryResult.tasks.map(function(task) { return task.id; }), originalIds);
+    assert.equal(retryResult.total, 2);
+    assert.equal(retryResult.completed, 2);
   });
 
   it("emits countdown state events and stops notifying an unsubscribed listener", async function() {
