@@ -12,7 +12,7 @@ const {
 } = require("./doubao-page-parser");
 
 const DOUBAO_CHAT_URL = "https://www.doubao.com/chat/";
-const POLL_INTERVAL_MS = 2000;
+const POLL_INTERVAL_MS = 1000;
 const COLLECTION_TIMEOUT_MS = 120000;
 const MAX_DIAGNOSTICS = 20;
 const DIAGNOSTIC_TIMEOUT_MS = 5000;
@@ -83,7 +83,8 @@ function inspectPageScript() {
     "    var label = (node.getAttribute('aria-label') || node.innerText || node.textContent || '').trim();",
     "    return visible(node) && stopPattern.test(label);",
     "  });",
-    "  var messageNodes = Array.from(document.querySelectorAll('[data-message-id]'));",
+    "  var allMessageNodes = Array.from(document.querySelectorAll('[data-message-id]'));",
+    "  var messageNodes = allMessageNodes.slice(Math.max(0, allMessageNodes.length - 80));",
     "  var messageCandidates = messageNodes.map(function(node) {",
     "    var ancestorClassNames = [];",
     "    var ancestor = node.parentElement;",
