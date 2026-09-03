@@ -277,6 +277,8 @@ export default function BatchGenerationView({ clients, currentClientId, research
 
   function startNewBatch() {
     newBatchWizardRef.current = true;
+    setBatchSubmissionOpen(false);
+    setBatchSubmissionFeedback('');
     setPreviewResult(null);
     setError('');
     setStep(0);
