@@ -43,7 +43,7 @@ describe("generation batch article title projection", function () {
       id: "article-title-1",
       clientId: "client-a",
       generationTaskId: "task-title-1",
-      title: "这是从文章真源投影出的标题",
+      title: "这是从文章真源投影出的标题\n第二行",
       content: "正文不应该被复制进 generation batch task。",
     };
     const service = createContentGenerationBatchService({
@@ -77,14 +77,17 @@ describe("generation batch article title projection", function () {
       const projected = service.getBatch("batch-title-1");
       assert.equal(
         projected.tasks[0].articleTitle,
-        "这是从文章真源投影出的标题",
+        "这是从文章真源投影出的标题 第二行",
       );
       assert.equal("content" in projected.tasks[0], false);
       assert.equal("article" in projected.tasks[0], false);
       assert.equal("articleTitle" in persistedBatch.tasks[0], false);
 
       const listed = service.listBatches();
-      assert.equal(listed[0].tasks[0].articleTitle, article.title);
+      assert.equal(
+        listed[0].tasks[0].articleTitle,
+        "这是从文章真源投影出的标题 第二行",
+      );
     } finally {
       await service.dispose();
     }
