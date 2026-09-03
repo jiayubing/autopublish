@@ -74,6 +74,7 @@ const queueTask = exactObject({
   status: enumField([
     "pending",
     "waiting_login",
+    "waiting_human",
     "running",
     "waiting_interval",
     "paused",
