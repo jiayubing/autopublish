@@ -171,23 +171,7 @@ function navigateConversationScript(urlJson) {
 
 function newConversationScript() {
   return [
-    "var pattern = /^(?:新对话|新建对话|new chat)$/i;",
-    "var candidates = page.locator('button, a, [role=\\\"button\\\"]');",
-    "var count = Math.min(await candidates.count(), 300);",
-    "var clicked = false;",
-    "for (var index = 0; index < count; index += 1) {",
-    "  var candidate = candidates.nth(index);",
-    "  var visible = false;",
-    "  try { visible = await candidate.isVisible(); } catch (_) {}",
-    "  if (!visible) continue;",
-    "  var label = '';",
-    "  try { label = (await candidate.getAttribute('aria-label')) || (await candidate.getAttribute('title')) || (await candidate.innerText()) || ''; } catch (_) {}",
-    "  if (!pattern.test(String(label).trim())) continue;",
-    "  await candidate.click();",
-    "  clicked = true;",
-    "  break;",
-    "}",
-    "if (!clicked) await page.goto(" + JSON.stringify(DOUBAO_CHAT_URL) + ", { waitUntil: 'domcontentloaded' });",
+    "await page.goto(" + JSON.stringify(DOUBAO_CHAT_URL) + ", { waitUntil: 'domcontentloaded' });",
     "return { url: page.url(), created: true };"
   ].join("\n");
 }
