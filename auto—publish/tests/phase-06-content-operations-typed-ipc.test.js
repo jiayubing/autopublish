@@ -104,7 +104,6 @@ const preview = {
   taskCount: 1,
   skippedExisting: 0,
   disabledQuestions: 0,
-  tasks: [{ clientId: "client-1", questionId: "question-1", force: false }],
 };
 const DOUBAO_FIXTURES = {
   "content:list-questions": [
@@ -137,9 +136,7 @@ const DOUBAO_FIXTURES = {
     { preview },
   ],
   "content:start-prepared-doubao-batch": [
-    {
-      tasks: [{ clientId: "client-1", questionId: "question-1", force: false }],
-    },
+    { clientIds: ["client-1"], mode: "missing" },
     { queue },
   ],
   "content:pause-doubao-batch": [{}, { queue }],
