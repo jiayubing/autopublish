@@ -39,18 +39,12 @@ export interface ContentQuestion {
   updatedAt: string;
 }
 export type DoubaoBatchMode = "missing" | "recollect";
-export interface DoubaoBatchTask {
-  clientId: string;
-  questionId: string;
-  force: boolean;
-}
 export interface DoubaoBatchPreview {
   mode: DoubaoBatchMode;
   clientCount: number;
   taskCount: number;
   skippedExisting: number;
   disabledQuestions: number;
-  tasks: DoubaoBatchTask[];
 }
 export type DoubaoLoginStatus =
   "unknown" | "checking" | "login_required" | "authenticated" | "session_error";
