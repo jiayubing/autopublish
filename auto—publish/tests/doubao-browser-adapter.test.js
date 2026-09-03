@@ -226,7 +226,7 @@ describe("Doubao browser adapter", { concurrency: false }, function() {
     assert.doesNotMatch(script, /generating:\s*[^\n]*bodyText/);
   });
 
-  it("normalizes the current raw snapshot and waits for three stable answers", async function() {
+  it("normalizes the current raw snapshot and waits for two stable answers", async function() {
     const calls = [];
     let inspectCount = 0;
     let elapsed = 0;
@@ -253,7 +253,7 @@ describe("Doubao browser adapter", { concurrency: false }, function() {
 
     const result = await adapter.collect("当前问题");
 
-    assert.equal(inspectCount, 4);
+    assert.equal(inspectCount, 3);
     assert.equal(result.answerText, "当前回答正文足够长，可以保存。");
     assert.deepEqual(result.references, []);
   });
@@ -302,7 +302,7 @@ describe("Doubao browser adapter", { concurrency: false }, function() {
     const result = await adapter.collect("重复问题");
 
     assert.equal(result.answerText, "新回答正文至少十个字符。");
-    assert.ok(inspectCount >= 7);
+    assert.ok(inspectCount >= 6);
   });
 
   it("uses the dedicated doubao session and returns a scoped complete answer", async function() {
