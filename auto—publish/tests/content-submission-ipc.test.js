@@ -590,3 +590,109 @@ it("exposes paid-media batch snapshot, single start, and client-scoped start all
   assert.equal(started.ok, true, JSON.stringify(started));
   assert.equal(started.data.executionStatus, "submitted");
 });
+
+
+it("auto-starts admitted regular queue groups without turning admission into a start command", async function () {
+  const handlers = new Map();
+  const kicks = [];
+  const articleRef = { clientId: "client-1", articleId: "article-1" };
+  registerContentSubmissionIpc({
+    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
+    submissionMaintenance: {},
+    submissionWorkflow: {
+      regularQueue: {
+        admit: (input) => ({
+          batchId: "batch-1",
+          target: {
+            platformId: input.platformId,
+            accountProfileId: input.accountProfileId,
+          },
+          articleRefs: input.articleRefs,
+          items: [
+            {
+              articleRef,
+              articleId: articleRef.articleId,
+              itemId: "item-1",
+              batchId: "batch-1",
+              queueGroupId: "group-1",
+              status: "queued",
+            },
+            {
+              articleRef,
+              articleId: articleRef.articleId,
+              queueGroupId: "group-1",
+              status: "idempotent",
+            },
+          ],
+          admittedCount: 1,
+          idempotentCount: 1,
+          missingCount: 0,
+          conflictCount: 0,
+        }),
+      },
+      regularQueueGroups: {
+        kick: (input) => kicks.push(input),
+      },
+    },
+  });
+
+  const result = await handlers.get("content:admit-regular-queue-items")(null, {
+    articleRefs: [articleRef],
+    platformId: "lieju",
+    accountProfileId: "profile-1",
+    autoStart: true,
+    confirmed: true,
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(kicks, [{ queueGroupId: "group-1" }]);
+  assert.equal(result.data.admittedCount, 1);
+});
+
+it("keeps a committed regular admission successful when best-effort auto-start fails", async function () {
+  const handlers = new Map();
+  const articleRef = { clientId: "client-1", articleId: "article-1" };
+  registerContentSubmissionIpc({
+    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
+    submissionMaintenance: {},
+    submissionWorkflow: {
+      regularQueue: {
+        admit: () => ({
+          batchId: "batch-1",
+          target: { platformId: "lieju", accountProfileId: "profile-1" },
+          articleRefs: [articleRef],
+          items: [
+            {
+              articleRef,
+              articleId: articleRef.articleId,
+              queueGroupId: "group-1",
+              status: "queued",
+            },
+          ],
+          admittedCount: 1,
+          idempotentCount: 0,
+          missingCount: 0,
+          conflictCount: 0,
+        }),
+      },
+      regularQueueGroups: {
+        kick: () => {
+          throw Object.assign(new Error("synthetic kick failure"), {
+            code: "SYNTHETIC_KICK_FAILURE",
+          });
+        },
+      },
+    },
+  });
+
+  const result = await handlers.get("content:admit-regular-queue-items")(null, {
+    articleRefs: [articleRef],
+    platformId: "lieju",
+    accountProfileId: "profile-1",
+    autoStart: true,
+    confirmed: true,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.admittedCount, 1);
+});

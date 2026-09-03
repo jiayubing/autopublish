@@ -11,6 +11,7 @@ import SettingsNavigation, {
 import SettingsOverview from "./settings/SettingsOverview";
 import MediaProviderSettings from "./settings/MediaProviderSettings";
 import HepanProviderSettings from "./settings/HepanProviderSettings";
+import PlatformAccountSettings from "./settings/PlatformAccountSettings";
 import { useWorkspaceFeature } from "../features/workspace/workspace-feature-context";
 import { useSettingsFeature } from "../features/settings/settings-context";
 
@@ -278,6 +279,8 @@ function SettingsViewContent() {
       <MediaProviderSettings />
     ) : active === "hepan" ? (
       <HepanProviderSettings />
+    ) : active === "platformAccounts" ? (
+      <PlatformAccountSettings />
     ) : active === "workspace" ? (
       <WorkspaceSettings />
     ) : active === "runtime" ? (
@@ -290,7 +293,7 @@ function SettingsViewContent() {
       <div>
         <h2 className="text-xl font-bold text-slate-800">设置</h2>
         <p className="mt-1 text-sm text-slate-500">
-          管理服务账号、工作区和运行环境。账号配置与内容工作区相互独立。
+          管理服务配置、普通投稿平台账号、工作区和运行环境。
         </p>
       </div>
       <div className="grid min-w-0 gap-5 lg:grid-cols-[13rem_minmax(0,1fr)]">

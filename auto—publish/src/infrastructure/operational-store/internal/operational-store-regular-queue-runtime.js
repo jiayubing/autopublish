@@ -336,15 +336,33 @@ function createRegularQueueRuntime(context) {
       "OPERATIONAL_QUEUE_GROUP_ID_INVALID",
     );
     const intent = value.running === true ? "none" : "manual";
+    const preserveManualPause =
+      value.running === true && value.preserveManualPause === true;
     const stamp = iso(clock);
     return transaction(() => {
-      const changed = db
-        .prepare(
-          "UPDATE submission_queue_groups SET pause_intent=?,revision=revision+1,updated_at=? WHERE queue_group_id=?",
-        )
-        .run(intent, stamp, queueGroupId).changes;
-      if (changed !== 1) throw fail("OPERATIONAL_QUEUE_GROUP_NOT_FOUND");
-      regularQueueFault("after-group-run-intent", { queueGroupId, intent });
+      const changed = preserveManualPause
+        ? db
+            .prepare(
+              "UPDATE submission_queue_groups SET pause_intent=?,revision=revision+1,updated_at=? WHERE queue_group_id=? AND pause_intent!='manual'",
+            )
+            .run(intent, stamp, queueGroupId).changes
+        : db
+            .prepare(
+              "UPDATE submission_queue_groups SET pause_intent=?,revision=revision+1,updated_at=? WHERE queue_group_id=?",
+            )
+            .run(intent, stamp, queueGroupId).changes;
+      if (changed !== 1) {
+        const existing = regularQueueGroupSnapshots({ queueGroupId })[0];
+        if (!existing) throw fail("OPERATIONAL_QUEUE_GROUP_NOT_FOUND");
+        if (preserveManualPause && existing.pauseIntent === "manual")
+          return existing;
+        throw fail("OPERATIONAL_QUEUE_GROUP_RUN_INTENT_CONFLICT");
+      }
+      regularQueueFault("after-group-run-intent", {
+        queueGroupId,
+        intent,
+        preserveManualPause,
+      });
       return regularQueueGroupSnapshots({ queueGroupId })[0];
     });
   }

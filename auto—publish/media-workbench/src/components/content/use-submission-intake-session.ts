@@ -49,9 +49,6 @@ export type SubmissionIntakeCommands = {
   admitRegularQueueItems: (
     input: RegularQueueAdmissionInput,
   ) => Promise<SubmissionIntakeCommandResult<RegularQueueAdmissionResult>>;
-  startRegularQueueGroup: (input: {
-    queueGroupId: string;
-  }) => Promise<SubmissionIntakeCommandResult<unknown>>;
   previewPaidMediaPreflight: (
     input: PaidMediaPreflightInput,
   ) => Promise<SubmissionIntakeCommandResult<PaidMediaPreflight>>;
@@ -102,6 +99,51 @@ export type SubmissionIntakeSessionOptions = SubmissionIntakeCommands & {
   onCommitted: () => void;
 };
 
+type RegularTargetPreference = {
+  platformId: string;
+  accountProfileId: string;
+};
+
+const REGULAR_TARGET_PREFERENCE_KEY =
+  "auto-publish:regular-submission-target";
+
+function loadRegularTargetPreference(): RegularTargetPreference {
+  if (typeof localStorage === "undefined")
+    return { platformId: "", accountProfileId: "" };
+  try {
+    const value = JSON.parse(
+      localStorage.getItem(REGULAR_TARGET_PREFERENCE_KEY) || "null",
+    ) as Partial<RegularTargetPreference> | null;
+    return {
+      platformId: typeof value?.platformId === "string" ? value.platformId : "",
+      accountProfileId:
+        typeof value?.accountProfileId === "string"
+          ? value.accountProfileId
+          : "",
+    };
+  } catch (_) {
+    return { platformId: "", accountProfileId: "" };
+  }
+}
+
+function saveRegularTargetPreference(
+  preference: RegularTargetPreference,
+): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    if (!preference.platformId) {
+      localStorage.removeItem(REGULAR_TARGET_PREFERENCE_KEY);
+      return;
+    }
+    localStorage.setItem(
+      REGULAR_TARGET_PREFERENCE_KEY,
+      JSON.stringify(preference),
+    );
+  } catch (_) {
+    // Preference persistence is optional; submission remains available.
+  }
+}
+
 function initialState(
   feedback: SubmissionIntakeFeedback | null = null,
 ): SessionState {
@@ -136,7 +178,6 @@ export function useSubmissionIntakeSession({
   availableArticleRefs,
   previewRegularQueueAdmission,
   admitRegularQueueItems,
-  startRegularQueueGroup,
   previewPaidMediaPreflight,
   confirmPaidMediaBatch,
   commandStates,
@@ -215,11 +256,14 @@ export function useSubmissionIntakeSession({
     (articleRefs: ReadonlyArray<ArticleSelection>) => {
       if (!articleRefs.length || mutationPending()) return;
       invalidateAsync();
+      const preferredTarget = loadRegularTargetPreference();
       setState({
         ...initialState(),
         open: true,
         articleRefs: articleRefs.map((article) => ({ ...article })),
         selectionKey: keyOf(articleRefs),
+        platformId: preferredTarget.platformId,
+        accountProfileId: preferredTarget.accountProfileId,
       });
     },
     [invalidateAsync, mutationPending],
@@ -250,6 +294,10 @@ export function useSubmissionIntakeSession({
     (platformId: string) => {
       if (mutationPending()) return;
       invalidateAsync();
+      saveRegularTargetPreference({
+        platformId,
+        accountProfileId: "",
+      });
       setState((current) => ({
         ...current,
         platformId,
@@ -265,12 +313,18 @@ export function useSubmissionIntakeSession({
     (accountProfileId: string) => {
       if (mutationPending()) return;
       invalidateAsync();
-      setState((current) => ({
-        ...current,
-        accountProfileId,
-        error: "",
-        pending: null,
-      }));
+      setState((current) => {
+        saveRegularTargetPreference({
+          platformId: current.platformId,
+          accountProfileId,
+        });
+        return {
+          ...current,
+          accountProfileId,
+          error: "",
+          pending: null,
+        };
+      });
     },
     [invalidateAsync, mutationPending],
   );
@@ -311,7 +365,6 @@ export function useSubmissionIntakeSession({
       commandBusy(
         "previewRegularQueueAdmission",
         "admitRegularQueueItems",
-        "startRegularQueueGroup",
       )
     )
       return;
@@ -324,10 +377,11 @@ export function useSubmissionIntakeSession({
       error: "",
       pending: "regular_preview",
     }));
-    const input = {
+    const input: RegularQueueAdmissionInput = {
       articleRefs: state.articleRefs,
       platformId: state.platformId,
       accountProfileId: state.accountProfileId,
+      autoStart: true,
     };
     try {
       const preview = await previewRegularQueueAdmission(input);
@@ -339,21 +393,9 @@ export function useSubmissionIntakeSession({
       }
       if (!preview.queueableCount && !preview.idempotentCount)
         throw new Error("没有符合普通平台队列规则的文章");
-      const resumableQueueGroupIds = [
-        ...new Set(
-          preview.items
-            .filter(
-              (item) =>
-                item.status === "idempotent" &&
-                item.reasonCode === "REGULAR_CLIENT_PROFILE_INCOMPLETE" &&
-                Boolean(item.queueGroupId),
-            )
-            .map((item) => item.queueGroupId as string),
-        ),
-      ];
       const accepted = await confirm({
         title: "确认发起普通平台投稿",
-        message: `将新增 ${preview.queueableCount} 项普通平台投稿，已存在跳过 ${preview.idempotentCount} 项，缺失 ${preview.missingCount} 项，冲突 ${preview.conflictCount} 项。${resumableQueueGroupIds.length ? ` 其中 ${resumableQueueGroupIds.length} 个因客户资料不完整而暂停的已有队列将重新启动。` : ""}`,
+        message: `将新增 ${preview.queueableCount} 项普通平台投稿，已存在跳过 ${preview.idempotentCount} 项，缺失 ${preview.missingCount} 项，冲突 ${preview.conflictCount} 项。确认后队列会自动开始；你手动暂停的已有队列不会被恢复。`,
         confirmLabel: "确认发起投稿",
       });
       if (!isCurrent(requestedScope, epoch)) return;
@@ -371,30 +413,11 @@ export function useSubmissionIntakeSession({
         setState((current) => ({ ...current, pending: null }));
         return;
       }
-      let resumedCount = 0;
-      for (const queueGroupId of resumableQueueGroupIds) {
-        const stillQueued = result.items.some(
-          (item) =>
-            item.status === "idempotent" &&
-            item.queueGroupId === queueGroupId,
-        );
-        if (!stillQueued) continue;
-        const resumed = await startRegularQueueGroup({ queueGroupId });
-        if (!isCurrent(requestedScope, epoch)) return;
-        if (isContentCommandStaleResult(resumed)) {
-          pendingRef.current = null;
-          setState((current) => ({ ...current, pending: null }));
-          return;
-        }
-        resumedCount += 1;
-      }
       pendingRef.current = null;
       setState(
         initialState({
           kind: "status",
-          text: resumedCount
-            ? `已发起 ${result.admittedCount || 0} 项普通平台投稿，并重新启动 ${resumedCount} 个因客户资料不完整而暂停的队列。`
-            : `已发起 ${result.admittedCount || 0} 项普通平台投稿。`,
+          text: `已发起 ${result.admittedCount || 0} 项普通平台投稿，并已请求自动开始执行。`,
         }),
       );
       onCommitted();
@@ -510,7 +533,6 @@ export function useSubmissionIntakeSession({
         commandBusy(
           "previewRegularQueueAdmission",
           "admitRegularQueueItems",
-          "startRegularQueueGroup",
         ),
       paidPreviewBusy:
         state.pending === "paid_preview" ||

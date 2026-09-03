@@ -578,7 +578,7 @@ describe("renderer history editor flow", { concurrency: false }, () => {
       await page.getByRole("button", { name: /发起投稿 \(1\)/ }).click();
       const intake = page.getByRole("dialog", { name: "发起投稿" });
       await intake.getByLabel("普通平台投稿目标").selectOption("fixture-platform");
-      await intake.getByRole("button", { name: "确认发起投稿" }).evaluate((button) => {
+      await intake.getByRole("button", { name: "检查投稿" }).evaluate((button) => {
         button.click();
         button.click();
       });
@@ -587,7 +587,7 @@ describe("renderer history editor flow", { concurrency: false }, () => {
       assert.equal(await intake.isVisible(), true);
       assert.deepEqual(await page.evaluate(() => window.__historyEditorFlow.calls.regularAdmission), []);
 
-      await intake.getByRole("button", { name: "确认发起投稿" }).click();
+      await intake.getByRole("button", { name: "检查投稿" }).click();
       await confirmation.getByRole("button", { name: "确认发起投稿" }).click();
       await page.getByRole("status").filter({ hasText: "已发起 1 项普通平台投稿" }).waitFor();
       const calls = await page.evaluate(() => window.__historyEditorFlow.calls);

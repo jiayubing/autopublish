@@ -8,6 +8,7 @@ import type {
 import type { SettingsSection } from "./SettingsNavigation";
 import { useConfirmation } from "../../confirmation";
 import { useSettingsFeature } from "../../features/settings/settings-context";
+import { usePlatformFeature } from "../../features/platform/platform-feature-context";
 
 const EMPTY_AI: AiProviderStatus = {
   source: "application",
@@ -46,10 +47,14 @@ export default function SettingsOverview({
 }) {
   const { confirm } = useConfirmation();
   const { feature, snapshot } = useSettingsFeature();
+  const { snapshot: platformSnapshot } = usePlatformFeature();
   const ai = (snapshot.ai.data || EMPTY_AI) as AiProviderStatus;
   const media = (snapshot.media.data || EMPTY_MEDIA) as MediaProviderStatus;
   const hepan = (snapshot.hepan.data || EMPTY_HEPAN) as HepanProviderStatus;
   const legacy = snapshot.legacy.data as LegacyProviderSettingsStatus | null;
+  const boundPlatformAccounts = platformSnapshot.accountProfiles.items.filter(
+    (profile) => profile.bindingStatus === "bound",
+  ).length;
   const legacyBusy = snapshot.commands.importLegacy.busy;
   const error =
     snapshot.ai.query.error?.userMessage ||
@@ -99,6 +104,14 @@ export default function SettingsOverview({
         : "尚未配置",
       configured: hepan.configured,
     },
+    {
+      id: "platformAccounts",
+      title: "平台账号",
+      detail: boundPlatformAccounts
+        ? `已绑定 ${boundPlatformAccounts} 个账号档案`
+        : "尚未绑定普通投稿账号",
+      configured: boundPlatformAccounts > 0,
+    },
   ];
 
   return (
@@ -111,7 +124,7 @@ export default function SettingsOverview({
           服务配置概览
         </h3>
         <p className="mt-1 text-sm text-slate-500">
-          账号密钥属于应用级配置，与当前工作区分离。
+          服务密钥与普通投稿账号分开维护；平台登录与账号绑定统一从“平台账号”进入。
         </p>
       </div>
       {error && (
@@ -140,7 +153,7 @@ export default function SettingsOverview({
           {legacyNotice}
         </p>
       )}
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {items.map((item) => (
           <button
             key={item.id}
