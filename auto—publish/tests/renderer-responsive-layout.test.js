@@ -686,7 +686,7 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
 
       await page.getByRole("button", { name: "刷新客户与模板" }).click();
       await page.locator("#nav-item-content-production").click();
-      await page.getByRole("button", { name: "文章生成" }).click();
+      await page.getByRole("button", { name: "单篇生成", exact: true }).click();
       await page.getByText(/资料 1 份 · 回答 1 条/).waitFor();
 
       assert.equal(await page.getByRole("button", { name: "生成 1 篇文章" }).isEnabled(), true);
