@@ -239,56 +239,19 @@ function createContentGenerationBatchService(options) {
   function enrichBatch(batch) {
     if (!batch || !Array.isArray(batch.tasks)) return batch;
     const enriched = clone(batch);
-    const succeededTasks = enriched.tasks.filter(function(task) {
-      return task && task.status === "succeeded" && task.articleId;
-    });
-    if (!succeededTasks.length) return enriched;
+    if (typeof contentStore.getArticle !== "function") return enriched;
 
-    if (typeof contentStore.getArticle === "function") {
-      enriched.tasks = enriched.tasks.map(function(task) {
-        if (!task || task.status !== "succeeded" || !task.articleId) return task;
-        try {
-          const article = contentStore.getArticle(task.clientId, task.articleId);
-          const title = projectedArticleTitle(article && article.title);
-          return title
-            ? Object.assign({}, task, { articleTitle: title })
-            : task;
-        } catch (_) {
-          return task;
-        }
-      });
-      return enriched;
-    }
-
-    const taskIds = succeededTasks.map(function(task) { return task.id; });
-    const articleByTaskId = new Map();
-    try {
-      if (typeof contentStore.resolveIdentities === "function") {
-        const resolved = contentStore.resolveIdentities({ generationTaskIds: taskIds });
-        (resolved && Array.isArray(resolved.generationTaskIds) ? resolved.generationTaskIds : []).forEach(function(entry) {
-          const article = entry && entry.result && entry.result.kind === "one"
-            ? entry.result.article
-            : null;
-          const title = projectedArticleTitle(article && article.title);
-          if (article && typeof article.id === "string" && title)
-            articleByTaskId.set(entry.id, { id: article.id, title });
-        });
-      } else {
-        taskIds.forEach(function(taskIdValue) {
-          const resolved = contentStore.findByGenerationTaskId(taskIdValue);
-          const article = resolved && resolved.kind === "one" ? resolved.article : null;
-          const title = projectedArticleTitle(article && article.title);
-          if (article && typeof article.id === "string" && title)
-            articleByTaskId.set(taskIdValue, { id: article.id, title });
-        });
-      }
-    } catch (_) {
-      return enriched;
-    }
     enriched.tasks = enriched.tasks.map(function(task) {
-      const article = articleByTaskId.get(task.id);
-      if (!article || article.id !== task.articleId) return task;
-      return Object.assign({}, task, { articleTitle: article.title });
+      if (!task || task.status !== "succeeded" || !task.articleId) return task;
+      try {
+        const article = contentStore.getArticle(task.clientId, task.articleId);
+        const title = projectedArticleTitle(article && article.title);
+        return title
+          ? Object.assign({}, task, { articleTitle: title })
+          : task;
+      } catch (_) {
+        return task;
+      }
     });
     return enriched;
   }
