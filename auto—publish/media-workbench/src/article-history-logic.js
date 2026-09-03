@@ -157,7 +157,7 @@ export function groupPublishedArticlesByTarget(articles, publishedArchives, publ
       group = {
         key: target.key,
         platform: target.displayTitle,
-        label: "",
+        label: target.displayTitle,
         templateSnapshot: null,
         displayTitle: target.displayTitle,
         articleAnnotations: {},
