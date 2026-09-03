@@ -96,12 +96,43 @@ function createDoubaoCollectionDesktopService(options) {
   }
 
   function updateQuestion(input) {
-    const result = questionStore.updateQuestion(input.clientId, input.questionId, {
-      text: input.text,
-      enabled: input.enabled
-    });
-    notifyContentSources("CONTENT_QUESTION_UPDATED");
-    return result;
+    const current = questionStore.getQuestion(input.clientId, input.questionId);
+    const nextText = input.text === undefined ? current.text : input.text;
+    const textChanged = typeof nextText === "string" &&
+      nextText.trim().replace(/\s+/g, " ") !== String(current.text || "").trim().replace(/\s+/g, " ");
+    let staleResearch = null;
+
+    if (textChanged) {
+      try {
+        staleResearch = researchStore.getResearch(input.clientId, input.questionId);
+      } catch (error) {
+        if (!error || error.code !== "RESEARCH_NOT_FOUND") throw error;
+      }
+      if (staleResearch && researchStore.deleteResearch(input.clientId, input.questionId) !== true) {
+        throw serviceError("DOUBAO_RESEARCH_DELETE_FAILED", "Old research could not be invalidated");
+      }
+    }
+
+    try {
+      const result = questionStore.updateQuestion(input.clientId, input.questionId, {
+        text: input.text,
+        enabled: input.enabled
+      });
+      notifyContentSources("CONTENT_QUESTION_UPDATED");
+      return result;
+    } catch (error) {
+      if (staleResearch) {
+        try {
+          researchStore.saveResearch(input.clientId, staleResearch);
+        } catch (restoreError) {
+          const failure = serviceError("DOUBAO_RESEARCH_RESTORE_FAILED", "Old research could not be restored after question update failed");
+          failure.cause = error;
+          failure.restoreError = restoreError;
+          throw failure;
+        }
+      }
+      throw error;
+    }
   }
 
   function deleteQuestion(input) {
