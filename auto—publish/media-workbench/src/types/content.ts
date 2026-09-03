@@ -57,6 +57,7 @@ export type DoubaoLoginStatus =
 export type DoubaoTaskStatus =
   | "pending"
   | "waiting_login"
+  | "waiting_human"
   | "running"
   | "waiting_interval"
   | "paused"
