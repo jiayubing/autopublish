@@ -296,6 +296,20 @@ function createMediaResourceService(opts) {
     throw serviceError("MEDIA_RESOURCE_NOT_FOUND", "Media resource is unavailable");
   }
 
+  function getCachedResource(resourceId) {
+    var requestedId = firstText(resourceId);
+    if (!requestedId || requestedId.length > 128) {
+      throw serviceError("MEDIA_RESOURCE_ID_INVALID", "Media resource identity is invalid");
+    }
+    var resource = readCachedResources(resourceStore).find(function(candidate) {
+      return candidate.resourceId === requestedId;
+    });
+    if (!resource) return null;
+    return Object.freeze(Object.assign({}, resource, {
+      fingerprint: canonicalResourceFingerprint(resource),
+    }));
+  }
+
   function getFavoriteResource(resourceId) {
     var requestedId = firstText(resourceId);
     if (!requestedId || requestedId.length > 128) {
@@ -402,6 +416,7 @@ function createMediaResourceService(opts) {
     searchResourcePage: searchResourcePage,
     refreshResources: refreshResources,
     queryCurrentResource: queryCurrentResource,
+    getCachedResource: getCachedResource,
     getFavoriteResource: getFavoriteResource,
     getPoolPage: getPoolPage,
     addToPool: addToPool,
