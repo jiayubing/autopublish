@@ -241,14 +241,24 @@ function createContentGenerationBatchService(options) {
           const article = entry && entry.result && entry.result.kind === "one"
             ? entry.result.article
             : null;
-          if (article && typeof article.id === "string" && typeof article.title === "string")
+          if (
+            article &&
+            typeof article.id === "string" &&
+            typeof article.title === "string" &&
+            article.title.trim()
+          )
             articleByTaskId.set(entry.id, article);
         });
       } else {
         taskIds.forEach(function(taskIdValue) {
           const resolved = contentStore.findByGenerationTaskId(taskIdValue);
           const article = resolved && resolved.kind === "one" ? resolved.article : null;
-          if (article && typeof article.id === "string" && typeof article.title === "string")
+          if (
+            article &&
+            typeof article.id === "string" &&
+            typeof article.title === "string" &&
+            article.title.trim()
+          )
             articleByTaskId.set(taskIdValue, article);
         });
       }
