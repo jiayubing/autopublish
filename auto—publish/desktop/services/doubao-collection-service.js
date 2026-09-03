@@ -195,12 +195,12 @@ function createDoubaoCollectionDesktopService(options) {
   }
 
   function startPreparedBatch(input) {
-    if (typeof collectionService.validatePreparedBatch !== "function") {
-      return Promise.reject(serviceError("DOUBAO_ADAPTER_UNSUPPORTED", "Doubao collection service does not support prepared batches"));
+    if (typeof collectionService.prepareBatch !== "function") {
+      return Promise.reject(serviceError("DOUBAO_ADAPTER_UNSUPPORTED", "Doubao collection service does not support batch preparation"));
     }
     let tasks;
     try {
-      tasks = collectionService.validatePreparedBatch(input);
+      tasks = collectionService.prepareBatch(input);
     } catch (error) {
       return Promise.reject(error);
     }
