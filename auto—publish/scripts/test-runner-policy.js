@@ -20,12 +20,12 @@ const SERIAL_NAME_RULES = Object.freeze([
     "packaging and release evidence use public artifact outputs",
   ],
   [
-    /production-ipc/i,
-    "production IPC checks inspect shared packaged outputs",
+    /production-ipc|legacy-path-absence/i,
+    "production and legacy absence checks inspect shared packaged outputs",
   ],
   [
-    /phase-04-platform-run/i,
-    "platform lifecycle tests own shared process state",
+    /phase-04-platform-run|phase-08-cleanup-gates/i,
+    "platform lifecycle and Phase 8 gate tests own shared process state",
   ],
   [
     /renderer-harness|renderer-contract-artifact-absence|\.electron\.test\./i,
