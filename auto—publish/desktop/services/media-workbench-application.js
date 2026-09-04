@@ -116,9 +116,15 @@ function createMediaWorkbenchApplication(options) {
       ? createPaidMediaPreflightService({
           contentStore: values.contentStore,
           paidAdmission: values.paidAdmissionFacade,
-          mediaPoolStore: poolStore,
           lifecycleFacts: values.paidLifecycleFacts,
           resourceService,
+          queryResource:
+            resourceService && typeof resourceService.getCachedResource === "function"
+              ? resourceService.getCachedResource.bind(resourceService)
+              : resourceService &&
+                  typeof resourceService.getFavoriteResource === "function"
+                ? resourceService.getFavoriteResource.bind(resourceService)
+                : undefined,
           clientSnapshotResolver: values.clientSnapshotResolver,
           systemSubmissionCodeProvider: values.systemSubmissionCodeProvider,
           clock: values.clock,

@@ -197,19 +197,13 @@ function createPaidMediaPreflightService(options) {
   const paidAdmission = value.paidAdmission || value.paidAdmissionFacade;
   if (!paidAdmission || typeof paidAdmission.admitPaidBatch !== "function")
     throw preflightError("PAID_MEDIA_ADMISSION_REQUIRED");
-  const mediaPoolStore = value.mediaPoolStore || value.favoriteMediaPool;
-  if (!mediaPoolStore || typeof mediaPoolStore.contains !== "function")
-    throw preflightError(
-      "PAID_MEDIA_PREFLIGHT_UNAVAILABLE",
-      "收藏媒体状态读取能力不可用，未创建付费批次",
-    );
   const resourceService = value.resourceService || null;
   const queryResource =
     typeof value.queryResource === "function"
       ? value.queryResource
       : resourceService &&
-          typeof resourceService.getFavoriteResource === "function"
-        ? resourceService.getFavoriteResource.bind(resourceService)
+          typeof resourceService.getCachedResource === "function"
+        ? resourceService.getCachedResource.bind(resourceService)
         : null;
   if (!queryResource)
     throw preflightError("PAID_MEDIA_RESOURCE_QUERY_REQUIRED");
@@ -285,27 +279,6 @@ function createPaidMediaPreflightService(options) {
         "文章状态读取失败，未创建付费批次",
       );
     }
-  }
-
-  async function assertFavoriteMembership(mediaResourceId, phase) {
-    let isFavorite;
-    try {
-      isFavorite = await mediaPoolStore.contains(mediaResourceId);
-    } catch (_) {
-      throw preflightError(
-        "PAID_MEDIA_RESOURCE_QUERY_FAILED",
-        "收藏媒体状态读取失败，请重新预检",
-      );
-    }
-    if (isFavorite !== true)
-      throw preflightError(
-        phase === "confirm"
-          ? "PAID_MEDIA_CONFIRMATION_STALE"
-          : "INVALID_MEDIA_RESOURCE_ID",
-        phase === "confirm"
-          ? "媒体已不在当前收藏媒体池中，请重新预检"
-          : "媒体资源不在当前收藏媒体池中",
-      );
   }
 
   function readArticles(refs, options) {
@@ -467,14 +440,13 @@ function createPaidMediaPreflightService(options) {
   async function preflight(input) {
     const refs = refsFrom(input);
     const mediaResourceId = mediaResourceIdFrom(input);
-    await assertFavoriteMembership(mediaResourceId, "preflight");
     let resource;
     try {
       resource = await queryResource(mediaResourceId);
     } catch (_) {
       throw preflightError(
         "PAID_MEDIA_RESOURCE_QUERY_FAILED",
-        "收藏媒体信息读取失败，请重新选择",
+        "媒体资源信息读取失败，请刷新后重新选择",
       );
     }
     const safeResource = resourceForConfirmation(resource);
@@ -546,15 +518,6 @@ function createPaidMediaPreflightService(options) {
     }
     entry.inFlight = true;
 
-    try {
-      await assertFavoriteMembership(model.mediaResourceId, "confirm");
-    } catch (error) {
-      entry.inFlight = false;
-      if (shouldInvalidateAfterStateChange(error && error.code))
-        confirmations.delete(token);
-      throw error;
-    }
-
     let currentResource;
     try {
       currentResource = resourceForConfirmation(
@@ -564,7 +527,7 @@ function createPaidMediaPreflightService(options) {
       confirmations.delete(token);
       throw preflightError(
         "PAID_MEDIA_RESOURCE_RECHECK_FAILED",
-        "收藏媒体信息复核失败，请重新确认",
+        "媒体资源信息复核失败，请重新确认",
       );
     }
     if (
@@ -576,7 +539,7 @@ function createPaidMediaPreflightService(options) {
       confirmations.delete(token);
       throw preflightError(
         "PAID_MEDIA_CONFIRMATION_STALE",
-        "收藏媒体参考信息已变化，请重新确认",
+        "媒体资源参考信息已变化，请重新确认",
       );
     }
 
