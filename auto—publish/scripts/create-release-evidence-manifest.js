@@ -59,8 +59,6 @@ function parseArguments(argv) {
       );
     else if (valueOption("--offline-report"))
       options.offlineReport = path.resolve(valueFor(arg, "--offline-report"));
-    else if (valueOption("--legacy-report"))
-      options.legacyReport = path.resolve(valueFor(arg, "--legacy-report"));
     else if (valueOption("--rollback-package"))
       options.rollbackPackage = valueFor(arg, "--rollback-package");
     else if (valueOption("--rollback-report"))

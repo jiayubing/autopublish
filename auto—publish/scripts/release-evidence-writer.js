@@ -111,7 +111,6 @@ function buildReleaseEvidenceManifest(options) {
       opts.offlineReport,
       "production-offline-self-test",
     ),
-    legacyAbsence: summarizeReport(opts.legacyReport, "legacy-absence-report"),
   };
   if (
     artifact.status === "PASSED" &&
@@ -177,7 +176,6 @@ function buildReleaseEvidenceManifest(options) {
     desktopTestDiscovery: evidence.desktopTestDiscovery,
     artifact,
     offlineSelfTest: evidence.offlineSelfTest,
-    legacyAbsence: evidence.legacyAbsence,
     rollbackPackage,
     rollback,
     manualGates,
