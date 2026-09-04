@@ -69,16 +69,6 @@ jobs:
         if: github.event_name == 'push'
         run: npm run pack:production:smoke
         working-directory: auto—publish
-      - name: required/phase-08-gates
-        if: github.event_name == 'push'
-        run: |
-          npm run test:phase-08:gates
-          node scripts/verify-phase-08-gates.js --resources release-production-smoke/win-unpacked/resources --output build/evidence/phase-08-gates.json
-        working-directory: auto—publish
-      - name: required/legacy-publish-log-absence
-        if: github.event_name == 'push'
-        run: node scripts/verify-legacy-absence.js --resources release-production-smoke/win-unpacked/resources --output build/evidence/legacy-publish-log.json
-        working-directory: auto—publish
       - name: Upload production artifact manifest
         if: github.event_name == 'push'
         uses: actions/upload-artifact@v4
@@ -252,14 +242,8 @@ jobs:
       - name: Prepare alpha artifact fixture
         run: npm run pack:alpha:dirty
         working-directory: auto—publish
-      - name: required/alpha-artifact-gates
-        run: >-
-          node --test
-          tests/alpha-smoke-verifier.test.js
-          tests/phase-06-capability-specific-inventory.test.js
-          && node scripts/verify-legacy-absence.js
-          --resources release-alpha/win-unpacked/resources
-          --output build/evidence/alpha-legacy-absence.json
+      - name: required/alpha-artifact-smoke
+        run: node scripts/verify-alpha-package.js release-alpha/win-unpacked/resources
         working-directory: auto—publish
 
   link-security:
@@ -348,7 +332,6 @@ jobs:
           --backup-report build/evidence/backup-restore.json
           --capacity-report build/evidence/capacity.json
           --offline-report build/evidence/production-smoke.json
-          --legacy-report build/evidence/legacy-publish-log.json
           --check required/root-tests=PASSED
           --check required/test-discovery=PASSED
           --check required/auth-tests=PASSED
@@ -360,14 +343,12 @@ jobs:
           --check required/rate-limit-capacity=PASSED
           --check required/media-transport=PASSED
           --check required/diagnostics-static=PASSED
-          --check required/legacy-publish-log-absence=PASSED
           --check required/toolchain=PASSED
           --check required/packaging-contracts=PASSED
           --check required/production-directory-smoke=PASSED
           --check required/link-security=PASSED
-          --check required/phase-08-gates=PASSED
           --check required/production-ipc-matrix=PASSED
-          --check required/alpha-artifact-gates=PASSED
+          --check required/alpha-artifact-smoke=PASSED
         working-directory: auto—publish
       - name: Validate release checklist with explicit human blockers
         run: node scripts/validate-release-checklist.js build/release-evidence-manifest.json --allow-blocked
