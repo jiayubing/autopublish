@@ -81,8 +81,8 @@ function createRegularPlatformOutcomeService(options) {
         result.errorCode === undefined
           ? defaultOutcomeCode(result.status)
           : result.errorCode,
-      observedAt: result.observedAt || observedAt(),
     };
+    if (result.observedAt) candidate.observedAt = result.observedAt;
     if (result.providerEventAt) candidate.providerEventAt = result.providerEventAt;
     if (result.remoteId !== undefined) candidate.remoteId = result.remoteId;
     if (result.remoteUrl !== undefined && result.remoteUrl !== null)
@@ -90,7 +90,9 @@ function createRegularPlatformOutcomeService(options) {
     if (result.status === "group_blocked")
       candidate.articleRecoverable = result.articleRecoverable;
     try {
-      return parseRegularOutcomeObservation(candidate);
+      return parseRegularOutcomeObservation(candidate, {
+        defaultObservedAt: observedAt,
+      });
     } catch (error) {
       throw translateObservationError(error);
     }
