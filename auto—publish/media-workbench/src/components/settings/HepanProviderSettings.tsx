@@ -42,7 +42,7 @@ export default function HepanProviderSettings() {
     snapshot.commands.testHepan.error?.userMessage ||
     snapshot.commands.clearHepan.error?.userMessage;
   const notice = snapshot.commands.saveHepan.result
-    ? "蓝色河畔 GEO API 配置已保存。"
+    ? "蓝色河畔配置已保存。"
     : snapshot.commands.testHepan.result
       ? "账号、套餐和剩余额度检查成功；测试输入未保存。"
       : snapshot.commands.clearHepan.result
@@ -85,7 +85,7 @@ export default function HepanProviderSettings() {
     if (!validate()) return;
     if (
       !(await confirm({
-        title: "测试蓝色河畔 GEO API",
+        title: "测试蓝色河畔",
         message:
           "测试只会查询账户状态、套餐和剩余额度，不会发布文章或消耗发帖额度。",
         confirmLabel: "开始测试",
@@ -120,14 +120,11 @@ export default function HepanProviderSettings() {
     >
       <div>
         <h3 id="hepan-provider-settings-title" className="text-base font-semibold text-slate-800">
-          蓝色河畔 GEO API
+          蓝色河畔
         </h3>
         <p className="mt-1 text-sm text-slate-500">
-          使用蓝色河畔官方 GEO 发帖 API。登录密码加密保存；测试只查询账户状态，不会发布文章。
+          用于蓝色河畔发帖。登录密码会安全保存；测试只检查账户状态，不会发布文章。
         </p>
-      </div>
-      <div className="min-w-0 rounded-md border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900">
-        API：{status.apiUrl} · 配置来源：{readOnly ? "环境变量覆盖（只读）" : "应用级加密存储"}
       </div>
       <div className="grid min-w-0 gap-3">
         <label className="grid min-w-0 gap-1 text-sm font-medium text-slate-700">
@@ -164,7 +161,7 @@ export default function HepanProviderSettings() {
         {status.lastTest ? (status.lastTest.ok ? "成功" : "失败") : "尚未测试"}
       </p>
       {status.lastTest && (
-        <div className="grid gap-1 text-xs text-slate-600" aria-label="蓝色河畔 GEO API 检查结果">
+        <div className="grid gap-1 text-xs text-slate-600" aria-label="蓝色河畔账户检查结果">
           <p>检查时间：{checkedAt(status.lastTest.testedAt)}</p>
           {status.lastTest.account && (
             <p>账号：{status.lastTest.account.displayName}（UID {status.lastTest.account.uid}）</p>
@@ -176,7 +173,6 @@ export default function HepanProviderSettings() {
               {status.lastTest.remainingCount ?? "-"}
             </p>
           )}
-          <p>检查代码：{status.lastTest.code}</p>
         </div>
       )}
       {error && <p role="alert" aria-live="assertive" className="text-sm text-rose-700">{error}</p>}
