@@ -73,6 +73,21 @@ function createRegularPlatformOutcomeService(options) {
       : null;
   }
 
+  function transitionObservation(normalized) {
+    const observation = {
+      status: normalized.status,
+      code: normalized.code,
+      observedAt: normalized.observedAt,
+    };
+    if (normalized.providerEventAt)
+      observation.providerEventAt = normalized.providerEventAt;
+    if (normalized.remoteId) observation.remoteId = normalized.remoteId;
+    if (normalized.remoteUrl) observation.remoteUrl = normalized.remoteUrl;
+    if (normalized.status === "group_blocked")
+      observation.articleRecoverable = normalized.articleRecoverable;
+    return Object.freeze(observation);
+  }
+
   function canonicalObservation(raw) {
     const result = raw || {};
     const candidate = {
@@ -90,9 +105,11 @@ function createRegularPlatformOutcomeService(options) {
     if (result.status === "group_blocked")
       candidate.articleRecoverable = result.articleRecoverable;
     try {
-      return parseRegularOutcomeObservation(candidate, {
-        defaultObservedAt: observedAt,
-      });
+      return transitionObservation(
+        parseRegularOutcomeObservation(candidate, {
+          defaultObservedAt: observedAt,
+        }),
+      );
     } catch (error) {
       throw translateObservationError(error);
     }
