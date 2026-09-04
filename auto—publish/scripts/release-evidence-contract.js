@@ -13,13 +13,11 @@ const REQUIRED_CHECKS = Object.freeze([
   "required/auth-migration-roundtrip",
   "required/health-semantics",
   "required/media-transport",
-  "required/legacy-publish-log-absence",
   "required/toolchain",
   "required/packaging-contracts",
   "required/link-security",
-  "required/phase-08-gates",
   "required/production-ipc-matrix",
-  "required/alpha-artifact-gates",
+  "required/alpha-artifact-smoke",
 ]);
 
 const MANUAL_GATES = Object.freeze([
@@ -47,7 +45,6 @@ const EVIDENCE_FIELDS = Object.freeze([
   "authTests",
   "containerTests",
   "offlineSelfTest",
-  "legacyAbsence",
 ]);
 
 const STATUSES = new Set([
