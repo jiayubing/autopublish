@@ -8,7 +8,9 @@ const {
   canonicalArticleRefs,
   normalizeArticleRef,
 } = require("../article-ref");
-const { ACTIVE_TARGET_STATUSES } = require("../article-lifecycle-facts");
+const {
+  evaluateRegularQueueAdmission,
+} = require("../regular-queue-admission-policy");
 
 function createArticleMutationAdmission(kernel) {
   const regularQueueTransitions = kernel.ports.regularQueueTransitions;
@@ -190,30 +192,21 @@ function createArticleMutationAdmission(kernel) {
         try {
           const workflow = kernel.workflowFor(article, [ref], facts);
           const targetKey = domain.publicationTargetKey(target);
-          const existing = facts.submissionItems.find(function (candidate) {
-            return (
-              candidate.articleId === ref.articleId &&
-              candidate.targetKey === targetKey &&
-              candidate.status === "queued" &&
-              candidate.queueGroupId
-            );
+          const admission = evaluateRegularQueueAdmission({
+            articleRef: ref,
+            targetKey,
+            workflow,
+            submissionItems: facts.submissionItems,
           });
-          const activeTargetKeys = Object.entries(workflow.targetFacts || {})
-            .filter(([, fact]) =>
-              ACTIVE_TARGET_STATUSES.has(fact && fact.status),
-            )
-            .map(([activeTargetKey]) => activeTargetKey);
-          if (
-            activeTargetKeys.some(function (activeTargetKey) {
-              return activeTargetKey !== targetKey;
-            })
-          ) {
-            throw kernel.mutationError(
-              "ARTICLE_ACTIVE_TARGET_CONFLICT",
-              "Article already has another active publication target",
-            );
+          if (admission.status === "conflict") {
+            if (admission.reasonCode === "ARTICLE_ACTIVE_TARGET_CONFLICT") {
+              throw kernel.mutationError(
+                admission.reasonCode,
+                "Article already has another active publication target",
+              );
+            }
+            throw kernel.mutationError(admission.reasonCode);
           }
-          if (!existing) kernel.assertAllowed(workflow, "queue");
           const fingerprint = fingerprintArticle(article);
           const result = regularQueueTransitions.admitRegularQueueItem({
             clientId: ref.clientId,
