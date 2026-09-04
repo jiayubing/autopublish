@@ -477,6 +477,12 @@ function assertInsideViewport(box, viewport) {
   );
 }
 
+async function activateSettingsSection(page, label) {
+  const button = page.getByRole("button", { name: label, exact: true });
+  await button.focus();
+  await button.press("Enter");
+}
+
 const SIDEBAR_NAVIGATION = [
   { viewMode: "content-production", label: "内容生产" },
   { viewMode: "article-library", label: "文章库" },
@@ -818,7 +824,7 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
       for (const label of ["内容生产", "文章库", "投稿中心", "订单", "媒体资源", "设置"])
         assert.match(measured.text, new RegExp(label));
 
-      await page.getByRole("button", { name: "工作区", exact: true }).click();
+      await activateSettingsSection(page, "工作区");
       const workspaceText = await page
         .locator("main")
         .filter({ hasText: /^工作区未选择/ })
@@ -826,7 +832,7 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
       assert.match(workspaceText, /工作区切换不会复制、移动或删除原有业务数据/);
       assert.doesNotMatch(workspaceText, /AES-256|LocalStorage|clearAll/);
 
-      await page.getByRole("button", { name: "AI 生成", exact: true }).click();
+      await activateSettingsSection(page, "AI 生成");
       await page.getByLabel("AI Base URL").fill("http://provider.example/v1");
       await page.getByLabel("AI API Key").fill("fixture-key");
       await page.getByLabel("AI model").fill("fixture-model");
@@ -836,14 +842,12 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
         .filter({ hasText: "Base URL 只允许 HTTPS" })
         .waitFor();
 
-      await page.getByRole("button", { name: "运行环境", exact: true }).click();
+      await activateSettingsSection(page, "运行环境");
       await page.getByRole("button", { name: "运行浏览器自检" }).waitFor();
       await page.getByText("Playwright Node", { exact: true }).waitFor();
       await page.getByText("DOCX 解析", { exact: true }).waitFor();
 
-      await page
-        .getByRole("button", { name: "存储与清理", exact: true })
-        .click();
+      await activateSettingsSection(page, "存储与清理");
       const cleanCaches = page.getByRole("button", { name: "清理缓存" });
       await cleanCaches.waitFor();
       assert.equal(await cleanCaches.isDisabled(), true);
