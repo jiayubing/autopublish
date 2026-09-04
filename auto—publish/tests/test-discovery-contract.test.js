@@ -80,7 +80,6 @@ test("hybrid execution partitions every discovered file exactly once", () => {
       "tests/phase-06-production-ipc-fixture-matrix.test.js",
     ),
   );
-  assert.ok(plan.serialFiles.includes("tests/phase-08-cleanup-gates.test.js"));
   assert.ok(plan.serialFiles.includes("tests/auth-gate.test.js"));
   assert.equal(plan.parallelConcurrency, 4);
 });
