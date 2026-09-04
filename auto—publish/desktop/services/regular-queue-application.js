@@ -6,7 +6,9 @@ const {
   normalizeArticleRef,
 } = require("../../src/content/article-ref");
 const { deriveArticleLifecycle } = require("../../src/content/article-lifecycle-projection");
-const { ACTIVE_TARGET_STATUSES } = require("../../src/content/article-lifecycle-facts");
+const {
+  evaluateRegularQueueAdmission,
+} = require("../../src/content/regular-queue-admission-policy");
 const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
 function fail(code, message) {
@@ -263,12 +265,6 @@ function createRegularQueueApplication(options) {
     return domain.publicationTargetKey(target);
   }
 
-  function itemForTarget(facts, ref, key) {
-    return (facts.submissionItems || []).find(function (item) {
-      return item.articleId === ref.articleId && item.targetKey === key;
-    }) || null;
-  }
-
   function previewRegularQueueAdmission(input) {
     const target = targetFrom(input);
     const refs = refsFrom(input);
@@ -277,44 +273,14 @@ function createRegularQueueApplication(options) {
     const key = targetKey(target);
     const items = refs.map(function (ref) {
       let article;
-      try { article = contentStore.getArticle(ref.clientId, ref.articleId); }
-      catch (_) {
-        return Object.freeze({ articleRef: ref, articleId: ref.articleId, status: "missing", reasonCode: "ARTICLE_NOT_FOUND" });
-      }
-      const existing = itemForTarget(facts, ref, key);
-      if (existing && existing.status === "queued" && existing.queueGroupId) {
-        let recoverableReasonCode = null;
-        if (
-          groupTransitions &&
-          typeof groupTransitions.listRegularQueueGroupSnapshots === "function"
-        ) {
-          const group = (
-            groupTransitions.listRegularQueueGroupSnapshots({
-              queueGroupId: existing.queueGroupId,
-            }) || []
-          ).find(function (candidate) {
-            return candidate && candidate.queueGroupId === existing.queueGroupId;
-          });
-          if (
-            group &&
-            group.pauseIntent === "system" &&
-            group.actions &&
-            group.actions.reasonCode === "REGULAR_CLIENT_PROFILE_INCOMPLETE"
-          ) {
-            recoverableReasonCode = group.actions.reasonCode;
-          }
-        }
+      try {
+        article = contentStore.getArticle(ref.clientId, ref.articleId);
+      } catch (_) {
         return Object.freeze({
           articleRef: ref,
           articleId: ref.articleId,
-          itemId: existing.itemId,
-          batchId: existing.batchId,
-          targetKey: key,
-          queueGroupId: existing.queueGroupId,
-          status: "idempotent",
-          ...(recoverableReasonCode
-            ? { reasonCode: recoverableReasonCode }
-            : {}),
+          status: "missing",
+          reasonCode: "ARTICLE_NOT_FOUND",
         });
       }
       const workflow = deriveArticleLifecycle({
@@ -325,28 +291,12 @@ function createRegularQueueApplication(options) {
         attentionItems: facts.attentionItems,
         removalTransactions: facts.removalTransactions || [],
       });
-      const activeTargetKeys = Object.entries(workflow.targetFacts || {})
-        .filter(([, fact]) => ACTIVE_TARGET_STATUSES.has(fact && fact.status))
-        .map(([activeTargetKey]) => activeTargetKey);
-      if (activeTargetKeys.some(function (activeTargetKey) { return activeTargetKey !== key; })) {
-        return Object.freeze({
-          articleRef: ref,
-          articleId: ref.articleId,
-          targetKey: key,
-          status: "conflict",
-          reasonCode: "ARTICLE_ACTIVE_TARGET_CONFLICT",
-        });
-      }
-      if (!workflow.operations.queue.allowed) {
-        return Object.freeze({
-          articleRef: ref,
-          articleId: ref.articleId,
-          targetKey: key,
-          status: "conflict",
-          reasonCode: workflow.operations.queue.reasonCodes[0] || "ARTICLE_OPERATION_FROZEN",
-        });
-      }
-      return Object.freeze({ articleRef: ref, articleId: ref.articleId, targetKey: key, status: "queueable" });
+      return evaluateRegularQueueAdmission({
+        articleRef: ref,
+        targetKey: key,
+        workflow,
+        submissionItems: facts.submissionItems,
+      });
     });
     return Object.freeze({
       target,
