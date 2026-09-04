@@ -63,7 +63,6 @@ function parseRegularOutcomeObservation(input, options) {
     (value.status === "group_blocked" &&
       typeof value.articleRecoverable !== "boolean") ||
     (value.remoteId !== undefined &&
-      value.remoteId !== null &&
       (typeof value.remoteId !== "string" || !REMOTE_IDS.test(value.remoteId)))
   )
     invalid(REGULAR_OUTCOME_OBSERVATION_ISSUES.INVALID);
