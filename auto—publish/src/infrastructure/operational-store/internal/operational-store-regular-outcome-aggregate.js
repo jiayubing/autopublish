@@ -2,6 +2,11 @@
 
 const crypto = require("node:crypto");
 const domain = require("../../../domain");
+const {
+  REGULAR_OUTCOME_OBSERVATION_ISSUES,
+  isRegularOutcomeObservationError,
+  parseRegularOutcomeObservation,
+} = require("../../../publication/regular-outcome-observation");
 const { fromText, text } = require("./operational-store-utils");
 
 const OBSERVATION_CODES = /^[A-Z][A-Z0-9_]{0,127}$/;
@@ -48,68 +53,38 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
     return value;
   }
 
+  function translateObservationError(error) {
+    if (!isRegularOutcomeObservationError(error)) throw error;
+    if (error.issue === REGULAR_OUTCOME_OBSERVATION_ISSUES.TIME_INVALID)
+      return fail("REGULAR_OUTCOME_TIME_INVALID");
+    if (error.issue === REGULAR_OUTCOME_OBSERVATION_ISSUES.EVIDENCE_INVALID)
+      return fail("REGULAR_OUTCOME_EVIDENCE_INVALID");
+    if (
+      error.issue ===
+      REGULAR_OUTCOME_OBSERVATION_ISSUES.ACCEPTED_REMOTE_IDENTITY_REQUIRED
+    )
+      return fail("REGULAR_ACCEPTED_REMOTE_IDENTITY_REQUIRED");
+    if (
+      error.issue ===
+      REGULAR_OUTCOME_OBSERVATION_ISSUES.REMOTE_PENDING_REMOTE_ID_REQUIRED
+    )
+      return fail("REGULAR_REMOTE_PENDING_REMOTE_ID_REQUIRED");
+    return fail("REGULAR_OUTCOME_INVALID");
+  }
+
   function observation(input, expectedStatus, stamp) {
-    const value = (input && input.observation) || {};
-    if (
-      value.status !== expectedStatus ||
-      typeof value.code !== "string" ||
-      !OBSERVATION_CODES.test(value.code) ||
-      Object.keys(value).some(
-        (key) =>
-          ![
-            "status",
-            "code",
-            "observedAt",
-            "providerEventAt",
-            "remoteId",
-            "remoteUrl",
-            "articleRecoverable",
-          ].includes(key),
-      ) ||
-      (expectedStatus === "group_blocked" &&
-        typeof value.articleRecoverable !== "boolean") ||
-      (value.remoteId !== undefined &&
-        (typeof value.remoteId !== "string" ||
-          !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/.test(value.remoteId)))
-    )
-      throw fail("REGULAR_OUTCOME_INVALID");
-    const observedAt =
-      value.observedAt === undefined
-        ? stamp
-        : safeTimestamp(value.observedAt, "REGULAR_OUTCOME_TIME_INVALID");
-    const providerEventAt =
-      value.providerEventAt === undefined || value.providerEventAt === null
-        ? null
-        : safeTimestamp(value.providerEventAt, "REGULAR_OUTCOME_TIME_INVALID");
-    const remoteUrl =
-      value.remoteUrl === undefined || value.remoteUrl === null
-        ? null
-        : domain.normalizePublishedArticleUrl(value.remoteUrl);
-    if (value.remoteUrl !== undefined && value.remoteUrl !== null && !remoteUrl)
-      throw fail("REGULAR_OUTCOME_EVIDENCE_INVALID");
-    const normalized = Object.freeze({
-      status: value.status,
-      code: value.code,
-      observedAt,
-      providerEventAt,
-      remoteId: value.remoteId || null,
-      remoteUrl,
-      ...(expectedStatus === "group_blocked"
-        ? { articleRecoverable: value.articleRecoverable === true }
-        : {}),
-    });
-    if (
-      expectedStatus === "accepted" &&
-      !normalized.remoteId &&
-      !normalized.remoteUrl
-    )
-      throw fail("REGULAR_ACCEPTED_REMOTE_IDENTITY_REQUIRED");
-    if (expectedStatus === "remote_pending" && !normalized.remoteId)
-      throw fail("REGULAR_REMOTE_PENDING_REMOTE_ID_REQUIRED");
-    return Object.freeze({
-      ...normalized,
-      fingerprint: stableFingerprint(normalized),
-    });
+    try {
+      const normalized = parseRegularOutcomeObservation(
+        (input && input.observation) || {},
+        { expectedStatus, defaultObservedAt: stamp },
+      );
+      return Object.freeze({
+        ...normalized,
+        fingerprint: stableFingerprint(normalized),
+      });
+    } catch (error) {
+      throw translateObservationError(error);
+    }
   }
 
   function loadAttempt(id, options) {
