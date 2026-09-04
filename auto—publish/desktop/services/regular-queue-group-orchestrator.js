@@ -14,6 +14,11 @@ const TRANSITION_METHODS = Object.freeze([
   "setRegularQueueGroupRunIntent",
   "startAllRegularQueueGroups",
 ]);
+const EXECUTOR_METHODS = Object.freeze([
+  "beginQueueRun",
+  "endQueueRun",
+  "preparePlatformSubmission",
+]);
 const OUTCOME_RECOVERY_METHODS = Object.freeze([
   "markOrphanedRegularAttemptUncertain",
 ]);
@@ -61,10 +66,20 @@ function validateTransitions(value) {
 }
 
 function validateExecutor(value) {
+  const keys = value && typeof value === "object" ? Object.keys(value) : [];
+  const hasBegin = Boolean(
+    value && Object.prototype.hasOwnProperty.call(value, "beginQueueRun"),
+  );
+  const hasEnd = Boolean(
+    value && Object.prototype.hasOwnProperty.call(value, "endQueueRun"),
+  );
   if (
     !value ||
-    Object.keys(value).join("\u0000") !== "preparePlatformSubmission" ||
-    typeof value.preparePlatformSubmission !== "function"
+    keys.some((key) => !EXECUTOR_METHODS.includes(key)) ||
+    typeof value.preparePlatformSubmission !== "function" ||
+    hasBegin !== hasEnd ||
+    (hasBegin && typeof value.beginQueueRun !== "function") ||
+    (hasEnd && typeof value.endQueueRun !== "function")
   )
     throw fail("REGULAR_PLATFORM_EXECUTOR_INVALID");
   return value;
