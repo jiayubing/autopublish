@@ -13,9 +13,6 @@ test("streamlined product flow keeps batch results truthful and production navig
   const detail = source(
     "media-workbench/src/components/content/GenerationBatchDetail.tsx",
   );
-  const submission = source(
-    "media-workbench/src/components/content/BatchRegularSubmissionDialog.tsx",
-  );
   const workbench = source(
     "media-workbench/src/components/ContentWorkbench.tsx",
   );
@@ -26,12 +23,10 @@ test("streamlined product flow keeps batch results truthful and production navig
 
   assert.match(detail, /批次结果/);
   assert.match(detail, /查看文章/);
-  assert.match(detail, /批量投稿/);
-  assert.doesNotMatch(detail, /查看本批次文章/);
+  assert.match(detail, /查看本批次文章/);
+  assert.match(detail, /投稿请先进入文章库/);
+  assert.doesNotMatch(detail, /批量投稿/);
   assert.match(detail, /task\.articleTitle/);
-
-  assert.match(submission, /task\.articleTitle/);
-  assert.match(submission, /成功文章默认全选/);
 
   assert.match(workbench, /"questions", "single", "batch"/);
   assert.match(workbench, /问题采集/);
