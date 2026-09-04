@@ -9,7 +9,12 @@ const {
 } = require("../scripts/create-release-evidence-manifest");
 
 const repositoryRoot = path.resolve(__dirname, "..", "..");
-const workflowPath = path.join(repositoryRoot, ".github", "workflows", "ci.yml");
+const workflowPath = path.join(
+  repositoryRoot,
+  ".github",
+  "workflows",
+  "ci.yml",
+);
 
 function job(source, name) {
   const lines = source.split(/\r?\n/);
