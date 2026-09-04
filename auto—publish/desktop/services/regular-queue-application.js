@@ -265,6 +265,26 @@ function createRegularQueueApplication(options) {
     return domain.publicationTargetKey(target);
   }
 
+  function queueGroupReasonCode(queueGroupId) {
+    if (
+      !queueGroupId ||
+      !groupTransitions ||
+      typeof groupTransitions.listRegularQueueGroupSnapshots !== "function"
+    )
+      return null;
+    const groups = groupTransitions.listRegularQueueGroupSnapshots({
+      queueGroupId,
+    }) || [];
+    if (!Array.isArray(groups)) return null;
+    const group = groups.find(function (candidate) {
+      return candidate && candidate.queueGroupId === queueGroupId;
+    });
+    const reasonCode = group && group.actions && group.actions.reasonCode;
+    return typeof reasonCode === "string" && /^[A-Z][A-Z0-9_]{0,127}$/.test(reasonCode)
+      ? reasonCode
+      : null;
+  }
+
   function previewRegularQueueAdmission(input) {
     const target = targetFrom(input);
     const refs = refsFrom(input);
@@ -291,12 +311,17 @@ function createRegularQueueApplication(options) {
         attentionItems: facts.attentionItems,
         removalTransactions: facts.removalTransactions || [],
       });
-      return evaluateRegularQueueAdmission({
+      const admission = evaluateRegularQueueAdmission({
         articleRef: ref,
         targetKey: key,
         workflow,
         submissionItems: facts.submissionItems,
       });
+      if (admission.status !== "idempotent") return admission;
+      const reasonCode = queueGroupReasonCode(admission.queueGroupId);
+      return reasonCode
+        ? Object.freeze(Object.assign({}, admission, { reasonCode }))
+        : admission;
     });
     return Object.freeze({
       target,
