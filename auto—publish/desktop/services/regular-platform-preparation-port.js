@@ -170,8 +170,6 @@ function createRegularPlatformPreparationPort(options) {
       });
     },
   };
-  Object.defineProperty(port, "beginQueueRun", { enumerable: false });
-  Object.defineProperty(port, "endQueueRun", { enumerable: false });
   return Object.freeze(port);
 }
 
