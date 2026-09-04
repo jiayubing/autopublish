@@ -65,25 +65,22 @@ jobs:
       - name: required/packaging-contracts
         run: npm run test:packaging
         working-directory: auto—publish
-      - name: Production dependency audit
-        run: npm audit --omit=dev --audit-level=high
-        working-directory: auto—publish
-      - name: Development dependency audit (non-blocking known-risk report)
-        continue-on-error: true
-        run: npm audit --audit-level=high
-        working-directory: auto—publish
       - name: required/production-directory-smoke
+        if: github.event_name == 'push'
         run: npm run pack:production:smoke
         working-directory: auto—publish
       - name: required/phase-08-gates
+        if: github.event_name == 'push'
         run: |
           npm run test:phase-08:gates
           node scripts/verify-phase-08-gates.js --resources release-production-smoke/win-unpacked/resources --output build/evidence/phase-08-gates.json
         working-directory: auto—publish
       - name: required/legacy-publish-log-absence
+        if: github.event_name == 'push'
         run: node scripts/verify-legacy-absence.js --resources release-production-smoke/win-unpacked/resources --output build/evidence/legacy-publish-log.json
         working-directory: auto—publish
       - name: Upload production artifact manifest
+        if: github.event_name == 'push'
         uses: actions/upload-artifact@v4
         with:
           name: production-artifact-manifest
@@ -125,6 +122,7 @@ jobs:
 
   auth-container:
     name: required/auth-container-node22
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     env:
       CI_SYNTHETIC_ONLY: "1"
@@ -204,6 +202,7 @@ jobs:
 
   desktop-capacity:
     name: required/desktop-capacity-node24
+    if: github.event_name == 'push'
     runs-on: windows-latest
     env:
       CI_SYNTHETIC_ONLY: "1"
@@ -235,6 +234,7 @@ jobs:
 
   desktop-artifact:
     name: required/desktop-artifact-node24
+    if: github.event_name == 'push'
     runs-on: windows-latest
     env:
       CI_SYNTHETIC_ONLY: "1"
@@ -279,9 +279,31 @@ jobs:
       - run: npm run test:links
         working-directory: auto—publish
 
+  dependency-audit:
+    name: release/dependency-audit
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: auto—publish/package-lock.json
+      - run: npm ci
+        working-directory: auto—publish
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+        working-directory: auto—publish
+      - name: Development dependency audit (non-blocking known-risk report)
+        continue-on-error: true
+        run: npm audit --audit-level=high
+        working-directory: auto—publish
+
   release-evidence:
     name: required/release-evidence
-    needs: [desktop, desktop-capacity, desktop-artifact, auth, auth-container, auth-verification, desktop-security, link-security]
+    if: github.event_name == 'push'
+    needs: [desktop, desktop-capacity, desktop-artifact, auth, auth-container, auth-verification, desktop-security, link-security, dependency-audit]
     runs-on: ubuntu-latest
     env:
       CI_SYNTHETIC_ONLY: "1"
