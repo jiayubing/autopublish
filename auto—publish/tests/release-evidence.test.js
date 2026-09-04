@@ -143,6 +143,7 @@ test("release evidence records safe artifact hashes and fixed check names", () =
       authReport: reports.authTests,
       containerReport: reports.containerTests,
       offlineReport: reports.offlineSelfTest,
+      legacyReport: reports.legacyAbsence,
     });
     const value = JSON.parse(fs.readFileSync(output, "utf8"));
     const actualSourceState = currentSourceState(repositoryRoot);
@@ -352,6 +353,186 @@ test("release evidence rejects an artifact application version mismatch", () => 
       () => buildReleaseEvidenceManifest({ artifactManifest }),
       (error) => error.code === "RELEASE_ARTIFACT_VERSION_MISMATCH",
     );
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("release evidence rejects unsafe artifact metadata and detached commits", () => {
+  const fixture = tempRoot();
+  try {
+    const artifactManifest = path.join(fixture.root, "artifact.json");
+    const base = artifactManifestValue();
+    fs.writeFileSync(artifactManifest, JSON.stringify(base), "utf8");
+    assert.throws(
+      () =>
+        createReleaseEvidenceManifest({
+          artifactManifest,
+          commit: "a".repeat(40),
+        }),
+      (error) => error.code === "RELEASE_EVIDENCE_COMMIT_MISMATCH",
+    );
+    const unsafePath = Object.assign({}, base, {
+      artifacts: base.artifacts.map((artifact) =>
+        artifact.name === "electron-main"
+          ? Object.assign({}, artifact, { path: "C:/Users/alice/private.txt" })
+          : artifact,
+      ),
+    });
+    fs.writeFileSync(artifactManifest, JSON.stringify(unsafePath), "utf8");
+    assert.throws(
+      () => summarizeArtifactManifest(artifactManifest),
+      (error) => error.code === "RELEASE_ARTIFACT_MANIFEST_INVALID",
+    );
+    const unsafeVersion = Object.assign({}, base, {
+      artifacts: base.artifacts.map((artifact) =>
+        artifact.name === "playwright-node"
+          ? Object.assign({}, artifact, { version: "token=leak" })
+          : artifact,
+      ),
+    });
+    fs.writeFileSync(artifactManifest, JSON.stringify(unsafeVersion), "utf8");
+    assert.throws(
+      () => summarizeArtifactManifest(artifactManifest),
+      (error) => error.code === "RELEASE_ARTIFACT_MANIFEST_INVALID",
+    );
+    const rollbackReport = path.join(fixture.root, "rollback.json");
+    fs.writeFileSync(
+      rollbackReport,
+      JSON.stringify({
+        status: "PASSED",
+        package: "C:/release/rollback.zip",
+        sha256: "c".repeat(64),
+        plan: "rollback-v1",
+      }),
+      "utf8",
+    );
+    assert.throws(
+      () => summarizeRollbackReport(rollbackReport),
+      (error) => error.code === "RELEASE_ROLLBACK_INPUT_INVALID",
+    );
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("release checklist keeps human gates separate from automated pass state", () => {
+  const checks = Object.fromEntries(
+    REQUIRED_CHECKS.map((name) => [name, { status: "PASSED" }]),
+  );
+  const value = {
+    manifestVersion: 1,
+    commit: "b".repeat(40),
+    applicationVersion: "1.2.3",
+    authSchemaVersion: 2,
+    workspaceSchemaVersion: 1,
+    sourceState: { status: "DIRTY", diffSha256: "c".repeat(64) },
+    requiredChecks: checks,
+    manualGates: allStatuses(MANUAL_GATES, "PENDING_HUMAN"),
+    migration: { status: "PENDING_HUMAN" },
+    authMigration: { status: "PENDING_HUMAN" },
+    backupRestore: { status: "PENDING_HUMAN" },
+    capacity: { status: "PENDING_HUMAN" },
+    authTests: { status: "PENDING_HUMAN" },
+    containerTests: { status: "PENDING_HUMAN" },
+    desktopTestDiscovery: { status: "PENDING_HUMAN" },
+    artifact: { status: "PENDING_HUMAN" },
+    offlineSelfTest: { status: "PENDING_HUMAN" },
+    legacyAbsence: { status: "PENDING_HUMAN" },
+    rollback: { status: "PENDING_HUMAN" },
+    releaseState: "BLOCKED_RELEASE",
+  };
+  assert.throws(
+    () => validateReleaseChecklist(value, { allowBlocked: true }),
+    (error) => error.code === "RELEASE_CHECKLIST_INVALID",
+  );
+  value.checklist = checklistEntries(
+    checks,
+    value.manualGates,
+    Object.fromEntries(EVIDENCE_FIELDS.map((name) => [name, value[name]])),
+    value.rollback,
+  );
+  assert.deepEqual(
+    validateReleaseChecklist(value, { allowBlocked: true }).status,
+    "BLOCKED_RELEASE",
+  );
+  const mismatched = Object.assign({}, value, {
+    checklist: value.checklist.map((entry) =>
+      entry.id === REQUIRED_CHECKS[0]
+        ? Object.assign({}, entry, { status: "FAILED", state: "FAILED" })
+        : entry,
+    ),
+  });
+  assert.throws(
+    () => validateReleaseChecklist(mismatched, { allowBlocked: true }),
+    (error) => error.code === "RELEASE_CHECKLIST_INVALID",
+  );
+  const assertInvalidChecklist = (checklist) => {
+    assert.throws(
+      () =>
+        validateReleaseChecklist(Object.assign({}, value, { checklist }), {
+          allowBlocked: true,
+        }),
+      (error) => error.code === "RELEASE_CHECKLIST_INVALID",
+    );
+  };
+  assertInvalidChecklist(
+    value.checklist.map((entry, index) =>
+      index === 0 ? Object.assign({}, entry, { id: "unknown/check" }) : entry,
+    ),
+  );
+  assertInvalidChecklist(
+    value.checklist.map((entry, index) =>
+      index === 0 ? Object.assign({}, entry, { kind: "EVIDENCE" }) : entry,
+    ),
+  );
+  assertInvalidChecklist(
+    value.checklist.map((entry, index) =>
+      index === 0 ? Object.assign({}, entry, { state: "FAILED" }) : entry,
+    ),
+  );
+  assertInvalidChecklist(
+    value.checklist.map((entry, index) =>
+      index === 1
+        ? Object.assign({}, entry, { id: value.checklist[0].id })
+        : entry,
+    ),
+  );
+  const mutateChecklistEntry = (id, changes) =>
+    value.checklist.map((entry) =>
+      entry.id === id ? Object.assign({}, entry, changes) : entry,
+    );
+  assertInvalidChecklist(
+    mutateChecklistEntry("evidence/migration", {
+      status: "PASSED",
+      state: "PASSED",
+    }),
+  );
+  assertInvalidChecklist(
+    mutateChecklistEntry("manual/signing-certificate", {
+      status: "PASSED",
+      state: "PASSED",
+    }),
+  );
+  assertInvalidChecklist(
+    mutateChecklistEntry("manual/rollback-evidence", {
+      status: "PASSED",
+      state: "PASSED",
+    }),
+  );
+});
+
+test("Auth evidence reports test-file inventory without mislabeling it as test totals", () => {
+  const fixture = tempRoot();
+  try {
+    const report = createAuthTestSummary({
+      status: "PASSED",
+      output: path.join(fixture.root, "auth-tests.json"),
+    });
+    assert.ok(report.testFiles > 0);
+    assert.equal(Object.hasOwn(report, "count"), false);
+    assert.equal(Object.hasOwn(report, "passed"), false);
+    assert.equal(Object.hasOwn(report, "failed"), false);
   } finally {
     fixture.cleanup();
   }
