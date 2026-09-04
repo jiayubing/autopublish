@@ -51,6 +51,11 @@ function timestamp(value) {
   return value;
 }
 
+function defaultObservedAt(options) {
+  const value = options && options.defaultObservedAt;
+  return typeof value === "function" ? value() : value;
+}
+
 function parseRegularOutcomeObservation(input, options) {
   const value = input || {};
   const expectedStatus = options && options.expectedStatus;
@@ -69,7 +74,7 @@ function parseRegularOutcomeObservation(input, options) {
 
   const observedAt = timestamp(
     value.observedAt === undefined
-      ? options && options.defaultObservedAt
+      ? defaultObservedAt(options)
       : value.observedAt,
   );
   const providerEventAt =
