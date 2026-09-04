@@ -1,6 +1,10 @@
 "use strict";
 
-const domain = require("../../src/domain");
+const {
+  REGULAR_OUTCOME_OBSERVATION_ISSUES,
+  isRegularOutcomeObservationError,
+  parseRegularOutcomeObservation,
+} = require("../../src/publication/regular-outcome-observation");
 
 const TRANSITION_METHODS = Object.freeze([
   "confirmRegularAccepted",
@@ -45,50 +49,51 @@ function createRegularPlatformOutcomeService(options) {
     return stamp.toISOString();
   }
 
+  function translateObservationError(error) {
+    if (!isRegularOutcomeObservationError(error)) throw error;
+    if (error.issue === REGULAR_OUTCOME_OBSERVATION_ISSUES.TIME_INVALID)
+      return fail("REGULAR_OUTCOME_TIME_INVALID");
+    if (
+      error.issue ===
+      REGULAR_OUTCOME_OBSERVATION_ISSUES.ACCEPTED_REMOTE_IDENTITY_REQUIRED
+    )
+      return fail("REGULAR_ACCEPTED_REMOTE_IDENTITY_REQUIRED");
+    if (
+      error.issue ===
+      REGULAR_OUTCOME_OBSERVATION_ISSUES.REMOTE_PENDING_REMOTE_ID_REQUIRED
+    )
+      return fail("REGULAR_REMOTE_PENDING_REMOTE_ID_REQUIRED");
+    return fail("REGULAR_ADAPTER_OUTCOME_INVALID");
+  }
+
+  function defaultOutcomeCode(status) {
+    if (status === "accepted") return "REGULAR_ACCEPTED";
+    return typeof status === "string"
+      ? `REGULAR_${status.toUpperCase()}`
+      : null;
+  }
+
   function canonicalObservation(raw) {
     const result = raw || {};
-    if (
-      !["accepted", "remote_pending", "article_rejected", "group_blocked", "uncertain"].includes(result.status)
-    )
-      throw fail("REGULAR_ADAPTER_OUTCOME_INVALID");
-    if (
-      result.errorCode !== undefined &&
-      (typeof result.errorCode !== "string" ||
-        !/^[A-Z][A-Z0-9_]{0,127}$/.test(result.errorCode))
-    )
-      throw fail("REGULAR_ADAPTER_OUTCOME_INVALID");
-    const observation = {
+    const candidate = {
       status: result.status,
       code:
-        result.errorCode ||
-        (result.status === "accepted"
-          ? "REGULAR_ACCEPTED"
-          : `REGULAR_${result.status.toUpperCase()}`),
+        result.errorCode === undefined
+          ? defaultOutcomeCode(result.status)
+          : result.errorCode,
       observedAt: result.observedAt || observedAt(),
     };
-    if (result.providerEventAt) observation.providerEventAt = result.providerEventAt;
-    if (
-      result.remoteId !== undefined &&
-      (typeof result.remoteId !== "string" ||
-        !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/.test(result.remoteId))
-    )
-      throw fail("REGULAR_ADAPTER_OUTCOME_INVALID");
-    if (result.remoteId) observation.remoteId = result.remoteId;
-    if (result.remoteUrl !== undefined && result.remoteUrl !== null) {
-      const remoteUrl = domain.normalizePublishedArticleUrl(result.remoteUrl);
-      if (!remoteUrl) throw fail("REGULAR_ADAPTER_OUTCOME_INVALID");
-      observation.remoteUrl = remoteUrl;
+    if (result.providerEventAt) candidate.providerEventAt = result.providerEventAt;
+    if (result.remoteId !== undefined) candidate.remoteId = result.remoteId;
+    if (result.remoteUrl !== undefined && result.remoteUrl !== null)
+      candidate.remoteUrl = result.remoteUrl;
+    if (result.status === "group_blocked")
+      candidate.articleRecoverable = result.articleRecoverable;
+    try {
+      return parseRegularOutcomeObservation(candidate);
+    } catch (error) {
+      throw translateObservationError(error);
     }
-    if (result.status === "accepted" && !observation.remoteId && !observation.remoteUrl)
-      throw fail("REGULAR_ACCEPTED_REMOTE_IDENTITY_REQUIRED");
-    if (result.status === "remote_pending" && !observation.remoteId)
-      throw fail("REGULAR_REMOTE_PENDING_REMOTE_ID_REQUIRED");
-    if (result.status === "group_blocked") {
-      if (typeof result.articleRecoverable !== "boolean")
-        throw fail("REGULAR_ADAPTER_OUTCOME_INVALID");
-      observation.articleRecoverable = result.articleRecoverable;
-    }
-    return Object.freeze(observation);
   }
 
   function applyRegularOutcome(input) {
@@ -96,10 +101,14 @@ function createRegularPlatformOutcomeService(options) {
     const attemptId = request.regularPublicationAttemptId;
     const observation = canonicalObservation(request.outcome);
     const command = { regularPublicationAttemptId: attemptId, observation };
-    if (observation.status === "accepted") return transitions.recordRegularAccepted(command);
-    if (observation.status === "remote_pending") return transitions.recordRegularRemotePending(command);
-    if (observation.status === "article_rejected") return transitions.recordRegularArticleRejected(command);
-    if (observation.status === "group_blocked") return transitions.recordRegularGroupBlocked(command);
+    if (observation.status === "accepted")
+      return transitions.recordRegularAccepted(command);
+    if (observation.status === "remote_pending")
+      return transitions.recordRegularRemotePending(command);
+    if (observation.status === "article_rejected")
+      return transitions.recordRegularArticleRejected(command);
+    if (observation.status === "group_blocked")
+      return transitions.recordRegularGroupBlocked(command);
     return transitions.recordRegularUncertain(command);
   }
 
@@ -109,8 +118,10 @@ function createRegularPlatformOutcomeService(options) {
     confirmRegularNotAccepted: transitions.confirmRegularNotAccepted,
     getRegularOutcomeSnapshot: transitions.getRegularOutcomeSnapshot,
     listRegularRemotePending: transitions.listRegularRemotePending,
-    markOrphanedRegularAttemptUncertain: transitions.markOrphanedRegularAttemptUncertain,
-    prepareRegularUncertainResolution: transitions.prepareRegularUncertainResolution,
+    markOrphanedRegularAttemptUncertain:
+      transitions.markOrphanedRegularAttemptUncertain,
+    prepareRegularUncertainResolution:
+      transitions.prepareRegularUncertainResolution,
   });
 }
 
