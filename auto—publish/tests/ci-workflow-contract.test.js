@@ -34,6 +34,22 @@ function assertStep(source, name) {
   assert.ok(source.includes("- name: " + name), name);
 }
 
+function assertPushOnlyJob(source, name) {
+  assert.ok(
+    source.includes("if: github.event_name == 'push'"),
+    name + " must run only for master push release validation",
+  );
+}
+
+function assertPushOnlyStep(source, name) {
+  assert.ok(
+    source.includes(
+      "- name: " + name + "\n        if: github.event_name == 'push'",
+    ),
+    name + " must run only for master push release validation",
+  );
+}
+
 test("root CI workflow fixes required checks, isolation, and command ownership", () => {
   assert.equal(fs.existsSync(workflowPath), true);
   assert.equal(
@@ -98,8 +114,15 @@ test("root CI workflow fixes required checks, isolation, and command ownership",
     desktop.includes("- name: required/root-tests\n        run: npm test"),
     false,
   );
-  assert.ok(desktop.includes("npm audit --omit=dev --audit-level=high"));
-  assert.ok(desktop.includes("continue-on-error: true"));
+  for (const releaseStep of [
+    "required/production-directory-smoke",
+    "required/phase-08-gates",
+    "required/legacy-publish-log-absence",
+    "Upload production artifact manifest",
+  ])
+    assertPushOnlyStep(desktop, releaseStep);
+  assert.equal(desktop.includes("npm audit --omit=dev --audit-level=high"), false);
+  assert.equal(desktop.includes("npm audit --audit-level=high"), false);
 
   const auth = job(workflow, "auth");
   assert.ok(auth.includes("name: required/auth-node22"));
@@ -119,6 +142,7 @@ test("root CI workflow fixes required checks, isolation, and command ownership",
 
   const container = job(workflow, "auth-container");
   assert.ok(container.includes("name: required/auth-container-node22"));
+  assertPushOnlyJob(container, "auth-container");
   assert.ok(
     container.includes(
       "docker build --file auto—publish/auth-server/Dockerfile",
@@ -153,12 +177,14 @@ test("root CI workflow fixes required checks, isolation, and command ownership",
 
   const capacity = job(workflow, "desktop-capacity");
   assert.ok(capacity.includes("name: required/desktop-capacity-node24"));
+  assertPushOnlyJob(capacity, "desktop-capacity");
   assert.ok(capacity.includes("build/evidence/capacity.json"));
   assert.ok(capacity.includes("tests/phase-02-runtime-capacity.test.js"));
   assert.equal(capacity.includes("tests/phase-05-handoff-capacity.test.js"), false);
 
   const artifact = job(workflow, "desktop-artifact");
   assert.ok(artifact.includes("name: required/desktop-artifact-node24"));
+  assertPushOnlyJob(artifact, "desktop-artifact");
   assertStep(artifact, "required/alpha-artifact-gates");
   assert.ok(
     artifact
@@ -174,11 +200,20 @@ test("root CI workflow fixes required checks, isolation, and command ownership",
   assert.ok(links.includes("node-version: 24"));
   assert.ok(links.includes("run: npm run test:links"));
 
+  const audit = job(workflow, "dependency-audit");
+  assert.ok(audit.includes("name: release/dependency-audit"));
+  assertPushOnlyJob(audit, "dependency-audit");
+  assert.ok(audit.includes("runs-on: ubuntu-latest"));
+  assert.ok(audit.includes("npm audit --omit=dev --audit-level=high"));
+  assert.ok(audit.includes("npm audit --audit-level=high"));
+  assert.ok(audit.includes("continue-on-error: true"));
+
   const evidence = job(workflow, "release-evidence");
   assert.ok(evidence.includes("name: required/release-evidence"));
+  assertPushOnlyJob(evidence, "release-evidence");
   assert.ok(
     evidence.includes(
-      "needs: [desktop, desktop-capacity, desktop-artifact, auth, auth-container, auth-verification, desktop-security, link-security]",
+      "needs: [desktop, desktop-capacity, desktop-artifact, auth, auth-container, auth-verification, desktop-security, link-security, dependency-audit]",
     ),
   );
   assert.ok(evidence.includes("setup-node@v4"));
