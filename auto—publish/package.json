@@ -47,7 +47,7 @@
     "pack:alpha": "npm run check:clean-build && npm run prepare:runtime-tools && npm run build:renderer && npm run build:preload && electron-builder --win portable --config electron-builder.alpha.yml",
     "pack:alpha:dirty": "node scripts/check-clean-build.js --allow-dirty && npm run prepare:runtime-tools && npm run build:renderer && npm run build:preload && electron-builder --win portable --config electron-builder.alpha.yml",
     "dist:alpha": "npm run check:clean-build && npm run prepare:runtime-tools && npm run build:renderer && npm run build:preload && electron-builder --win nsis --config electron-builder.alpha.yml && node scripts/verify-alpha-package.js release-alpha/win-unpacked/resources",
-    "dist:alpha:dirty": "npm run check:clean-build && npm run prepare:runtime-tools && npm run build:renderer && npm run build:preload && electron-builder --win nsis --config electron-builder.alpha.yml && node scripts/verify-alpha-package.js release-alpha/win-unpacked/resources"
+    "dist:alpha:dirty": "node scripts/check-clean-build.js --allow-dirty && npm run prepare:runtime-tools && npm run build:renderer && npm run build:preload && electron-builder --win nsis --config electron-builder.alpha.yml && node scripts/verify-alpha-package.js release-alpha/win-unpacked/resources"
   },
   "dependencies": {
     "@noble/hashes": "^2.2.0",
