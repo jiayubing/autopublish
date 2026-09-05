@@ -279,36 +279,10 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
       assert.equal(await page.locator("#nav-item-workbench").count(), 0);
       await page.locator("#nav-item-content-production").click();
       await page.getByRole("button", { name: "批量生成", exact: true }).click();
-      const viewBatchArticles = page.getByRole("button", { name: "查看本批次文章", exact: true });
-      await viewBatchArticles.waitFor();
-      await viewBatchArticles.click();
-      await page.getByTestId("generation-batch-filter").waitFor();
-      assert.match(
-        await page.getByTestId("generation-batch-filter").innerText(),
-        /generation-batch-a/,
-      );
-      const batchGroup = page.getByText(
-        "fixture-platform · 测试模板 · 批次导航回归",
-        { exact: true },
-      );
-      await batchGroup.waitFor();
-      assert.equal(await batchGroup.count(), 1);
-      assert.equal(
-        await page.evaluate(() => window.__generationBatchNavigation.submissionMutations),
-        0,
-      );
-
-      await page.getByRole("button", { name: "清除批次筛选" }).click();
-      assert.equal(await page.getByTestId("generation-batch-filter").count(), 0);
-
-      await page.locator("#nav-item-content-production").click();
-      await page.getByRole("button", { name: "批量生成", exact: true }).click();
-      const viewBatchArticlesAgain = page.getByRole("button", { name: "查看本批次文章", exact: true });
-      await viewBatchArticlesAgain.waitFor();
-      await viewBatchArticlesAgain.click();
-      await page.getByTestId("generation-batch-filter").waitFor();
-      await batchGroup.waitFor();
-      assert.equal(await batchGroup.count(), 1);
+      const bulkSubmit = page.getByRole("button", { name: "批量投稿", exact: true });
+      await bulkSubmit.waitFor();
+      await bulkSubmit.click();
+      await page.getByRole("dialog", { name: "批量投稿本批次文章" }).waitFor();
       assert.equal(
         await page.evaluate(() => window.__generationBatchNavigation.submissionMutations),
         0,

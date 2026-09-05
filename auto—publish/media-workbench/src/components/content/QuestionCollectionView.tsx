@@ -245,3 +245,4 @@ export default function QuestionCollectionView({ clients, clientId, questions, r
     <CollectionTaskBar queue={queue} busy={collectionPending} onPause={() => void pauseCollection()} onResume={() => void resumeCollection()} onStop={() => void stopCollection()} onRetry={retryFailed} />
   </div>;
 }
+

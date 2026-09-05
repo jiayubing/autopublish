@@ -51,3 +51,4 @@ export default function CollapsibleSourceItem({
     {expanded && <div id={contentId} className="mt-3 border-t border-slate-100 pt-3 text-xs text-slate-600">{children}</div>}
   </article>;
 }
+

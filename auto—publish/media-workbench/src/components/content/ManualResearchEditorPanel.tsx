@@ -75,3 +75,4 @@ export default function ManualResearchEditorPanel({ session, draft, questionText
     </section>
   </>;
 }
+

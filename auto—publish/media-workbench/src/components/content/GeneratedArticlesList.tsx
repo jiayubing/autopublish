@@ -68,3 +68,4 @@ export default function GeneratedArticlesList({ groups, visibleError, clientId, 
     {!groups.length && !visibleError && <div className="rounded-md border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-400">暂无文章</div>}
   </div>;
 }
+

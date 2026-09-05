@@ -121,3 +121,4 @@ export default function GeneratedArticleEditorPanel({ article, published = false
     </div>
   </section>;
 }
+

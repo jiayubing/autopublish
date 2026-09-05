@@ -36,3 +36,4 @@ export default function ArticleTrashPanel({ trash, visibleError, commandBusy, wo
   </div>;
 }
 
+

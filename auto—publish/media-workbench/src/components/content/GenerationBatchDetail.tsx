@@ -21,6 +21,7 @@ interface GenerationBatchDetailProps {
   onCancelPending: (input: { batchId: string; confirmed: true }) => Promise<GenerationBatch>;
   onStartNew?: () => void;
   onViewBatchArticles?: (batchId: string, clientId?: string, articleId?: string) => void;
+  onBulkSubmit?: () => void;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -45,6 +46,7 @@ export default function GenerationBatchDetail({
   onCancelPending,
   onStartNew,
   onViewBatchArticles,
+  onBulkSubmit,
 }: GenerationBatchDetailProps) {
   const { confirm } = useConfirmation();
   const [cancelledBatch, setCancelledBatch] = useState<GenerationBatch | null>(null);
@@ -70,6 +72,8 @@ export default function GenerationBatchDetail({
   const failed = counts.failed > 0;
   const terminal = effectiveStatus === 'completed' || effectiveStatus === 'abandoned';
   const successfulTasks = displayedBatch.tasks.filter((task) => task.status === 'succeeded' && task.articleId);
+  const submittedKeys = (() => { try { const value = JSON.parse(localStorage.getItem(`auto-publish:batch-admitted:${displayedBatch.id}`) || '[]'); return new Set(Array.isArray(value) ? value : []); } catch (_) { return new Set<string>(); } })();
+  const pendingSubmissionTasks = successfulTasks.filter((task) => !submittedKeys.has(`${task.clientId}:${task.articleId}`));
   const anyCommandBusy = Object.values(busy).some(Boolean);
 
   async function cancelPending() {
@@ -124,8 +128,8 @@ export default function GenerationBatchDetail({
     {cancelError && <div role="alert" className="mt-2 rounded border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{cancelError}</div>}
 
     {terminal && successfulTasks.length > 0 && <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded border border-blue-100 bg-blue-50 p-2 text-xs">
-      <span>本批次成功 {successfulTasks.length} 篇。投稿请先进入文章库，由文章当前状态决定可用操作。</span>
-      {onViewBatchArticles && <button type="button" onClick={() => onViewBatchArticles(displayedBatch.id)} disabled={anyCommandBusy} className="rounded bg-blue-700 px-2 py-1 text-white disabled:opacity-40">查看本批次文章</button>}
+      <span>本批次成功 {successfulTasks.length} 篇，结果已按客户列在下方，可逐篇查看或直接批量投稿。</span>
+      {onBulkSubmit && pendingSubmissionTasks.length > 0 && <button type="button" onClick={onBulkSubmit} disabled={anyCommandBusy} className="rounded bg-blue-700 px-2 py-1 text-white disabled:opacity-40">批量投稿</button>}
     </div>}
 
     <div className="generation-batch-task-list mt-4 max-h-72 space-y-1 overflow-y-auto">
@@ -160,3 +164,4 @@ export default function GenerationBatchDetail({
     </div>}
   </section>;
 }
+
