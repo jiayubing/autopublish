@@ -2,35 +2,29 @@
 
 const { loadPlatforms } = require("../../src/core/platforms");
 
-function queueTarget(entry, allowLegacyCompatibility) {
+function queueTarget(entry) {
   return {
     id: entry.id,
     displayName: entry.displayName,
     scanDir: entry.scanDir,
-    contentQueueImport:
-      entry.legacyQueueImport === true || allowLegacyCompatibility === true,
+    contentQueueImport: true,
     publicationTarget: { kind: entry.publicationTargetKind },
     imagePublishingCapability: Object.freeze({ supported: entry.imagePublishing === true }),
   };
 }
 
 function createSubmissionTargetCatalog(options) {
-  const value = options || {};
-  const configured = Array.isArray(value.directoryEntries)
-    ? value.directoryEntries
-    : null;
-  const allowLegacyCompatibility = value.allowLegacyCompatibility === true;
+  const configured =
+    options && Array.isArray(options.directoryEntries)
+      ? options.directoryEntries
+      : null;
 
   function all() {
     return (
       configured ||
       loadPlatforms()
         .filter((platform) => Boolean(platform.regularSubmission))
-        .map((platform) =>
-          Object.assign({}, platform.submissionDirectoryEntry, {
-            legacyQueueImport: Boolean(platform.legacyQueue),
-          }),
-        )
+        .map((platform) => platform.submissionDirectoryEntry)
     ).slice();
   }
 
@@ -40,7 +34,7 @@ function createSubmissionTargetCatalog(options) {
         (platform) =>
           platform.publicationTargetKind === "platform",
       )
-      .map((entry) => queueTarget(entry, allowLegacyCompatibility));
+      .map(queueTarget);
   }
 
   function find(id) {
