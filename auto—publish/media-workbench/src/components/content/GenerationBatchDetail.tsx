@@ -72,6 +72,8 @@ export default function GenerationBatchDetail({
   const failed = counts.failed > 0;
   const terminal = effectiveStatus === 'completed' || effectiveStatus === 'abandoned';
   const successfulTasks = displayedBatch.tasks.filter((task) => task.status === 'succeeded' && task.articleId);
+  const submittedKeys = (() => { try { const value = JSON.parse(localStorage.getItem(`auto-publish:batch-submitted:${displayedBatch.id}`) || '[]'); return new Set(Array.isArray(value) ? value : []); } catch (_) { return new Set<string>(); } })();
+  const pendingSubmissionTasks = successfulTasks.filter((task) => !submittedKeys.has(`${task.clientId}:${task.articleId}`));
   const anyCommandBusy = Object.values(busy).some(Boolean);
 
   async function cancelPending() {
@@ -127,7 +129,7 @@ export default function GenerationBatchDetail({
 
     {terminal && successfulTasks.length > 0 && <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded border border-blue-100 bg-blue-50 p-2 text-xs">
       <span>本批次成功 {successfulTasks.length} 篇，结果已按客户列在下方，可逐篇查看或直接批量投稿。</span>
-      {onBulkSubmit && <button type="button" onClick={onBulkSubmit} disabled={anyCommandBusy} className="rounded bg-blue-700 px-2 py-1 text-white disabled:opacity-40">批量投稿</button>}
+      {onBulkSubmit && pendingSubmissionTasks.length > 0 && <button type="button" onClick={onBulkSubmit} disabled={anyCommandBusy} className="rounded bg-blue-700 px-2 py-1 text-white disabled:opacity-40">批量投稿</button>}
     </div>}
 
     <div className="generation-batch-task-list mt-4 max-h-72 space-y-1 overflow-y-auto">

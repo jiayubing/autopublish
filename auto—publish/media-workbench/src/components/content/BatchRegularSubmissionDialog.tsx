@@ -225,6 +225,13 @@ export default function BatchRegularSubmissionDialog({
         { articleRefs, platformId, accountProfileId },
         { admitRegularQueueItems },
       );
+      try {
+        const key = `auto-publish:batch-submitted:${batch.id}`;
+        const previous = JSON.parse(localStorage.getItem(key) || "[]");
+        const next = new Set(Array.isArray(previous) ? previous : []);
+        articleRefs.forEach((ref) => next.add(`${ref.clientId}:${ref.articleId}`));
+        localStorage.setItem(key, JSON.stringify([...next]));
+      } catch (_) {}
       void feature
         .refreshRegularQueueGroups("batch-submission-commit")
         .catch(() => undefined);
