@@ -170,7 +170,9 @@ async function createWorkspaceRuntimeComposition(deps) {
         return platformSettingsService;
       },
     });
-    const loadedPlatforms = loadPlatforms({ runtimeContext: platformRuntimeContext });
+    const loadedPlatforms = loadPlatforms({
+      runtimeContext: platformRuntimeContext,
+    });
     const directoryEntries = Object.freeze(
       loadedPlatforms.map(function (platform) {
         return platform.submissionDirectoryEntry;
@@ -178,12 +180,18 @@ async function createWorkspaceRuntimeComposition(deps) {
     );
     const regularDirectoryEntries = Object.freeze(
       loadedPlatforms
-        .filter(function (platform) { return Boolean(platform.regularSubmission); })
-        .map(function (platform) { return platform.submissionDirectoryEntry; }),
+        .filter(function (platform) {
+          return Boolean(platform.regularSubmission);
+        })
+        .map(function (platform) {
+          return platform.submissionDirectoryEntry;
+        }),
     );
     const regularSubmissionPorts = Object.freeze(
       loadedPlatforms
-        .filter(function (platform) { return Boolean(platform.regularSubmission); })
+        .filter(function (platform) {
+          return Boolean(platform.regularSubmission);
+        })
         .map(function (platform) {
           return Object.freeze({
             id: platform.definition.id,
@@ -194,9 +202,14 @@ async function createWorkspaceRuntimeComposition(deps) {
     );
     const accountInspectionPorts = Object.freeze(
       loadedPlatforms
-        .filter(function (platform) { return Boolean(platform.accountInspection); })
+        .filter(function (platform) {
+          return Boolean(platform.accountInspection);
+        })
         .map(function (platform) {
-          return Object.freeze({ id: platform.definition.id, port: platform.accountInspection });
+          return Object.freeze({
+            id: platform.definition.id,
+            port: platform.accountInspection,
+          });
         }),
     );
     const remoteReviewPorts = Object.freeze(
@@ -213,16 +226,26 @@ async function createWorkspaceRuntimeComposition(deps) {
     );
     const loginSessionPorts = Object.freeze(
       loadedPlatforms
-        .filter(function (platform) { return Boolean(platform.loginSession); })
+        .filter(function (platform) {
+          return Boolean(platform.loginSession);
+        })
         .map(function (platform) {
-          return Object.freeze({ id: platform.definition.id, port: platform.loginSession });
+          return Object.freeze({
+            id: platform.definition.id,
+            port: platform.loginSession,
+          });
         }),
     );
     const legacyQueuePorts = Object.freeze(
       loadedPlatforms
-        .filter(function (platform) { return Boolean(platform.legacyQueue); })
+        .filter(function (platform) {
+          return Boolean(platform.legacyQueue);
+        })
         .map(function (platform) {
-          return Object.freeze({ id: platform.definition.id, port: platform.legacyQueue });
+          return Object.freeze({
+            id: platform.definition.id,
+            port: platform.legacyQueue,
+          });
         }),
     );
     const settingsAdapters = Object.freeze(
@@ -275,9 +298,11 @@ async function createWorkspaceRuntimeComposition(deps) {
         }),
     );
     const submissionPlatformDirectory =
-      require("../services/submission-target-catalog").createSubmissionTargetCatalog({
-        directoryEntries: regularDirectoryEntries,
-      });
+      require("../services/submission-target-catalog").createSubmissionTargetCatalog(
+        {
+          directoryEntries: regularDirectoryEntries,
+        },
+      );
     const operationalStoreTransitionPorts = {};
     let contentStore = null;
     const operationalStore =
@@ -361,8 +386,7 @@ async function createWorkspaceRuntimeComposition(deps) {
           regularQueueGroupSubmissionIntervalTransitions:
             operationalStoreTransitionPorts.regularQueueGroupSubmissionIntervalTransitions,
           onDataInvalidated: invalidation.invalidate,
-          accountProfileResolver:
-            platformAccountProfileService.assertBound,
+          accountProfileResolver: platformAccountProfileService.assertBound,
           clientSnapshotResolver: function (clientId) {
             const client =
               require("../../src/content/client-knowledge").getClient(
@@ -639,7 +663,11 @@ async function createWorkspaceRuntimeComposition(deps) {
     const platformSessionService =
       require("../services/platform-session-service").createPlatformSessionService(
         {
-          adapters: Object.fromEntries(loginSessionPorts.map(function (platform) { return [platform.id, platform.port]; })),
+          adapters: Object.fromEntries(
+            loginSessionPorts.map(function (platform) {
+              return [platform.id, platform.port];
+            }),
+          ),
           assertPlaywrightAvailable: function () {
             return require("../services/playwright-capability").assertPlaywrightAvailable(
               runtime.diagnosticsService,
@@ -697,19 +725,22 @@ async function createWorkspaceRuntimeComposition(deps) {
       },
     });
     const submissionCenterSnapshot =
-      require("../services/submission-center-snapshot").createSubmissionCenterSnapshot({
-        getRevision: invalidation.getRevision,
-        getWorkspaceRuntimeId: invalidation.getWorkspaceRuntimeId,
-        validateClient: function (clientId) {
-          return require("../../src/content/client-knowledge").getClient(
-            workspaceRoot,
-            clientId,
-          );
+      require("../services/submission-center-snapshot").createSubmissionCenterSnapshot(
+        {
+          getRevision: invalidation.getRevision,
+          getWorkspaceRuntimeId: invalidation.getWorkspaceRuntimeId,
+          validateClient: function (clientId) {
+            return require("../../src/content/client-knowledge").getClient(
+              workspaceRoot,
+              clientId,
+            );
+          },
+          listRegularQueueGroups:
+            regularQueueApplication.listRegularQueueGroups,
+          listPaidMediaBatches: mediaApplication.getPaidMediaBatches,
+          listAttention: attentionPorts.attentionQuery.list,
         },
-        listRegularQueueGroups: regularQueueApplication.listRegularQueueGroups,
-        listPaidMediaBatches: mediaApplication.getPaidMediaBatches,
-        listAttention: attentionPorts.attentionQuery.list,
-      });
+      );
     modules = {
       taskService,
       platformSettingsService,

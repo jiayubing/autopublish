@@ -426,8 +426,7 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
           (options &&
             options.idempotentExistingOrphanedUncertain === true &&
             existingObservation.status === "uncertain" &&
-            existingObservation.code ===
-              "REGULAR_ORPHANED_REMOTE_ATTEMPT")
+            existingObservation.code === "REGULAR_ORPHANED_REMOTE_ATTEMPT")
         )
           return Object.freeze({ attemptId: id, status, idempotent: true });
         throw fail("REGULAR_OUTCOME_CONFLICT");
@@ -501,7 +500,11 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
     return transaction(() => {
       const row = loadAttempt(id);
       if (row.publication_status === "published")
-        return Object.freeze({ attemptId: id, status: "published", firstWins: true });
+        return Object.freeze({
+          attemptId: id,
+          status: "published",
+          firstWins: true,
+        });
       const existing = row.intent.detail && row.intent.detail.observation;
       if (row.publication_status === "uncertain" && existing) {
         if (

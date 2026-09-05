@@ -21,8 +21,7 @@ function parseArguments(argv) {
     else if (["--manifest", "--application"].includes(arg)) {
       if (!args[index + 1] || args[index + 1].startsWith("--"))
         throw smokeError("OFFLINE_ARGUMENT_INVALID", arg + " requires a value");
-      const key =
-        arg === "--manifest" ? "manifestPath" : "applicationPath";
+      const key = arg === "--manifest" ? "manifestPath" : "applicationPath";
       options[key] = path.resolve(args[++index]);
     } else if (arg === "--static-only") options.staticOnly = true;
     else

@@ -16,7 +16,9 @@ const {
 function createPublicationRecoveryComposition(options) {
   const value = options || {};
   if (typeof value.workspaceRoot !== "string")
-    throw new Error("Publication recovery composition dependencies are required");
+    throw new Error(
+      "Publication recovery composition dependencies are required",
+    );
   const operationalStore =
     value.operationalStore ||
     createOperationalStore({

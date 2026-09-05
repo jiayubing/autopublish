@@ -128,7 +128,9 @@ function createRuntimeDiagnosticsService(options) {
   }
 
   function diagnose() {
-    const tools = resolvePlaywrightRuntime(Object.assign({}, opts, { appRoot }));
+    const tools = resolvePlaywrightRuntime(
+      Object.assign({}, opts, { appRoot }),
+    );
     const mammoth = probeBundledMammoth(appRoot, opts.docxAvailable);
     const capabilities = {
       playwrightNode: capability(

@@ -85,7 +85,8 @@ function createPaidExecutionAggregate(context, activeTarget) {
   }
 
   function safePauseReason(value) {
-    return typeof value === "string" && /^[A-Z][A-Z0-9_.:-]{0,127}$/u.test(value)
+    return typeof value === "string" &&
+      /^[A-Z][A-Z0-9_.:-]{0,127}$/u.test(value)
       ? value
       : null;
   }
@@ -98,14 +99,17 @@ function createPaidExecutionAggregate(context, activeTarget) {
       const intent = fromText(item.intent_payload) || {};
       const detail = intent.detail || {};
       const reason =
-        safePauseReason(detail.pauseReason) || safePauseReason(detail.reasonCode);
+        safePauseReason(detail.pauseReason) ||
+        safePauseReason(detail.reasonCode);
       if (reason) return reason;
       if (status === "uncertain") return "PAID_ORDER_CREATION_UNCERTAIN";
       return "PAID_ORDER_CREATION_BLOCKED";
     }
     for (const item of items) {
       const intent = fromText(item.intent_payload) || {};
-      const reason = safePauseReason(intent.detail && intent.detail.pauseReason);
+      const reason = safePauseReason(
+        intent.detail && intent.detail.pauseReason,
+      );
       if (reason) return reason;
     }
     return row.pause_intent === "manual"
@@ -175,14 +179,24 @@ function createPaidExecutionAggregate(context, activeTarget) {
     const inFlight = items.some((item) =>
       ["claimed", "remote_started"].includes(item.status),
     );
-    const remainingCount = items.filter((item) => item.status === "queued").length;
-    const status = items.some((item) => item.status === "uncertain" || item.status === "blocked")
+    const remainingCount = items.filter(
+      (item) => item.status === "queued",
+    ).length;
+    const status = items.some(
+      (item) => item.status === "uncertain" || item.status === "blocked",
+    )
       ? "needs_attention"
-      : items.every((item) => ["completed", "failed", "cancelled"].includes(item.status)) ? "completed" : "queued";
+      : items.every((item) =>
+            ["completed", "failed", "cancelled"].includes(item.status),
+          )
+        ? "completed"
+        : "queued";
     const paused = row.pause_intent !== "none";
     const runState = inFlight ? "in_flight" : paused ? "paused" : "running";
     const currentItem =
-      items.find((item) => ["claimed", "remote_started"].includes(item.status)) ||
+      items.find((item) =>
+        ["claimed", "remote_started"].includes(item.status),
+      ) ||
       items.find((item) => item.status === "queued") ||
       null;
     return Object.freeze({
@@ -195,13 +209,19 @@ function createPaidExecutionAggregate(context, activeTarget) {
       actions: Object.freeze({
         canStart: status === "queued" && paused && runState === "paused",
         canPause:
-          status === "queued" && !paused && ["running", "in_flight"].includes(runState),
+          status === "queued" &&
+          !paused &&
+          ["running", "in_flight"].includes(runState),
         canCancelRemaining: remainingCount > 0,
       }),
       articleCount: row.article_count,
       mediaName:
-        confirmation.resourceName || confirmation.mediaName || first?.mediaName || "",
-      mediaRemarks: confirmation.resourceRemarks || confirmation.mediaRemarks || "",
+        confirmation.resourceName ||
+        confirmation.mediaName ||
+        first?.mediaName ||
+        "",
+      mediaRemarks:
+        confirmation.resourceRemarks || confirmation.mediaRemarks || "",
       createdOrderCount: items.filter((item) => item.orderId).length,
       remainingCount,
       currentItem,
@@ -836,11 +856,9 @@ function createPaidExecutionAggregate(context, activeTarget) {
       }
 
       if (cancelledCount > 0) {
-        db
-          .prepare(
-            "UPDATE paid_submission_batches SET pause_intent=CASE WHEN pause_intent='none' THEN 'manual' ELSE pause_intent END,updated_at=? WHERE batch_id=?",
-          )
-          .run(stamp, batchId);
+        db.prepare(
+          "UPDATE paid_submission_batches SET pause_intent=CASE WHEN pause_intent='none' THEN 'manual' ELSE pause_intent END,updated_at=? WHERE batch_id=?",
+        ).run(stamp, batchId);
       }
       if (cancelledCount > 0) {
         const openItems = db

@@ -1,7 +1,4 @@
-import type {
-  PlatformArticle,
-  PlatformQueueData,
-} from "../types/platform";
+import type { PlatformArticle, PlatformQueueData } from "../types/platform";
 import type { IpcResponse } from "../types/ipc";
 import {
   ipcError,

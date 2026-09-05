@@ -7,9 +7,7 @@ const {
   parseTargetIdentityV1,
   preparedContentFingerprint,
 } = require("./regular-publication-contract");
-const {
-  normalizePublishedArticleUrl,
-} = require("./published-article-url");
+const { normalizePublishedArticleUrl } = require("./published-article-url");
 
 const FINGERPRINT = /^[a-f0-9]{64}$/;
 const REMOTE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/u;
@@ -470,11 +468,9 @@ function projectPublicationLocator(input) {
 function parsePublicationLocator(input) {
   exact(input, ["remoteId", "remoteUrl", "displayStatus"]);
   if (
-    ![
-      "MANUAL_CONFIRMED_NO_LOCATOR",
-      "RECORDED",
-      "UNKNOWN_LEGACY",
-    ].includes(input.displayStatus)
+    !["MANUAL_CONFIRMED_NO_LOCATOR", "RECORDED", "UNKNOWN_LEGACY"].includes(
+      input.displayStatus,
+    )
   )
     invalid("PUBLICATION_LOCATOR_INVALID");
   const parsedRemoteId = remoteId(input.remoteId);

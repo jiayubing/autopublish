@@ -8,7 +8,9 @@ const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
 
 test("retired phase 1 execution composition is absent from production runtime", () => {
   assert.equal(
-    fs.existsSync(path.join(root, "desktop/composition/phase-01-composition.js")),
+    fs.existsSync(
+      path.join(root, "desktop/composition/phase-01-composition.js"),
+    ),
     false,
   );
   assert.doesNotMatch(read("desktop/main.js"), /phase-01-composition/);

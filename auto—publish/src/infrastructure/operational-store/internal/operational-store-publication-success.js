@@ -98,9 +98,7 @@ function createPublicationSuccessPrimitive(context) {
       )
       .get(articleId);
     if (!existing) return null;
-    const publicationEvidence = parseEvidence(
-      fromText(existing.evidence_json),
-    );
+    const publicationEvidence = parseEvidence(fromText(existing.evidence_json));
     return Object.freeze({
       attemptId: existing.attempt_id,
       publicationId: existing.publication_id,

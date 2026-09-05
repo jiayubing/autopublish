@@ -63,7 +63,11 @@ type ArticleManagementSnapshotWire = Omit<
 };
 type CoreContentApi = {
   listClients: () => Promise<ContentIpcResponse<{ clients: ContentClient[] }>>;
-  getClientDetails: (clientId: string) => Promise<ContentIpcResponse<{ client: ContentClient; research: ContentResearch[] }>>;
+  getClientDetails: (
+    clientId: string,
+  ) => Promise<
+    ContentIpcResponse<{ client: ContentClient; research: ContentResearch[] }>
+  >;
   saveClientLiejuPublicationProfile: (input: {
     clientId: string;
     profile: LiejuPublicationProfile;
@@ -71,7 +75,9 @@ type CoreContentApi = {
   listResearch: (
     clientId: string,
   ) => Promise<ContentIpcResponse<{ research: ContentResearch[] }>>;
-  listResearchMetadata: (clientId: string) => Promise<ContentIpcResponse<{ research: ContentResearch[] }>>;
+  listResearchMetadata: (
+    clientId: string,
+  ) => Promise<ContentIpcResponse<{ research: ContentResearch[] }>>;
   listTemplateCatalog: () => Promise<
     ContentIpcResponse<ContentTemplateCatalog>
   >;
@@ -317,7 +323,9 @@ export async function listContentClients(): Promise<ContentClient[]> {
     (wire) => wire.clients,
   );
 }
-export async function getContentClientDetails(clientId: string): Promise<{ client: ContentClient; research: ContentResearch[] }> {
+export async function getContentClientDetails(
+  clientId: string,
+): Promise<{ client: ContentClient; research: ContentResearch[] }> {
   return callCoreContent(
     (api) => requireBridgeMethod(api.getClientDetails)(clientId),
     "Unable to load client details",
@@ -342,7 +350,9 @@ export async function listContentResearch(
     (wire) => wire.research,
   );
 }
-export async function listContentResearchMetadata(clientId: string): Promise<ContentResearch[]> {
+export async function listContentResearchMetadata(
+  clientId: string,
+): Promise<ContentResearch[]> {
   return callCoreContent(
     (api) => requireBridgeMethod(api.listResearchMetadata)(clientId),
     "Unable to load research metadata",

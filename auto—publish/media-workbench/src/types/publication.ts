@@ -104,8 +104,10 @@ export interface PublicationEvidenceV1 {
   missingReasons: string[];
   safeEvidenceRefs: Array<{ kind: string; fingerprint: string }>;
 }
-export interface PublicationEvidenceV2
-  extends Omit<PublicationEvidenceV1, "version"> {
+export interface PublicationEvidenceV2 extends Omit<
+  PublicationEvidenceV1,
+  "version"
+> {
   version: 2;
   remoteId: string | null;
 }
@@ -168,9 +170,7 @@ export interface PublicationArchiveEntry {
     remoteId: string | null;
     remoteUrl: string | null;
     displayStatus:
-      | "MANUAL_CONFIRMED_NO_LOCATOR"
-      | "RECORDED"
-      | "UNKNOWN_LEGACY";
+      "MANUAL_CONFIRMED_NO_LOCATOR" | "RECORDED" | "UNKNOWN_LEGACY";
   };
   terminalTargetV1: TerminalTargetV1;
 }

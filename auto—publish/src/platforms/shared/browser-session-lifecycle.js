@@ -173,7 +173,11 @@ function createBrowserSessionLifecycle(options) {
     try {
       stateLease.release();
     } catch (_) {
-      diagnose("BROWSER_SESSION_STATE_LEASE_RELEASE_FAILED", "storage", "lease");
+      diagnose(
+        "BROWSER_SESSION_STATE_LEASE_RELEASE_FAILED",
+        "storage",
+        "lease",
+      );
     }
   }
 
@@ -250,9 +254,14 @@ function createBrowserSessionLifecycle(options) {
         );
       } finally {
         try {
-          if (io.existsSync(temporaryStateFile)) io.unlinkSync(temporaryStateFile);
+          if (io.existsSync(temporaryStateFile))
+            io.unlinkSync(temporaryStateFile);
         } catch (_) {
-          diagnose("BROWSER_SESSION_STATE_TEMP_CLEANUP_FAILED", "storage", "state-save");
+          diagnose(
+            "BROWSER_SESSION_STATE_TEMP_CLEANUP_FAILED",
+            "storage",
+            "state-save",
+          );
         }
       }
       if (primaryError) throw primaryError;

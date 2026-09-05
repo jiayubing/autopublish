@@ -8,11 +8,7 @@ import type {
   PublicationTargetDto,
   SafeOperationalErrorDto,
 } from "../contracts/phase-01-domain";
-import {
-  ipcError,
-  requireBridgeMethod,
-  requireContentApi,
-} from "./transport";
+import { ipcError, requireBridgeMethod, requireContentApi } from "./transport";
 
 export type { PublicationTargetDto, SafeOperationalErrorDto };
 

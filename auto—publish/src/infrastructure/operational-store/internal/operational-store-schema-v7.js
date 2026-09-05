@@ -59,7 +59,8 @@ function verifyV7Structure(db, errorCode, options) {
       JSON.stringify(["notice_id"]) ||
     !kindIndex ||
     kindIndex.unique !== 1 ||
-    JSON.stringify(indexColumns(db, kindIndex.name)) !== JSON.stringify(["kind"]) ||
+    JSON.stringify(indexColumns(db, kindIndex.name)) !==
+      JSON.stringify(["kind"]) ||
     (legacyTable && !(options && options.allowLegacy === true))
   )
     throw fail(errorCode);

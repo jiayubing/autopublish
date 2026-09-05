@@ -9,7 +9,8 @@ function createRegularQueueGroupComposition(options) {
   const regularOutcomeRecovery = value.regularPlatformOutcomeService
     ? Object.freeze({
         markOrphanedRegularAttemptUncertain:
-          value.regularPlatformOutcomeService.markOrphanedRegularAttemptUncertain,
+          value.regularPlatformOutcomeService
+            .markOrphanedRegularAttemptUncertain,
       })
     : null;
   const orchestrator = createRegularQueueGroupOrchestrator({

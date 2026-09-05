@@ -52,7 +52,9 @@ export async function confirmAccountProfile(input: {
   return result.data.profile;
 }
 
-export async function bindAccountProfile(accountProfileId: string): Promise<AccountProfile> {
+export async function bindAccountProfile(
+  accountProfileId: string,
+): Promise<AccountProfile> {
   const result = await requireBridgeMethod(
     accountProfileApi().bindAccountProfile,
   )({ accountProfileId, confirmed: true });
@@ -61,7 +63,9 @@ export async function bindAccountProfile(accountProfileId: string): Promise<Acco
   return result.data.profile;
 }
 
-export async function deleteAccountProfile(accountProfileId: string): Promise<string> {
+export async function deleteAccountProfile(
+  accountProfileId: string,
+): Promise<string> {
   const result = await requireBridgeMethod(
     accountProfileApi().deleteAccountProfile,
   )({ accountProfileId, confirmed: true });

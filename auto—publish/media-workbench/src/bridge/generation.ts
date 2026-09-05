@@ -50,7 +50,11 @@ type GenerationContentApi = {
     platform: string;
     templateId: string;
     templateCatalogRevision?: string;
-  }) => Promise<GenerationIpcResponse<{ article: GeneratedContentArticle | ContentGenerationOperation }>>;
+  }) => Promise<
+    GenerationIpcResponse<{
+      article: GeneratedContentArticle | ContentGenerationOperation;
+    }>
+  >;
   saveArticle: (input: {
     article: GeneratedContentArticle;
     expectedFingerprint: string;
