@@ -44,6 +44,40 @@ const MEDIA_CHANNELS = [
   "media:open-published-url",
 ];
 
+test("media application scans local articles without contacting a supplier", async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "media-scan-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const inputDir = path.join(root, "input");
+  let draftReads = 0;
+  const application = createMediaWorkbenchApplication({
+    paths: { mediaInput: inputDir, data: path.join(root, "data") },
+    mediaClientProvider: () => assert.fail("local scanning must not create a remote client"),
+    mediaOrderService: { listOrderViews: () => [] },
+    draftStore: {
+      get: () => {
+        draftReads += 1;
+        return { title: "Saved title", remark: "Saved remark", ignoreImages: true };
+      },
+    },
+  });
+  assert.equal(draftReads, 0);
+  assert.equal(fs.existsSync(inputDir), false);
+  assert.deepEqual(await application.scanArticles(), { items: [] });
+  fs.mkdirSync(inputDir);
+  fs.writeFileSync(path.join(inputDir, "article.md"), "# Source title\n\nBody");
+  fs.writeFileSync(path.join(inputDir, "~$temporary.md"), "Temporary");
+  fs.writeFileSync(path.join(inputDir, "ignored.json"), "{}");
+  const result = await application.scanArticles();
+  assert.equal(draftReads, 1);
+  assert.equal(result.items.length, 1);
+  assert.equal(result.items[0].filename, "article.md");
+  assert.equal(result.items[0].title, "Saved title");
+  assert.equal(result.items[0].autoTitle, "Source title");
+  assert.equal(result.items[0].remark, "Saved remark");
+  assert.equal(result.items[0].ignoreImages, true);
+  assert.equal(fs.existsSync(path.join(root, "data")), false);
+});
+
 test("media projections and draft requests preserve all supported resource types", () => {
   const types = ["image", "video", "audio", "document"];
   assert.deepEqual(
