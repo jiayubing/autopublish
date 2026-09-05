@@ -231,6 +231,8 @@ function createFixture(options) {
       store,
       contentStore,
       application,
+      transitionPorts,
+      coordinator,
       management,
       createCalls,
       cancelCalls,
@@ -265,6 +267,45 @@ function firstOrder(fixture) {
   assert.ok(order);
   return order;
 }
+
+test("media composition pauses persisted work without loading provider configuration or resource caches", async () => {
+  const fixture = createFixture();
+  try {
+    const admitted = await confirmBatch(fixture, ["article-d"]);
+    fixture.transitionPorts.paidExecutionTransitions.setPaidSubmissionBatchRunIntent({
+      batchId: admitted.batchId,
+      running: true,
+    });
+    assert.equal(fixture.application.getPaidMediaBatches().items[0].runState, "running");
+    const data = path.join(fixture.root, "media-cache");
+    fs.mkdirSync(data);
+    for (const name of ["media-resources.json", "media-pool.json", "media-drafts.json"])
+      fs.writeFileSync(path.join(data, name), "invalid-json");
+    const { createMediaWorkbenchComposition } = require("../desktop/composition/media-workbench-composition");
+    const composition = createMediaWorkbenchComposition({
+      paths: { data, mediaInput: path.join(fixture.root, "missing-input") },
+      workspaceRoot: fixture.root,
+      platformSettingsService: {
+        getAdapterForRuntime: () => assert.fail("startup must not request a remote client"),
+        getRuntimeConfig: () => assert.fail("startup must not load paid-media configuration"),
+      },
+      contentStore: fixture.contentStore,
+      operationalStoreTransitionPorts: fixture.transitionPorts,
+      articleMutationCoordinator: fixture.coordinator,
+      invalidation: { invalidate: () => {} },
+      reportCompositionDiagnostic: () => assert.fail("unexpected startup diagnostic"),
+    });
+    const batch = composition.mediaApplication.getPaidMediaBatches().items[0];
+    assert.equal(batch.batchId, admitted.batchId);
+    assert.equal(batch.runState, "paused");
+    assert.equal(fixture.application.getPaidMediaBatches().items[0].runState, "paused");
+    assert.equal(fixture.createCalls.length, 0);
+    assert.deepEqual(composition.mediaApplication.listOrderAttention(), []);
+    assert.throws(() => composition.mediaApplication.getDrafts(), { code: "MEDIA_DRAFT_STORE_CORRUPT" });
+  } finally {
+    fixture.close();
+  }
+});
 
 test("paid media application exposes the fee and risk snapshot before admitting a batch", async () => {
   const fixture = createFixture({
