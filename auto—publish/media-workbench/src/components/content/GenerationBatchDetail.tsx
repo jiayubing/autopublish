@@ -72,7 +72,7 @@ export default function GenerationBatchDetail({
   const failed = counts.failed > 0;
   const terminal = effectiveStatus === 'completed' || effectiveStatus === 'abandoned';
   const successfulTasks = displayedBatch.tasks.filter((task) => task.status === 'succeeded' && task.articleId);
-  const submittedKeys = (() => { try { const value = JSON.parse(localStorage.getItem(`auto-publish:batch-submitted:${displayedBatch.id}`) || '[]'); return new Set(Array.isArray(value) ? value : []); } catch (_) { return new Set<string>(); } })();
+  const submittedKeys = (() => { try { const value = JSON.parse(localStorage.getItem(`auto-publish:batch-admitted:${displayedBatch.id}`) || '[]'); return new Set(Array.isArray(value) ? value : []); } catch (_) { return new Set<string>(); } })();
   const pendingSubmissionTasks = successfulTasks.filter((task) => !submittedKeys.has(`${task.clientId}:${task.articleId}`));
   const anyCommandBusy = Object.values(busy).some(Boolean);
 
@@ -164,3 +164,4 @@ export default function GenerationBatchDetail({
     </div>}
   </section>;
 }
+

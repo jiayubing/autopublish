@@ -216,3 +216,4 @@ export default function ArticleGenerationView({ clientId, client, clients = [], 
     </div>}
   </div>;
 }
+

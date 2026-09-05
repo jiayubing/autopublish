@@ -612,3 +612,4 @@ export default function GeneratedArticlesView({
     </div>
   );
 }
+

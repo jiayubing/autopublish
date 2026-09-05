@@ -226,7 +226,7 @@ export default function BatchRegularSubmissionDialog({
         { admitRegularQueueItems },
       );
       try {
-        const key = `auto-publish:batch-submitted:${batch.id}`;
+        const key = `auto-publish:batch-admitted:${batch.id}`;
         const previous = JSON.parse(localStorage.getItem(key) || "[]");
         const next = new Set(Array.isArray(previous) ? previous : []);
         articleRefs.forEach((ref) => next.add(`${ref.clientId}:${ref.articleId}`));
@@ -426,3 +426,4 @@ export default function BatchRegularSubmissionDialog({
     </div>
   );
 }
+

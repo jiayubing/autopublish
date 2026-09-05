@@ -339,3 +339,4 @@ export default function BatchGenerationView({ clients, currentClientId, research
     {batch && <BatchRegularSubmissionDialog open={batchSubmissionOpen} batch={batch} clients={resolvedClients} onClose={() => setBatchSubmissionOpen(false)} onCommitted={(summary) => setBatchSubmissionFeedback(`已批量处理 ${summary.clientCount} 个客户：新增投稿 ${summary.admittedCount} 项，已存在跳过 ${summary.idempotentCount} 项，队列已请求自动开始。`)} />}
   </div>;
 }
+

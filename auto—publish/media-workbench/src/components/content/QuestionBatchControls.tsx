@@ -111,3 +111,4 @@ export default function QuestionBatchControls({ clients, initialClientId, isColl
     {batchPreview && <p className="mt-2 text-xs text-slate-500">预览：{batchPreview.clientCount} 个客户 · {batchPreview.taskCount} 个问题进入队列 · 跳过 {batchPreview.skippedExisting} 个已有回答 · 排除 {batchPreview.disabledQuestions} 个停用问题</p>}
   </section>;
 }
+

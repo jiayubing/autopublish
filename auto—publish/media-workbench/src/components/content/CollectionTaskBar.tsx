@@ -40,3 +40,4 @@ export default function CollectionTaskBar({ queue, busy = false, onPause, onResu
     </div>
   </div>;
 }
+

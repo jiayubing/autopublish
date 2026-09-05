@@ -30,3 +30,4 @@ export default function QuestionResearchList({ questions, research, manualAnswer
     </CollapsibleSourceItem></div>;
   })}</div>;
 }
+
