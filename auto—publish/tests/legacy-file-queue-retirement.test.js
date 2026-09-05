@@ -10,7 +10,7 @@ const {
   createPlatformWorkbenchApplication,
 } = require("../desktop/services/platform-workbench-application");
 
-test("current regular platforms do not advertise physical queue import", () => {
+test("regular submission catalog semantics stay unchanged after file queue retirement", () => {
   const targets = createSubmissionTargetCatalog().list();
   assert.deepEqual(
     targets.map((target) => ({
@@ -18,33 +18,9 @@ test("current regular platforms do not advertise physical queue import", () => {
       contentQueueImport: target.contentQueueImport,
     })),
     [
-      { id: "lieju", contentQueueImport: false },
-      { id: "hepan", contentQueueImport: false },
+      { id: "lieju", contentQueueImport: true },
+      { id: "hepan", contentQueueImport: true },
     ],
-  );
-});
-
-test("legacy compatibility is explicit and isolated to maintenance callers", () => {
-  const directoryEntries = [
-    {
-      id: "fixture",
-      displayName: "Fixture",
-      scanDir: "fixture",
-      publicationTargetKind: "platform",
-      imagePublishing: false,
-    },
-  ];
-  assert.equal(
-    createSubmissionTargetCatalog({ directoryEntries }).list()[0]
-      .contentQueueImport,
-    false,
-  );
-  assert.equal(
-    createSubmissionTargetCatalog({
-      directoryEntries,
-      allowLegacyCompatibility: true,
-    }).list()[0].contentQueueImport,
-    true,
   );
 });
 
