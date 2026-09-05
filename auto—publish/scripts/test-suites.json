@@ -69,7 +69,7 @@
     "tests/legacy-platform-settings-migration.test.js",
     "tests/phase-02-migration.test.js",
     "tests/phase-02-runtime-capacity.test.js",
-    "tests/phase-06-symbol-identity-evidence.test.js",
+    "tests/ipc-symbol-identity-evidence.test.js",
     "tests/article-lifecycle-ticket-23-a.test.js",
     "tests/article-lifecycle-ticket-23-b.test.js",
     "tests/article-lifecycle-ticket-23-c.test.js",
