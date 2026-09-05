@@ -234,76 +234,14 @@ async function installPackagedFixture(application, responseDelayMs) {
 }
 
 function platformLoginFixtureResults() {
-  const { productionIpcContractFixtures } = require("./fixtures/phase-06-production-ipc-contract-fixtures");
   const { productionIpcRegistry } = require("../desktop/ipc/contracts/production-registry");
-  const fixtureFor = (channel) =>
-    productionIpcContractFixtures.find(
-      (fixture) => fixture.channel === channel && fixture.result !== undefined,
-    );
-  const article = fixtureFor("content:get-article-editor").result.article;
-  const operation = (allowed) => ({
-    allowed,
-    reasonCodes: [],
-    safeMetadata: {},
-  });
-  const management = {
-    clientId: article.clientId,
-    revision: 1,
-    articles: [article],
-    trash: [],
-    publicationRecords: [],
-    submissionPlatforms: [
-      { id: "platform-1", displayName: "测试平台", contentQueueImport: true },
-    ],
-    workflowItems: [
-      {
-        articleId: article.id,
-        workflow: {
-          version: 1,
-          stage: "pending_submission",
-          label: "待投稿",
-          primaryAction: "submit",
-          allowedBulkActions: ["submit", "trash"],
-          reasonCodes: [],
-          reasonMessage: null,
-          locks: {
-            canEdit: true,
-            canSubmit: true,
-            canCancel: false,
-            canTrash: true,
-          },
-          operations: {
-            edit: operation(true),
-            submit: operation(true),
-            trash: operation(true),
-            restore: operation(false),
-            purge: operation(false),
-          },
-          attentionCount: 0,
-          orderSummary: {
-            status: "none",
-            label: "无订单",
-            records: 0,
-            active: 0,
-            published: 0,
-            attention: 0,
-          },
-          publicationSummary: {
-            status: "none",
-            label: "未发布",
-            records: 0,
-            published: 0,
-            uncertain: false,
-          },
-          targetFacts: [],
-        },
-      },
-    ],
-  };
   const success = (channel, result) =>
     productionIpcRegistry.success(productionIpcRegistry.byChannel(channel), result);
   return {
-    management: success("content:get-article-management-snapshot", management),
+    queue: success("platforms:get-queue", {
+      platforms: [{ id: "platform-1", displayName: "测试平台", loginAvailable: true }],
+      queue: [],
+    }),
     openLogin: success("platforms:open-login", {
       platformId: "platform-1",
       status: "opened",
@@ -326,7 +264,7 @@ async function installPlatformLoginFixture(application) {
           return response;
         });
       };
-      install("content:get-article-management-snapshot", input.management);
+      install("platforms:get-queue", input.queue);
       install("platforms:open-login", input.openLogin);
       install("platforms:check-login", input.checkLogin);
       const window = BrowserWindow.getAllWindows()[0];
@@ -490,8 +428,14 @@ async function runRound(scenario, round) {
       executablePath: unpackedSmoke ? unpackedExecutable : electronBinary,
       args: unpackedSmoke
         ? ["--disable-gpu", `--user-data-dir=${path.join(directory, "user-data")}`]
-        : [main],
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined },
+        : [main, `--user-data-dir=${path.join(directory, "user-data")}`],
+      env: {
+        ...process.env,
+        ELECTRON_RUN_AS_NODE: undefined,
+        AUTO_PUBLISH_WORKSPACE: undefined,
+        LOCALAPPDATA: path.join(directory, "local-app-data"),
+        APPDATA: path.join(directory, "app-data"),
+      },
     });
     const page = await application.firstWindow();
     page.setDefaultTimeout(10000);
@@ -635,7 +579,13 @@ test(
           "--disable-gpu",
           `--user-data-dir=${path.join(directory, "user-data")}`,
         ],
-        env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined },
+        env: {
+          ...process.env,
+          ELECTRON_RUN_AS_NODE: undefined,
+          AUTO_PUBLISH_WORKSPACE: undefined,
+          LOCALAPPDATA: path.join(directory, "local-app-data"),
+          APPDATA: path.join(directory, "app-data"),
+        },
       });
       const page = await application.firstWindow();
       page.setDefaultTimeout(20000);
@@ -646,10 +596,10 @@ test(
       await installPackagedFixture(application, 0);
       await page.getByText("数据已就绪").waitFor();
       await installPlatformLoginFixture(application);
-      await page.getByRole("checkbox", { name: /^全选 / }).check();
-      await page.getByRole("button", { name: "发起投稿 (1)" }).click();
+      await page.getByRole("button", { name: "设置", exact: true }).click();
+      await page.getByRole("button", { name: "平台账号", exact: true }).click();
       await page
-        .getByRole("combobox", { name: "普通平台投稿目标" })
+        .getByRole("combobox", { name: "平台账号投稿平台" })
         .selectOption("platform-1");
 
       await page.getByRole("button", { name: "打开登录页" }).click();

@@ -233,8 +233,14 @@ suite("production preload sandbox boundary", { concurrency: false }, () => {
       );
       application = await electron.launch({
         executablePath: require("electron"),
-        args: [main],
-        env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined },
+        args: [main, `--user-data-dir=${path.join(directory, "user-data")}`],
+        env: {
+          ...process.env,
+          ELECTRON_RUN_AS_NODE: undefined,
+          AUTO_PUBLISH_WORKSPACE: undefined,
+          LOCALAPPDATA: path.join(directory, "local-app-data"),
+          APPDATA: path.join(directory, "app-data"),
+        },
       });
       const page = await application.firstWindow();
       const exposure = await page.evaluate(async () => ({
@@ -480,8 +486,14 @@ suite("production preload sandbox boundary", { concurrency: false }, () => {
         );
         application = await electron.launch({
           executablePath: require("electron"),
-          args: [main],
-          env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined },
+          args: [main, `--user-data-dir=${path.join(directory, "user-data")}`],
+          env: {
+            ...process.env,
+            ELECTRON_RUN_AS_NODE: undefined,
+            AUTO_PUBLISH_WORKSPACE: undefined,
+            LOCALAPPDATA: path.join(directory, "local-app-data"),
+            APPDATA: path.join(directory, "app-data"),
+          },
         });
         const page = await application.firstWindow();
         assert.equal(

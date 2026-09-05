@@ -20,11 +20,11 @@ function writeFixture(directory) {
     "let configured = true; let lastTest = null; let testCalls = 0; let saves = 0; let clears = 0;",
     "const data = (value) => Promise.resolve({ ok: true, data: value });",
     'const auth = { authenticated: true, user: { loginName: "fixture-user" }, entitlements: [{ product: "AutoPublish", enabled: true, expiresAt: null }], device: { deviceCount: 1, maxDevices: 5 }, errorCode: null, sessionStatus: "authenticated" };',
-    'const hepanStatus = () => ({ source: "application", configured, pythonConfigured: configured, cookieConfigured: configured, categoryId: 121, vendorConfigured: false, bundledVendorAvailable: true, siteOrigin: "https://www.hepan.com", lastTest });',
+    'const hepanStatus = () => ({ source: "application", configured, uid: 12345, uidConfigured: configured, passwordConfigured: configured, apiUrl: "https://www.hepan.com/geoapi/api.php", lastTest });',
     "const platformSettings = {",
     '  getStatus: (platformId) => data({ status: platformId === "hepan" ? hepanStatus() : { source: "application", configured: false, baseUrl: "", timeoutMs: 30000, allowInsecure: false, transport: "未配置", apiKeyMask: "", lastTest: null } }),',
     "  save: () => { saves += 1; return data({ status: hepanStatus() }); },",
-    '  test: () => { testCalls += 1; if (testCalls === 2) return Promise.resolve({ ok: false, error: { code: "HEPAN_REMOTE_TIMEOUT", category: "remote", retryability: "safe", userMessage: "河畔网络请求超时，请稍后重试，无需更换 Cookie。" } }); lastTest = { testedAt: "2026-07-21T05:00:00.000Z", ok: true, code: "HEPAN_AUTH_OK", authenticated: true, publishAccess: true, uploadContext: "changed", stage: "upload_context", warnings: ["HEPAN_UPLOAD_CONTEXT_CHANGED"], account: { displayName: "fixture-user", uid: "2093208" } }; return data({ result: lastTest }); },',
+    '  test: () => { testCalls += 1; if (testCalls === 2) return Promise.resolve({ ok: false, error: { code: "HEPAN_GEO_API_TIMEOUT", category: "remote", retryability: "safe", userMessage: "蓝色河畔 GEO API 请求超时，请稍后重试。" } }); lastTest = { testedAt: "2026-07-21T05:00:00.000Z", ok: true, account: { displayName: "fixture-user", uid: "12345" } }; return data({ result: lastTest }); },',
     "  clear: () => { configured = false; lastTest = null; clears += 1; return data({ cleared: true }); },",
     "  getLegacyStatus: () => data({ discover: { media: { available: false, sources: [] }, hepan: { available: false, sources: [], cookiePathAvailable: false }, sources: [], importable: false }, record: null }),",
     "  importLegacy: () => data({})",
@@ -76,8 +76,14 @@ suite(
       try {
         app = await electron.launch({
           executablePath: electronBinary,
-          args: [main],
-          env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined },
+          args: [main, `--user-data-dir=${path.join(directory, "user-data")}`],
+          env: {
+            ...process.env,
+            ELECTRON_RUN_AS_NODE: undefined,
+            AUTO_PUBLISH_WORKSPACE: undefined,
+            LOCALAPPDATA: path.join(directory, "local-app-data"),
+            APPDATA: path.join(directory, "app-data"),
+          },
         });
         const page = await app.firstWindow();
         page.setDefaultTimeout(10000);
@@ -94,29 +100,29 @@ suite(
         await page
           .getByRole("button", { name: "蓝色河畔", exact: true })
           .click();
-        const python = page.getByLabel("Python 可执行文件");
-        const interval = page.getByLabel("河畔发布间隔预设");
+        const uid = page.getByLabel("蓝色河畔用户 ID");
+        const password = page.getByLabel("蓝色河畔登录密码");
         const save = page.getByRole("button", { name: "保存配置" });
-        const test = page.getByRole("button", { name: "测试登录" });
+        const test = page.getByRole("button", { name: "测试账户" });
         const clear = page.getByRole("button", { name: "清除配置" });
 
         await save.click();
         await page.waitForFunction(
           () => window.__focusTest?.getState().saves === 1,
         );
-        await python.click();
+        await uid.click();
         assert.equal(
           await page.evaluate(() =>
             document.activeElement?.getAttribute("aria-label"),
           ),
-          "Python 可执行文件",
+          "蓝色河畔用户 ID",
         );
-        await interval.click();
+        await password.click();
         assert.equal(
           await page.evaluate(() =>
             document.activeElement?.getAttribute("aria-label"),
           ),
-          "河畔发布间隔预设",
+          "蓝色河畔登录密码",
         );
 
         await test.click();
@@ -124,7 +130,7 @@ suite(
         assert.equal((await app.windows()).length, 1);
         await page.getByRole("button", { name: "取消" }).click();
         await page.waitForFunction(() =>
-          document.activeElement?.textContent?.includes("测试登录"),
+          document.activeElement?.textContent?.includes("测试账户"),
         );
         assert.equal((await app.windows()).length, 1);
 
@@ -133,13 +139,13 @@ suite(
           .getByRole("dialog")
           .getByRole("button", { name: "开始测试" })
           .click();
-        await page.getByText(/登录账号：fixture-user/).waitFor();
-        await python.click();
+        await page.getByText(/账号：fixture-user/).waitFor();
+        await uid.click();
         assert.equal(
           await page.evaluate(() =>
             document.activeElement?.getAttribute("aria-label"),
           ),
-          "Python 可执行文件",
+          "蓝色河畔用户 ID",
         );
 
         await test.click();
@@ -149,14 +155,14 @@ suite(
           .click();
         await page
           .getByRole("alert")
-          .filter({ hasText: "网络请求超时" })
+          .filter({ hasText: "蓝色河畔 GEO API 请求超时" })
           .waitFor();
-        await interval.click();
+        await password.click();
         assert.equal(
           await page.evaluate(() =>
             document.activeElement?.getAttribute("aria-label"),
           ),
-          "河畔发布间隔预设",
+          "蓝色河畔登录密码",
         );
 
         await clear.click();
@@ -175,12 +181,12 @@ suite(
         await page.waitForFunction(
           () => window.__focusTest?.getState().clears === 1,
         );
-        await python.click();
+        await uid.click();
         assert.equal(
           await page.evaluate(() =>
             document.activeElement?.getAttribute("aria-label"),
           ),
-          "Python 可执行文件",
+          "蓝色河畔用户 ID",
         );
       } finally {
         if (app) await app.close();

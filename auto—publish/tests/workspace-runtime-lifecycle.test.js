@@ -2,7 +2,27 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { it } = require("node:test");
+const { it, after, mock } = require("node:test");
+const playwright = require("../src/core/playwright");
+const browserInvocations = mock.method(playwright, "pwInvokeSync", () => {
+  throw Object.assign(new Error("Synthetic session is not open"), {
+    code: "PLAYWRIGHT_SESSION_NOT_OPEN",
+  });
+});
+const browserEvaluations = mock.method(playwright, "runCode", () => {
+  throw new Error("Workspace lifecycle tests must not evaluate browser code");
+});
+after(() => {
+  try {
+    for (const call of browserInvocations.mock.calls) {
+      assert.ok(["state-save", "close"].includes(call.arguments[0][0]),
+        "workspace lifecycle may only clean up its synthetic session");
+    }
+    assert.equal(browserEvaluations.mock.callCount(), 0);
+  } finally {
+    mock.restoreAll();
+  }
+});
 const { createWorkspaceDataInvalidation, scopesForReason } = require("../desktop/workspace-data-invalidation");
 const { createWorkspaceRuntime } = require("../desktop/workspace-runtime");
 const { createContentLifecycleComposition } = require("../desktop/composition/content-lifecycle-composition");
