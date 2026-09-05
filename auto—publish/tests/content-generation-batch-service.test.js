@@ -168,6 +168,7 @@ describe("content generation batch service", function() {
   it("keeps generation owner dependencies free of submission admission paths", function() {
     for (const relative of [
       "desktop/services/content-generation-batch-service.js",
+      "desktop/services/content-generation-batch-preview.js",
       "src/content/generation-batch-runner.js",
       "src/content/article-generator.js",
     ]) {
@@ -333,6 +334,33 @@ describe("content generation batch service", function() {
     assert.equal(preview.executableTaskCount, 1);
     assert.deepStrictEqual(preview.excludedClients, [{ clientId: "c2", codes: ["CLIENT_MATERIAL_REQUIRED", "GEO_RESEARCH_REQUIRED"] }]);
     assert.deepStrictEqual(preview.tasks.map(function(task) { return [task.clientId, task.platform, task.templateId]; }), [["c1", "ctrip", "guide"]]);
+  });
+
+  it("keeps selected sources client-scoped and preview free of batch mutations", async function() {
+    const harness = makeHarness({
+      materialStore: { listMaterials: async (clientId) => [{ id: clientId + "-material", status: "ready", content: "facts" }] },
+      researchStore: { listResearch: (clientId) => [{ id: clientId + "-research", answerText: "answer" }] },
+    });
+    const input = {
+      templates: [{ platform: "ctrip", templateId: "guide" }],
+      clientSources: [
+        { clientId: "c1", materialIds: ["c1-material"], researchQueryIds: ["c1-research"] },
+        { clientId: "c2", materialIds: ["c2-material"], researchQueryIds: ["c2-research"] },
+      ],
+    };
+    const preview = await harness.service.preview(input);
+    assert.deepEqual(preview.clientSources, input.clientSources);
+    assert.equal(preview.executableTaskCount, 2);
+    input.clientSources[1].materialIds = ["c1-material"];
+    input.clientSources[1].researchQueryIds = ["c1-research"];
+    const crossClient = await harness.service.preview(input);
+    assert.deepEqual(crossClient.excludedClients, [{ clientId: "c2", codes: ["CLIENT_MATERIAL_INVALID", "GEO_RESEARCH_INVALID"] }]);
+    assert.deepEqual(crossClient.tasks.map((task) => task.clientId), ["c1"]);
+    assert.deepEqual(harness.batchStore.listBatches(), []);
+    assert.deepEqual(harness.calls.generate, []);
+    assert.deepEqual(harness.calls.run, []);
+    assert.deepEqual(harness.savedArticles, []);
+    await harness.service.dispose();
   });
 
   it("does not turn source or client read failures into empty or missing inputs", async function() {
