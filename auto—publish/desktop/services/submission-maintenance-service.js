@@ -37,6 +37,9 @@ function createSubmissionMaintenanceService(options) {
     (value.paths && value.paths.input) ||
       path.join(workspaceRoot, ".autopublish", "input"),
   );
+  // Historical physical-queue artifacts are owned only by this maintenance
+  // boundary. The public submission target catalog keeps its regular-admission
+  // semantics and is not used as a runtime switch for legacy file scanning.
   const targetCatalog = createSubmissionTargetCatalog({
     directoryEntries: value.directoryEntries,
   });

@@ -112,26 +112,30 @@ test("authenticated platform and account registrars return path-free typed proje
     { handle: (channel, handler) => handlers.set(channel, handler) },
     async () => {},
   );
+  let scanCount = 0;
   registerPlatformIpc({
     ipcMain,
     directoryEntries: [{ id: "toutiao", displayName: "头条", publicationTargetKind: "platform" }],
     platformSessionService: { supports: () => true },
     platformWorkbenchService: {
-      scanQueue: () => [
-        {
-          platformId: "toutiao",
-          articles: [
-            {
-              filename: "fixture.md",
-              title: "Fixture",
-              filePath: "C:\\private\\fixture.md",
-              archiveError: Object.assign(new Error("private path"), {
-                code: "ARCHIVE_FAILED",
-              }),
-            },
-          ],
-        },
-      ],
+      scanQueue: () => {
+        scanCount += 1;
+        return [
+          {
+            platformId: "toutiao",
+            articles: [
+              {
+                filename: "fixture.md",
+                title: "Fixture",
+                filePath: "C:\\private\\fixture.md",
+                archiveError: Object.assign(new Error("private path"), {
+                  code: "ARCHIVE_FAILED",
+                }),
+              },
+            ],
+          },
+        ];
+      },
       taskKey: () => "",
     },
   });
@@ -161,8 +165,8 @@ test("authenticated platform and account registrars return path-free typed proje
   assert.deepEqual(queue.data.platforms, [
     { id: "toutiao", displayName: "头条", loginAvailable: true },
   ]);
-  assert.equal(queue.data.queue[0].archiveErrorCode, "ARCHIVE_FAILED");
-  assert.equal("filePath" in queue.data.queue[0], false);
+  assert.deepEqual(queue.data.queue, []);
+  assert.equal(scanCount, 0);
 
   const profilesContract = productionIpcRegistry.byChannel(
     "platforms:list-account-profiles",

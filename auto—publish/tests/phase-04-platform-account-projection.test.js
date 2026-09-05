@@ -37,20 +37,35 @@ function register(overrides, dependencyOverrides) {
   return { handlers };
 }
 
-test("platform queue projects only its durable account profile id", async () => {
-  const value = register();
+test("platform catalog projection does not read the retired physical queue", async () => {
+  const value = register(
+    {
+      scanQueue: function () {
+        throw new Error("retired physical queue must not be scanned");
+      },
+    },
+    {
+      directoryEntries: [
+        {
+          id: "toutiao",
+          displayName: "头条",
+          publicationTargetKind: "platform",
+        },
+      ],
+      platformSessionService: {
+        supports: () => false,
+        openLogin: async () => undefined,
+        checkLogin: async () => false,
+      },
+    },
+  );
   const result = await value.handlers.get("platforms:get-queue")();
   assert.equal(result.ok, true);
-  assert.deepEqual(result.data.queue[0], {
-    filename: "fixture.md",
-    title: "fixture",
-    platformId: "toutiao",
-    sourcePlatformId: "toutiao",
-    sourceArticleState: "active",
-    reasonCode: null,
-    accountProfileId: "account-toutiao",
-    archiveErrorCode: null,
-    remoteStatus: null,
+  assert.deepEqual(result.data, {
+    platforms: [
+      { id: "toutiao", displayName: "头条", loginAvailable: false },
+    ],
+    queue: [],
   });
 });
 
