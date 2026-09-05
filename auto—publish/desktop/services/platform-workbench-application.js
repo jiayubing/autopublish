@@ -1,21 +1,8 @@
-const fs = require("node:fs");
-const mammoth = require("mammoth");
 const { assertPlaywrightAvailable } = require("./playwright-capability");
 const { createPlatformSessionService } = require("./platform-session-service");
-const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 const {
   projectPlatformQueue,
 } = require("../application/read-models/platform-read-model");
-
-function diagnose(code, action) {
-  reportDiagnostic({
-    code,
-    module: "platform-workbench-application",
-    category: "validation",
-    operationId: "platform-workbench-application",
-    metadata: { action },
-  });
-}
 
 function createPlatformWorkbenchApplication(options) {
   const values = options || {};
@@ -33,50 +20,21 @@ function createPlatformWorkbenchApplication(options) {
     adapters,
     assertPlaywrightAvailable: ensurePlaywright,
   });
-  const workbenchService = values.platformWorkbenchService;
-  if (!workbenchService) throw new Error("Platform application requires the workspace ContentStore service");
 
   async function getQueue() {
-    const ordinaryPlatforms = directoryEntries.filter((platform) => platform.publicationTargetKind === "platform");
-    const grouped = workbenchService.scanQueue();
-    const queue = [];
-    for (const group of grouped) {
-      for (const article of group.articles || []) {
-        let title = article.title;
-        if (article.filename && article.filename.toLowerCase().endsWith(".docx")) {
-          try {
-            const docxResult = await mammoth.extractRawText({ buffer: fs.readFileSync(article.filePath || article.file) });
-            for (const line of String((docxResult && docxResult.value) || "").split(/\n/)) {
-              const candidate = line.replace(/^#+\s*/, "").trim();
-              if (candidate) {
-                title = candidate.length > 60 ? candidate.substring(0, 60) + "..." : candidate;
-                break;
-              }
-            }
-          } catch (_) {
-            diagnose("PLATFORM_DOCX_TITLE_PROBE_FAILED", "docx-title");
-          }
-        }
-        queue.push({
-          filename: article.filename,
-          title,
-          platformId: group.platformId,
-          sourcePlatformId: group.platformId,
-          sourceArticleState: article.sourceArticleState || "active",
-          reasonCode: article.reasonCode || null,
-          accountProfileId: typeof article.accountProfileId === "string" ? article.accountProfileId : "",
-          archiveError: article.archiveError || null,
-          remoteStatus: article.remoteStatus || null,
-        });
-      }
-    }
+    const ordinaryPlatforms = directoryEntries.filter(
+      (platform) => platform.publicationTargetKind === "platform",
+    );
+    // The physical input-directory queue is retired. Keep this IPC projection as
+    // a platform catalog for renderer compatibility; live submission items come
+    // from the regular queue application instead.
     return projectPlatformQueue({
       platforms: ordinaryPlatforms.map((platform) => ({
         id: platform.id,
         displayName: platform.displayName,
         loginAvailable: platformSessionService.supports(platform.id),
       })),
-      queue,
+      queue: [],
     });
   }
 
