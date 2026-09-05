@@ -132,8 +132,10 @@ function admission(
     articleRefs: articleIds.map((articleId) => ref(articleId)),
     platformId,
     accountProfileId,
+    // This suite exercises publication outcomes; interval persistence has its own suite.
+    queueConfig: { submissionIntervalSeconds: 0 },
   };
-  if (queueGroupId) input.queueConfig = { queueGroupId };
+  if (queueGroupId) input.queueConfig.queueGroupId = queueGroupId;
   return fixture.application.admitRegularQueueItems(input);
 }
 
@@ -220,7 +222,7 @@ async function waitFor(predicate, message) {
   assert.fail(message || "synthetic queue condition was not reached");
 }
 
-test("25-C admission keeps one target, groups by identity, and hides a sole account in the public view", async () => {
+test("admission keeps one target, groups by identity, and hides a sole account in the public view", async () => {
   const fixture = makeFixture();
   let platformFeature;
   try {
@@ -356,7 +358,7 @@ test("25-C admission keeps one target, groups by identity, and hides a sole acco
   }
 });
 
-test("25-C runs different platforms concurrently, serializes same-platform accounts, appends FIFO text-only work, and scopes failures", async () => {
+test("runs different platforms concurrently, serializes same-platform accounts, appends FIFO text-only work, and scopes failures", async () => {
   const fixture = makeFixture();
   try {
     for (const articleId of [
@@ -549,7 +551,7 @@ test("25-C runs different platforms concurrently, serializes same-platform accou
   }
 });
 
-test("25-C pause-all, manual pause, start-all, and restart preserve operator intent", async () => {
+test("pause-all, manual pause, start-all, and restart preserve operator intent", async () => {
   const fixture = makeFixture();
   try {
     for (const articleId of ["pause-current", "pause-remaining", "manual-only"])
@@ -678,7 +680,7 @@ test("25-C pause-all, manual pause, start-all, and restart preserve operator int
   }
 });
 
-test("25-C uncertain freezes the article, forbids replay, and exposes only the two named manual closures", async () => {
+test("uncertain freezes the article, forbids replay, and exposes only the two named manual closures", async () => {
   const fixture = makeFixture();
   try {
     fixture.add(article("uncertain-accepted"));

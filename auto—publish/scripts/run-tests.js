@@ -6,6 +6,7 @@ const { spawnSync } = require("node:child_process");
 const { Writable } = require("node:stream");
 const { run } = require("node:test");
 const { spec } = require("node:test/reporters");
+const suites = require("./test-suites.json");
 const {
   DEFAULT_PARALLEL_CONCURRENCY,
   createExecutionPlan,
@@ -46,6 +47,23 @@ function collectTestFiles(excludedFiles) {
   return files.sort((left, right) => left.localeCompare(right));
 }
 
+function selectTestSuite(files, suite) {
+  if (!suite || suite === "all") return files;
+  if (!["core", "integration", "maintenance", "release"].includes(suite))
+    throw new Error("TEST_SUITE_UNKNOWN");
+  const assignments = Object.values(suites).flat();
+  if (new Set(assignments).size !== assignments.length)
+    throw new Error("TEST_SUITE_DUPLICATE_FILE");
+  const discovered = new Set(files);
+  if (assignments.some((file) => !discovered.has(file)))
+    throw new Error("TEST_SUITE_FILE_MISSING");
+  const assigned = new Set(assignments);
+  const selected = new Set(suites[suite] || []);
+  return files.filter((file) =>
+    suite === "integration" ? !assigned.has(file) : selected.has(file),
+  );
+}
+
 function parsePositiveInteger(value, code) {
   if (!/^\d+$/.test(String(value || ""))) {
     process.stderr.write(code + " requires a positive integer\n");
@@ -70,7 +88,18 @@ function parseArguments(args) {
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (arg === "--list") options.list = true;
-    else if (arg === "--serial") options.serial = true;
+    else if (arg === "--suite") {
+      const suite = args[++index];
+      if (
+        !["all", "core", "integration", "maintenance", "release"].includes(
+          suite,
+        )
+      ) {
+        process.stderr.write("Unknown or missing test suite\n");
+        return null;
+      }
+      options.suite = suite;
+    } else if (arg === "--serial") options.serial = true;
     else if (arg === "--profile-output") {
       const value = args[index + 1];
       if (!value || value.startsWith("--")) {
@@ -466,7 +495,13 @@ function writeProfile(output, mode, plan, results, summary, wallClockMs) {
 async function main(args) {
   const options = parseArguments(args);
   if (!options) return 1;
-  const files = collectTestFiles(options.excludedFiles);
+  const excluded = new Set(
+    options.excludedFiles.map(normalizeRelativeFilename),
+  );
+  const files = selectTestSuite(collectTestFiles(), options.suite).filter(
+    (file) => !excluded.has(file),
+  );
+  process.stdout.write(`Test suite: ${options.suite || "all"}\n`);
   printCollection(files);
   if (options.list) return 0;
   if (files.length === 0) {
@@ -518,7 +553,16 @@ async function main(args) {
       `\u2139 todo ${summary.counts.todo}`,
     ].join("\n") + "\n",
   );
-  const profileOutput = options.profileOutput || DEFAULT_PROFILE_OUTPUT;
+  const profileOutput =
+    options.profileOutput ||
+    (options.suite && options.suite !== "all"
+      ? path.join(
+          ROOT,
+          "build",
+          "test-results",
+          `${options.suite}-timings.json`,
+        )
+      : DEFAULT_PROFILE_OUTPUT);
   writeProfile(
     profileOutput,
     mode,
@@ -565,6 +609,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  selectTestSuite,
   collectTestFiles,
   createExecutionPlan,
   main,

@@ -15,7 +15,7 @@ const {
   validateQueryScanBudget,
   assertSafeGeneratedEvidence,
   safeEnvironmentSummary,
-} = require("./ticket-25-a-contract");
+} = require("./article-management-benchmark-contract");
 const { createExecutionProvenance } = require("./release-evidence-inputs");
 
 function percentile(values, fraction) {

@@ -9,12 +9,55 @@ const {
   createExecutionPlan,
   parseArguments,
   summarizeTestResults,
+  selectTestSuite,
 } = require("../scripts/run-tests");
 const {
   createTestDiscoveryEvidence,
 } = require("../scripts/create-test-discovery-evidence");
 
 const root = path.resolve(__dirname, "..");
+
+test("named suites partition discovery and preserve complete all-suite execution", () => {
+  const files = collectTestFiles();
+  const groups = ["core", "integration", "maintenance", "release"];
+  const selected = groups.flatMap((group) => selectTestSuite(files, group));
+  assert.equal(new Set(selected).size, files.length);
+  assert.deepEqual(selected.sort(), [...files].sort());
+  assert.deepEqual(selectTestSuite(files, "all"), files);
+  const core = selectTestSuite(files, "core");
+  assert.ok(core.includes("tests/regular-platform-acceptance.test.js"));
+  assert.ok(
+    !core.includes("tests/phase-06-production-ipc-fixture-matrix.test.js"),
+  );
+  assert.throws(() => selectTestSuite(files, "unknown"), /TEST_SUITE_UNKNOWN/);
+  assert.throws(() => selectTestSuite([], "core"), /TEST_SUITE_FILE_MISSING/);
+  assert.ok(
+    selectTestSuite(
+      [...files, "tests/new-feature.test.js"],
+      "integration",
+    ).includes("tests/new-feature.test.js"),
+  );
+});
+
+test("suite CLI rejects unknown names and lists the selected files", () => {
+  const invalid = spawnSync(
+    process.execPath,
+    ["scripts/run-tests.js", "--suite", "unknown", "--list"],
+    { cwd: root, encoding: "utf8", windowsHide: true },
+  );
+  assert.equal(invalid.status, 1);
+  const result = spawnSync(
+    process.execPath,
+    ["scripts/run-tests.js", "--suite", "core", "--list"],
+    { cwd: root, encoding: "utf8", windowsHide: true },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  const listed = result.stdout
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith("- "))
+    .map((line) => line.slice(2));
+  assert.deepEqual(listed, selectTestSuite(collectTestFiles(), "core"));
+});
 
 test("default test discovery collects both JavaScript module extensions", () => {
   const files = collectTestFiles();
@@ -33,7 +76,7 @@ test("default test discovery collects both JavaScript module extensions", () => 
   assert.equal(
     JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).scripts
       .test,
-    "node scripts/run-tests.js",
+    "node scripts/run-tests.js --suite core",
   );
   assert.match(
     fs.readFileSync(path.join(root, "scripts", "run-tests.js"), "utf8"),

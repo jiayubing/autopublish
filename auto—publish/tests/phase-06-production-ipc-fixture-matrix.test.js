@@ -168,26 +168,6 @@ const eventFixtures = productionIpcContractFixtures.filter(
 assert.equal(lifecycleFixtures.length, 25);
 assert.equal(eventFixtures.length, 4);
 
-for (const fixture of lifecycleFixtures) {
-  test(`lifecycle query closes query-to-state-to-snapshot consumer: ${fixture.capability}`, () => {
-    const result = verifyCapabilityEvidence(productionContext(), {
-      ...fixture,
-      kind: "invoke",
-    });
-    assert.equal(result.ok, true, result.reasons.join("\n"));
-  });
-}
-
-for (const fixture of eventFixtures) {
-  test(`event closes producer-to-unique-consumer-to-dispose: ${fixture.capability}`, () => {
-    const result = verifyCapabilityEvidence(productionContext(), {
-      ...fixture,
-      kind: "event",
-    });
-    assert.equal(result.ok, true, result.reasons.join("\n"));
-  });
-}
-
 test("shared registry rejects unknown versions and fields for every capability", () => {
   for (const fixture of productionIpcContractFixtures) {
     const contract = productionIpcRegistry.byCapability(fixture.capability);

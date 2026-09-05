@@ -13,11 +13,31 @@ the installed package.
 
 ## Engineering Commands
 
+### 日常测试与完整验收
+
+`npm test` 运行核心 GEO 行为；提交前再运行 `npm run test:integration`。
+`npm run test:maintenance` 单独运行迁移、容量、诊断及静态分析器测试。
+`npm run test:release` 是发布测试组，不包含 build 或真实外部验收。
+`npm run test:all` 保留全量执行；`npm run test:discover` 始终列出全量文件。
+
+测试选择的唯一配置是 `scripts/test-suites.json`：明确列出 core、maintenance、release，
+其余自动归入 integration，新增测试不会因遗漏分类而消失。任何 profile 都可附加
+`-- --list` 查看实际集合。缺失文件或重复分类会报错。
+
+release/all 需要 Windows、Playwright Chromium、可用 renderer 构建以及已构建的
+unpacked 应用；Electron 焦点测试需 `RUN_ELECTRON_FOCUS_TESTS=1`，打包导航测试需
+`RUN_UNPACKED_NAVIGATION_SMOKE=1` 和 `AUTO_PUBLISH_UNPACKED_EXECUTABLE` 指向测试产物。
+这些测试使用合成 fixture；不以跳过代替发布验收。未满足前置条件时，跳过会使执行器返回失败。
+
+分组计时写入 `build/test-results/<suite>-timings.json`，不会覆盖全量
+`build/evidence/root-test-timings.json`。无参数执行 `node scripts/run-tests.js` 仍是全量，
+原 CI 的 `test:desktop-core` 及证据脚本保留原语义；它不等于日常 core 组。
+
 Run commands from this directory.
 
 ```powershell
 npm test
-npm run test:phase-08:gates
+npm run test:integration
 npm run lint
 npm run typecheck:main
 npm run typecheck:renderer
