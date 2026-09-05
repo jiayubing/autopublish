@@ -4,7 +4,7 @@
 
 ## 当前执行入口
 
-- 当前无待执行的本地计划；按用户新任务选择相关入口。
+- 当前没有待执行的本地计划。
 
 ## 等待用户明确外部授权
 
@@ -17,6 +17,8 @@
 ## 最近已完成的本地计划
 
 以下计划保留为历史 evidence，不是默认执行入口：
+
+- [非阻塞技术债后续处理计划](../.scratch/complexity-follow-up/NONBLOCKING-CLEANUP-PLAN.md)：COMPLETE；格式清理、测试命名、IPC 分析器和包体积调查结论及验证见计划 §7。
 
 - [复杂度收敛与测试瘦身计划](../.scratch/complexity-reduction/COMPLEXITY-REDUCTION-PLAN.md)：COMPLETE；测试入口、代码职责收敛及干净提交构建验收已完成，保留决策与证据见计划最终记录。
 
