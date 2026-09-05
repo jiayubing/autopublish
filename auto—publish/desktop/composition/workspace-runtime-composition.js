@@ -218,13 +218,6 @@ async function createWorkspaceRuntimeComposition(deps) {
           return Object.freeze({ id: platform.definition.id, port: platform.loginSession });
         }),
     );
-    const legacyQueuePorts = Object.freeze(
-      loadedPlatforms
-        .filter(function (platform) { return Boolean(platform.legacyQueue); })
-        .map(function (platform) {
-          return Object.freeze({ id: platform.definition.id, port: platform.legacyQueue });
-        }),
-    );
     const settingsAdapters = Object.freeze(
       loadedPlatforms
         .filter(function (platform) {
@@ -660,10 +653,6 @@ async function createWorkspaceRuntimeComposition(deps) {
         },
       ),
     );
-    const adapters = {};
-    legacyQueuePorts.forEach(function (platform) {
-      adapters[platform.id] = platform.port;
-    });
     const regularImagePlanService =
       require("../services/regular-image-plan-service").createRegularImagePlanService(
         { imageSelectionPort: clientImageLibrary.imageSelectionPort },
@@ -717,17 +706,6 @@ async function createWorkspaceRuntimeComposition(deps) {
           recheckPaidOrder: paidMediaRecheck,
         },
       );
-    const platformWorkbenchService = ownService(
-      require("../services/platform-workbench-service").createPlatformWorkbenchService(
-        {
-          rootDir: workspaceRoot,
-          paths: injectedPaths,
-          contentStore,
-          platforms: directoryEntries,
-          adapters,
-        },
-      ),
-    );
     const platformSessionService =
       require("../services/platform-session-service").createPlatformSessionService(
         {
@@ -745,7 +723,6 @@ async function createWorkspaceRuntimeComposition(deps) {
           directoryEntries,
           loginSessionPorts,
           platformSessionService,
-          platformWorkbenchService,
           taskService,
           assertPlaywrightAvailable: function () {
             return require("../services/playwright-capability").assertPlaywrightAvailable(
@@ -800,7 +777,6 @@ async function createWorkspaceRuntimeComposition(deps) {
               return "";
             }
           },
-          platformWorkbenchService,
           openExternal: options.openExternal,
           invalidateData: invalidation.invalidate,
         },
@@ -869,7 +845,6 @@ async function createWorkspaceRuntimeComposition(deps) {
         paidMediaBatchComposition.orderCreationResolutionService,
       aiContentService,
       contentGenerationBatchService,
-      platformWorkbenchService,
       platformAccountProfileService,
       publicationRecoveryComposition,
       attentionPorts,
@@ -896,7 +871,6 @@ async function createWorkspaceRuntimeComposition(deps) {
       regularQueueApplication,
       regularQueueGroupOrchestrator: regularQueueGroupComposition.orchestrator,
       contentGenerationBatchService,
-      platformWorkbenchService,
       platformApplication,
       mediaApplication,
       paidMediaPreflightService: Object.freeze({
