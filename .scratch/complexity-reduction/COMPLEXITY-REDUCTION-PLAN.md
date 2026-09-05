@@ -268,10 +268,10 @@ npm run test:release
 
 ## 9. 当前状态
 
-- 状态：执行中
-- 当前阶段：Phase 0/1 已落地；Phase 2 首批精简、Phase 3 装配隔离和 Phase 4 局部职责收敛已实施；Phase 5 消费者处置决策已记录；本地全量与发布组通过，已获提交授权，正在验证干净提交构建
+- 状态：COMPLETE
+- 当前阶段：Phase 0/1 入口落地、Phase 2 有证据的测试精简、Phase 3 装配隔离、Phase 4 职责收敛及 Phase 5 消费者保留/删除决策闭合；干净提交构建与全量验收通过
 - 负责人：项目维护者
-- 下一步：验证正式 clean-build、干净提交的本地 unpacked 构建与打包测试，记录最终结果；不 push、不发布。保留有真实消费者的迁移与状态机，不继续为文件数量扩大重构
+- 下一步：无本计划待实施项；日常使用 core，跨模块修改运行 integration，维护与发布按对应入口验证。剩余历史命名和静态分析器按实际修改需求维护，不为文件数量继续重构；本计划不执行 push 或对外发布。
 
 ## 10. 执行记录与决策
 
@@ -466,8 +466,8 @@ Primary Review 已核对：分组并集/互斥、新文件归属、未知参数�
 | Phase 4：收敛职责 | 生成预检与运行 owner 分离，workspace 移出媒体内部装配，删除扫描服务死接口；删除服务和 aggregate 已调查，按明确事务 owner 保留。 |
 | Phase 5：历史代码处置 | 无消费者工具已删除；仍有启动/脚本/维护消费者的迁移保留。未满足真实 workspace 全部迁移的删除前提，不进行退役。 |
 | 日常/集成/维护/发布测试 | 四组与最终 all 均通过且零跳过；lint、相关 typecheck、renderer/preload build 已通过。 |
-| 格式与构建限制 | 全仓 format:check 存在 19 项基线失败；正式 check:clean-build 返回 BUILD_WORKTREE_DIRTY。诊断 alpha 构建和 verifier 已通过，正式发布门禁未通过。 |
-| 完成状态 | 本轮实现与本地验收可供审阅；因正式干净提交门禁未完成，整个计划和 Goal 不标 COMPLETE。 |
+| 格式与构建限制 | 全仓 format:check 的 19 项基线失败保留为既有技术债；取得授权并提交后，正式 check:clean-build、干净提交的本地 alpha 构建和 verifier 均通过，见最终记录。没有验证签名或对外发布。 |
+| 完成状态 | 授权后的实现提交、干净构建、全量测试与最终收尾记录闭合。对仍有消费者的迁移及状态机作保留决策，不将有条件删除误判为必须强制删除。 |
 
 - 提交授权边界来源：根 AGENTS §8 将提交是否允许交给执行协议与用户授权；EXECUTION-PROTOCOL §1.2 规定“仅在用户当前 Goal 明确授权 commit/merge 时自动执行这些 Git 变更；否则到相应 gate 停止”。本次 Goal 未明确授权 commit/merge，提交确认是当前剩余门禁的前置条件。
 
@@ -476,3 +476,16 @@ Primary Review 已核对：分组并集/互斥、新文件归属、未知参数�
 - 用户明确回复“授权”，允许按工程意图提交本轮变更并继续验证干净提交构建；不 push、不发布。
 - 五个本地实现提交：c3e3e37（测试分组与失效工具清理）、7d64fa3（媒体扫描死接口删除）、b451022（生成预检职责分离）、29af836（媒体装配与恢复）、70d1906（测试隔离及设置合同更新）。
 - 没有在提交时修改生产源码或测试行为；最终全量 1983 项通过的工作区内容已进入 Git。下一步提交本文档与清单后执行 clean-build 和干净提交的本地构建验收，结果尚未预先标为通过。
+
+### 2026-09-05：最终干净提交验收与 Closure
+
+- 构建和测试提交：`777f69a8fd60662881bd5ce31b808824d6b1d069`，包括五个实现提交及计划/清单记录。正式 `npm run check:clean-build` 返回 clean=true、allowDirty=false；构建期间 Git 保持干净。
+- `prepare:runtime-tools`、`build:renderer`（含 renderer typecheck）、`build:preload`、lint、main typecheck、bridge strict typecheck 均通过。Vite 既有大 chunk 提示保留，不扩大为前端拆包任务。
+- 使用 electron-builder 的现有 alpha 配置，dir 目标、publish=never、独立输出 `release-alpha/complexity-clean-777f69a`；生成本地 Windows unpacked 应用。alpha package verifier 通过；产物内 build-info 记录上述提交和 dirty=false，五个生产改动模块与提交源码逐字节一致。
+- 产物 SHA-256：ETO—001.exe = `d9eda2a646352ed9eb06fcc8fd5aaf3e6b2f4d912f36f400e0f37a5ad0c8ca1b`；resources/app.asar = `dc9ab868348015637f1d4baa883f4f666792384a2bc3193aa4af205662147fe4`。产物位于 ignored 输出目录，不提交二进制。
+- 使用新产物和 RUN_ELECTRON_FOCUS_TESTS=1、RUN_UNPACKED_NAVIGATION_SMOKE=1 执行：
+  `npm run test:all -- --profile-output build/test-results/clean-777f69a-all.json`。
+  最终 288 文件、1983/1983 通过，failed/skipped/todo/cancelled 均为零，191.177 秒；执行器 CLOSED、allFilesReported=true。包括打包导航、平台登录 IPC、设置焦点、preload、迁移/容量及全部生产 IPC 合同。
+- Bounded Closure：复核授权后的提交范围、干净检查、打包源码一致性和最终全量报告，无新增生产/测试修改，无未关闭的本轮阻塞 finding。19 项既有格式问题不由本轮引入，已明确保留；不得将本次完成描述为全仓所有 gate 均通过。
+- 此后只提交本计划和 WORK-INDEX 收尾记录。收尾提交与被验证提交的应用源码、测试、schema、构建配置必须无差异；最终再检查 Git clean。文档提交不会被冒充为已重新构建的产物提交。
+- 本计划完成的是个人维护场景下的复杂度收敛与本地验收；仍保留客户隔离、幂等、恢复和不确定结果人工核对，不删除有消费者的迁移，不要求真实客户数据已迁移。不包含签名、安装器发布、真实账号或真实发布操作。

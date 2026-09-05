@@ -4,7 +4,7 @@
 
 ## 当前执行入口
 
-- [复杂度收敛与测试瘦身计划](../.scratch/complexity-reduction/COMPLEXITY-REDUCTION-PLAN.md)：执行中；先建立基线和测试分类，再收敛测试入口与代码职责。具体进度以该计划为准。
+- 当前无待执行的本地计划；按用户新任务选择相关入口。
 
 ## 等待用户明确外部授权
 
@@ -17,6 +17,8 @@
 ## 最近已完成的本地计划
 
 以下计划保留为历史 evidence，不是默认执行入口：
+
+- [复杂度收敛与测试瘦身计划](../.scratch/complexity-reduction/COMPLEXITY-REDUCTION-PLAN.md)：COMPLETE；测试入口、代码职责收敛及干净提交构建验收已完成，保留决策与证据见计划最终记录。
 
 - [GEO 批量发文：文章生成与列举网投稿修复计划](../.scratch/article-generation-and-lieju-remediation/ARTICLE-GENERATION-AND-LIEJU-REMEDIATION-PLAN.md) — `COMPLETE`；P0–P5、HTTP-only 列举网投稿决策、最终门禁和 bounded closure evidence 见计划 §10。
 - [Ticket 27：投稿结果闭环整改](../.scratch/article-lifecycle-and-submission/issues/27-publication-attention-result-closure-remediation.md) — `COMPLETE`；Combined Audit、remediation、final clean-HEAD gate 与最终边界见 [27-D handoff](../.scratch/article-lifecycle-and-submission/handoffs/27-D-result-closure-integration.md)。
