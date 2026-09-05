@@ -37,8 +37,12 @@ function createSubmissionMaintenanceService(options) {
     (value.paths && value.paths.input) ||
       path.join(workspaceRoot, ".autopublish", "input"),
   );
+  // This service is the compatibility owner for artifacts created by the retired
+  // physical queue. No current submission path may infer queue-import support
+  // from this opt-in.
   const targetCatalog = createSubmissionTargetCatalog({
     directoryEntries: value.directoryEntries,
+    allowLegacyCompatibility: true,
   });
 
   function queuePaths(payload) {
