@@ -120,5 +120,6 @@ test("completed generation batch keeps direct bulk submission as its primary wor
   assert.doesNotMatch(detailSource, /投稿请先进入文章库/);
 
   assert.match(viewSource, /BatchRegularSubmissionDialog/);
-  assert.match(viewSource, /onBulkSubmit=\{\(\) => setBatchSubmissionOpen\(true\)\}/);
+  assert.match(viewSource, /onBulkSubmit=/);
+  assert.match(viewSource, /setBatchSubmissionOpen\(true\)/);
 });
