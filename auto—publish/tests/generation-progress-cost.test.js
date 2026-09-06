@@ -179,15 +179,20 @@ for (const taskCount of [10, 100]) {
       }
       const phases = {};
       for (const phase of Object.keys(samples[0])) {
-        const times = samples.map((sample) => sample[phase].elapsedMs).sort((a, b) => a - b);
-        const { elapsedMs: ignored, ...counts } = samples[0][phase];
-        void ignored;
+        const counts = { ...samples[0][phase] };
+        // Measure real payloads, including variable metadata; byte lengths and
+        // elapsed time are observations, not deterministic operation counts.
+        for (const key of ["elapsedMs", "eventBytes", "snapshotBytes"]) delete counts[key];
         for (const sample of samples) {
-          const { elapsedMs: otherIgnored, ...otherCounts } = sample[phase];
-          void otherIgnored;
-          assert.deepEqual(otherCounts, counts, "deterministic counts across repeats");
+          for (const [key, value] of Object.entries(counts)) {
+            assert.equal(sample[phase][key], value, phase + " " + key);
+          }
         }
-        phases[phase] = { ...counts, medianMs: times[1], rangeMs: [times[0], times[2]] };
+        phases[phase] = { ...counts };
+        for (const key of ["elapsedMs", "eventBytes", "snapshotBytes"]) {
+          const values = samples.map((sample) => sample[phase][key]).sort((a, b) => a - b);
+          phases[phase][key] = { median: values[1], range: [values[0], values[2]] };
+        }
       }
       console.log("GENERATION_PROGRESS_COST " + json({ node: process.version, platform: process.platform, arch: process.arch, taskCount, concurrency, repeats: 3, phases }));
     });
