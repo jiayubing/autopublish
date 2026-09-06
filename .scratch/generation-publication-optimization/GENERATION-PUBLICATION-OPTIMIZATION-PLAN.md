@@ -3,12 +3,13 @@
 ## 1. 当前状态与授权
 
 - 创建日期：2026-09-05。
-- 状态：`C_READY_FOR_REVIEW`。A/B 已合并到 `master`；C 的实现、性能证据和 PR 验证已完成，PR #25 保持打开且未合并；L/D/E 未开始。
+- 状态：`L_READY_FOR_REVIEW`。A/B/C 已全部合并到 `master`；L 已完成直接组合调用链收口审计，未发现阻塞 finding。该状态只有在 PR #26 **当前 HEAD** 的 required CI 全绿时成立；对外报告前必须再次核验当前 HEAD，不能用更早提交的绿色结果替代。D/E 未开始。
+- L 开始时源码真源：`master` `3dc7d59a6d2fa4507e7daf326323ce40b5509ae3`，该提交已包含 A（PR #22）、B（PR #24）和 C（PR #25）。
 - C 开始时源码真源：`master` `3498eb64f9c87291254af821186e2974c9f7d3ec`，该提交已包含 A（PR #22）和 B（PR #24）。
 - 用户目标：先做好生成文章、发布文章；本计划不评估 GEO 优化效果。
 - 用户新增要求：已发布文章显示的时间应为实际发布时间，不是文章生成时间。
-- 当前线程授权仅覆盖 C 的实现、测试、提交、push、PR 与 CI 修复；不包含自动 merge，不进入 L/D/E，也不执行真实账号或生产发布操作。
-- 下一步：PR #25 等待评审/后续明确合并指令；本线程在确认当前 HEAD required checks 绿色后停止，不顺带开始 L/D/E。
+- 当前线程授权仅覆盖 L 的组合回归、收口审计、必要修复、计划 evidence、提交、push、PR 与 CI 修复；不包含自动 merge，不进入 D/E，也不执行真实账号或生产发布操作。
+- 下一步：核验 PR #26 当前 HEAD 的 required checks；全绿后仅报告 `L_READY_FOR_REVIEW`，PR 保持未合并，不顺带开始 D/E。
 
 本计划是本次优化的唯一范围、进度与验证入口，不重新启动已完成的历史计划，也不改变文章生命周期 Wave Plan 中尚未完成的真实外部验收状态。
 
@@ -74,8 +75,8 @@
 | --- | --- | --- | --- |
 | A 批量投稿失败恢复 | `DONE`（PR #22 已合并） | 阻塞主操作链路 | 删除旁路投稿事实，失败和移出后的操作正确，行为测试通过。 |
 | B 已发布时间 | `DONE`（PR #24 已合并） | 用户明确需求；D1/D2 已确认 | 发布证据到列表闭合，展示与确认的排序筛选语义一致。 |
-| C 批量生成读取成本 | `READY FOR REVIEW`（PR #25；未合并） | 规模化风险 | 消除已证明的逐任务全库枚举，幂等、恢复、失效语义不退化，给出实测数据。 |
-| L 本地集成收口 | `PENDING` | 本地完成 gate | A/B/C 的直接组合回归、一次收口审计及必要有界复审闭合。 |
+| C 批量生成读取成本 | `DONE`（PR #25 已合并） | 规模化风险 | 消除已证明的逐任务全库枚举，幂等、恢复、失效语义不退化，给出实测数据。 |
+| L 本地集成收口 | `READY FOR REVIEW` | 本地完成 gate | A/B/C 的直接组合回归、一次收口审计及必要有界复审闭合；对外报告前必须确认 PR #26 当前 HEAD required CI 全绿。 |
 | D CI 执行去重 | `PENDING` | 非阻塞维护；不阻塞 A/B/C/L | 保持有效覆盖与 evidence 合同，重复执行减少且可证明。 |
 | E 真实平台验收 | `PENDING` | 外部授权 gate；独立于本地完成 | 获得当次明确授权并完成约定范围，不自动执行。 |
 
@@ -162,6 +163,24 @@ Owner：`src/content/content-store.js`、`content-identity-index.js`、`generati
 
 事件证据：identity lookup 本身不发 Renderer event，benchmark 的 `eventPayloads=0`；独立 generation snapshot event 基线为 100 events、0 follow-up IPC、0 batch file reads。该同步文件路径的 `performance.eventLoopUtilization()` 观测为 0，因此不将其宣传为有效生产延迟承诺。
 
+### L. 本地集成收口（2026-09-06）
+
+L 从当时 GitHub 最新 `master` `3dc7d59a6d2fa4507e7daf326323ce40b5509ae3` 建立独立分支 `codex/generation-publication-optimization-l-integration-closeout`。开始时已直接核实 A / B / C 均已合并：PR #22 → `9e440eebafc45408a4c309bb06ccbc9212c2dc67`，PR #24 → `3498eb64f9c87291254af821186e2974c9f7d3ec`，PR #25 → `3dc7d59a6d2fa4507e7daf326323ce40b5509ae3`。
+
+本次不是全仓 Primary Audit，只检查最终 A/B/C diff 与直接组合调用链：
+
+- A：`batch-regular-submission-coordinator` → `regular-queue-application` → `ArticleMutationCoordinator` / lifecycle projection / regular admission policy → OperationalStore 与 ContentStore。跨客户 partial result 只由 coordinator 编排；资格、active target、幂等和失败/uncertain 事实仍由权威生命周期 owner 决定。明确失败后可重新 admission；已成功项为 idempotent，不进入新的 fresh admission；未开始队列项移出后 active target 与 queue 同步清除并恢复投稿资格；uncertain 冻结文章、暂停组，只暴露人工确认 accepted / not accepted，不存在盲目自动 retry。
+- B：OperationalStore `applyFirstPublicationSuccess` / publication archive → `article-management-snapshot` → `article-history-logic` → `GeneratedArticlesView` / `GeneratedArticlesList` / `PublicationHistoryDrawer`。首次成功事实 first-wins / idempotent；迟到 accepted 不改写首个发布事实。已发布页的展示、排序、日期筛选、组内/组间“最新”统一使用 `firstPublishedAt` 及来源；缺失时显示“发布时间未记录”，不回退 `createdAt`；混合 `all` 仅已发布行改显示时间，仍走原生成时间分组/排序合同。
+- C：`generation-batch-runner` → ContentStore live `ContentIdentityIndex` → ArticleMutationCoordinator mutation session；composition 把 coordinator 与普通写路径接到同一个 ContentStore owner。runner 每任务已有文章恢复检查保留；identity cardinality 继续 `none / one / many` fail-closed；create/save/trash/restore/purge 的更新/移除/失效边界保持一致；每个 workspace 构造独立 ContentStore，不跨内容库复用索引。100 / 1,000 历史文章及 1,000-task 继续按 C 已建立的 bounded benchmark 合同验证，不重新故意执行病态旧实现完整基线。
+
+收口审计结果：**0 个阻塞 finding**。没有发现 `INTRODUCED_BY_CHANGE`、`CROSS_TICKET_INTERACTION` 或新增 `EXPOSED_PREEXISTING` 阻塞项；没有新增第二业务事实 owner、Renderer 旁路 writer、重复 publication owner、跨 workspace 永久 cache，或绕开 ContentStore identity owner 的合法写路径。错误、取消、暂停、恢复、重复 admission、发布竞争和 uncertain 路径仍 fail-closed。没有证据要求为“收口”重写 A/B/C，因此 L 不修改生产代码，也未触发 bounded re-audit。
+
+Evidence note：`PROCESS_EVIDENCE_GAP`（非代码 finding）。当前执行会话的通用容器无法解析 `github.com`，不能从 GitHub clone 仓库，所以没有把本地容器中的 `npm test` / `npm run test:integration` 等命令伪记为执行成功。计划允许在**同一最终 HEAD** 复用可信 GitHub CI。PR #26 的 CI #242 已在 HEAD `50ac219aa58795a3a4415a910a5f74ddd0caf4b6` 实际完成 `success`：`required/root-tests` 通过 `npm run test:desktop-core` 执行无 `--suite` 的测试全发现，再按仓库既有 exclusion 过滤特殊发布/容量组，因此对普通 core + integration 中 A/B/C 回归提供等价/超集 evidence；`npm test` 与 `npm run test:integration` **没有在该 HEAD 上被单独调用**，不能写成分别成功。`required/toolchain` 同一 HEAD 实际通过 lint、renderer/bridge/main typecheck、format check、renderer build，并由既有 workflow 额外通过 preload build；migration 与 packaging-contracts 也成功，但 L 未改 schema/打包，因此只作为现有 workflow 的额外 evidence。auth、auth-verification、desktop-security、link-security 全绿。
+
+CI #242 中 desktop-capacity-node24、auth-container、dependency-audit、desktop-artifact、desktop-migration-production-directory、installer-smoke、release-evidence、desktop-runtime-semantics 等 PR 条件 job 为 `skipped`，明确不计为成功。开始时 master 同 SHA 的 CI #241 `success` 与 Windows Installer #42 `success` 仅是基线参考，也不替代 L PR 最终 gate。
+
+最终 evidence 绑定规则：本计划状态提交本身会产生新的 PR HEAD，因此不把某个旧 run number 冒充“最终 HEAD”。L 对外报告前必须读取 PR #26 **当前 HEAD**，确认该 HEAD 的 required CI 全绿；该 PR checks 页面/commit status 是最后一笔不移动 Git HEAD 的权威 evidence。若当前 HEAD 不是上述 #242 的 SHA，则 #242 只作为前一代码等价提交的验证，不能单独满足完成 gate。D 未开始。E 未开始且未授权；没有操作真实账号、真实发布、图片上传、付费下单、生产迁移或 GEO 效果评估。
+
 ### D. CI 去重与维护成本（非阻塞）
 
 Owner：根 `.github/workflows/ci.yml`、应用 `package.json`、`scripts/run-tests.js`、`scripts/test-suites.json` 和直接 evidence scripts。
@@ -234,4 +253,5 @@ node --import ./media-workbench/node_modules/tsx/dist/loader.mjs --input-type=mo
 - 2026-09-06：C 将逐任务新建全库身份索引改为 ContentStore 实例级惰性 live index，并在 create/save/trash/restore/purge mutation seam 内维护或失效；bounded re-audit 同时关闭了 `ArticleMutationCoordinator` 绕过 ContentStore 导致 stale index 的合法写路径。
 - 2026-09-06：PR #25 run #237 取得真实 100/1,000 articles × 100 lookups 和 1,000-task 数据；该轮仅 3 个 benchmark 口径断言失败，其余 1932/1935 项通过。修正测试口径并限制持续 CI 不再重放病态旧实现后，代码 HEAD `196b008195cba77b8e6b5fe5b78f6d57f67f38af` 的 run #238 required jobs 全绿。
 - 2026-09-06：包含完整 C 证据的文档 HEAD `7d8e7986fc4f64b81ae4a9426a504476e9e936ca` 在 run #239 完成 SUCCESS；本次状态收口提交只修改本计划文字，合并前仍要求 PR 当前 HEAD required checks 绿色。
-- L/D/E 均未开始；未执行真实发布、生产账号操作或自动 merge。
+- 2026-09-06：C 已通过 PR #25 合并，master 为 `3dc7d59a6d2fa4507e7daf326323ce40b5509ae3`；L 从该真源建立独立分支并完成 A/B/C 直接组合调用链收口审计。当前 0 个阻塞 finding，无生产代码修复、无 bounded re-audit。D 未开始，E 未开始且未授权，无真实外部副作用。
+- 2026-09-06：L PR #26 的 CI #242 在 HEAD `50ac219aa58795a3a4415a910a5f74ddd0caf4b6` 完整 `success`：全测试发现/root-tests、migration、toolchain、packaging-contracts 以及 auth/auth-verification/desktop-security/link-security 均成功；PR 条件 skipped jobs 未计为成功。本次随后只提交 L 状态/evidence 文档，因此对外报告前仍必须以 PR #26 当前 HEAD 的 required checks 再次复验，不能用 #242 替代移动后的 HEAD。
