@@ -73,6 +73,22 @@ function messageOf(value: unknown, fallback: string) {
   return value instanceof Error && value.message ? value.message : fallback;
 }
 
+function articleRefKey(ref: { clientId: string; articleId: string }) {
+  return `${ref.clientId}:${ref.articleId}`;
+}
+
+function taskIdsForArticleRefs(
+  candidates: BatchCandidate[],
+  articleRefs: Array<{ clientId: string; articleId: string }>,
+) {
+  const keys = new Set(articleRefs.map(articleRefKey));
+  return candidates
+    .filter((task) =>
+      keys.has(articleRefKey({ clientId: task.clientId, articleId: task.articleId })),
+    )
+    .map((task) => task.id);
+}
+
 export default function BatchRegularSubmissionDialog({
   open,
   batch,
@@ -221,44 +237,84 @@ export default function BatchRegularSubmissionDialog({
       });
       if (!accepted) return;
 
-      const result = await admitBatchRegularSubmission(
-        { articleRefs, platformId, accountProfileId },
-        { admitRegularQueueItems },
-      );
-      try {
-        const key = `auto-publish:batch-admitted:${batch.id}`;
-        const previous = JSON.parse(localStorage.getItem(key) || "[]");
-        const next = new Set(Array.isArray(previous) ? previous : []);
-        articleRefs.forEach((ref) => next.add(`${ref.clientId}:${ref.articleId}`));
-        localStorage.setItem(key, JSON.stringify([...next]));
-      } catch (_) {}
+      const result = preview.queueableArticleRefs.length
+        ? await admitBatchRegularSubmission(
+            {
+              articleRefs: preview.queueableArticleRefs,
+              platformId,
+              accountProfileId,
+            },
+            { admitRegularQueueItems },
+          )
+        : {
+            succeededClientIds: [],
+            failedClientIds: [],
+            uncertainClientIds: [],
+            invalidatedClientIds: [],
+            failures: [],
+            uncertain: [],
+            invalidations: [],
+            admittedCount: 0,
+            idempotentCount: 0,
+            missingCount: 0,
+            conflictCount: 0,
+          };
+
       void feature
         .refreshRegularQueueGroups("batch-submission-commit")
         .catch(() => undefined);
       void feature.refreshQueue("batch-submission-commit").catch(() => undefined);
 
-      if (result.failures.length) {
+      const totalIdempotentCount =
+        preview.idempotentCount + result.idempotentCount;
+      const previewBlocked = preview.missingCount + preview.conflictCount;
+      const hasOpenIssues = Boolean(
+        previewBlocked ||
+          result.failures.length ||
+          result.uncertain.length ||
+          result.invalidations.length,
+      );
+
+      if (hasOpenIssues) {
         const failedClients = new Set(result.failedClientIds);
+        const retryableRefs = preview.queueableArticleRefs.filter((ref) =>
+          failedClients.has(ref.clientId),
+        );
         setSelectedTaskIds(
-          new Set(
-            selectedCandidates
-              .filter((task) => failedClients.has(task.clientId))
-              .map((task) => task.id),
-          ),
+          new Set(taskIdsForArticleRefs(selectedCandidates, retryableRefs)),
         );
         setFeedback(
-          `已成功处理 ${result.succeededClientIds.length} 个客户，加入 ${result.admittedCount} 项，已存在跳过 ${result.idempotentCount} 项。`,
+          `已确认新增 ${result.admittedCount} 项，已存在跳过 ${totalIdempotentCount} 项。已成功的文章不会加入直接重试集合。`,
         );
-        setError(
-          `${result.failures.length} 个客户提交失败，已仅保留这些客户的文章勾选，可直接重试。首个错误：${result.failures[0].message}`,
-        );
+        const messages: string[] = [];
+        if (previewBlocked) {
+          messages.push(
+            `预检发现缺失 ${preview.missingCount} 项、冲突 ${preview.conflictCount} 项；这些文章未提交。`,
+          );
+        }
+        if (result.invalidations.length) {
+          messages.push(
+            `${result.invalidations.length} 个客户在确认后发生事实变化，未按成功处理，请重新预检当前投稿事实。`,
+          );
+        }
+        if (result.uncertain.length) {
+          messages.push(
+            `${result.uncertain.length} 个客户提交结果未知，未加入直接重试集合；请先重新检查当前投稿事实。`,
+          );
+        }
+        if (result.failures.length) {
+          messages.push(
+            `${result.failures.length} 个客户明确提交失败，已仅保留这些客户的可入队文章勾选，可再次检查后重试。首个错误：${result.failures[0].message}`,
+          );
+        }
+        setError(messages.join(" "));
         return;
       }
 
       onCommitted?.({
         admittedCount: result.admittedCount,
-        idempotentCount: result.idempotentCount,
-        clientCount: result.succeededClientIds.length,
+        idempotentCount: totalIdempotentCount,
+        clientCount: preview.actionableClientIds.length,
       });
       onClose();
     } catch (value) {
