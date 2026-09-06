@@ -86,10 +86,14 @@ it("Enter without a new message does not count as a confirmed send", async (t) =
     runtime: { open: async () => {}, evaluate: async (input) => {
       if (input.action === "send-question") sends += 1;
       try { return await new Function("page", `return (async () => {${input.script}})();`)(testPage); }
-      catch (error) { if (error.name === "TimeoutError") error.code = "PLAYWRIGHT_TIMEOUT"; throw error; }
+      catch (error) {
+        // The CLI maps inner action failure (not a killed process) to EXEC_FAILED.
+        if (error.name === "TimeoutError") error.code = "PLAYWRIGHT_EXEC_FAILED";
+        throw error;
+      }
     } }
   });
-  await assert.rejects(adapter.collect("测试问题"), { code: "DOUBAO_TIMEOUT" });
+  await assert.rejects(adapter.collect("测试问题"), { code: "PLAYWRIGHT_EXEC_FAILED" });
   assert.equal(sends, 1);
   const diagnostic = JSON.parse(fs.readFileSync(path.join(root, fs.readdirSync(root)[0]), "utf8"));
   assert.equal(diagnostic.phase, "send");
