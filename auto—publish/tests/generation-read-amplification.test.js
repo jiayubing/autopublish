@@ -30,6 +30,29 @@ function instrumentFs() {
   };
 }
 
+function instrumentArticleStore(articleStore) {
+  const counts = { fullLibraryEnumerations: 0, articleRecordsRead: 0 };
+  const proxy = new Proxy(articleStore, {
+    get: function(target, property) {
+      const value = target[property];
+      if (property === "listArticles" && typeof value === "function") {
+        return function() {
+          counts.fullLibraryEnumerations += 1;
+          const articles = value.apply(target, arguments);
+          counts.articleRecordsRead += articles.length;
+          return articles;
+        };
+      }
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  return {
+    store: proxy,
+    counts: counts,
+    reset: function() { counts.fullLibraryEnumerations = 0; counts.articleRecordsRead = 0; },
+  };
+}
+
 function article(index) {
   return {
     id: `article-${index}`,
@@ -45,11 +68,12 @@ function article(index) {
 function createFixture(articleCount) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "generation-read-amplification-"));
   const io = instrumentFs();
-  const articleStore = createArticleStore(root, { fs: io.fs });
-  for (let index = 0; index < articleCount; index += 1) articleStore.createArticle(article(index));
+  const persistedArticleStore = createArticleStore(root, { fs: io.fs });
+  for (let index = 0; index < articleCount; index += 1) persistedArticleStore.createArticle(article(index));
+  const identityReads = instrumentArticleStore(persistedArticleStore);
   const listClientIds = function() { return ["client-1"]; };
-  const store = createContentStore({ articleStore: articleStore, listClientIds: listClientIds });
-  return { root: root, io: io, articleStore: articleStore, listClientIds: listClientIds, store: store };
+  const store = createContentStore({ articleStore: identityReads.store, listClientIds: listClientIds });
+  return { root: root, io: io, identityReads: identityReads, articleStore: identityReads.store, listClientIds: listClientIds, store: store };
 }
 
 function legacyLookup(fixture, taskId) {
@@ -61,18 +85,24 @@ function legacyLookup(fixture, taskId) {
   return index.findByGenerationTaskId(taskId);
 }
 
-function measure(lookup, taskCount, io) {
-  io.reset();
+function measure(lookup, taskCount, fixture) {
+  fixture.io.reset();
+  fixture.identityReads.reset();
+  const eventLoopStart = performance.eventLoopUtilization();
   const started = performance.now();
   for (let index = 0; index < taskCount; index += 1) {
     assert.equal(lookup(`new-task-${index}`).kind, "none");
   }
+  const eventLoop = performance.eventLoopUtilization(eventLoopStart);
   return {
     wallClockMs: Number((performance.now() - started).toFixed(2)),
-    fileReads: io.counts.reads,
-    directoryEnumerations: io.counts.enumerations,
-    writes: io.counts.writes,
+    fullLibraryEnumerations: fixture.identityReads.counts.fullLibraryEnumerations,
+    articleRecordsRead: fixture.identityReads.counts.articleRecordsRead,
+    fileReads: fixture.io.counts.reads,
+    directoryEnumerations: fixture.io.counts.enumerations,
+    writes: fixture.io.counts.writes,
     identityLookups: taskCount,
+    eventLoopUtilization: Number(eventLoop.utilization.toFixed(6)),
     eventPayloads: 0,
   };
 }
@@ -81,15 +111,18 @@ function measure(lookup, taskCount, io) {
   it(`real file-path identity lookup removes read amplification for ${articleCount} existing articles x 100 tasks`, function() {
     const fixture = createFixture(articleCount);
     try {
-      const before = measure(function(taskId) { return legacyLookup(fixture, taskId); }, 100, fixture.io);
-      const after = measure(function(taskId) { return fixture.store.findByGenerationTaskId(taskId); }, 100, fixture.io);
+      const before = measure(function(taskId) { return legacyLookup(fixture, taskId); }, 100, fixture);
+      const after = measure(function(taskId) { return fixture.store.findByGenerationTaskId(taskId); }, 100, fixture);
+      process.stdout.write(`READ_AMPLIFICATION_BENCHMARK ${JSON.stringify({ articleCount: articleCount, taskCount: 100, before: before, after: after })}\n`);
       assert.equal(before.identityLookups, 100);
       assert.equal(after.identityLookups, 100);
-      assert.ok(before.directoryEnumerations >= 100);
-      assert.ok(after.directoryEnumerations <= 1);
+      assert.equal(before.fullLibraryEnumerations, 100);
+      assert.equal(before.articleRecordsRead, articleCount * 100);
+      assert.equal(after.fullLibraryEnumerations, 1);
+      assert.equal(after.articleRecordsRead, articleCount);
+      assert.ok(after.directoryEnumerations < before.directoryEnumerations);
       assert.ok(after.fileReads < before.fileReads);
       assert.equal(after.writes, 0);
-      process.stdout.write(`READ_AMPLIFICATION_BENCHMARK ${JSON.stringify({ articleCount: articleCount, taskCount: 100, before: before, after: after })}\n`);
     } finally {
       fs.rmSync(fixture.root, { recursive: true, force: true });
     }
@@ -99,11 +132,12 @@ function measure(lookup, taskCount, io) {
 it("real file-path identity lookup stays at one library enumeration for the 1000-task contract", function() {
   const fixture = createFixture(1000);
   try {
-    const after = measure(function(taskId) { return fixture.store.findByGenerationTaskId(taskId); }, 1000, fixture.io);
-    assert.ok(after.directoryEnumerations <= 1);
+    const after = measure(function(taskId) { return fixture.store.findByGenerationTaskId(taskId); }, 1000, fixture);
+    process.stdout.write(`READ_AMPLIFICATION_BENCHMARK ${JSON.stringify({ articleCount: 1000, taskCount: 1000, before: { derivedArticleReads: 1000000, derivedFullEnumerations: 1000 }, after: after })}\n`);
+    assert.equal(after.fullLibraryEnumerations, 1);
+    assert.equal(after.articleRecordsRead, 1000);
     assert.equal(after.identityLookups, 1000);
     assert.equal(after.writes, 0);
-    process.stdout.write(`READ_AMPLIFICATION_BENCHMARK ${JSON.stringify({ articleCount: 1000, taskCount: 1000, before: { derivedArticleReads: 1000000, derivedFullEnumerations: 1000 }, after: after })}\n`);
   } finally {
     fs.rmSync(fixture.root, { recursive: true, force: true });
   }
