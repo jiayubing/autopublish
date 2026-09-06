@@ -377,7 +377,6 @@ function installDesktopFixture(page, fixture) {
 
 async function openHistory(width = 1128, height = 527, fixtureOptions) {
   const page = await browser.newPage({ viewport: { width, height } });
-  page.setDefaultTimeout(5000);
   page.on("pageerror", (error) => process.stderr.write(`renderer page error: ${error.message}\n`));
   const fixture = createFixture(fixtureOptions);
   await installDesktopFixture(page, fixture);
@@ -401,7 +400,6 @@ describe("renderer history editor flow", { concurrency: false }, () => {
 
   it("opens on the current client's pending-submission articles without treating normal backlog as an alert", async () => {
     const page = await browser.newPage({ viewport: { width: 1128, height: 527 } });
-    page.setDefaultTimeout(5000);
     const fixture = createFixture();
     await installDesktopFixture(page, fixture);
     await page.addInitScript(() => {
