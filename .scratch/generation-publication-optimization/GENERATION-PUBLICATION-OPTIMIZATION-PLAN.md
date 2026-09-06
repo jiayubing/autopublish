@@ -199,7 +199,7 @@ Source / baseline：
 
 - D 从开始时 GitHub 最新 `master` `6374d9ae0732c4e45ab7eece8a88c25ce059185b` 创建独立分支 `codex/generation-publication-optimization-d-ci-dedup`；该 master 已包含 A/B/C/L。
 - 最新 master push CI 为 workflow run `34013548072` / run #244，`conclusion=success`；workflow 约 7m00s，desktop job 约 6m45s。
-- master desktop evidence：discovery `291` 个文件；`test:desktop-core` 实际选择 `281` 个 test file、3303 tests passed、`wallClockMs=206592`。`required/root-tests` 约 3m28s，migration 约 8s，toolchain 约 34s；desktop-security 约 3m21s，其中 production IPC matrix 约 2m31s。单次 runner 时长只作辅助证据，不能把 runner 波动宣传成确定性能提升。
+- master desktop evidence：discovery `291` 个文件；`test:desktop-core` 实际选择 `281` 个 test file、1935 tests passed、`wallClockMs=206592`。`required/root-tests` 约 3m28s，migration 约 8s，toolchain 约 34s；desktop-security 约 3m21s，其中 production IPC matrix 约 2m31s。单次 runner 时长只作辅助证据，不能把 runner 波动宣传成确定性能提升。
 
 真实执行地图与分类：
 
@@ -227,7 +227,7 @@ PR #27 首轮代码 HEAD `1d828483022d7ad2b7f4cb6386ab2eb28cdb0d97` 的真实 pu
 
 - 实际执行成功：`required/desktop-node24`、`required/auth-node22`、`required/auth-verification-node22`、`required/desktop-security-node24`、`required/link-security`。
 - desktop 内 `required/test-discovery`、`required/root-tests`、`required/migration-roundtrip`、`required/toolchain`、`required/packaging-contracts` 实际成功；desktop-security 内 media transport、diagnostics、production IPC matrix 实际成功。
-- PR artifact 证明 discovery `291 → 291` 不变；broad core `281 → 273` 个 test file，8 个目标文件全部从 core timing 消失。broad core assertions `3303 → 3188` 只表示这 115 个断言不再在 broad run 重跑，不是删除测试；它们的专属 owner 仍真实执行。
+- PR artifact 证明 discovery `291 → 291` 不变；broad core `281 → 273` 个 test file，8 个目标文件全部从 core timing 消失。broad core tests `1935 → 1820` 只表示这 115 个断言不再在 broad run 重跑，不是删除测试；它们的专属 owner 仍真实执行。
 - root timing 单次样本 `206592ms → 191980ms`，约减少 14.6s / 7.1%；这是辅助 wall-clock evidence，主要确定性收益是每个源码状态减少 **8 次重复 test-file execution**，以及 renderer lint/typecheck 从 toolchain 的两次等价执行收敛为 build 路径一次。
 - migration evidence 在 PR 仍真实 `PASSED`，约 8.06s；没有由 evidence 层替代测试。
 - PR workflow 约 5m06s，不能和 master push baseline 约 7m00s 直接宣传成 workflow 提速，因为 PR 天然跳过 push-only jobs。
