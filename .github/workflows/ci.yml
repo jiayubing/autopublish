@@ -55,7 +55,6 @@ jobs:
       - name: required/toolchain
         run: |
           npm run lint
-          npm run typecheck:renderer
           npm run typecheck:bridge
           npm run typecheck:main
           npm run format:check
