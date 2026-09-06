@@ -28,6 +28,7 @@ type GenerationIpcResponse<T> =
   { ok: true; data?: T } | { ok: false; error?: SafeGenerationIpcError };
 
 type GenerationPlanInput = {
+  concurrency?: number;
   clientIds: string[];
   templates: GenerationBatchTemplateSelection[];
   clientSources?: GenerationBatchSourceSelection[];

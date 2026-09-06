@@ -57,3 +57,24 @@ checks, external E2E, and real Auth recovery remain owner-controlled actions
 that require dry-run or explicit execution confirmation. Completed refactor
 branch plans and handoffs are historical Git evidence, not current operating
 instructions.
+
+## 批量生成与豆包采集
+
+批量生成向导在“检查生成来源”中提供 1–4 篇并发选择，新批次默认 4。
+预览和启动使用同一个选择；已有批次的暂停、继续、失败重试保持其已保存的并发数。
+并发表示同时进行的 AI 请求任务数，不保证模型吞吐量同比提升；遇到限流时应降低新批次并发。
+
+豆包继续按客户分组串行采集，同一客户复用对话。发送前先等待上一题结束，
+发送后确认页面出现本轮用户消息，再按该消息身份读取回答。普通聊天正文中的登录、
+验证码或网络错误字样不作为页面故障；真正的登录与验证界面仍需人工处理。
+
+采集超时、页面错误、发送失败或已识别的浏览器会话故障会保留本题失败并暂停剩余任务。
+检查页面后“继续”只执行尚未开始的任务，不自动重发失败题；批次结束后可用现有
+“重试失败”入口重新采集失败题。单题总期限仍为 120 秒，错误与诊断区分打开、切换对话、
+等待就绪、发送确认和等待回答阶段。已有成功回答的保存规则不变，不提供原批次重启恢复。
+
+相关定向回归（使用合成数据；页面测试需要已安装的 Playwright Chromium）：
+
+```text
+node --test tests/generation-concurrency-choice.test.js tests/doubao-session-recovery.test.js tests/doubao-page-interaction.test.js tests/renderer-generation-concurrency.test.js
+```

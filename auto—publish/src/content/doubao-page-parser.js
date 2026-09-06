@@ -104,13 +104,15 @@ function normalizePageSnapshot(raw) {
   return page;
 }
 
-function findAnswerForQuestion(snapshot, question) {
+function findAnswerForQuestion(snapshot, question, questionMessageId) {
   const page = normalizePageSnapshot(snapshot);
   const messages = Array.isArray(page.messages) ? page.messages : [];
   let questionIndex = -1;
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
-    if (message && message.role === "user" && message.text === question) {
+    if (message && message.role === "user" &&
+        (!questionMessageId || message.messageId === questionMessageId) &&
+        text(message.text).trim().replace(/\s+/g, " ") === text(question).trim().replace(/\s+/g, " ")) {
       questionIndex = index;
       break;
     }
@@ -129,17 +131,17 @@ function findAnswerForQuestion(snapshot, question) {
   throw parserError("DOUBAO_ANSWER_NOT_FOUND", "Assistant answer for the requested Doubao question was not found");
 }
 
-function selectAnswerForQuestion(snapshot, question) {
-  const found = findAnswerForQuestion(snapshot, question);
+function selectAnswerForQuestion(snapshot, question, questionMessageId) {
+  const found = findAnswerForQuestion(snapshot, question, questionMessageId);
   return {
     answerText: text(found.answer.text),
     references: normalizeReferences(found.answer.references)
   };
 }
 
-function getAnswerIdentity(snapshot, question) {
+function getAnswerIdentity(snapshot, question, questionMessageId) {
   try {
-    const found = findAnswerForQuestion(snapshot, question);
+    const found = findAnswerForQuestion(snapshot, question, questionMessageId);
     return {
       questionIndex: found.questionIndex,
       answerIndex: found.answerIndex,
@@ -153,13 +155,13 @@ function getAnswerIdentity(snapshot, question) {
   }
 }
 
-function isAnswerComplete(snapshot, question) {
+function isAnswerComplete(snapshot, question, questionMessageId) {
   const page = snapshot && typeof snapshot === "object" ? snapshot : {};
   if (page.generating || page.challenge === true || text(page.errorText).trim()) return false;
 
   let answer;
   try {
-    answer = selectAnswerForQuestion(page, question);
+    answer = selectAnswerForQuestion(page, question, questionMessageId);
   } catch (error) {
     if (error.code === "DOUBAO_QUESTION_NOT_FOUND" || error.code === "DOUBAO_ANSWER_NOT_FOUND") return false;
     throw error;

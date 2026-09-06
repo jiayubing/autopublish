@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { reportDiagnostic } = require("../diagnostics/diagnostic-producer");
 
 const { DIRS, PW } = require("../../scripts/config");
 const { createPlaywrightRuntime, pwSessionConfig } = require("../core/playwright");
@@ -28,8 +29,9 @@ function defaultSleep(milliseconds) {
   return new Promise(function(resolve) { setTimeout(resolve, milliseconds); });
 }
 
-function timeoutError() {
-  return codedError("DOUBAO_TIMEOUT", "Doubao answer collection timed out after 120 seconds");
+function timeoutError(phase, elapsedMs) {
+  const labels = { open: "打开浏览器", conversation: "切换客户对话", ready: "等待上一题结束", send: "确认问题已发送", answer: "等待本题完整回答" };
+  return codedError("DOUBAO_TIMEOUT", "豆包采集超时：" + labels[phase] + "；本题已等待 " + Math.floor(elapsedMs / 1000) + " 秒。请检查页面后继续，失败题可单独重试。");
 }
 
 function isFreshAnswer(identity, baseline) {
@@ -52,15 +54,7 @@ function withTimeout(promise, milliseconds) {
 function inspectPageScript() {
   return [
     "return await page.evaluate(function() {",
-    "  var bodyText = document.body ? (document.body.innerText || '') : '';",
     "  var input = document.querySelector('textarea, input[type=\\\"text\\\"], [contenteditable=\\\"true\\\"]');",
-    "  var loginPattern = /(?:登录|登錄|立即登录|登录\\/注册|log\\s*in|login)/i;",
-    "  var logoutPattern = /(?:退出登录|登出|log\\s*out|logout)/i;",
-    "  var loginControls = Array.from(document.querySelectorAll('button, [role=\\\"button\\\"], a'));",
-    "  var loginRequired = loginControls.some(function(node) {",
-    "    var label = (node.innerText || node.textContent || node.getAttribute('aria-label') || '').trim();",
-    "    return loginPattern.test(label) && !logoutPattern.test(label);",
-    "  }) || (loginPattern.test(bodyText) && !logoutPattern.test(bodyText));",
     "  var visible = function(node) {",
     "    if (!node) return false;",
     "    var style = window.getComputedStyle ? window.getComputedStyle(node) : null;",
@@ -77,6 +71,21 @@ function inspectPageScript() {
     "    }",
     "    return true;",
     "  };",
+    "  var outsideMessages = function(node) {",
+    "    for (var current = node; current; current = current.parentElement) {",
+    "      if (current.getAttribute('data-message-id')) return false;",
+    "      if ((current.getAttribute('class') || '').split(/\\s+/).indexOf('v_list_row') !== -1) return false;",
+    "    }",
+    "    return true;",
+    "  };",
+    "  var statusRegions = Array.from(document.querySelectorAll('[role=\"dialog\"], [role=\"alert\"], [aria-modal=\"true\"], [class*=\"captcha\"], [id*=\"captcha\"]')).filter(function(node) { return outsideMessages(node) && visible(node); });",
+    "  var statusText = statusRegions.map(function(node) { return node.innerText || node.textContent || ''; }).join('\\n');",
+    "  var loginPattern = /^(?:登录|登錄|立即登录|登录\\s*[/／]\\s*注册|log\\s*in|login|sign\\s*in)$/i;",
+    "  var loginControls = Array.from(document.querySelectorAll('button, [role=\"button\"], a'));",
+    "  var loginRequired = loginControls.some(function(node) {",
+    "    var label = (node.innerText || node.textContent || node.getAttribute('aria-label') || '').trim();",
+    "    return outsideMessages(node) && visible(node) && loginPattern.test(label);",
+    "  });",
     "  var stopPattern = /(?:stop\\s+generating|停止生成|停止回答)/i;",
     "  var controls = Array.from(document.querySelectorAll('button, [role=\\\"button\\\"]'));",
     "  var generating = controls.some(function(node) {",
@@ -136,8 +145,8 @@ function inspectPageScript() {
     "      references: references",
     "    };",
     "  });",
-    "  var challenge = /验证码|安全验证|人机验证|captcha|challenge/i.test(bodyText);",
-    "  var errorMatch = bodyText.match(/(?:加载失败|出错了|服务异常|网络错误)[^\\n]*/i);",
+    "  var challenge = /验证码|安全验证|人机验证|captcha|challenge/i.test(statusText);",
+    "  var errorMatch = statusText.match(/(?:加载失败|出错了|服务异常|网络错误)[^\\n]*/i);",
     "  return {",
     "    url: location.href,",
     "    inputAvailable: !!input,",
@@ -154,11 +163,31 @@ function inspectPageScript() {
 function sendQuestionScript(questionJson) {
   return [
     "var question = " + questionJson + ";",
-    "var input = page.locator('textarea, input[type=\\\"text\\\"], [contenteditable=\\\"true\\\"]').first();",
+    "var knownIds = await page.evaluate(function() { return Array.from(document.querySelectorAll('[data-message-id]')).map(function(node) { return node.getAttribute('data-message-id'); }); });",
+    "var input = page.locator('textarea:visible, input[type=\"text\"]:visible, [contenteditable=\"true\"]:visible').first();",
     "await input.waitFor({ state: 'visible', timeout: 15000 });",
     "await input.fill(question);",
     "await input.press('Enter');",
-    "return { ok: true };"
+    "var acknowledgement = await page.waitForFunction(function(value) {",
+    "  var normalize = function(text) { return String(text || '').trim().replace(/\\s+/g, ' '); };",
+    "  var nodes = Array.from(document.querySelectorAll('[data-message-id]'));",
+    "  for (var index = nodes.length - 1; index >= 0; index -= 1) {",
+    "    var node = nodes[index];",
+    "    var id = node.getAttribute('data-message-id');",
+    "    if (!id || value.knownIds.indexOf(id) !== -1 || normalize(node.innerText || node.textContent) !== normalize(value.question)) continue;",
+    "    var role = (node.getAttribute('data-role') || node.getAttribute('data-message-role') || '').toLowerCase();",
+    "    var user = role === 'user' || role === 'human';",
+    "    if (!role) {",
+    "      for (var parent = node, depth = 0; parent && depth <= 8; parent = parent.parentElement, depth += 1) {",
+    "        if ((parent.getAttribute('class') || '').split(/\\s+/).indexOf('justify-end') !== -1) { user = true; break; }",
+    "      }",
+    "    }",
+    "    if (user) return id;",
+    "  }",
+    "  return false;",
+    "}, { question: question, knownIds: knownIds }, { timeout: 15000 });",
+    "try { return { ok: true, questionMessageId: await acknowledgement.jsonValue() }; }",
+    "finally { await acknowledgement.dispose(); }"
   ].join("\n");
 }
 
@@ -266,35 +295,21 @@ function createDoubaoBrowserAdapter(options) {
     return openingPromise;
   }
 
-  async function inspect(input) {
-    const evaluateInput = Object.assign({ action: "inspect-page", script: inspectPageScript() }, input || {});
-    await ensureSession({ timeoutMs: evaluateInput.timeoutMs });
-    let recovered = false;
-    while (true) {
-      try {
-        const snapshot = await runtime.evaluate(evaluateInput);
-        return normalizePageSnapshot(snapshot);
-      } catch (error) {
-        if (!error || error.code !== "PLAYWRIGHT_SESSION_NOT_OPEN" || recovered) throw error;
-        recovered = true;
-        sessionReady = false;
-        await ensureSession({ timeoutMs: evaluateInput.timeoutMs });
-      }
-    }
-  }
-
   async function inspectExistingSession(input) {
     const evaluateInput = Object.assign({ action: "inspect-page", script: inspectPageScript() }, input || {});
     try {
       const snapshot = await runtime.evaluate(evaluateInput);
       return normalizePageSnapshot(snapshot);
     } catch (error) {
-      if (error && error.code === "PLAYWRIGHT_SESSION_NOT_OPEN") sessionReady = false;
+      if (error && error.code === "PLAYWRIGHT_SESSION_NOT_OPEN") {
+        sessionReady = false;
+        activeClientId = null;
+      }
       throw error;
     }
   }
 
-  async function captureDiagnostic(code, snapshot, error) {
+  async function captureDiagnostic(code, snapshot, error, progress) {
     fs.mkdirSync(diagnosticsDir, { recursive: true });
     const stamp = safeTimestamp(now());
     const stem = stamp + "-" + String(code).replace(/[^a-zA-Z0-9_-]/g, "_") + "-" + diagnosticSequence++;
@@ -306,7 +321,8 @@ function createDoubaoBrowserAdapter(options) {
       capturedAt: now(),
       status: classifyPage(page).status,
       messageCount: Array.isArray(page.messages) ? page.messages.length : 0,
-      errorCode: error && error.code ? String(error.code) : ""
+      errorCode: error && error.code ? String(error.code) : "",
+      ...(progress || {})
     };
     fs.writeFileSync(jsonPath, JSON.stringify(summary, null, 2), "utf8");
     trimDiagnostics(diagnosticsDir, diagnosticsLimit);
@@ -323,17 +339,14 @@ function createDoubaoBrowserAdapter(options) {
     const pageState = classifyPage(snapshot);
     if (pageState.status === "login_required") {
       const error = codedError("DOUBAO_LOGIN_REQUIRED", "Doubao login is required");
-      await captureDiagnostic(error.code, snapshot, error);
       throw error;
     }
     if (pageState.status === "challenge") {
       const error = codedError("DOUBAO_CHALLENGE", "Doubao challenge requires human action");
-      await captureDiagnostic(error.code, snapshot, error);
       throw error;
     }
     if (pageState.status === "page_error") {
       const error = codedError("DOUBAO_PAGE_ERROR", "Doubao page reported an error");
-      await captureDiagnostic(error.code, snapshot, error);
       throw error;
     }
     return pageState;
@@ -356,7 +369,8 @@ function createDoubaoBrowserAdapter(options) {
         });
         activeClientId = clientId;
         return;
-      } catch (_) {
+      } catch (error) {
+        if (error && ["DOUBAO_TIMEOUT", "PLAYWRIGHT_TIMEOUT", "ETIMEDOUT"].includes(error.code)) throw error;
         conversationStore.remove(clientId);
       }
     }
@@ -384,89 +398,97 @@ function createDoubaoBrowserAdapter(options) {
     );
     if (!requestedQuestion.trim()) throw codedError("DOUBAO_INVALID_QUESTION", "Doubao question is required");
 
-    const deadline = clock() + timeoutMs;
+    const startedAt = clock();
+    const deadline = startedAt + timeoutMs;
+    let phase = "open";
+    let lastSnapshot = null;
+    let questionMessageId;
+    let sendConfirmed = false;
+    const timedOut = function() { return timeoutError(phase, clock() - startedAt); };
     const evaluateWithDeadline = async function(input) {
       const remaining = deadline - clock();
-      if (remaining <= 0) throw timeoutError();
-      try {
-        const evaluateInput = Object.assign({}, input, { timeoutMs: remaining });
-        const result = input.action === "inspect-page"
-          ? await inspect(evaluateInput)
-          : await runtime.evaluate(evaluateInput);
-        if (clock() >= deadline) throw timeoutError();
-        return result;
-      } catch (error) {
-        if (error && (error.code === "DOUBAO_TIMEOUT" || error.code === "PLAYWRIGHT_TIMEOUT" || error.code === "ETIMEDOUT") || clock() >= deadline) {
-          throw timeoutError();
-        }
-        throw error;
-      }
+      if (remaining <= 0) throw timedOut();
+      const evaluateInput = Object.assign({}, input, { timeoutMs: remaining });
+      // Do not silently reopen/navigate away from a question already sent.
+      const result = input.action === "inspect-page"
+        ? await inspectExistingSession(evaluateInput)
+        : await runtime.evaluate(evaluateInput);
+      if (clock() >= deadline) throw timedOut();
+      return result;
     };
-    const openRemaining = deadline - clock();
-    if (openRemaining <= 0) throw timeoutError();
+    const readPage = async function() {
+      lastSnapshot = await evaluateWithDeadline({ action: "inspect-page", script: inspectPageScript() });
+      await assertPageCollectable(lastSnapshot);
+      rememberClientConversation(clientId, lastSnapshot);
+      return lastSnapshot;
+    };
+    const waitForPoll = async function() {
+      const remaining = deadline - clock();
+      if (remaining <= 0) throw timedOut();
+      await sleep(Math.min(intervalMs, remaining));
+      if (clock() >= deadline) throw timedOut();
+    };
     try {
-      await ensureSession({ timeoutMs: openRemaining });
-    } catch (error) {
-      if (error && (error.code === "PLAYWRIGHT_TIMEOUT" || error.code === "ETIMEDOUT") || clock() >= deadline) {
-        throw timeoutError();
+      await ensureSession({ timeoutMs: timeoutMs });
+      if (clock() >= deadline) throw timedOut();
+      phase = "conversation";
+      await ensureClientConversation(clientId, evaluateWithDeadline);
+      phase = "ready";
+      let initialSnapshot = await readPage();
+      while (initialSnapshot.generating) {
+        await waitForPoll();
+        initialSnapshot = await readPage();
+      }
+      const baselineAnswer = getAnswerIdentity(initialSnapshot, requestedQuestion);
+      phase = "send";
+      const questionJson = JSON.stringify(requestedQuestion);
+      const sendResult = await evaluateWithDeadline({
+        action: "send-question",
+        questionJson: questionJson,
+        script: sendQuestionScript(questionJson)
+      });
+      if (!sendResult || sendResult.ok !== true) {
+        throw codedError("DOUBAO_SEND_FAILED", "豆包未确认问题已发送，请检查页面后重试。");
+      }
+      sendConfirmed = true;
+      questionMessageId = sendResult.questionMessageId;
+      phase = "answer";
+      let previousText = null;
+      let stableCount = 0;
+      while (true) {
+        const snapshot = await readPage();
+        const answerIdentity = getAnswerIdentity(snapshot, requestedQuestion, questionMessageId);
+        if (isFreshAnswer(answerIdentity, baselineAnswer) && isAnswerComplete(snapshot, requestedQuestion, questionMessageId)) {
+          const answer = selectAnswerForQuestion(snapshot, requestedQuestion, questionMessageId);
+          if (answer.answerText === previousText) stableCount += 1;
+          else { previousText = answer.answerText; stableCount = 1; }
+          if (stableCount >= 2) {
+            return { answerText: answer.answerText, references: answer.references, collectionMethod: "automatic", collectedAt: now() };
+          }
+        } else {
+          previousText = null;
+          stableCount = 0;
+        }
+        await waitForPoll();
+      }
+    } catch (cause) {
+      const error = (cause && ["DOUBAO_TIMEOUT", "PLAYWRIGHT_TIMEOUT", "ETIMEDOUT"].includes(cause.code)) || clock() >= deadline
+        ? timedOut() : cause;
+      const identity = getAnswerIdentity(lastSnapshot, requestedQuestion, questionMessageId);
+      try {
+        await captureDiagnostic(error.code || "DOUBAO_COLLECTION_FAILED", lastSnapshot, error, {
+          phase: phase, elapsedMs: Math.max(0, clock() - startedAt),
+          generating: Boolean(lastSnapshot && lastSnapshot.generating),
+          sendConfirmed: sendConfirmed, answerSeen: Boolean(identity)
+        });
+      } catch (_) {
+        reportDiagnostic({
+          code: "DOUBAO_DIAGNOSTIC_WRITE_FAILED", module: "doubao-browser-adapter", category: "storage",
+          operationId: "doubao-diagnostic", metadata: { phase: phase, outcome: "best-effort-failed" }
+        });
       }
       throw error;
     }
-    await ensureClientConversation(clientId, evaluateWithDeadline);
-    const initialSnapshot = await evaluateWithDeadline({ action: "inspect-page", script: inspectPageScript() });
-    await assertPageCollectable(initialSnapshot);
-    rememberClientConversation(clientId, initialSnapshot);
-    const baselineAnswer = getAnswerIdentity(initialSnapshot, requestedQuestion);
-    const questionJson = JSON.stringify(requestedQuestion);
-    const sendResult = await evaluateWithDeadline({
-      action: "send-question",
-      questionJson: questionJson,
-      script: sendQuestionScript(questionJson)
-    });
-    if (sendResult && sendResult.ok === false) {
-      throw codedError("DOUBAO_SEND_FAILED", "Doubao question could not be sent");
-    }
-
-    let previousText = null;
-    let stableCount = 0;
-    let lastSnapshot = null;
-
-    while (true) {
-      const snapshot = await evaluateWithDeadline({ action: "inspect-page", script: inspectPageScript() });
-      lastSnapshot = snapshot;
-      await assertPageCollectable(snapshot);
-      rememberClientConversation(clientId, snapshot);
-
-      const answerIdentity = getAnswerIdentity(snapshot, requestedQuestion);
-      if (isFreshAnswer(answerIdentity, baselineAnswer) && isAnswerComplete(snapshot, requestedQuestion)) {
-        const answer = selectAnswerForQuestion(snapshot, requestedQuestion);
-        if (answer.answerText === previousText) stableCount += 1;
-        else {
-          previousText = answer.answerText;
-          stableCount = 1;
-        }
-        if (stableCount >= 2) {
-          return {
-            answerText: answer.answerText,
-            references: answer.references,
-            collectionMethod: "automatic",
-            collectedAt: now()
-          };
-        }
-      } else {
-        previousText = null;
-        stableCount = 0;
-      }
-
-      const remaining = deadline - clock();
-      if (remaining <= 0) break;
-      await sleep(Math.min(intervalMs, remaining));
-      if (clock() >= deadline) break;
-    }
-
-    const error = timeoutError();
-    await captureDiagnostic(error.code, lastSnapshot, error);
-    throw error;
   }
 
   async function close() {
