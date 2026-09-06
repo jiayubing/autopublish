@@ -1,12 +1,17 @@
 name: Windows Installer
 
 on:
-  push:
+  workflow_run:
+    workflows:
+      - CI
     branches:
       - master
+    types:
+      - completed
   pull_request:
     paths:
       - .github/workflows/windows-installer.yml
+      - auto—publish/tests/ci-workflow-contract.test.js
   workflow_dispatch:
     inputs:
       ref:
@@ -19,6 +24,9 @@ permissions:
 
 jobs:
   installer:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
     runs-on: windows-latest
     env:
       CI_SYNTHETIC_ONLY: "1"
@@ -26,7 +34,7 @@ jobs:
       - name: Checkout requested ref
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref || github.ref }}
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.ref || github.ref }}
 
       - uses: actions/setup-node@v4
         with:
@@ -41,10 +49,12 @@ jobs:
         working-directory: auto—publish/media-workbench
 
       - name: Install Playwright Chromium
+        if: github.event_name == 'workflow_dispatch'
         run: npx playwright install chromium
         working-directory: auto—publish
 
       - name: Run desktop core tests
+        if: github.event_name == 'workflow_dispatch'
         run: npm run test:desktop-core
         working-directory: auto—publish
 
