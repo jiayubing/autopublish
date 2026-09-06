@@ -105,7 +105,7 @@ export default function GenerationBatchDetail({
         <button type="button" title="暂停批量生成" onClick={onPause} disabled={busy.pause || !running} className="task-icon-button"><Pause className="h-4 w-4" /></button>
         <button type="button" title="继续批量生成" onClick={onResume} disabled={busy.resume || active || !unfinished} className="task-icon-button"><Play className="h-4 w-4" /></button>
         <button type="button" title="结束当前批次" onClick={onAbandon} disabled={busy.abandon || anyCommandBusy || active || !unfinished} className="task-icon-button">结束</button>
-        <button type="button" title="重试失败任务" onClick={onRetry} disabled={busy.retry || active || !failed} className="task-icon-button"><RotateCcw className="h-4 w-4" /></button>
+        <button type="button" title="重试失败任务" onClick={onRetry} disabled={busy.retry || effectiveStatus !== 'failed' || !failed} className="task-icon-button"><RotateCcw className="h-4 w-4" /></button>
         <button type="button" title="永久取消待处理任务" onClick={() => void cancelPending()} disabled={anyCommandBusy || cancelBusy || counts.pending < 1} className="task-icon-button"><Ban className="h-4 w-4" /></button>
       </div>
     </div>

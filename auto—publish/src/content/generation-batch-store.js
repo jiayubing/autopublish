@@ -48,7 +48,11 @@ function createGenerationBatchStore(options) {
     const batch = getBatch(batchId);
     const task = batch.tasks.find(function (item) { return item.id === taskIdValue; });
     if (!task) throw storeError("GENERATION_TASK_NOT_FOUND", "Generation task was not found");
+    const configurationPaused = batch.status === "paused_configuration";
     update(task, batch);
+    // Task outcomes must not clear the batch-level reason while workers drain.
+    // Only an explicit batch transition can leave a configuration pause.
+    if (configurationPaused) batch.status = "paused_configuration";
     batch.counts = countsFor(batch.tasks);
     return writeBatch(batch);
   }
@@ -162,7 +166,10 @@ function createGenerationBatchStore(options) {
       batch.tasks.forEach(function (task) {
         if (task.status === "running") { task.status = "interrupted"; task.updatedAt = clock(); changed = true; }
       });
-      if (changed) { batch.status = "interrupted"; recovered.push(writeBatch(batch)); }
+      if (changed) {
+        if (batch.status !== "paused_configuration") batch.status = "interrupted";
+        recovered.push(writeBatch(batch));
+      }
     });
     return recovered.map(clone);
   }

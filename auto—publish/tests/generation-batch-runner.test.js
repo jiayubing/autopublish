@@ -453,3 +453,206 @@ describe("generation batch runner", function() {
     assert.equal(store.getBatch(batch.id).tasks.filter(function(task) { return task.status === "succeeded"; }).length, 50);
   });
 });
+
+// Exercise the real persisted owners together; the unit fixture above deliberately
+// keeps its task and batch transitions independent of the production store.
+describe("persisted generation configuration recovery", function() {
+  function deferred() {
+    let resolve;
+    const promise = new Promise(function(done) { resolve = done; });
+    return { promise, resolve };
+  }
+
+  function fixture(t, templateIds) {
+    const fs = require("node:fs");
+    const os = require("node:os");
+    const path = require("node:path");
+    const { createGenerationBatchStore } = require("../src/content/generation-batch-store");
+    const { createArticleStore } = require("../src/content/article-store");
+    const { createContentStore } = require("../src/content/content-store");
+    const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "generation-configuration-recovery-"));
+    const runtimes = [];
+    t.after(async function() {
+      try {
+        for (const runtime of runtimes.reverse()) await runtime.dispose();
+      } finally {
+        fs.rmSync(workspaceRoot, { recursive: true, force: true });
+      }
+    });
+    function openStore() { return createGenerationBatchStore({ workspaceRoot }); }
+    function openContentStore() {
+      return createContentStore({
+        articleStore: createArticleStore(workspaceRoot),
+        listClientIds: function() { return ["c1"]; }
+      });
+    }
+    const store = openStore();
+    const contentStore = openContentStore();
+    const batch = store.createBatch({
+      clientSources: [{ clientId: "c1", materialIds: ["brand.md"], researchQueryIds: ["q1"] }],
+      templates: templateIds.map(function(templateId) { return { platform: "ctrip", templateId }; }),
+      aiConfigFingerprint: "fp-original",
+      concurrency: 2
+    });
+    function article(task) {
+      return {
+        id: "article-" + task.templateId, clientId: task.clientId,
+        title: "Synthetic " + task.templateId, content: "Synthetic body",
+        status: "generated", createdAt: "2026-09-06T00:00:00.000Z",
+        generationBatchId: batch.id, generationTaskId: task.id,
+        platform: task.platform, templateId: task.templateId
+      };
+    }
+    return { store, contentStore, batch, article, openStore, openContentStore,
+      track: function(runtime) { runtimes.push(runtime); return runtime; } };
+  }
+
+  function waitForAbort(signal) {
+    return new Promise(function(_, reject) {
+      function abort() { reject(taskError("AI_ABORTED")); }
+      if (signal.aborted) abort();
+      else signal.addEventListener("abort", abort, { once: true });
+    });
+  }
+
+  it("retains configuration pause after a concurrent abort and leaves the third task unclaimed", async function(t) {
+    const h = fixture(t, ["configuration", "interrupted", "pending"]);
+    const siblingStarted = deferred();
+    const calls = [];
+    const events = [];
+    const runner = h.track(createGenerationBatchRunner({
+      batchStore: h.store, contentStore: h.contentStore, concurrency: 2,
+      executeTask: async function(task, options) {
+        calls.push(task.templateId);
+        if (task.templateId === "configuration") {
+          await siblingStarted.promise;
+          throw taskError("AI_UNAUTHORIZED", 401);
+        }
+        if (task.templateId === "interrupted") {
+          const stopped = waitForAbort(options.signal);
+          siblingStarted.resolve();
+          return stopped;
+        }
+        throw new Error("An unclaimed task must not call AI after configuration pause");
+      }
+    }));
+    runner.subscribe(function(event) { events.push(event); });
+
+    const result = await runner.run(h.batch.id);
+
+    assert.equal(result.status, "paused_configuration");
+    assert.equal(runner.getState().status, "paused_configuration");
+    assert.deepEqual(result.tasks.map(function(task) { return task.status; }), ["failed", "interrupted", "pending"]);
+    assert.deepEqual(result.tasks.map(function(task) { return task.attempts; }), [1, 1, 0]);
+    assert.equal(result.tasks[0].error.code, "AI_UNAUTHORIZED");
+    assert.deepEqual(calls, ["configuration", "interrupted"]);
+    assert.equal(events.at(-1).status, "paused_configuration");
+    assert.equal(events.at(-1).batch.status, "paused_configuration");
+    assert.deepEqual(h.openStore().getBatch(h.batch.id), result);
+  });
+
+  it("resumes through the service with config confirmation without regenerating saved or successful articles", async function(t) {
+    const { createContentGenerationBatchService } = require("../desktop/services/content-generation-batch-service");
+    const h = fixture(t, ["saved", "configuration", "pending", "success"]);
+    const completedTask = h.batch.tasks[3];
+    h.contentStore.createArticle(h.article(completedTask));
+    h.store.markTaskRunning(h.batch.id, completedTask.id);
+    h.store.markTaskSucceeded(h.batch.id, completedTask.id, h.article(completedTask).id);
+    const saved = deferred();
+    const initialCalls = [];
+    const runner = h.track(createGenerationBatchRunner({
+      batchStore: h.store, contentStore: h.contentStore, concurrency: 2,
+      executeTask: async function(task, options) {
+        initialCalls.push(task.templateId);
+        if (task.templateId === "saved") {
+          // The article commit has succeeded, but the runner has not registered
+          // its result when the other worker stops this run.
+          h.contentStore.createArticle(h.article(task));
+          const stopped = waitForAbort(options.signal);
+          saved.resolve();
+          return stopped;
+        }
+        if (task.templateId === "configuration") {
+          await saved.promise;
+          throw taskError("AI_FORBIDDEN", 403);
+        }
+        throw new Error("Only the two active tasks may execute");
+      }
+    }));
+    const paused = await runner.run(h.batch.id);
+    assert.equal(paused.status, "paused_configuration");
+    assert.deepEqual(paused.tasks.map(function(task) { return task.status; }), ["interrupted", "failed", "pending", "succeeded"]);
+    assert.deepEqual(initialCalls, ["saved", "configuration"]);
+    const articlesBeforeResume = h.contentStore.listArticles("c1");
+    assert.equal(articlesBeforeResume.length, 2);
+    await runner.dispose();
+
+    const store = h.openStore();
+    const contentStore = h.openContentStore();
+    const resumedCalls = [];
+    const events = [];
+    let fingerprint = "fp-original";
+    const service = h.track(createContentGenerationBatchService({
+      batchStore: store, contentStore,
+      clientKnowledge: {}, materialStore: {}, researchStore: {}, templateStore: {},
+      aiProviderService: { getFingerprint: function() { return fingerprint; } },
+      aiClient: { complete: async function(messages) { resumedCalls.push(messages[0].content); return "Synthetic body"; } },
+      articleGeneratorFactory: function(deps) {
+        return { generateArticle: async function(input) {
+          await deps.aiClient.complete([{ role: "user", content: input.templateId }]);
+          return h.article(Object.assign({}, input, { id: input.generationTaskId }));
+        } };
+      }
+    }));
+    const terminal = deferred();
+    service.subscribe(function(event) {
+      events.push(event);
+      if (["completed", "failed", "paused_configuration", "interrupted"].includes(event.status)) terminal.resolve();
+    });
+    const pausedSnapshot = service.getRuntimeSnapshot();
+    assert.equal(pausedSnapshot.batch.status, "paused_configuration");
+    assert.equal(pausedSnapshot.capabilities.canContinue, true);
+    assert.equal(pausedSnapshot.capabilities.canRetry, false);
+    fingerprint = "fp-fixed";
+    await assert.rejects(service.resumeBatch({ batchId: h.batch.id }), { code: "GENERATION_AI_CONFIG_CHANGED" });
+    assert.deepEqual(resumedCalls, []);
+    assert.equal(store.getBatch(h.batch.id).status, "paused_configuration");
+
+    await service.resumeBatch({ batchId: h.batch.id, confirmConfigChange: true });
+    await terminal.promise;
+    // Let the service's existing promise finalizer release its run reservation.
+    await new Promise(function(resolve) { setImmediate(resolve); });
+
+    const snapshot = service.getRuntimeSnapshot();
+    assert.equal(snapshot.batch.status, "completed");
+    assert.equal(snapshot.runtime.status, "completed");
+    assert.equal(snapshot.capabilities.canContinue, false);
+    assert.equal(snapshot.capabilities.canRetry, false);
+    assert.deepEqual(resumedCalls.sort(), ["configuration", "pending"]);
+    assert.deepEqual(snapshot.batch.tasks.map(function(task) { return task.attempts; }), [1, 2, 1, 1]);
+    assert.ok(snapshot.batch.tasks.every(function(task) { return task.status === "succeeded"; }));
+    assert.equal(contentStore.listArticles("c1").length, 4);
+    for (const article of articlesBeforeResume) assert.deepEqual(contentStore.getArticle("c1", article.id), article);
+    assert.equal(contentStore.findByGenerationTaskId(h.batch.tasks[0].id).kind, "one");
+    assert.equal(events.some(function(event) { return event.status === "failed"; }), false);
+  });
+
+  it("preserves the configuration stop reason across late results and restart recovery", function(t) {
+    const h = fixture(t, ["configuration", "late-success", "late-failure", "in-flight"]);
+    for (const task of h.batch.tasks) h.store.markTaskRunning(h.batch.id, task.id);
+    h.store.markTaskFailed(h.batch.id, h.batch.tasks[0].id, taskError("AI_MODEL_NOT_FOUND"));
+    h.store.updateBatchStatus(h.batch.id, "paused_configuration");
+    h.contentStore.createArticle(h.article(h.batch.tasks[1]));
+    h.store.markTaskSucceeded(h.batch.id, h.batch.tasks[1].id, h.article(h.batch.tasks[1]).id);
+    assert.equal(h.store.getBatch(h.batch.id).status, "paused_configuration");
+    h.store.markTaskFailed(h.batch.id, h.batch.tasks[2].id, taskError("AI_EMPTY_RESPONSE"));
+    assert.equal(h.store.getBatch(h.batch.id).status, "paused_configuration");
+
+    const recovered = h.openStore().getBatch(h.batch.id);
+    assert.equal(recovered.status, "paused_configuration");
+    assert.deepEqual(recovered.tasks.map(function(task) { return task.status; }), ["failed", "succeeded", "failed", "interrupted"]);
+    assert.equal(recovered.tasks[0].error.code, "AI_MODEL_NOT_FOUND");
+    assert.equal(recovered.tasks[1].articleId, h.article(h.batch.tasks[1]).id);
+    assert.equal(recovered.tasks[2].error.code, "AI_EMPTY_RESPONSE");
+  });
+});
