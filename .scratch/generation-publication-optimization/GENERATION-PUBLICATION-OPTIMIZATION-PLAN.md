@@ -79,7 +79,7 @@
 | C 批量生成读取成本 | `DONE`（PR #25 已合并） | 规模化风险 | 消除已证明的逐任务全库枚举，幂等、恢复、失效语义不退化，给出实测数据。 |
 | L 本地集成收口 | `DONE`（PR #26 已合并） | 本地完成 gate | A/B/C 的直接组合回归、一次收口审计及必要有界复审闭合。 |
 | D CI 执行去重 | `READY FOR REVIEW`（以 PR #27 当前最终 HEAD required PR CI 全绿为条件） | 非阻塞维护；不阻塞 A/B/C/L | 保持有效覆盖与 evidence 合同，重复执行减少且可证明。 |
-| E 真实平台验收 | `PENDING` | 外部授权 gate；独立于本地完成 | 获得当次明确授权并完成约定范围，不自动执行。 |
+| E 真实平台验收 | `DONE`（2026-09-06） | 外部授权 gate；独立于本地完成 | 已按明确授权完成蓝色河畔、列举网真实验收；无图；结果已核对并记录。 |
 
 ### A. 批量投稿失败恢复
 
@@ -302,3 +302,4 @@ node --import ./media-workbench/node_modules/tsx/dist/loader.mjs --input-type=mo
 - 2026-09-06：C 已通过 PR #25 合并，master 为 `3dc7d59a6d2fa4507e7daf326323ce40b5509ae3`；L 从该真源建立独立分支并完成 A/B/C 直接组合调用链收口审计。当前 0 个阻塞 finding，无生产代码修复、无 bounded re-audit。D 未开始，E 未开始且未授权，无真实外部副作用。
 - 2026-09-06：L PR #26 的 CI #242 在 HEAD `50ac219aa58795a3a4415a910a5f74ddd0caf4b6` 完整 `success`：全测试发现/root-tests、migration、toolchain、packaging-contracts 以及 auth/auth-verification/desktop-security/link-security 均成功；PR 条件 skipped jobs 未计为成功。本次随后只提交 L 状态/evidence 文档，因此对外报告前仍必须以 PR #26 当前 HEAD 的 required checks 再次复验，不能用 #242 替代移动后的 HEAD。
 - 2026-09-06：L 已通过 PR #26 合并到 `master@6374d9ae0732c4e45ab7eece8a88c25ce059185b`。D 从该真源建立独立分支与 PR #27；首轮代码 HEAD `1d828483022d7ad2b7f4cb6386ab2eb28cdb0d97` 的 PR CI run #245 全绿，discovery 保持 291、broad core 281→273，确认减少 8 次重复 test-file execution；本计划提交后的最终 HEAD required PR CI 仍是最后 gate。E 未开始且未授权；未自动 merge，未进行真实账号/投稿/图片/付费/生产迁移/GEO 操作。
+- 2026-09-06：E 获得用户逐次明确授权并完成真实平台验收。蓝色河畔使用唯一账号发布 1 篇未发布文章、无图片，平台页面确认发布成功并记录确认发布时间 `2026-09-06 16:04:04`。列举网使用 BG1 完成直采人文章真实发布；随后鲁丽文章首次因城市目录同名入口链接导致本地准备失败，移除旧队列项并重新入队后复现。已在当前登录会话中确认洛阳合法发布地址为 `https://post.lieju.com/117/239`，根因是解析器遇到 `ly.lieju.com/post/239` 站点入口后提前失败；修复为跳过无效同名链接并继续寻找合法 `post.lieju.com/<cityId>/239`，无城市硬编码。新增回归测试后列举网解析测试 11 项全绿；鲁丽使用 BG1 重新发布成功。E 的授权范围未包含图片上传、付费下单、重复发布或 GEO 效果评估，以上均未执行。
