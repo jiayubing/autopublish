@@ -103,6 +103,41 @@ function createContentStore(options) {
     };
   });
 
+  // The mutation coordinator uses the same ContentStore-owned session seam so
+  // every file-backed article mutation keeps the cached identity view fresh.
+  if (typeof articleStore.openMutationSession === "function") {
+    api.openMutationSession = function(refs) {
+      const session = articleStore.openMutationSession(refs);
+      return Object.freeze({
+        refs: session.refs,
+        readArticle: session.readArticle.bind(session),
+        replaceArticle: function(ref, article, expectedFingerprint) {
+          const result = session.replaceArticle(ref, article, expectedFingerprint);
+          if (identityIndex) identityIndex.upsert(result);
+          return result;
+        },
+        moveArticleToTrash: function(ref, tombstone, operationId, expectedFingerprint) {
+          const result = session.moveArticleToTrash(ref, tombstone, operationId, expectedFingerprint);
+          if (identityIndex) identityIndex.remove(ref.clientId, ref.articleId);
+          return result;
+        },
+        isArticleTrashed: session.isArticleTrashed.bind(session),
+        getTrashedTombstone: session.getTrashedTombstone.bind(session),
+        restoreTrashedArticle: function(ref) {
+          const result = session.restoreTrashedArticle(ref);
+          if (identityIndex) identityIndex.upsert(result);
+          return result;
+        },
+        permanentlyDeleteTrashedArticle: function(ref, purgedAt) {
+          const result = session.permanentlyDeleteTrashedArticle(ref, purgedAt);
+          if (identityIndex) identityIndex.remove(ref.clientId, ref.articleId);
+          return result;
+        },
+        release: session.release.bind(session),
+      });
+    };
+  }
+
   return api;
 }
 
