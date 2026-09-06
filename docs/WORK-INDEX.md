@@ -4,7 +4,9 @@
 
 ## 当前执行入口
 
-- [文章生成与发布链路优化计划](../.scratch/generation-publication-optimization/GENERATION-PUBLICATION-OPTIMIZATION-PLAN.md)：`PENDING`；覆盖批量投稿失败恢复、已发布时间、批量生成读放大和非阻塞 CI 去重。不含 GEO 效果评估；时间语义 D1/D2 已确认，尚未授权实施或真实外部操作。
+- [AutoPublish 可靠性与批量能力改进计划](../.scratch/reliability-batch-follow-up/RELIABILITY-BATCH-FOLLOW-UP-PLAN.md)：本次仅执行 R2，R1 已由 PR #31 完成；详细状态、实测与验证由该计划 §11 维护。
+
+前序参考：[文章生成与发布链路优化计划](../.scratch/generation-publication-optimization/GENERATION-PUBLICATION-OPTIMIZATION-PLAN.md)，不作为本线程实施入口。
 
 ## 等待用户明确外部授权
 
