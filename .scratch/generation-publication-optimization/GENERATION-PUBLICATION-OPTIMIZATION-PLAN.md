@@ -3,12 +3,12 @@
 ## 1. 当前状态与授权
 
 - 创建日期：2026-09-05。
-- 状态：`PENDING`。本轮完成计划编写与问题取证，尚未实施修复。
-- 源码基线：`b2395db`；计划编写前 `master` 工作树干净，领先 `origin/master` 16 个提交。
+- 状态：`C_IN_REVIEW`。A/B 已合并到 `master`；C 已实现并提交 PR #25，等待本计划证据提交后的最终 HEAD CI 收口；L/D/E 未开始。
+- C 开始时源码真源：`master` `3498eb64f9c87291254af821186e2974c9f7d3ec`，该提交已包含 A（PR #22）和 B（PR #24）。
 - 用户目标：先做好生成文章、发布文章；本计划不评估 GEO 优化效果。
 - 用户新增要求：已发布文章显示的时间应为实际发布时间，不是文章生成时间。
-- 本次授权仅覆盖计划文档和必要只读取证；不包含实现、commit、merge、push、真实账号或生产操作。
-- 下一步：§3 的 D1/D2 已于 2026-09-06 获用户确认；获得实施指令后按 §4 串行推进。目前没有待用户决定的时间语义，不将产品确认视为实施或外部操作授权。
+- 当前线程授权仅覆盖 C 的实现、测试、提交、push、PR 与 CI 修复；不包含自动 merge，不进入 L/D/E，也不执行真实账号或生产发布操作。
+- 下一步：以 PR #25 文档证据提交后的最终 HEAD 为准完成 CI；C 关闭后停止，不顺带开始 L/D/E。
 
 本计划是本次优化的唯一范围、进度与验证入口，不重新启动已完成的历史计划，也不改变文章生命周期 Wave Plan 中尚未完成的真实外部验收状态。
 
@@ -72,9 +72,9 @@
 
 | 项 | 状态 | 性质 | 完成条件 |
 | --- | --- | --- | --- |
-| A 批量投稿失败恢复 | `PENDING` | 阻塞主操作链路 | 删除旁路投稿事实，失败和移出后的操作正确，行为测试通过。 |
-| B 已发布时间 | `PENDING` | 用户明确需求；D1/D2 已确认 | 发布证据到列表闭合，展示与确认的排序筛选语义一致。 |
-| C 批量生成读取成本 | `PENDING` | 规模化风险 | 消除已证明的逐任务全库枚举，幂等、恢复、失效语义不退化，给出实测数据。 |
+| A 批量投稿失败恢复 | `DONE`（PR #22 已合并） | 阻塞主操作链路 | 删除旁路投稿事实，失败和移出后的操作正确，行为测试通过。 |
+| B 已发布时间 | `DONE`（PR #24 已合并） | 用户明确需求；D1/D2 已确认 | 发布证据到列表闭合，展示与确认的排序筛选语义一致。 |
+| C 批量生成读取成本 | `IN REVIEW`（PR #25；实现已完成） | 规模化风险 | 消除已证明的逐任务全库枚举，幂等、恢复、失效语义不退化，给出实测数据。 |
 | L 本地集成收口 | `PENDING` | 本地完成 gate | A/B/C 的直接组合回归、一次收口审计及必要有界复审闭合。 |
 | D CI 执行去重 | `PENDING` | 非阻塞维护；不阻塞 A/B/C/L | 保持有效覆盖与 evidence 合同，重复执行减少且可证明。 |
 | E 真实平台验收 | `PENDING` | 外部授权 gate；独立于本地完成 | 获得当次明确授权并完成约定范围，不自动执行。 |
@@ -137,6 +137,30 @@ Owner：`src/content/content-store.js`、`content-identity-index.js`、`generati
 5. 不通过单纯提高并发、减少校验或忽略落盘失败掩盖读取问题。
 
 验收：已有 100 / 1,000 篇文章时各执行 100 个合成生成任务，对比读取次数；再测当前合同上限 1,000 个任务。相同环境记录墙钟时间、事件循环延迟、读取量、写入量和事件负载，不把本机结果宣传成生产吞吐承诺。保留成功任务不重生、暂停/取消、异常恢复和并发身份一致性回归。
+
+#### C 实施与证据（2026-09-06）
+
+实现保持既有事实 owner，不修改 `generation-batch-runner` 的每任务幂等检查：
+
+- `ContentStore` 每实例惰性建立一个 `ContentIdentityIndex`，后续 `findByGenerationTaskId` / operation identity 查询复用同一索引，不再逐任务全库重建。
+- `createArticle` / `saveArticle` 仅在文件持久化成功后增量 `upsert`；`moveArticleToTrash` 成功后从索引移除；restore / permanent-delete 等非热路径成功后失效索引并在下一次读取安全重建。
+- `ContentIdentityIndex` 继续保存 closed-cardinality 的 `none/one/many` 语义，不选择冲突候选，不降低重复身份保护。
+- `createGenerationTaskIndex` 保持独立新建的 snapshot seam，没有把 live cache 变成全局永久事实。
+- bounded re-audit 发现生产 `ArticleMutationCoordinator.createArticle()` 原先直接持有裸 `ArticleStore`，会让另一个合法生成入口绕过 live index。composition 已改为向 coordinator 注入同一个 `ContentStore` mutation seam；mutation session 内 create/replace/trash/restore 与普通 ContentStore 写入共享同一 identity view。
+- 每个 workspace/content-library 重新构造独立 `ContentStore`，索引不跨内容库共享；workspace switch 不依赖全局 cache 清理。
+- runner 的暂停、继续、取消、已有文章恢复、失败恢复和冲突控制流未改写，继续由既有 runner/store owner 和回归套件验证。
+
+真实临时目录 + 真实 `ArticleStore` 文件路径基线来自 PR #25 CI run #237（Windows / Node 24）。该轮虽然 benchmark 的“维护型写入必须为 0”错误断言导致 3 个测试失败，但失败前已完整记录旧实现与新实现的真实 I/O 数据；其余 1932 / 1935 项通过，新增 mutation-session freshness 回归也通过：
+
+| 场景 | 旧实现 | C 实现 | 结果 |
+| --- | --- | --- | --- |
+| 100 articles × 100 lookups | 69,984.9 ms；100 次全库扫描；10,000 条文章记录；40,000 file reads；20,100 directory enumerations；50,000 读路径维护写操作 | 460.57 ms；1 次全库扫描；100 条文章记录；400 file reads；201 directory enumerations；500 读路径维护写操作 | 全库扫描与文章读取 100× 收敛 |
+| 1,000 articles × 100 lookups | 490,673.82 ms；100 次全库扫描；100,000 条文章记录；400,000 file reads；200,100 directory enumerations；500,000 读路径维护写操作 | 4,738.61 ms；1 次全库扫描；1,000 条文章记录；4,000 file reads；2,001 directory enumerations；5,000 读路径维护写操作 | 全库扫描与文章读取 100× 收敛 |
+| 1,000 articles × 1,000 lookups | 按相同旧 owner 路径为 1,000 次全库扫描 / 1,000,000 条文章记录读取 | 5,076.35 ms；1 次全库扫描；1,000 条文章记录；4,000 file reads；2,001 directory enumerations；5,000 读路径维护写操作 | 当前 1,000-task 合同仍为单次建索引 |
+
+说明：上述“写入”不是业务文章写入，而是 `ArticleStore.listArticles()` 真实读取路径中的锁/事务维护 I/O。run #237 的失败暴露的是 benchmark 口径错误，不是生产逻辑失败。后续 benchmark 已把该指标明确为 `maintenanceWrites`，持续 CI 使用“一次真实旧路径扫描 + 线性旧成本模型 + 优化后完整 100 / 1,000-task 实跑”，避免每次 PR 故意重放已证明的约 10 分钟病态旧实现。run #238 在代码 HEAD `196b008195cba77b8e6b5fe5b78f6d57f67f38af` 上 required jobs 全绿，包括 desktop core/root tests、migration roundtrip、toolchain conformance、packaging contracts 和 production directory smoke。
+
+事件证据：identity lookup 本身不发 Renderer event，benchmark 的 `eventPayloads=0`；独立 generation snapshot event 基线为 100 events、0 follow-up IPC、0 batch file reads。该同步文件路径的 `performance.eventLoopUtilization()` 观测为 0，因此不将其宣传为有效生产延迟承诺。
 
 ### D. CI 去重与维护成本（非阻塞）
 
@@ -206,5 +230,8 @@ node --import ./media-workbench/node_modules/tsx/dist/loader.mjs --input-type=mo
 
 - 2026-09-05：完成范围收敛、用户时间需求登记、源码取证、确定性显示错误复现及计划编写；D1/D2 待用户确认。
 - 2026-09-06：用户回复“1.接受，2.同意”，D1/D2 已确认；更新本计划和工作索引，实施状态仍为 `PENDING`。未修改生产源码、未执行 Git 提交或真实外部操作。
-- 本轮未运行完整业务测试、打包和真实发布验收；仅修改计划与工作索引，不声称任何生产修复已完成。
-- 实施开始后在此追加各项实际源码状态、命令结果、发现和决定；不覆盖前一轮证据，也不将历史 PASS 当作新代码的验收。
+- 2026-09-06：A 已通过 PR #22 合并，B 已通过 PR #24 合并；C 从 `master` `3498eb64f9c87291254af821186e2974c9f7d3ec` 建立 `codex/generation-publication-optimization-c-read-amplification`，PR #25 仅治理批量生成 identity read amplification。
+- 2026-09-06：C 将逐任务新建全库身份索引改为 ContentStore 实例级惰性 live index，并在 create/save/trash/restore/purge mutation seam 内维护或失效；bounded re-audit 同时关闭了 `ArticleMutationCoordinator` 绕过 ContentStore 导致 stale index 的合法写路径。
+- 2026-09-06：PR #25 run #237 取得真实 100/1,000 articles × 100 lookups 和 1,000-task 数据；该轮仅 3 个 benchmark 口径断言失败，其余 1932/1935 项通过。修正测试口径并限制持续 CI 不再重放病态旧实现后，代码 HEAD `196b008195cba77b8e6b5fe5b78f6d57f67f38af` 的 run #238 required jobs 全绿。
+- 2026-09-06：本计划证据提交后仍须以 PR #25 新最终 HEAD 的 CI 为关闭依据；此前绿色代码 HEAD 仅作为可追溯证据，不冒充文档提交后的最终通过。
+- L/D/E 均未开始；未执行真实发布、生产账号操作或自动 merge。
