@@ -95,3 +95,36 @@ it("keeps identity indexes scoped to each ContentStore instance", function() {
   assert.equal(second.findByGenerationTaskId("first").kind, "none");
   assert.equal(second.findByGenerationTaskId("second").article.id, "b");
 });
+
+it("keeps mutation-session writes in the same live identity view", function() {
+  const ref = { clientId: "c", articleId: "a" };
+  let active = { id: "a", clientId: "c", generationTaskId: "task-old", title: "Old" };
+  let trashed = null;
+  const articleStore = {
+    listArticles: function() { return active ? [Object.assign({}, active)] : []; },
+    openMutationSession: function() {
+      return {
+        refs: [ref],
+        readArticle: function() { return active; },
+        replaceArticle: function(_ref, article) { active = Object.assign({}, article); return Object.assign({}, active); },
+        moveArticleToTrash: function() { trashed = active; active = null; return { clientId: "c", articleId: "a" }; },
+        isArticleTrashed: function() { return Boolean(trashed); },
+        getTrashedTombstone: function() { return { clientId: "c", articleId: "a" }; },
+        restoreTrashedArticle: function() { active = trashed; trashed = null; return Object.assign({}, active); },
+        permanentlyDeleteTrashedArticle: function() { trashed = null; return { clientId: "c", articleId: "a", permanentlyDeleted: true }; },
+        release: function() {},
+      };
+    },
+  };
+  const store = createContentStore({ listClientIds: () => ["c"], articleStore: articleStore });
+  assert.equal(store.findByGenerationTaskId("task-old").article.id, "a");
+  const session = store.openMutationSession([ref]);
+  session.replaceArticle(ref, Object.assign({}, active, { generationTaskId: "task-new", title: "New" }));
+  assert.equal(store.findByGenerationTaskId("task-old").kind, "none");
+  assert.equal(store.findByGenerationTaskId("task-new").article.title, "New");
+  session.moveArticleToTrash(ref, {});
+  assert.equal(store.findByGenerationTaskId("task-new").kind, "none");
+  session.restoreTrashedArticle(ref);
+  assert.equal(store.findByGenerationTaskId("task-new").article.id, "a");
+  session.release();
+});
