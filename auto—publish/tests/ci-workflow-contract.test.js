@@ -16,6 +16,12 @@ const workflowPath = path.join(
   "workflows",
   "ci.yml",
 );
+const installerWorkflowPath = path.join(
+  repositoryRoot,
+  ".github",
+  "workflows",
+  "windows-installer.yml",
+);
 const packageJson = JSON.parse(
   fs.readFileSync(path.join(applicationRoot, "package.json"), "utf8"),
 );
@@ -130,6 +136,32 @@ test("CI assigns specialized desktop tests and renderer typecheck to one ordinar
   assert.match(
     packageJson.scripts["build:renderer"],
     /npm --prefix media-workbench run lint && npm --prefix media-workbench run build/,
+  );
+});
+
+test("Windows installer reuses successful master CI instead of rerunning desktop core", () => {
+  assert.equal(fs.existsSync(installerWorkflowPath), true);
+  const workflow = fs.readFileSync(installerWorkflowPath, "utf8");
+  const installer = job(workflow, "installer");
+
+  assert.ok(workflow.includes("  workflow_run:"));
+  assert.ok(workflow.includes("      - CI"));
+  assert.ok(workflow.includes("      - master"));
+  assert.ok(workflow.includes("      - completed"));
+  assert.equal(workflow.includes("  push:"), false);
+  assert.ok(
+    installer.includes("github.event.workflow_run.conclusion == 'success'"),
+  );
+  assert.ok(installer.includes("github.event.workflow_run.head_sha"));
+  assert.ok(
+    installer.includes(
+      "- name: Run desktop core tests\n        if: github.event_name == 'workflow_dispatch'\n        run: npm run test:desktop-core",
+    ),
+  );
+  assert.ok(
+    installer.includes(
+      "- name: Install Playwright Chromium\n        if: github.event_name == 'workflow_dispatch'",
+    ),
   );
 });
 
