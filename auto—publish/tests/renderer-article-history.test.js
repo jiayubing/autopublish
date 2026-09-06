@@ -1,8 +1,12 @@
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 
+let articleMatchesLibraryDateRange;
 let groupArticlesByTemplate;
 let groupPublishedArticlesByTarget;
+let publishedArticleMatchesDateRange;
+let publishedTimeFactFromEvidence;
+let publishedTimeFactsByArticle;
 let resolveAvailableTemplateId;
 let summarizeTemplateSnapshot;
 let articleSelectionKey;
@@ -24,10 +28,26 @@ function item(id, platform, templateId, createdAt, overrides) {
   }, overrides || {});
 }
 
+function publishedArchive(articleId, targetSnapshotV1, firstPublishedAt, firstPublishedAtSource) {
+  return {
+    publicationId: "publication-" + articleId,
+    publicationEvidence: {
+      articleIdentityV1: { articleId },
+      targetSnapshotV1,
+      firstPublishedAt,
+      firstPublishedAtSource,
+    },
+  };
+}
+
 describe("article history grouping", async function() {
   const historyLogic = await import("../media-workbench/src/article-history-logic.js");
+  articleMatchesLibraryDateRange = historyLogic.articleMatchesLibraryDateRange;
   groupArticlesByTemplate = historyLogic.groupArticlesByTemplate;
   groupPublishedArticlesByTarget = historyLogic.groupPublishedArticlesByTarget;
+  publishedArticleMatchesDateRange = historyLogic.publishedArticleMatchesDateRange;
+  publishedTimeFactFromEvidence = historyLogic.publishedTimeFactFromEvidence;
+  publishedTimeFactsByArticle = historyLogic.publishedTimeFactsByArticle;
   resolveAvailableTemplateId = historyLogic.resolveAvailableTemplateId;
   summarizeTemplateSnapshot = historyLogic.summarizeTemplateSnapshot;
   articleSelectionKey = historyLogic.articleSelectionKey;
@@ -93,33 +113,21 @@ describe("article history grouping", async function() {
   });
 
   it("keeps all paid media in one published group and labels the media on each article", function() {
-    const first = item("paid-a", "generation-platform", "generation-template", "2026-07-15T00:00:00.000Z");
-    const second = item("paid-b", "generation-platform", "generation-template", "2026-07-14T00:00:00.000Z");
+    const first = item("paid-a", "generation-platform", "generation-template", "2026-07-14T00:00:00.000Z");
+    const second = item("paid-b", "generation-platform", "generation-template", "2026-07-15T00:00:00.000Z");
     const groups = groupPublishedArticlesByTarget(
       [first, second],
       [
-        {
-          publicationId: "publication-a",
-          publicationEvidence: {
-            articleIdentityV1: { articleId: first.id },
-            targetSnapshotV1: {
-              kind: "media",
-              mediaResourceId: "media-a",
-              mediaName: "中华网",
-            },
-          },
-        },
-        {
-          publicationId: "publication-b",
-          publicationEvidence: {
-            articleIdentityV1: { articleId: second.id },
-            targetSnapshotV1: {
-              kind: "media",
-              mediaResourceId: "media-b",
-              mediaName: "中国网",
-            },
-          },
-        },
+        publishedArchive(first.id, {
+          kind: "media",
+          mediaResourceId: "media-a",
+          mediaName: "中华网",
+        }, "2026-08-20T02:00:00.000Z", "provider_event_time"),
+        publishedArchive(second.id, {
+          kind: "media",
+          mediaResourceId: "media-b",
+          mediaName: "中国网",
+        }, "2026-08-20T01:00:00.000Z", "provider_event_time"),
       ],
       [],
     );
@@ -132,6 +140,78 @@ describe("article history grouping", async function() {
       [first.id]: "媒体：中华网",
       [second.id]: "媒体：中国网",
     });
+  });
+
+  it("sorts published groups and articles by reliable publication time with stable unknowns", function() {
+    const lieju = { kind: "platform", platformId: "lieju", platformName: "列举网" };
+    const hepan = { kind: "platform", platformId: "hepan", platformName: "蓝色河畔" };
+    const generatedEarlyPublishedLate = item("generated-early-published-late", "generation", "template", "2026-06-01T00:00:00.000Z");
+    const generatedLatePublishedEarly = item("generated-late-published-early", "generation", "template", "2026-08-20T00:00:00.000Z");
+    const unknownFirst = item("unknown-first", "generation", "template", "2026-09-10T00:00:00.000Z");
+    const unknownSecond = item("unknown-second", "generation", "template", "2026-09-11T00:00:00.000Z");
+    const otherGroupLatest = item("other-group-latest", "generation", "template", "2026-01-01T00:00:00.000Z");
+    const groups = groupPublishedArticlesByTarget(
+      [generatedEarlyPublishedLate, generatedLatePublishedEarly, unknownFirst, unknownSecond, otherGroupLatest],
+      [
+        publishedArchive(generatedEarlyPublishedLate.id, lieju, "2026-08-31T16:30:00.000Z", "first_positive_observation_time"),
+        publishedArchive(generatedLatePublishedEarly.id, lieju, "2026-08-31T15:30:00.000Z", "provider_event_time"),
+        publishedArchive(unknownFirst.id, lieju, null, "legacy_unavailable"),
+        publishedArchive(unknownSecond.id, lieju, null, "legacy_unavailable"),
+        publishedArchive(otherGroupLatest.id, hepan, "2026-09-01T02:00:00.000Z", "provider_event_time"),
+      ],
+      [],
+    );
+
+    assert.deepStrictEqual(groups.map((group) => group.key), ["published:platform:hepan", "published:platform:lieju"]);
+    assert.deepStrictEqual(groups[1].articles.map((article) => article.id), [
+      generatedEarlyPublishedLate.id,
+      generatedLatePublishedEarly.id,
+      unknownFirst.id,
+      unknownSecond.id,
+    ]);
+  });
+
+  it("filters published articles by Beijing publication date without generation-time fallback", function() {
+    const target = { kind: "platform", platformId: "lieju", platformName: "列举网" };
+    const facts = publishedTimeFactsByArticle([
+      publishedArchive("september-in-beijing", target, "2026-08-31T16:00:00.000Z", "provider_event_time"),
+      publishedArchive("august-in-beijing", target, "2026-08-31T15:59:59.999Z", "first_positive_observation_time"),
+      publishedArchive("unknown", target, null, "legacy_unavailable"),
+    ]);
+
+    assert.equal(publishedArticleMatchesDateRange("september-in-beijing", facts, "2026-09-01", "2026-09-01"), true);
+    assert.equal(publishedArticleMatchesDateRange("september-in-beijing", facts, "2026-08-31", "2026-08-31"), false);
+    assert.equal(publishedArticleMatchesDateRange("august-in-beijing", facts, "2026-08-31", "2026-08-31"), true);
+    assert.equal(publishedArticleMatchesDateRange("unknown", facts, "", ""), true);
+    assert.equal(publishedArticleMatchesDateRange("unknown", facts, "2026-09-01", "2026-09-01"), false);
+    assert.equal(
+      articleMatchesLibraryDateRange(
+        { id: "unknown", createdAt: "2026-09-01T12:00:00.000Z" },
+        "published",
+        facts,
+        "2026-09-01",
+        "2026-09-01",
+      ),
+      false,
+    );
+    assert.equal(
+      articleMatchesLibraryDateRange(
+        { id: "unknown", createdAt: "2026-09-01T12:00:00.000Z" },
+        "all",
+        facts,
+        "2026-09-01",
+        "2026-09-01",
+      ),
+      true,
+    );
+  });
+
+  it("maps the three reliable publication-time sources and fails closed for legacy time", function() {
+    const at = "2026-08-20T00:01:00.000Z";
+    assert.equal(publishedTimeFactFromEvidence({ firstPublishedAt: at, firstPublishedAtSource: "provider_event_time" }).label, "发布时间");
+    assert.equal(publishedTimeFactFromEvidence({ firstPublishedAt: at, firstPublishedAtSource: "first_positive_observation_time" }).label, "确认发布时间");
+    assert.equal(publishedTimeFactFromEvidence({ firstPublishedAt: at, firstPublishedAtSource: "manual_positive_evidence_time" }).label, "人工确认时间");
+    assert.equal(publishedTimeFactFromEvidence({ firstPublishedAt: null, firstPublishedAtSource: "legacy_unavailable" }), null);
   });
 
   it("falls back to a published history record when legacy data has no archive", function() {

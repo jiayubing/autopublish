@@ -1,5 +1,6 @@
 import React from "react";
 import { AlertTriangle, ExternalLink, X } from "lucide-react";
+import { publishedTimeFactFromEvidence } from "../../article-history-logic";
 import { formatBeijingTime } from "../../time-format";
 import type {
   PublicationArchiveEntry,
@@ -103,13 +104,16 @@ function publicationTime(
   record: PublicationHistoryRecord,
   evidence: PublicationEvidence | undefined,
 ): { label: string; value: string } {
-  if (evidence?.firstPublishedAt)
+  const fact = publishedTimeFactFromEvidence(evidence);
+  if (fact)
     return {
-      label:
-        evidence.firstPublishedAtSource === "manual_positive_evidence_time"
-          ? "人工确认时间"
-          : "确认/发布时间",
-      value: formatBeijingTime(evidence.firstPublishedAt),
+      label: fact.label,
+      value: formatBeijingTime(fact.firstPublishedAt),
+    };
+  if (record.status === "published")
+    return {
+      label: "发布时间",
+      value: "发布时间未记录",
     };
   return {
     label: "最近更新时间",
@@ -419,4 +423,3 @@ export default function PublicationHistoryDrawer({
     </div>
   );
 }
-

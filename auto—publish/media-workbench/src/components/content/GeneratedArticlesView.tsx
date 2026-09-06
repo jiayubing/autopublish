@@ -6,9 +6,11 @@ import React, {
   useState,
 } from "react";
 import {
+  articleMatchesLibraryDateRange,
   articleSelectionKey,
   groupArticlesByTemplate,
   groupPublishedArticlesByTarget,
+  publishedTimeFactsByArticle,
   selectableArticles,
 } from "../../article-history-logic";
 import type {
@@ -154,6 +156,10 @@ export default function GeneratedArticlesView({
     });
     return grouped;
   }, [publishedArchives]);
+  const publishedTimeFacts = useMemo(
+    () => publishedTimeFactsByArticle(publishedArchives),
+    [publishedArchives],
+  );
   const workflowByArticle = useMemo(
     () =>
       new Map(
@@ -208,17 +214,30 @@ export default function GeneratedArticlesView({
         workflowByArticle.get(article.id)?.stage === selectedStage;
       const batchMatches =
         !generationBatchId || article.generationBatchId === generationBatchId;
-      const createdDate = article.createdAt.slice(0, 10);
-      const createdFromMatches = !createdFrom || createdDate >= createdFrom;
-      const createdToMatches = !createdTo || createdDate <= createdTo;
+      const dateMatches = articleMatchesLibraryDateRange(
+        article,
+        selectedStage,
+        publishedTimeFacts,
+        createdFrom,
+        createdTo,
+      );
       const textMatches =
         !query ||
         `${article.title} ${article.content} ${article.platform} ${article.templateId} ${article.templateSnapshot?.name || ""} ${article.templateSnapshot?.scenario || ""} ${article.templateSnapshot?.body || ""}`
           .toLowerCase()
           .includes(query);
-      return stageMatches && batchMatches && textMatches && createdFromMatches && createdToMatches;
+      return stageMatches && batchMatches && textMatches && dateMatches;
     });
-  }, [articles, createdFrom, createdTo, filter, generationBatchId, selectedStage, workflowByArticle]);
+  }, [
+    articles,
+    createdFrom,
+    createdTo,
+    filter,
+    generationBatchId,
+    publishedTimeFacts,
+    selectedStage,
+    workflowByArticle,
+  ]);
   const groups = useMemo(
     () =>
       selectedStage === "published"
@@ -456,7 +475,11 @@ export default function GeneratedArticlesView({
             起始日期
             <input
               type="date"
-              aria-label="文章创建起始日期"
+              aria-label={
+                selectedStage === "published"
+                  ? "文章发布时间起始日期"
+                  : "文章创建起始日期"
+              }
               value={createdFrom}
               onChange={(event) => setCreatedFrom(event.target.value)}
               className="min-w-0 bg-transparent text-slate-700 outline-none"
@@ -466,7 +489,11 @@ export default function GeneratedArticlesView({
             结束日期
             <input
               type="date"
-              aria-label="文章创建结束日期"
+              aria-label={
+                selectedStage === "published"
+                  ? "文章发布时间结束日期"
+                  : "文章创建结束日期"
+              }
               value={createdTo}
               onChange={(event) => setCreatedTo(event.target.value)}
               className="min-w-0 bg-transparent text-slate-700 outline-none"
@@ -557,6 +584,8 @@ export default function GeneratedArticlesView({
           collapsed={collapsed}
           selected={selected}
           workflowByArticle={workflowByArticle}
+          publishedArchives={publishedArchives}
+          publishedView={selectedStage === "published"}
           isArticleSelectable={isArticleSelectable}
           isArticleSubmittable={canSubmitArticle}
           removalSubmitDisabled={removalSnapshot.removalSubmitDisabled}
@@ -612,4 +641,3 @@ export default function GeneratedArticlesView({
     </div>
   );
 }
-
