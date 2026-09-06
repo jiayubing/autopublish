@@ -27,6 +27,96 @@ function compareCreatedAt(left, right) {
   return time || String(right.id || "").localeCompare(String(left.id || ""));
 }
 
+const PUBLISHED_TIME_LABELS = Object.freeze({
+  provider_event_time: "发布时间",
+  first_positive_observation_time: "确认发布时间",
+  manual_positive_evidence_time: "人工确认时间",
+});
+
+export function publishedTimeFactFromEvidence(evidence) {
+  if (!evidence || typeof evidence !== "object") return null;
+  const firstPublishedAt =
+    typeof evidence.firstPublishedAt === "string"
+      ? evidence.firstPublishedAt.trim()
+      : "";
+  const firstPublishedAtSource =
+    typeof evidence.firstPublishedAtSource === "string"
+      ? evidence.firstPublishedAtSource
+      : "";
+  const label = PUBLISHED_TIME_LABELS[firstPublishedAtSource];
+  const timestamp = firstPublishedAt ? Date.parse(firstPublishedAt) : NaN;
+  if (!label || !Number.isFinite(timestamp)) return null;
+  return {
+    firstPublishedAt,
+    firstPublishedAtSource,
+    label,
+    timestamp,
+  };
+}
+
+export function publishedTimeFactsByArticle(publishedArchives) {
+  const facts = new Map();
+  (Array.isArray(publishedArchives) ? publishedArchives : []).forEach(function(entry) {
+    const articleId = entry?.publicationEvidence?.articleIdentityV1?.articleId;
+    if (!articleId || facts.has(articleId)) return;
+    facts.set(articleId, publishedTimeFactFromEvidence(entry.publicationEvidence));
+  });
+  return facts;
+}
+
+export function publishedArticleMatchesDateRange(
+  articleId,
+  publishedTimeFacts,
+  fromDate,
+  toDate,
+) {
+  if (!fromDate && !toDate) return true;
+  const fact = publishedTimeFacts instanceof Map
+    ? publishedTimeFacts.get(articleId)
+    : null;
+  if (!fact) return false;
+  if (fromDate) {
+    const start = Date.parse(String(fromDate) + "T00:00:00+08:00");
+    if (!Number.isFinite(start) || fact.timestamp < start) return false;
+  }
+  if (toDate) {
+    const end = Date.parse(String(toDate) + "T23:59:59.999+08:00");
+    if (!Number.isFinite(end) || fact.timestamp > end) return false;
+  }
+  return true;
+}
+
+export function articleMatchesLibraryDateRange(
+  article,
+  selectedStage,
+  publishedTimeFacts,
+  fromDate,
+  toDate,
+) {
+  if (!fromDate && !toDate) return true;
+  if (selectedStage === "published")
+    return publishedArticleMatchesDateRange(
+      article?.id,
+      publishedTimeFacts,
+      fromDate,
+      toDate,
+    );
+  const createdDate = String(article?.createdAt || "").slice(0, 10);
+  return (
+    (!fromDate || createdDate >= fromDate) &&
+    (!toDate || createdDate <= toDate)
+  );
+}
+
+function comparePublishedAt(left, right, publishedTimeFacts) {
+  const leftFact = publishedTimeFacts.get(left?.id) || null;
+  const rightFact = publishedTimeFacts.get(right?.id) || null;
+  if (leftFact && rightFact) return rightFact.timestamp - leftFact.timestamp;
+  if (leftFact) return -1;
+  if (rightFact) return 1;
+  return 0;
+}
+
 export function articleSelectionKey(article) {
   return String(article?.clientId || "") + "\u0000" + String(article?.id || "");
 }
@@ -169,13 +259,21 @@ export function groupPublishedArticlesByTarget(articles, publishedArchives, publ
     if (target.articleLabel) group.articleAnnotations[article.id] = target.articleLabel;
   });
 
+  const publishedTimeFacts = publishedTimeFactsByArticle(publishedArchives);
   const result = Array.from(groups.values());
-  result.forEach(function(group) { group.articles.sort(compareCreatedAt); });
+  result.forEach(function(group) {
+    group.articles.sort(function(left, right) {
+      return comparePublishedAt(left, right, publishedTimeFacts);
+    });
+  });
   result.sort(function(left, right) {
-    const leftLatest = left.articles[0]?.createdAt || "";
-    const rightLatest = right.articles[0]?.createdAt || "";
-    return String(rightLatest).localeCompare(String(leftLatest)) || left.key.localeCompare(right.key);
+    const leftLatest = publishedTimeFacts.get(left.articles[0]?.id) || null;
+    const rightLatest = publishedTimeFacts.get(right.articles[0]?.id) || null;
+    if (leftLatest && rightLatest)
+      return rightLatest.timestamp - leftLatest.timestamp;
+    if (leftLatest) return -1;
+    if (rightLatest) return 1;
+    return 0;
   });
   return result;
 }
-
