@@ -206,7 +206,7 @@ function createArticleManagementSnapshot(options) {
     );
     const revision = Number(getRevision()) || 0;
     const cacheKey = key(clientId, revision);
-    if (cache.has(cacheKey)) return clone(cache.get(cacheKey));
+    if (cache.has(cacheKey)) return JSON.parse(cache.get(cacheKey));
 
     const articles = await read(
       "listArticles",
@@ -233,6 +233,7 @@ function createArticleManagementSnapshot(options) {
         return article && (article.id || article.articleId);
       })
       .filter(Boolean);
+    const articleIdSet = new Set(articleIds);
     let publishedArchives = [];
     if (
       publishedArchiveQueries &&
@@ -247,7 +248,7 @@ function createArticleManagementSnapshot(options) {
           return (
             entry &&
             entry.publicationEvidence &&
-            articleIds.includes(
+            articleIdSet.has(
               entry.publicationEvidence.articleIdentityV1.articleId,
             )
           );
@@ -292,7 +293,6 @@ function createArticleManagementSnapshot(options) {
             },
             clientId,
           );
-    const articleIdSet = new Set(articleIds);
     const publicationRecords = (Array.isArray(recordsRaw) ? recordsRaw : [])
       .filter(function (record) {
         return record && articleIdSet.has(record.articleId);
@@ -375,8 +375,10 @@ function createArticleManagementSnapshot(options) {
         );
       return get(input, true);
     }
-    cache.set(cacheKey, snapshot);
-    return clone(snapshot);
+    // Store the existing JSON read model once; each caller still owns its copy.
+    const serialized = JSON.stringify(snapshot);
+    cache.set(cacheKey, serialized);
+    return JSON.parse(serialized);
   }
 
   function invalidate() {
