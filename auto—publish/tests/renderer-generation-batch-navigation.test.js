@@ -12,10 +12,10 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
 
   after(closeRenderer);
 
-  it("opens the article library with a batch filter without creating submission facts", async function () {
+  async function checkBatch(batchStatus) {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     page.setDefaultTimeout(8000);
-    await page.addInitScript(() => {
+    await page.addInitScript((batchStatus) => {
       const ok = (data) => Promise.resolve({ ok: true, data });
       const client = { id: "client-a", name: "客户 A", knowledgeFiles: [] };
       const article = {
@@ -82,7 +82,7 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
       };
       const batch = {
         id: "generation-batch-a",
-        status: "completed",
+        status: batchStatus,
         clientSources: [
           { clientId: client.id, materialIds: [], researchQueryIds: [] },
         ],
@@ -97,23 +97,23 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
             templateId: "fixture-template",
             materialIds: [],
             researchQueryIds: [],
-            status: "succeeded",
+            status: batchStatus === "completed" ? "succeeded" : "failed",
             attempts: 1,
             error: null,
-            articleId: article.id,
-            articleTitle: article.title,
+            articleId: batchStatus === "completed" ? article.id : null,
+            articleTitle: batchStatus === "completed" ? article.title : undefined,
           },
         ],
         counts: {
           total: 1,
-          succeeded: 1,
-          failed: 0,
+          succeeded: batchStatus === "completed" ? 1 : 0,
+          failed: batchStatus === "completed" ? 0 : 1,
           pending: 0,
           interrupted: 0,
           cancelled: 0,
         },
       };
-      const state = { managementReads: 0, submissionMutations: 0 };
+      const state = { managementReads: 0, submissionMutations: 0, resumeCalls: 0, retryCalls: 0 };
       const managementSnapshot = () => {
         state.managementReads += 1;
         return ok({
@@ -191,8 +191,8 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
         createAndStartGenerationBatch: () => ok({ batch }),
         pauseGenerationBatch: () => ok({ batch }),
         abandonGenerationBatch: () => ok({ batch }),
-        resumeGenerationBatch: () => ok({ batch }),
-        retryFailedGenerationBatch: () => ok({ batch }),
+        resumeGenerationBatch: () => { state.resumeCalls += 1; return ok({ batch }); },
+        retryFailedGenerationBatch: () => { state.retryCalls += 1; return ok({ batch }); },
         previewCancelPendingGenerationBatch: () => ok({ canCancel: false, pendingCount: 0, runningCount: 0 }),
         cancelPendingGenerationBatch: () => ok({ batch }),
         getGenerationRuntimeSnapshot: () =>
@@ -201,7 +201,7 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
             sequence: 1,
             runtime: { status: "idle", state: "idle", batchId: null },
             batch,
-            capabilities: {},
+            capabilities: { canContinue: batchStatus !== "completed", canResume: batchStatus !== "completed", canRetry: batchStatus === "failed" },
           }),
         onGenerationBatchState: () => () => {},
       };
@@ -260,7 +260,7 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
         content,
       };
       window.__generationBatchNavigation = state;
-    });
+    }, batchStatus);
     try {
       await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
       assert.deepEqual(
@@ -279,6 +279,27 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
       assert.equal(await page.locator("#nav-item-workbench").count(), 0);
       await page.locator("#nav-item-content-production").click();
       await page.getByRole("button", { name: "批量生成", exact: true }).click();
+      if (batchStatus !== "completed") {
+        const detail = page.locator(".generation-batch-detail");
+        await detail.waitFor();
+        assert.ok((await detail.textContent()).includes("状态 " + batchStatus));
+        const resume = detail.getByTitle("继续批量生成", { exact: true });
+        const retry = detail.getByTitle("重试失败任务", { exact: true });
+        assert.equal(await resume.isEnabled(), true);
+        assert.equal(await detail.getByTitle("暂停批量生成", { exact: true }).isDisabled(), true);
+        assert.equal(await retry.isEnabled(), batchStatus === "failed");
+        if (batchStatus === "paused_configuration") {
+          await resume.click();
+          await page.waitForFunction(() => window.__generationBatchNavigation.resumeCalls === 1);
+          assert.equal(await page.evaluate(() => window.__generationBatchNavigation.retryCalls), 0);
+        } else {
+          await retry.click();
+          await page.waitForFunction(() => window.__generationBatchNavigation.retryCalls === 1);
+          assert.equal(await page.evaluate(() => window.__generationBatchNavigation.resumeCalls), 0);
+        }
+        assert.equal(await page.evaluate(() => window.__generationBatchNavigation.submissionMutations), 0);
+        return;
+      }
       const bulkSubmit = page.getByRole("button", { name: "批量投稿", exact: true });
       await bulkSubmit.waitFor();
       await bulkSubmit.click();
@@ -290,5 +311,14 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
     } finally {
       await page.close();
     }
+  }
+
+  it("opens the article library with a batch filter without creating submission facts", async function () {
+    await checkBatch("completed");
+  });
+
+  it("uses continue for configuration pause and reserves failed-only retry for ordinary failure", async function () {
+    await checkBatch("paused_configuration");
+    await checkBatch("failed");
   });
 });

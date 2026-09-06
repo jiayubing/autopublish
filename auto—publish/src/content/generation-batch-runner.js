@@ -256,8 +256,14 @@ function createGenerationBatchRunner(options) {
     pauseRequested = false;
     const work = (async function() {
       let batch = deps.batchStore.getBatch(batchId);
-      setState(batch, "running");
       const taskIds = batch.tasks.filter(function(task) { return selected(task, chosen); }).map(function(task) { return task.id; });
+      // The service has validated this explicit run, including config confirmation.
+      // Clear the previous stop reason before identity recovery, which can finish
+      // a task without claiming it or making another AI request.
+      if (taskIds.length > 0 && batch.status === "paused_configuration") {
+        batch = deps.batchStore.updateBatchStatus(batchId, "running");
+      }
+      setState(batch, "running");
       let nextIndex = 0;
       let configurationPaused = false;
       async function worker() {
