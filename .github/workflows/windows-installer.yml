@@ -11,7 +11,6 @@ on:
   pull_request:
     paths:
       - .github/workflows/windows-installer.yml
-      - auto—publish/tests/ci-workflow-contract.test.js
   workflow_dispatch:
     inputs:
       ref:
