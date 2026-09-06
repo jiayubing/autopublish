@@ -65,10 +65,12 @@ describe("doubao client-aware queue policy", function() {
     assert.equal(attempts, 2);
   });
 
-  it("retries failed tasks in place without growing the queue", async function() {
+  it("retries failed tasks in place without growing the queue", async function(t) {
     let allowSuccess = false;
+    const calls = [];
     const queue = createDoubaoCollectionQueue({
       collectOne: async function(input) {
+        calls.push(input.questionId);
         if (input.questionId === "q1" && !allowSuccess) {
           const error = new Error("temporary failure");
           error.code = "DOUBAO_PAGE_ERROR";
@@ -80,16 +82,35 @@ describe("doubao client-aware queue policy", function() {
       sleep: async function() {},
     });
 
-    const first = await queue.start([
+    t.after(() => queue.dispose());
+    const pausedOrCompleted = new Promise((resolve) => {
+      const unsubscribe = queue.subscribe((event) => {
+        if (event.type === "paused" || event.type === "completed") resolve(event);
+      });
+      t.after(unsubscribe);
+    });
+    const running = queue.start([
       { clientId: "client-a", questionId: "q1" },
       { clientId: "client-a", questionId: "q2" },
     ]);
+    // Page failures pause the shared conversation; only explicit resume runs q2.
+    assert.equal((await pausedOrCompleted).status, "paused");
+    const paused = queue.getState();
+    assert.deepEqual(paused.tasks.map((task) => task.status), ["failed", "pending"]);
+    assert.equal(paused.completed, 1);
+    assert.deepEqual(calls, ["q1"]);
+    const taskIds = paused.tasks.map((task) => task.id);
+    queue.resume();
+    const first = await running;
+    assert.deepEqual(calls, ["q1", "q2"]);
     assert.equal(first.total, 2);
     assert.equal(first.tasks.length, 2);
     assert.equal(first.tasks.filter((task) => task.status === "failed").length, 1);
 
     allowSuccess = true;
     const retried = await queue.retryFailed();
+    assert.deepEqual(calls, ["q1", "q2", "q1"]);
+    assert.deepEqual(retried.tasks.map((task) => task.id), taskIds);
     assert.equal(retried.total, 2);
     assert.equal(retried.tasks.length, 2);
     assert.equal(retried.completed, 2);
