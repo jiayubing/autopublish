@@ -24,15 +24,20 @@ function fixture(articleCount) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "article-snapshot-cost-"));
   let active = null;
   let store;
-  // Count real article-file reads, not list calls or inferred disk traffic.
+  // Observe real reads through ArticleStore's fs, including its lock bookkeeping.
+  // File reads are not physical disk/cache misses. Keep payload and lock I/O separate.
   const articleFs = new Proxy(fs, {
     get(target, property) {
       if (property !== "readFileSync") return target[property];
       return function(...args) {
         const result = target.readFileSync(...args);
         if (active) {
+          const size = Buffer.byteLength(result, "utf8");
           active.fileReads += 1;
-          active.fileBytes += Buffer.byteLength(result, "utf8");
+          active.fileBytes += size;
+          const kind = path.basename(String(args[0])) === "owner.json" ? "lock" : "article";
+          active[`${kind}FileReads`] += 1;
+          active[`${kind}FileBytes`] += size;
         }
         return result;
       };
@@ -122,7 +127,7 @@ function fixture(articleCount) {
     content.saveArticle({ ...article, title: `Editable version ${version}` });
   }
   async function measure(action, instrument) {
-    const counters = { queries: { articles: 0, trash: 0, facts: 0, archives: 0 }, queryResultBytes: 0, fileReads: 0, fileBytes: 0, sqlReads: 0, sqlRows: 0, sqlResultBytes: 0, serializations: 0, serializedBytes: 0 };
+    const counters = { queries: { articles: 0, trash: 0, facts: 0, archives: 0 }, queryResultBytes: 0, fileReads: 0, fileBytes: 0, articleFileReads: 0, articleFileBytes: 0, lockFileReads: 0, lockFileBytes: 0, sqlReads: 0, sqlRows: 0, sqlResultBytes: 0, serializations: 0, serializedBytes: 0 };
     if (instrument) {
       active = counters;
       statementPrototype.all = function(...args) { return observeRows(originalAll.apply(this, args)); };
@@ -191,13 +196,16 @@ for (const articleCount of [100, 1000]) {
           await read("switch", nextClient);
           assert.deepEqual(await read("switchBack", clientId), refreshed);
         }
-        assert.equal(costs.first.fileReads, articleCount * 2);
+        // Each article reads JSON + Markdown; lock release verifies owner.json twice.
+        assert.equal(costs.first.articleFileReads, articleCount * 2);
+        assert.equal(costs.first.lockFileReads, articleCount * 2);
+        assert.equal(costs.first.fileReads, costs.first.articleFileReads + costs.first.lockFileReads);
         assert.ok(costs.first.sqlReads > 0);
         assert.equal(costs.hit.fileReads, 0);
         assert.equal(costs.hit.sqlReads, 0);
         assert.deepEqual(costs.hit.queries, { articles: 0, trash: 0, facts: 0, archives: 0 });
         assert.deepEqual(costs.refresh.queries, costs.first.queries);
-        assert.equal(costs.refresh.fileBytes, costs.first.fileBytes);
+        assert.equal(costs.refresh.articleFileBytes, costs.first.articleFileBytes);
         const timing = Object.fromEntries(Object.entries(times).map(([phase, samples]) => {
           const sorted = [...samples].sort((a, b) => a - b);
           return [phase, { samples, medianMs: sorted[1], minMs: sorted[0], maxMs: sorted[2] }];
