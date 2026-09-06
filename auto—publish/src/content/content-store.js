@@ -28,6 +28,7 @@ function createContentStore(options) {
   const value = options || {};
   if (!value.articleStore || typeof value.articleStore.listArticles !== "function" || typeof value.listClientIds !== "function") throw new Error("CONTENT_STORE_INVALID");
   const articleStore = value.articleStore;
+  let identityIndex = null;
 
   function createIdentityIndex() {
     return createContentIdentityIndex({
@@ -38,23 +39,105 @@ function createContentStore(options) {
     });
   }
 
+  function getIdentityIndex() {
+    if (!identityIndex) identityIndex = createIdentityIndex();
+    return identityIndex;
+  }
+
+  function invalidateIdentityIndex() {
+    identityIndex = null;
+  }
+
   function resolveIdentities(input) {
     const request = input || {};
-    const index = createIdentityIndex();
+    const index = getIdentityIndex();
     return {
       articleIds: (request.articleIds || []).map(function(id) { return { id: id, result: index.findByArticleId(id) }; }),
       generationTaskIds: (request.generationTaskIds || []).map(function(id) { return { id: id, result: index.findByGenerationTaskId(id) }; })
     };
   }
 
-  function findByGenerationTaskId(id) { return createIdentityIndex().findByGenerationTaskId(id); }
-  function findByGenerationOperationId(id) { return createIdentityIndex().findByGenerationOperationId(id); }
-  function findByArticleId(id) { return createIdentityIndex().findByArticleId(id); }
-  const delegated = ["getArticle", "saveArticle", "createArticle", "listArticles", "moveArticleToTrash", "restoreTrashedArticle", "listTrashedArticles", "getTrashedTombstone", "permanentlyDeleteTrashedArticle", "isArticleTrashed", "isArticleRemoved"];
-  const api = { snapshotArticle, fingerprintArticle, resolveIdentities, findByGenerationTaskId, findByGenerationOperationId, findByArticleId, createGenerationTaskIndex: createIdentityIndex, supportsIdempotentRemovalOperation: articleStore.supportsIdempotentRemovalOperation === true };
-  delegated.forEach(function(name) {
+  function findByGenerationTaskId(id) { return getIdentityIndex().findByGenerationTaskId(id); }
+  function findByGenerationOperationId(id) { return getIdentityIndex().findByGenerationOperationId(id); }
+  function findByArticleId(id) { return getIdentityIndex().findByArticleId(id); }
+
+  const api = {
+    snapshotArticle,
+    fingerprintArticle,
+    resolveIdentities,
+    findByGenerationTaskId,
+    findByGenerationOperationId,
+    findByArticleId,
+    createGenerationTaskIndex: createIdentityIndex,
+    supportsIdempotentRemovalOperation: articleStore.supportsIdempotentRemovalOperation === true,
+  };
+
+  const readOnlyDelegated = ["getArticle", "listArticles", "listTrashedArticles", "getTrashedTombstone", "isArticleTrashed", "isArticleRemoved"];
+  readOnlyDelegated.forEach(function(name) {
     if (typeof articleStore[name] === "function") api[name] = articleStore[name].bind(articleStore);
   });
+
+  ["saveArticle", "createArticle"].forEach(function(name) {
+    if (typeof articleStore[name] !== "function") return;
+    api[name] = function() {
+      const result = articleStore[name].apply(articleStore, arguments);
+      if (identityIndex) identityIndex.upsert(result);
+      return result;
+    };
+  });
+
+  if (typeof articleStore.moveArticleToTrash === "function") {
+    api.moveArticleToTrash = function(clientId, articleId) {
+      const result = articleStore.moveArticleToTrash.apply(articleStore, arguments);
+      if (identityIndex) identityIndex.remove(clientId, articleId);
+      return result;
+    };
+  }
+
+  ["restoreTrashedArticle", "permanentlyDeleteTrashedArticle"].forEach(function(name) {
+    if (typeof articleStore[name] !== "function") return;
+    api[name] = function() {
+      const result = articleStore[name].apply(articleStore, arguments);
+      invalidateIdentityIndex();
+      return result;
+    };
+  });
+
+  // The mutation coordinator uses the same ContentStore-owned session seam so
+  // every file-backed article mutation keeps the cached identity view fresh.
+  if (typeof articleStore.openMutationSession === "function") {
+    api.openMutationSession = function(refs) {
+      const session = articleStore.openMutationSession(refs);
+      return Object.freeze({
+        refs: session.refs,
+        readArticle: session.readArticle.bind(session),
+        replaceArticle: function(ref, article, expectedFingerprint) {
+          const result = session.replaceArticle(ref, article, expectedFingerprint);
+          if (identityIndex) identityIndex.upsert(result);
+          return result;
+        },
+        moveArticleToTrash: function(ref, tombstone, operationId, expectedFingerprint) {
+          const result = session.moveArticleToTrash(ref, tombstone, operationId, expectedFingerprint);
+          if (identityIndex) identityIndex.remove(ref.clientId, ref.articleId);
+          return result;
+        },
+        isArticleTrashed: session.isArticleTrashed.bind(session),
+        getTrashedTombstone: session.getTrashedTombstone.bind(session),
+        restoreTrashedArticle: function(ref) {
+          const result = session.restoreTrashedArticle(ref);
+          if (identityIndex) identityIndex.upsert(result);
+          return result;
+        },
+        permanentlyDeleteTrashedArticle: function(ref, purgedAt) {
+          const result = session.permanentlyDeleteTrashedArticle(ref, purgedAt);
+          if (identityIndex) identityIndex.remove(ref.clientId, ref.articleId);
+          return result;
+        },
+        release: session.release.bind(session),
+      });
+    };
+  }
+
   return api;
 }
 

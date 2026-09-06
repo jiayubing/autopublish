@@ -34,7 +34,7 @@ function createContentLifecycleComposition(options) {
     });
   const articleRemovalTransitionPort = { execute: null };
   const articleMutationCoordinator = createArticleMutationCoordinator({
-    articleStore,
+    articleStore: contentStore,
     contentStore,
     publicationTransitions:
       value.publicationTransitions || value.operationalStore,

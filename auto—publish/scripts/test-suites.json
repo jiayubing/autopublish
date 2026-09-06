@@ -22,6 +22,7 @@
     "tests/client-image-selector.test.js",
     "tests/generation-batch-runner.test.js",
     "tests/generation-batch-store.test.js",
+    "tests/generation-read-amplification.test.js",
     "tests/generation-snapshot-event.test.js",
     "tests/prompt-builder.test.js",
     "tests/research-store.test.js",
