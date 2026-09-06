@@ -4,7 +4,7 @@
 
 ## 当前执行入口
 
-- 当前没有待执行的本地计划。
+- [文章生成与发布链路优化计划](../.scratch/generation-publication-optimization/GENERATION-PUBLICATION-OPTIMIZATION-PLAN.md)：`PENDING`；覆盖批量投稿失败恢复、已发布时间、批量生成读放大和非阻塞 CI 去重。不含 GEO 效果评估；时间语义 D1/D2 已确认，尚未授权实施或真实外部操作。
 
 ## 等待用户明确外部授权
 
