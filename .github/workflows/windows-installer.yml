@@ -33,7 +33,8 @@ jobs:
       - name: Checkout requested ref
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.ref || github.ref }}
+          # Package the PR branch itself, not the synthetic merge with master.
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.event_name == 'pull_request' && github.event.pull_request.head.sha || inputs.ref || github.ref }}
 
       - uses: actions/setup-node@v4
         with:
