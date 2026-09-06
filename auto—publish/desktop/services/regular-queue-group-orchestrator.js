@@ -44,13 +44,16 @@ function fail(code) {
   return error;
 }
 
-function diagnose(code, action) {
+function diagnose(code, action, causeCode) {
+  const metadata = { action };
+  if (typeof causeCode === "string" && /^[A-Z][A-Z0-9_]{1,127}$/.test(causeCode))
+    metadata.causeCode = causeCode;
   reportDiagnostic({
     code,
     module: "regular-queue-group-orchestrator",
     category: "storage",
     operationId: "regular-queue-group-orchestrator",
-    metadata: { action },
+    metadata,
   });
 }
 
@@ -295,7 +298,7 @@ function createRegularQueueGroupOrchestrator(options) {
       if (!outcomeService) throw error;
       const preparationOutcome = recoverablePreparationOutcome(error);
       if (preparationOutcome.errorCode === "REGULAR_PREPARATION_FAILED")
-        diagnose("REGULAR_PREPARATION_FAILED", "prepare-platform-submission");
+        diagnose("REGULAR_PREPARATION_FAILED", "prepare-platform-submission", error && error.code);
       return Object.freeze({
         ...preparationOutcome,
         transition: applyOutcome({

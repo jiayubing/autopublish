@@ -27,6 +27,10 @@ const {
 } = require("./packaging/renderer-smoke-probe");
 const { reportDiagnostic } = require("../src/diagnostics/diagnostic-producer");
 
+if (process.env.AUTO_PUBLISH_REMOTE_DEBUGGING === "1") {
+  app.commandLine.appendSwitch("remote-debugging-port", "9333");
+}
+
 const startupWorkspaceEnvironment = captureEnvironmentValue(
   process.env,
   "AUTO_PUBLISH_WORKSPACE",

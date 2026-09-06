@@ -184,12 +184,18 @@ function resolveLiejuCityTarget(html, customerCity) {
   const requestedCity = normalizedText(customerCity) || DEFAULT_CITY;
   const $ = cheerio.load(html);
   const links = $("a[href]").toArray();
+  let invalidRequestedCandidate = false;
+  let invalidAnyCandidate = false;
 
   function select(city, selection) {
     for (const link of links) {
       if (!normalizedText($(link).text()).includes(city)) continue;
       const target = cityTargetFromHref($(link).attr("href"));
-      if (!target) throw parserError("LIEJU_CITY_TARGET_INVALID");
+      if (!target) {
+        if (selection === "matched") invalidRequestedCandidate = true;
+        invalidAnyCandidate = true;
+        continue;
+      }
       return Object.freeze({ ...target, selection });
     }
     return null;
@@ -199,6 +205,8 @@ function resolveLiejuCityTarget(html, customerCity) {
   if (matched) return matched;
   const fallback = select(DEFAULT_CITY, "beijing_fallback");
   if (fallback) return fallback;
+  if (invalidRequestedCandidate || invalidAnyCandidate)
+    throw parserError("LIEJU_CITY_TARGET_INVALID");
   throw parserError("LIEJU_CITY_TARGET_UNAVAILABLE");
 }
 

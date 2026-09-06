@@ -166,6 +166,21 @@ test("Lieju city resolution uses the first DOM-order fuzzy match and falls back 
   assert.equal(Object.isFrozen(direct), true);
 });
 
+test("Lieju city resolution skips an invalid city-site link before the publish target", () => {
+  const target = parser.resolveLiejuCityTarget(
+    cityDirectory([
+      '<a href="https://ly.lieju.com/post/239">进入洛阳站»</a>',
+      '<a href="https://post.lieju.com/117/239">洛阳</a>',
+    ]),
+    "洛阳",
+  );
+  assert.deepEqual(target, {
+    cityId: "117",
+    url: "https://post.lieju.com/117/239",
+    selection: "matched",
+  });
+});
+
 test("Lieju city resolution rejects unsafe selected city targets", () => {
   assert.throws(
     () =>
