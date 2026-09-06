@@ -1,3 +1,4 @@
+# Temporary packaging trigger for A-stage verification; no build behavior change.
 name: Windows Installer
 
 on:
