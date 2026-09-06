@@ -3,13 +3,14 @@
 ## 1. 当前状态与授权
 
 - 创建日期：2026-09-05。
-- 状态：`L_READY_FOR_REVIEW`。A/B/C 已全部合并到 `master`；L 已完成直接组合调用链收口审计，未发现阻塞 finding。该状态只有在 PR #26 **当前 HEAD** 的 required CI 全绿时成立；对外报告前必须再次核验当前 HEAD，不能用更早提交的绿色结果替代。D/E 未开始。
+- 状态：A/B/C/L 已全部合并到 `master`。D 已完成最小实现、首轮 PR 真实 CI 与 bounded re-audit；对外 `D_READY_FOR_REVIEW` 仍以本计划状态提交后的 PR #27 **当前最终 HEAD** required PR CI 全绿为最后 gate。只能在 merge 后 master push 执行的门禁登记为 `POST_MERGE_PUSH_VALIDATION_PENDING`，PR 下的 `skipped` 不计为 success。E 未开始且未授权。
+- D 开始时源码真源：`master` `6374d9ae0732c4e45ab7eece8a88c25ce059185b`（PR #26 / L merge commit），该提交已包含 A（PR #22）、B（PR #24）、C（PR #25）和 L（PR #26）。
 - L 开始时源码真源：`master` `3dc7d59a6d2fa4507e7daf326323ce40b5509ae3`，该提交已包含 A（PR #22）、B（PR #24）和 C（PR #25）。
 - C 开始时源码真源：`master` `3498eb64f9c87291254af821186e2974c9f7d3ec`，该提交已包含 A（PR #22）和 B（PR #24）。
 - 用户目标：先做好生成文章、发布文章；本计划不评估 GEO 优化效果。
 - 用户新增要求：已发布文章显示的时间应为实际发布时间，不是文章生成时间。
-- 当前线程授权仅覆盖 L 的组合回归、收口审计、必要修复、计划 evidence、提交、push、PR 与 CI 修复；不包含自动 merge，不进入 D/E，也不执行真实账号或生产发布操作。
-- 下一步：核验 PR #26 当前 HEAD 的 required checks；全绿后仅报告 `L_READY_FOR_REVIEW`，PR 保持未合并，不顺带开始 D/E。
+- 当前线程授权仅覆盖 D 的 CI 去重、直接调用链/evidence 合同审计、必要最小修复、计划 evidence、提交、push、PR 与 CI 修复；不包含自动 merge，不进入 E，也不执行真实账号、真实投稿、图片上传、付费下单、生产迁移或 GEO 操作。
+- 下一步：核验 PR #27 本计划提交后的当前最终 HEAD required PR checks；全绿后报告 `D_READY_FOR_REVIEW` + `POST_MERGE_PUSH_VALIDATION_PENDING`，PR 保持未合并。
 
 本计划是本次优化的唯一范围、进度与验证入口，不重新启动已完成的历史计划，也不改变文章生命周期 Wave Plan 中尚未完成的真实外部验收状态。
 
@@ -69,15 +70,15 @@
 
 ## 4. 实施顺序与工作项
 
-本地产品修复顺序：`A → B → C → L`。D1/D2 已确认，不再存在对应决策阻塞。不得并行修改共享 owner。
+本地产品修复顺序：`A → B → C → L`；D 是其后的非阻塞维护优化。D1/D2 已确认，不再存在对应决策阻塞。不得并行修改共享 owner。
 
 | 项 | 状态 | 性质 | 完成条件 |
 | --- | --- | --- | --- |
 | A 批量投稿失败恢复 | `DONE`（PR #22 已合并） | 阻塞主操作链路 | 删除旁路投稿事实，失败和移出后的操作正确，行为测试通过。 |
 | B 已发布时间 | `DONE`（PR #24 已合并） | 用户明确需求；D1/D2 已确认 | 发布证据到列表闭合，展示与确认的排序筛选语义一致。 |
 | C 批量生成读取成本 | `DONE`（PR #25 已合并） | 规模化风险 | 消除已证明的逐任务全库枚举，幂等、恢复、失效语义不退化，给出实测数据。 |
-| L 本地集成收口 | `READY FOR REVIEW` | 本地完成 gate | A/B/C 的直接组合回归、一次收口审计及必要有界复审闭合；对外报告前必须确认 PR #26 当前 HEAD required CI 全绿。 |
-| D CI 执行去重 | `PENDING` | 非阻塞维护；不阻塞 A/B/C/L | 保持有效覆盖与 evidence 合同，重复执行减少且可证明。 |
+| L 本地集成收口 | `DONE`（PR #26 已合并） | 本地完成 gate | A/B/C 的直接组合回归、一次收口审计及必要有界复审闭合。 |
+| D CI 执行去重 | `READY FOR REVIEW`（以 PR #27 当前最终 HEAD required PR CI 全绿为条件） | 非阻塞维护；不阻塞 A/B/C/L | 保持有效覆盖与 evidence 合同，重复执行减少且可证明。 |
 | E 真实平台验收 | `PENDING` | 外部授权 gate；独立于本地完成 | 获得当次明确授权并完成约定范围，不自动执行。 |
 
 ### A. 批量投稿失败恢复
@@ -192,6 +193,51 @@ Owner：根 `.github/workflows/ci.yml`、应用 `package.json`、`scripts/run-te
 - 主进程 typecheck 当前只覆盖 composition TypeScript，应如实记录覆盖范围；本计划不全仓转换 JavaScript，也不新建仅用于让门禁显得完整的类型层。
 - 不把 auth-server、打包、安全和真实验收整套门禁强加到每次局部生成/UI 修改上；同样不能直接删除发布门禁。
 
+#### D 实施与证据（2026-09-06）
+
+Source / baseline：
+
+- D 从开始时 GitHub 最新 `master` `6374d9ae0732c4e45ab7eece8a88c25ce059185b` 创建独立分支 `codex/generation-publication-optimization-d-ci-dedup`；该 master 已包含 A/B/C/L。
+- 最新 master push CI 为 workflow run `34013548072` / run #244，`conclusion=success`；workflow 约 7m00s，desktop job 约 6m45s。
+- master desktop evidence：discovery `291` 个文件；`test:desktop-core` 实际选择 `281` 个 test file、3303 tests passed、`wallClockMs=206592`。`required/root-tests` 约 3m28s，migration 约 8s，toolchain 约 34s；desktop-security 约 3m21s，其中 production IPC matrix 约 2m31s。单次 runner 时长只作辅助证据，不能把 runner 波动宣传成确定性能提升。
+
+真实执行地图与分类：
+
+| 集合 | 当前/原执行位置 | 重复判断 | D 处理 | evidence / 条件 |
+| --- | --- | --- | --- | --- |
+| 4 个 migration tests | broad `test:desktop-core` + `required/migration-roundtrip`；其中 content-library / legacy 也由 link-security 在 link-capable 环境执行 | `REAL_DUPLICATE`（仅 core ↔ migration owner） | 从 broad core 排除，保留 migration 真执行；link-security 的独立语义不动 | migration evidence script 真正 `node --test`，非写死状态；PR/push desktop 均执行 |
+| 3 个 diagnostics tests | broad core + `required/diagnostics-static` | `REAL_DUPLICATE` | 从 broad core 排除 | desktop-security 真执行，PR/push 均执行 |
+| media transport test | broad core + `required/media-transport` | `REAL_DUPLICATE` | 从 broad core 排除 | desktop-security 真执行，PR/push 均执行 |
+| renderer typecheck | toolchain 显式 `typecheck:renderer`；`build:renderer` 又先执行同一个 `media-workbench run lint` | `REAL_DUPLICATE` | 删除 toolchain 的显式 renderer typecheck；`build:renderer` 保持 typecheck + build | 同一 Windows/Node24 desktop job、同一源码状态 |
+| production IPC matrix | 独立 `required/production-ipc-matrix`；原 broad core 已排除 | `NOT_DUPLICATE` | 保留 | desktop-security 独立安全/生产 IPC 语义 |
+| bridge typecheck / preload build | `typecheck:bridge` 与 `build:preload` 合同不同 | `NOT_DUPLICATE` | 均保留 | toolchain |
+| capacity | 两个 capacity 文件原已从 core 排除；另两个 generation 回归在 PR core 与 master push-only capacity evidence 都会执行 | `PUSH_ONLY_RELEASE_GATE` | 保留 PR core 覆盖，也保留 push-only capacity evidence；不为 push 节省时间牺牲 PR 检测 | `desktop-capacity` 仅 master push |
+| link-security | strict link capability verifier + 11 个 link-sensitive 行为测试，和 ordinary core/migration 有部分文件交集 | `INTENTIONAL_INDEPENDENT_GATE` | 完整保留 | 需要先证明 runner 具备真实 link/symlink 能力，再执行行为测试 |
+| packaging / auth / production smoke / artifact / dependency audit / release evidence | 独立行为或 release 语义 | `INTENTIONAL_INDEPENDENT_GATE` / `PUSH_ONLY_RELEASE_GATE` | 保留 | push-only 项不在 PR 中伪记成功 |
+
+实际修改仅 3 个实现/合同文件：
+
+1. `auto—publish/package.json`：给 broad `test:desktop-core` 增加 8 个已有专属 owner 的 exclusion（4 migration + 3 diagnostics + 1 media transport）。
+2. `.github/workflows/ci.yml`：toolchain 删除显式 `npm run typecheck:renderer`；保留 `npm run build:renderer`，其脚本仍先执行同一个 renderer lint/typecheck 再 build；bridge/main typecheck、format、preload build 均不变。
+3. `auto—publish/tests/ci-workflow-contract.test.js`：增加防回退合同，要求 8 个 specialized files 不回流 broad core、仍存在于各自专属脚本，并约束 renderer build 继续拥有 renderer typecheck。
+
+未修改 `run-tests.js` / `test-suites.json` 的发现逻辑；未建立第二套 suite 分类器、缓存系统、matrix generator 或 reusable-workflow 抽象；未修改 evidence writer，也没有用 `continue-on-error`、`|| true`、吞异常、写死 `PASSED` 代替本次被去重的测试执行。
+
+PR #27 首轮代码 HEAD `1d828483022d7ad2b7f4cb6386ab2eb28cdb0d97` 的真实 pull_request workflow run `34014799351` / run #245 完成 `success`：
+
+- 实际执行成功：`required/desktop-node24`、`required/auth-node22`、`required/auth-verification-node22`、`required/desktop-security-node24`、`required/link-security`。
+- desktop 内 `required/test-discovery`、`required/root-tests`、`required/migration-roundtrip`、`required/toolchain`、`required/packaging-contracts` 实际成功；desktop-security 内 media transport、diagnostics、production IPC matrix 实际成功。
+- PR artifact 证明 discovery `291 → 291` 不变；broad core `281 → 273` 个 test file，8 个目标文件全部从 core timing 消失。broad core assertions `3303 → 3188` 只表示这 115 个断言不再在 broad run 重跑，不是删除测试；它们的专属 owner 仍真实执行。
+- root timing 单次样本 `206592ms → 191980ms`，约减少 14.6s / 7.1%；这是辅助 wall-clock evidence，主要确定性收益是每个源码状态减少 **8 次重复 test-file execution**，以及 renderer lint/typecheck 从 toolchain 的两次等价执行收敛为 build 路径一次。
+- migration evidence 在 PR 仍真实 `PASSED`，约 8.06s；没有由 evidence 层替代测试。
+- PR workflow 约 5m06s，不能和 master push baseline 约 7m00s 直接宣传成 workflow 提速，因为 PR 天然跳过 push-only jobs。
+- PR 中 `auth-container`、`desktop-capacity`、`desktop-artifact`、`dependency-audit`、`release-evidence` 以及 desktop 的 production-directory-smoke 为 `skipped`；这些均**不计为 success**。
+- master push-only release 路径没有为验证 D 被自行 merge；workflow diff、既有 CI contract、evidence consumer/producer 检查及 master #244 baseline 证明静态合同未被破坏。只能在合并后 master push 真执行的部分登记：`POST_MERGE_PUSH_VALIDATION_PENDING`。
+
+Bounded re-audit 只覆盖 D diff、CI 直接调用链、test discovery/classification、evidence producer/consumer、PR/push 条件和直接 package scripts。结果：0 blocking finding；`INTRODUCED_BY_CHANGE=0`、`CROSS_TICKET_INTERACTION=0`、阻塞性 `EXPOSED_PREEXISTING=0`，无 escalation。D 没有修改 Renderer writer、业务事实 owner、文章生命周期、生成、投稿或发布时间产品语义。
+
+本计划状态提交会产生新的 PR HEAD，因此 run #245 只绑定前一个代码 HEAD，不能冒充文档后的最终 HEAD。对外报告 `D_READY_FOR_REVIEW` 前必须再次读取 PR #27 **当前最终 HEAD**，确认 required PR CI 全绿；该复验不改变 push-only 的 `POST_MERGE_PUSH_VALIDATION_PENDING` 状态。
+
 ## 5. 验证阶梯与收口
 
 实施时从 `auto—publish/` 运行，先定向、再集成，不在每次修复后重跑所有历史门禁。
@@ -209,7 +255,7 @@ Owner：根 `.github/workflows/ci.yml`、应用 `package.json`、`scripts/run-te
 
 本次前一轮审计已经识别的 findings，不重新开展全仓 Primary Audit。实施时验证修复 diff、直接调用链和不变量；L 做一次本计划集成收口。新增阻塞 finding 修复后仅作有界复审，扩大范围必须满足 Audit Protocol 的 escalation 条件。
 
-本地修复完成条件：A/B/C 的确认范围实现、失败路径安全、无新增事实 writer、关键交互及定向性能证据通过、阻塞 findings 关闭、最终源码验证和计划 evidence 一致。D 未执行可明确登记为后续非阻塞维护；E 未获授权须标注未验收，不能伪记完成。commit/merge 未授权时不执行，也不宣称 final clean-HEAD 发布 gate 已完成。
+A/B/C/L 已合并；D 的本地/PR 范围以本节和 D evidence 为准，最终 PR HEAD required checks 全绿后达到 `D_READY_FOR_REVIEW`。push-only 项在 PR 下不算通过，保持 `POST_MERGE_PUSH_VALIDATION_PENDING`；E 未获授权须标注未验收，不能伪记完成。自动 merge 未授权时不执行，也不宣称 master push-only release gate 已完成。
 
 ## 6. 真实平台验收前置条件
 
@@ -255,3 +301,4 @@ node --import ./media-workbench/node_modules/tsx/dist/loader.mjs --input-type=mo
 - 2026-09-06：包含完整 C 证据的文档 HEAD `7d8e7986fc4f64b81ae4a9426a504476e9e936ca` 在 run #239 完成 SUCCESS；本次状态收口提交只修改本计划文字，合并前仍要求 PR 当前 HEAD required checks 绿色。
 - 2026-09-06：C 已通过 PR #25 合并，master 为 `3dc7d59a6d2fa4507e7daf326323ce40b5509ae3`；L 从该真源建立独立分支并完成 A/B/C 直接组合调用链收口审计。当前 0 个阻塞 finding，无生产代码修复、无 bounded re-audit。D 未开始，E 未开始且未授权，无真实外部副作用。
 - 2026-09-06：L PR #26 的 CI #242 在 HEAD `50ac219aa58795a3a4415a910a5f74ddd0caf4b6` 完整 `success`：全测试发现/root-tests、migration、toolchain、packaging-contracts 以及 auth/auth-verification/desktop-security/link-security 均成功；PR 条件 skipped jobs 未计为成功。本次随后只提交 L 状态/evidence 文档，因此对外报告前仍必须以 PR #26 当前 HEAD 的 required checks 再次复验，不能用 #242 替代移动后的 HEAD。
+- 2026-09-06：L 已通过 PR #26 合并到 `master@6374d9ae0732c4e45ab7eece8a88c25ce059185b`。D 从该真源建立独立分支与 PR #27；首轮代码 HEAD `1d828483022d7ad2b7f4cb6386ab2eb28cdb0d97` 的 PR CI run #245 全绿，discovery 保持 291、broad core 281→273，确认减少 8 次重复 test-file execution；本计划提交后的最终 HEAD required PR CI 仍是最后 gate。E 未开始且未授权；未自动 merge，未进行真实账号/投稿/图片/付费/生产迁移/GEO 操作。
