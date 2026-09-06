@@ -138,6 +138,7 @@ function createContentGenerationBatchService(options) {
   let activeRun = null;
   let runner;
   let sourceCache = null;
+  let titleCache = null;
   const runtimeId = opts.runtimeId || crypto.randomUUID();
   let sequence = 0;
   const now = typeof opts.now === "function" ? opts.now : function() { return new Date().toISOString(); };
@@ -181,30 +182,39 @@ function createContentGenerationBatchService(options) {
     return title || null;
   }
 
-  function enrichBatch(batch) {
-    if (!batch || !Array.isArray(batch.tasks)) return batch;
-    const enriched = clone(batch);
-    if (typeof contentStore.getArticle !== "function") return enriched;
-
-    enriched.tasks = enriched.tasks.map(function(task) {
-      if (!task || task.status !== "succeeded" || !task.articleId) return task;
-      try {
-        const article = contentStore.getArticle(task.clientId, task.articleId);
-        const title = projectedArticleTitle(article && article.title);
-        return title
-          ? Object.assign({}, task, { articleTitle: title })
-          : task;
-      } catch (_) {
-        return task;
+  // Only mutate an owned projection, never the batch store's task objects.
+  function projectBatchTitles(batch, reuseTitles) {
+    if (!batch || !Array.isArray(batch.tasks) || typeof contentStore.getArticle !== "function") return batch;
+    const cache = titleCache && batch.id === activeBatchId ? titleCache : null;
+    batch.tasks.forEach(function(task) {
+      if (!task || task.status !== "succeeded" || !task.articleId) return;
+      const key = JSON.stringify([task.clientId, task.articleId]);
+      let title = null;
+      if (reuseTitles && cache && cache.has(key)) {
+        title = cache.get(key);
+      } else {
+        try {
+          const article = contentStore.getArticle(task.clientId, task.articleId);
+          title = projectedArticleTitle(article && article.title);
+        } catch (_) {
+          // Titles are optional display data; an explicit refresh retries them.
+        }
+        if (cache) cache.set(key, title);
       }
+      if (title) task.articleTitle = title;
+      else delete task.articleTitle;
     });
-    return enriched;
+    return batch;
   }
+
+  function enrichBatch(batch) {
+    // Public reads always refresh titles, including any active run's cache.
+    return projectBatchTitles(clone(batch), false);
+  }
+
   function emit(value) {
-    const source = value && value.batch
-      ? Object.assign({}, value, { batch: enrichBatch(value.batch) })
-      : value;
-    const event = safeEvent(source);
+    const event = safeEvent(value);
+    if (event.batch) projectBatchTitles(event.batch, true);
     if (!event.capabilities && event.batch) {
       event.capabilities = {
         canResume: canResume(event.batch),
@@ -372,6 +382,8 @@ function createContentGenerationBatchService(options) {
     const reservation = { batchId: batchId, selection: selection, promise: null };
     activeRun = reservation;
     activeBatchId = batchId;
+    // Service/workspace-local, limited to this batch and released on every run exit.
+    titleCache = new Map();
     try {
       const currentFingerprint = await fingerprint();
       if (selection === "unfinished" && currentFingerprint !== batch.aiConfigFingerprint && confirmConfigChange !== true) {
@@ -385,7 +397,7 @@ function createContentGenerationBatchService(options) {
         .then(function(result) {
           emitBatch(result, result && result.status);
           if (result && ["completed", "failed", "abandoned", "interrupted", "paused_configuration", "paused"].includes(result.status)) notifyData("GENERATION_BATCH_TERMINAL");
-          return enrichBatch(result);
+          return result;
         })
         .catch(function(error) {
           let failedBatch = null;
@@ -431,6 +443,7 @@ function createContentGenerationBatchService(options) {
             activeStatus = "idle";
             activeBatchId = null;
             sourceCache = null;
+            titleCache = null;
           }
         });
       reservation.promise = work;
@@ -441,6 +454,7 @@ function createContentGenerationBatchService(options) {
         activeStatus = "idle";
         activeBatchId = null;
         sourceCache = null;
+        titleCache = null;
       }
       throw error;
     }
@@ -571,6 +585,7 @@ function createContentGenerationBatchService(options) {
         });
       }
     }
+    titleCache = null;
     listeners.clear();
   }
 

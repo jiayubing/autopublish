@@ -16,7 +16,7 @@ const FIXED_TIME = "2026-09-06T00:00:00.000Z";
 const json = JSON.stringify;
 const turn = () => new Promise((resolve) => setImmediate(resolve));
 
-function createFixture(taskCount, concurrency) {
+function createFixture(taskCount, concurrency, beforeGenerate = null) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "generation-progress-cost-"));
   const counters = { eventBytes: 0 };
   let run;
@@ -79,6 +79,7 @@ function createFixture(taskCount, concurrency) {
       articleGeneratorFactory: () => ({
         async generateArticle(input) {
           count("aiCalls");
+          if (beforeGenerate) await beforeGenerate(input);
           return { id: "article-" + input.templateId, clientId: input.clientId,
             title: "Synthetic title " + input.templateId, content: "Synthetic body. ".repeat(64),
             status: "generated", createdAt: FIXED_TIME };
@@ -162,6 +163,7 @@ for (const taskCount of [10, 100]) {
           const firstLoad = await fixture.measure(() => fixture.service.getRuntimeSnapshot());
           const running = await fixture.measure(() => fixture.start(batch.id));
           assert.equal(running.aiCalls, taskCount);
+          assert.equal(running.titleQueries, taskCount, "one title lookup per successful article without explicit refresh");
           assert.equal(fixture.lastEvent.status, "completed");
           assert.equal(fixture.lastEvent.batch.counts.succeeded, taskCount);
           assert.equal(fixture.lastEvent.batch.tasks.length, taskCount);
@@ -198,3 +200,36 @@ for (const taskCount of [10, 100]) {
     });
   }
 }
+
+
+it("refreshes a legally saved title during real generation and after service restart", async () => {
+  let release;
+  let entered;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const waiting = new Promise((resolve) => { entered = resolve; });
+  const fixture = createFixture(2, 1, async (input) => {
+    if (input.templateId === "template-001") { entered(); await gate; }
+  });
+  let work;
+  try {
+    const batch = await fixture.create();
+    work = fixture.start(batch.id);
+    await Promise.race([waiting, work.then(() => { throw new Error("second task did not reach the barrier"); })]);
+    const article = fixture.contentStore.getArticle("client-1", "article-template-000");
+    // This is still an unsubmitted generated article; use the real save path,
+    // not edits to metadata JSON or a second title source.
+    fixture.contentStore.saveArticle({ ...article, title: "Edited generated title" });
+    const refreshed = fixture.service.getRuntimeSnapshot();
+    assert.equal(refreshed.batch.tasks[0].articleTitle, "Edited generated title");
+    release();
+    await work;
+    assert.equal(fixture.lastEvent.status, "completed");
+    assert.equal(fixture.lastEvent.batch.tasks[0].articleTitle, "Edited generated title");
+    await fixture.reopen();
+    assert.equal(fixture.service.getRuntimeSnapshot().batch.tasks[0].articleTitle, "Edited generated title");
+  } finally {
+    release();
+    if (work) await work;
+    await fixture.dispose();
+  }
+});
