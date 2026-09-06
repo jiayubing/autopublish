@@ -26,28 +26,57 @@ function createContentIdentityIndex(options) {
   const byArticle = new Map();
   const byTask = new Map();
   const byOperation = new Map();
+
+  function snapshot(rawArticle, fallbackClientId) {
+    const article = opts.snapshot ? opts.snapshot(rawArticle) : clone(rawArticle);
+    if (!article.clientId && fallbackClientId) article.clientId = fallbackClientId;
+    return article;
+  }
+
+  function addTo(map, key, article) {
+    if (!key) return;
+    const matches = map.get(key) || [];
+    matches.push(article);
+    map.set(key, matches);
+  }
+
+  function removeFrom(map, key, clientId, articleId) {
+    if (!key) return;
+    const matches = (map.get(key) || []).filter(function (article) {
+      return article.clientId !== clientId || article.id !== articleId;
+    });
+    if (matches.length) map.set(key, matches);
+    else map.delete(key);
+  }
+
+  function add(rawArticle, fallbackClientId) {
+    const article = snapshot(rawArticle, fallbackClientId);
+    const identity = articleIdentity({ clientId: article.clientId, articleId: article.id });
+    addTo(byArticle, identity.articleId, article);
+    addTo(byTask, article.generationTaskId, article);
+    addTo(byOperation, article.generationOperationId, article);
+    return article;
+  }
+
+  function remove(clientId, articleId) {
+    const matches = byArticle.get(articleId) || [];
+    matches.filter(function (article) { return article.clientId === clientId; }).forEach(function (article) {
+      removeFrom(byTask, article.generationTaskId, clientId, articleId);
+      removeFrom(byOperation, article.generationOperationId, clientId, articleId);
+    });
+    removeFrom(byArticle, articleId, clientId, articleId);
+  }
+
+  function upsert(rawArticle) {
+    const article = snapshot(rawArticle);
+    const identity = articleIdentity({ clientId: article.clientId, articleId: article.id });
+    remove(identity.clientId, identity.articleId);
+    add(article);
+  }
+
   opts.listClientIds().forEach(function (clientId) {
     opts.listArticles(clientId).forEach(function (rawArticle) {
-      const article = opts.snapshot
-        ? opts.snapshot(rawArticle)
-        : clone(rawArticle);
-      const identity = articleIdentity({
-        clientId: article.clientId || clientId,
-        articleId: article.id,
-      });
-      const articleMatches = byArticle.get(identity.articleId) || [];
-      articleMatches.push(article);
-      byArticle.set(identity.articleId, articleMatches);
-      if (article.generationTaskId) {
-        const taskMatches = byTask.get(article.generationTaskId) || [];
-        taskMatches.push(article);
-        byTask.set(article.generationTaskId, taskMatches);
-      }
-      if (article.generationOperationId) {
-        const operationMatches = byOperation.get(article.generationOperationId) || [];
-        operationMatches.push(article);
-        byOperation.set(article.generationOperationId, operationMatches);
-      }
+      add(rawArticle, clientId);
     });
   });
 
@@ -61,6 +90,8 @@ function createContentIdentityIndex(options) {
     findByGenerationOperationId: function (generationOperationId) {
       return resultFor(byOperation.get(generationOperationId) || []);
     },
+    upsert: upsert,
+    remove: remove,
     size: byArticle.size,
   };
 }
