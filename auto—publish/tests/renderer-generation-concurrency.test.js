@@ -60,7 +60,10 @@ test("generation wizard defaults to four and sends each chosen concurrency throu
       await page.goto(url, { waitUntil: "domcontentloaded" });
       await page.locator("#nav-item-content-production").click();
       await page.getByRole("button", { name: "批量生成", exact: true }).click();
-      await page.getByRole("checkbox", { name: /客户 A/ }).check();
+      await page.getByRole("button", { name: "选择客户", exact: true }).click();
+      const picker = page.getByRole("dialog", { name: "选择批次客户" });
+      await picker.getByRole("checkbox", { name: "客户 A", exact: true }).check();
+      await picker.getByRole("button", { name: "完成选择", exact: true }).click();
       await page.getByRole("button", { name: "下一步" }).click();
       await page.getByRole("checkbox", { name: /测试模板/ }).check();
       await page.getByRole("button", { name: "下一步" }).click();

@@ -467,12 +467,11 @@ describe(
           typeof window.__questionFixture.resolvePreview === "function",
       );
 
+      const selection = page.locator("[data-client-selection]");
+      const chooseClients = selection.getByRole("button", { name: "选择客户", exact: true });
+      assert.equal(await chooseClients.isDisabled(), true);
       assert.equal(
-        await page.getByRole("checkbox", { name: "客户 B" }).isDisabled(),
-        true,
-      );
-      assert.equal(
-        await page.getByRole("button", { name: /全选当前结果/ }).isDisabled(),
+        await selection.getByRole("button", { name: "清空选择", exact: true }).isDisabled(),
         true,
       );
       assert.equal(
@@ -486,6 +485,13 @@ describe(
       });
       await confirmation.waitFor();
       await confirmation.getByRole("button", { name: "取消" }).click();
+      await chooseClients.click();
+      const picker = page.getByRole("dialog", { name: "选择批次客户" });
+      assert.equal(await picker.getByRole("checkbox", { name: "客户 A", exact: true }).isChecked(), true);
+      assert.equal(await picker.getByRole("checkbox", { name: "客户 B", exact: true }).isChecked(), false);
+      await picker.getByRole("checkbox", { name: "客户 B", exact: true }).check();
+      await picker.getByRole("button", { name: "完成选择", exact: true }).click();
+      assert.match(await selection.innerText(), /已选 2 个客户/);
       assert.equal(
         await page.evaluate(() => window.__questionFixture.executeCalls),
         0,

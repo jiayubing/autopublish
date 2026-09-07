@@ -203,10 +203,10 @@ test("group management lives inside batch picker and generation keeps independen
 test("group read failure keeps batch picker searchable and retryable", { concurrency: false }, async (t) => {
   const { page, faults } = await openFixture(t, 3);
   const selector = page.locator("[data-client-selection]");
-  await selector.getByRole("button", { name: "选择客户" }).click();
-  const picker = page.getByRole("dialog", { name: "选择批次客户" });
   faults.read = true;
   await page.getByRole("button", { name: "刷新客户与模板", exact: true }).click();
+  await selector.getByRole("button", { name: "选择客户" }).click();
+  const picker = page.getByRole("dialog", { name: "选择批次客户" });
   await picker.getByRole("button", { name: "重试分组" }).waitFor();
   assert.equal(await picker.getByRole("combobox", { name: "批次客户分组" }).isDisabled(), true);
   assert.equal(await picker.getByRole("button", { name: "管理分组" }).isDisabled(), true);
