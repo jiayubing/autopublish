@@ -3,9 +3,6 @@ const {
   productionIpcRegistry,
 } = require("../ipc/contracts/production-registry");
 const {
-  projectArticleRemovalTransaction,
-} = require("../ipc/contracts/article-removal-contracts");
-const {
   reportDiagnostic,
 } = require("../../src/diagnostics/diagnostic-producer");
 
@@ -18,6 +15,7 @@ function reportCompositionDiagnostic(code, operation) {
     metadata: { action: operation || "composition" },
   });
 }
+
 function subscribeGenerationRuntimeState(
   contentGenerationBatchService,
   sendToRenderer,
@@ -37,9 +35,10 @@ function subscribeGenerationRuntimeState(
     );
   });
 }
-// This module owns construction and wiring of workspace-scoped services. The
-// runtime lifecycle module below owns only the returned composition's start /
-// dispose boundary; business operations remain behind application services.
+
+// This module owns the workspace-level runtime lifecycle and connects the
+// domain compositions. Platform/runtime and content-production construction
+// stay behind their own composition boundaries.
 async function createWorkspaceRuntimeComposition(deps) {
   const values = deps || {};
   const options = values.options || {};
@@ -151,156 +150,12 @@ async function createWorkspaceRuntimeComposition(deps) {
     const paths = runtime.paths;
     const injectedPaths = paths && paths.installation ? paths : undefined;
     const workspaceRoot = runtime.workspaceRoot;
-    let platformSettingsService = null;
     const clientImageLibrary =
       require("../../src/content/client-image-library").createClientImageLibrary(
         {
           workspaceRoot,
           paths: injectedPaths,
           imageDirectoryName: paths.clientImageDirectoryName,
-        },
-      );
-    const { loadPlatforms } = require("../../src/core/platforms");
-    const platformRuntimeContext = Object.freeze({
-      ...require("../../src/platforms/platform-runtime-context").createPlatformRuntimeContextFromWorkspacePaths(
-        paths,
-      ),
-      imageAssetReader: clientImageLibrary.imageAssetReader,
-      getPlatformSettingsService: function () {
-        return platformSettingsService;
-      },
-    });
-    const loadedPlatforms = loadPlatforms({
-      runtimeContext: platformRuntimeContext,
-    });
-    const directoryEntries = Object.freeze(
-      loadedPlatforms.map(function (platform) {
-        return platform.submissionDirectoryEntry;
-      }),
-    );
-    const regularDirectoryEntries = Object.freeze(
-      loadedPlatforms
-        .filter(function (platform) {
-          return Boolean(platform.regularSubmission);
-        })
-        .map(function (platform) {
-          return platform.submissionDirectoryEntry;
-        }),
-    );
-    const regularSubmissionPorts = Object.freeze(
-      loadedPlatforms
-        .filter(function (platform) {
-          return Boolean(platform.regularSubmission);
-        })
-        .map(function (platform) {
-          return Object.freeze({
-            id: platform.definition.id,
-            preparePlatformSubmission:
-              platform.regularSubmission.preparePlatformSubmission,
-          });
-        }),
-    );
-    const accountInspectionPorts = Object.freeze(
-      loadedPlatforms
-        .filter(function (platform) {
-          return Boolean(platform.accountInspection);
-        })
-        .map(function (platform) {
-          return Object.freeze({
-            id: platform.definition.id,
-            port: platform.accountInspection,
-          });
-        }),
-    );
-    const remoteReviewPorts = Object.freeze(
-      loadedPlatforms
-        .filter(function (platform) {
-          return Boolean(platform.remoteReviewContribution);
-        })
-        .map(function (platform) {
-          return Object.freeze({
-            id: platform.definition.id,
-            port: platform.remoteReviewContribution,
-          });
-        }),
-    );
-    const loginSessionPorts = Object.freeze(
-      loadedPlatforms
-        .filter(function (platform) {
-          return Boolean(platform.loginSession);
-        })
-        .map(function (platform) {
-          return Object.freeze({
-            id: platform.definition.id,
-            port: platform.loginSession,
-          });
-        }),
-    );
-    const legacyQueuePorts = Object.freeze(
-      loadedPlatforms
-        .filter(function (platform) {
-          return Boolean(platform.legacyQueue);
-        })
-        .map(function (platform) {
-          return Object.freeze({
-            id: platform.definition.id,
-            port: platform.legacyQueue,
-          });
-        }),
-    );
-    const settingsAdapters = Object.freeze(
-      loadedPlatforms
-        .filter(function (platform) {
-          return Boolean(platform.settingsContribution);
-        })
-        .map(function (platform) {
-          return platform.settingsContribution.createSettingsAdapter({
-            localStateRoot: paths && paths.localState,
-          });
-        }),
-    );
-    platformSettingsService = ownService(
-      require("../services/platform-settings-service").createPlatformSettingsService(
-        {
-          userDataPath: options.userDataPath,
-          safeStorage: options.safeStorage,
-          env: process.env,
-          localStateRoot: paths && paths.localState,
-          adapters: settingsAdapters,
-          getTaskState: taskState,
-        },
-      ),
-    );
-    const contentProfilePort = Object.freeze({
-      read: function (input) {
-        const value = input || {};
-        return require("../../src/content/client-knowledge").getClientPublicationProfile(
-          workspaceRoot,
-          value.clientId,
-          value.profileKey,
-        );
-      },
-    });
-    const clientProfileReaders = Object.freeze(
-      loadedPlatforms
-        .filter(function (platform) {
-          return Boolean(platform.clientProfileContribution);
-        })
-        .map(function (platform) {
-          return Object.freeze({
-            id: platform.definition.id,
-            requirement: platform.clientProfileContribution.requirement,
-            reader:
-              platform.clientProfileContribution.createProfileReader(
-                contentProfilePort,
-              ),
-          });
-        }),
-    );
-    const submissionPlatformDirectory =
-      require("../services/submission-target-catalog").createSubmissionTargetCatalog(
-        {
-          directoryEntries: regularDirectoryEntries,
         },
       );
     const operationalStoreTransitionPorts = {};
@@ -318,28 +173,41 @@ async function createWorkspaceRuntimeComposition(deps) {
         operationalStore.close();
       },
     });
-    const platformAccountBindingStore =
-      require("../services/platform-account-binding-store").createPlatformAccountBindingStore(
-        { localStateRoot: paths.localState },
-      );
-    const platformAccountIdentityService =
-      require("../services/platform-account-identity-service").createPlatformAccountIdentityService(
+
+    const platformRuntimeComposition = ownService(
+      await require("./platform-runtime-composition").createPlatformRuntimeComposition(
         {
-          adapters: Object.fromEntries(
-            accountInspectionPorts.map(function (platform) {
-              return [platform.id, platform.port];
-            }),
-          ),
-        },
-      );
-    const platformAccountProfileService =
-      require("../services/platform-account-profile-service").createPlatformAccountProfileService(
-        {
+          workspaceRoot,
+          paths,
+          userDataPath: options.userDataPath,
+          safeStorage: options.safeStorage,
           operationalStore,
-          bindingStore: platformAccountBindingStore,
-          identityService: platformAccountIdentityService,
+          clientImageLibrary,
+          getTaskState: taskState,
+          diagnosticsService: runtime.diagnosticsService,
         },
-      );
+      ),
+    );
+    const directoryEntries = platformRuntimeComposition.directoryEntries;
+    const regularDirectoryEntries =
+      platformRuntimeComposition.regularDirectoryEntries;
+    const regularSubmissionPorts =
+      platformRuntimeComposition.regularSubmissionPorts;
+    const remoteReviewPorts = platformRuntimeComposition.remoteReviewPorts;
+    const loginSessionPorts = platformRuntimeComposition.loginSessionPorts;
+    const legacyQueuePorts = platformRuntimeComposition.legacyQueuePorts;
+    const clientProfileReaders =
+      platformRuntimeComposition.clientProfileReaders;
+    const submissionPlatformDirectory =
+      platformRuntimeComposition.submissionPlatformDirectory;
+    const platformSettingsService =
+      platformRuntimeComposition.platformSettingsService;
+    const platformAccountProfileService =
+      platformRuntimeComposition.platformAccountProfileService;
+    const accountInspector = platformRuntimeComposition.accountInspector;
+    const platformSessionService =
+      platformRuntimeComposition.platformSessionService;
+
     const contentLifecycleComposition = ownService(
       require("./content-lifecycle-composition").createContentLifecycleComposition(
         {
@@ -414,7 +282,6 @@ async function createWorkspaceRuntimeComposition(deps) {
         loginSessionPorts,
       }),
     );
-    let accountInspector = null;
     const autoTrashArticle = async function (selection) {
       if (
         contentStore &&
@@ -458,13 +325,13 @@ async function createWorkspaceRuntimeComposition(deps) {
           workspaceRoot,
           operationalStore,
           articleMutationCoordinator,
-          createPostProcessor: function (operationalStore) {
+          createPostProcessor: function (store) {
             return require("../services/publication-post-processor").createPublicationPostProcessor(
               {
                 workspaceRoot,
                 paths: injectedPaths,
                 platforms: directoryEntries,
-                operationalStore,
+                operationalStore: store,
                 autoTrashArticle,
               },
             );
@@ -472,14 +339,6 @@ async function createWorkspaceRuntimeComposition(deps) {
         },
       ),
     );
-    accountInspector =
-      require("../services/platform-account-inspector").createPlatformAccountInspector(
-        {
-          operationalStore: publicationRecoveryComposition.operationalStore,
-          bindingStore: platformAccountBindingStore,
-          identityService: platformAccountIdentityService,
-        },
-      );
     const legacyProviderSettings =
       require("../runtime-config").createLegacyProviderSettingsMigration({
         configRoot: options.userDataPath,
@@ -487,25 +346,6 @@ async function createWorkspaceRuntimeComposition(deps) {
         runtimeConfigStore: runtime.runtimeConfigStore,
         platformSettingsService,
       });
-    const doubaoCollectionService = ownService(
-      require("../services/doubao-collection-service").createDoubaoCollectionDesktopService(
-        {
-          workspaceRoot,
-          paths: injectedPaths,
-          onDataInvalidated: invalidation.invalidate,
-        },
-      ),
-    );
-    const aiProviderService = ownService(
-      require("../services/ai-provider-service").createAiProviderService({
-        userDataPath: options.userDataPath,
-        paths: injectedPaths,
-        safeStorage: options.safeStorage,
-        getBatchState: function () {
-          return generationState() || taskState() || {};
-        },
-      }),
-    );
     const submissionMaintenance = ownService(
       require("../services/submission-maintenance-service").createSubmissionMaintenanceService(
         {
@@ -525,73 +365,42 @@ async function createWorkspaceRuntimeComposition(deps) {
         },
       );
     submissionMaintenance.recoverPreparedBatches();
-    const aiContentService = ownService(
-      require("../services/ai-content-service").createAiContentService({
-        workspaceRoot,
-        paths: injectedPaths,
-        contentStore,
-        operationalStore: publicationRecoveryComposition.operationalStore,
-        articleMutationCoordinator,
-        articleRemovalTransactionStore:
-          contentLifecycleComposition.articleRemovalTransactionStore,
-        articleRemovalTransitionPort:
-          contentLifecycleComposition.articleRemovalTransitionPort,
-        articleRemovalImpactQuery,
-        onArticleRemovalTransaction: function (transaction) {
-          const eventContract = productionIpcRegistry.byChannel(
-            "content:article-removal-transaction",
-          );
-          sendToRenderer(
-            eventContract.channel,
-            productionIpcRegistry.event(
-              eventContract,
-              projectArticleRemovalTransaction(transaction),
-            ),
-          );
-          invalidation.invalidate("ARTICLE_REMOVAL_TRANSACTION_CHANGED");
-        },
-        onDataInvalidated: invalidation.invalidate,
-        aiClientFactory: function () {
-          return aiProviderService.createClient();
-        },
-      }),
-    );
-    articleLifecycleOwner = aiContentService;
-    await publicationRecoveryComposition.publicationRecovery.recover();
-    if (aiContentService.recoverPendingArticleRemovals) {
-      const removalRecoveryScheduler = ownService(
-        require("../../src/content/article-removal-recovery-scheduler").createArticleRemovalRecoveryScheduler(
-          {
-            recover: aiContentService.recoverPendingArticleRemovals,
-            onDiagnostic: function (diagnostic) {
-              try {
-                runtime.diagnosticsService &&
-                  runtime.diagnosticsService.report &&
-                  runtime.diagnosticsService.report(diagnostic);
-              } catch (_) {
-                reportCompositionDiagnostic(
-                  "WORKSPACE_RECOVERY_DIAGNOSTIC_FAILED",
-                  "recovery-diagnostic",
-                );
-              }
-            },
-          },
-        ),
-      );
-      removalRecoveryScheduler.start();
-    }
-    const contentGenerationBatchService = ownService(
-      require("../services/content-generation-batch-service").createContentGenerationBatchService(
+
+    const contentProductionComposition = ownService(
+      await require("./content-production-composition").createContentProductionComposition(
         {
           workspaceRoot,
           paths: injectedPaths,
+          userDataPath: options.userDataPath,
+          safeStorage: options.safeStorage,
           contentStore,
+          operationalStore: publicationRecoveryComposition.operationalStore,
           articleMutationCoordinator,
-          aiProviderService,
+          articleRemovalTransactionStore:
+            contentLifecycleComposition.articleRemovalTransactionStore,
+          articleRemovalTransitionPort:
+            contentLifecycleComposition.articleRemovalTransitionPort,
+          articleRemovalImpactQuery,
           onDataInvalidated: invalidation.invalidate,
+          sendToRenderer,
+          runtimeDiagnosticsService: runtime.diagnosticsService,
+          getBatchState: function () {
+            return generationState() || taskState() || {};
+          },
         },
       ),
     );
+    const doubaoCollectionService =
+      contentProductionComposition.doubaoCollectionService;
+    const aiProviderService = contentProductionComposition.aiProviderService;
+    const aiContentService = contentProductionComposition.aiContentService;
+    const contentGenerationBatchService =
+      contentProductionComposition.contentGenerationBatchService;
+    articleLifecycleOwner = contentProductionComposition.articleLifecycleOwner;
+
+    await publicationRecoveryComposition.publicationRecovery.recover();
+    contentProductionComposition.start();
+
     const adapters = {};
     legacyQueuePorts.forEach(function (platform) {
       adapters[platform.id] = platform.port;
@@ -660,21 +469,6 @@ async function createWorkspaceRuntimeComposition(deps) {
         },
       ),
     );
-    const platformSessionService =
-      require("../services/platform-session-service").createPlatformSessionService(
-        {
-          adapters: Object.fromEntries(
-            loginSessionPorts.map(function (platform) {
-              return [platform.id, platform.port];
-            }),
-          ),
-          assertPlaywrightAvailable: function () {
-            return require("../services/playwright-capability").assertPlaywrightAvailable(
-              runtime.diagnosticsService,
-            );
-          },
-        },
-      );
     const platformApplication =
       require("../services/platform-workbench-application").createPlatformWorkbenchApplication(
         {
@@ -683,11 +477,8 @@ async function createWorkspaceRuntimeComposition(deps) {
           platformSessionService,
           platformWorkbenchService,
           taskService,
-          assertPlaywrightAvailable: function () {
-            return require("../services/playwright-capability").assertPlaywrightAvailable(
-              runtime.diagnosticsService,
-            );
-          },
+          assertPlaywrightAvailable:
+            platformRuntimeComposition.assertPlaywrightAvailable,
         },
       );
     const attentionPorts = publicationRecoveryComposition.createAttentionPorts({
