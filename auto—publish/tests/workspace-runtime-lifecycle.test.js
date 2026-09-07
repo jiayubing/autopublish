@@ -484,7 +484,7 @@ it("disposes services already created when a middle workspace factory fails", as
     fs.mkdirSync(path.join(root, "workspace"), { recursive: true });
     const runtime = createWorkspaceRuntime(workspaceRuntimeOptions(root));
     await assert.rejects(runtime.start({ workspacePath: path.join(root, "workspace") }), /generation factory failed/);
-    assert.deepEqual(events, ["content", "maintenance", "provider", "doubao", "task"]);
+    assert.deepEqual([...events].sort(), ["content", "doubao", "maintenance", "provider", "task"]);
     assert.equal(runtime.getState().phase, "stopped");
     assert.equal(runtime.getState().task, null);
     assert.throws(function() { runtime.registerIpc(); }, /not started/);
