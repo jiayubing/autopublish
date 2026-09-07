@@ -1,0 +1,48 @@
+name: R4 bounded inspection (temporary)
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    if: github.head_ref == 'chore/r4-test-ci-maintenance'
+    runs-on: ubuntu-latest
+    env:
+      CI_SYNTHETIC_ONLY: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Capture tracked checkout
+        run: git bundle create "$RUNNER_TEMP/r4-source.bundle" HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: r4-inspection-source
+          path: ${{ runner.temp }}/r4-source.bundle
+          retention-days: 1
+      - run: npm ci --ignore-scripts
+        working-directory: auto—publish
+      - run: npm ci --ignore-scripts
+        working-directory: auto—publish/media-workbench
+      - name: Capture dependency environment for offline targeted tests
+        run: |
+          node -p 'JSON.stringify({sha:process.env.GITHUB_SHA,node:process.version,platform:process.platform,arch:process.arch})' > "$RUNNER_TEMP/r4-environment.json"
+          tar -czf "$RUNNER_TEMP/r4-dependencies.tar.gz" auto—publish/node_modules auto—publish/media-workbench/node_modules
+      - uses: actions/upload-artifact@v4
+        with:
+          name: r4-inspection-dependencies
+          path: |
+            ${{ runner.temp }}/r4-dependencies.tar.gz
+            ${{ runner.temp }}/r4-environment.json
+          retention-days: 1
+      - name: Baseline IPC proof and runtime boundary tests
+        working-directory: auto—publish
+        run: /usr/bin/time -p node --test --test-concurrency=1 tests/ipc-symbol-identity-evidence.test.js tests/phase-06-production-ipc-fixture-matrix.test.js tests/phase-06-typed-ipc-production.test.js tests/phase-06-typed-ipc-foundation.test.js tests/phase-06-production-bridge-fail-closed.test.js
