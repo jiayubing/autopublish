@@ -5,18 +5,14 @@ const {
   canonicalArticleRefs,
   normalizeArticleRef,
 } = require("../../src/content/article-ref");
-const {
-  deriveArticleLifecycle,
-} = require("../../src/content/article-lifecycle-projection");
+const { deriveArticleLifecycle } = require("../../src/content/article-lifecycle-projection");
 const {
   evaluateRegularQueueAdmission,
 } = require("../../src/content/regular-queue-admission-policy");
 const {
   createRegularQueueGroupQuery,
 } = require("./regular-queue-group-query");
-const {
-  reportDiagnostic,
-} = require("../../src/diagnostics/diagnostic-producer");
+const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
 function fail(code, message) {
   const error = new Error(message || code);
@@ -30,18 +26,11 @@ function plainObject(value) {
 
 function createRegularQueueApplication(options) {
   const value = options || {};
-  if (
-    !value.contentStore ||
-    typeof value.contentStore.getArticle !== "function"
-  )
+  if (!value.contentStore || typeof value.contentStore.getArticle !== "function")
     throw fail("REGULAR_QUEUE_CONTENT_STORE_REQUIRED");
   if (!value.articleMutationCoordinator)
     throw fail("REGULAR_QUEUE_COORDINATOR_REQUIRED");
-  if (
-    !value.regularQueueTransitions ||
-    typeof value.regularQueueTransitions.listArticleLifecycleFacts !==
-      "function"
-  )
+  if (!value.regularQueueTransitions || typeof value.regularQueueTransitions.listArticleLifecycleFacts !== "function")
     throw fail("REGULAR_QUEUE_TRANSITIONS_REQUIRED");
   if (typeof value.accountProfileResolver !== "function")
     throw fail("REGULAR_QUEUE_ACCOUNT_PROFILE_RESOLVER_REQUIRED");
@@ -54,19 +43,15 @@ function createRegularQueueApplication(options) {
   const groupSubmissionIntervalTransitions =
     value.regularQueueGroupSubmissionIntervalTransitions || null;
   const accountProfileResolver = value.accountProfileResolver;
-  const clientSnapshotResolver =
-    typeof value.clientSnapshotResolver === "function"
-      ? value.clientSnapshotResolver
-      : function (clientId) {
-          return { version: 1, clientId, displayName: clientId };
-        };
-  const configuredPlatforms = Array.isArray(value.platforms)
-    ? value.platforms
+  const clientSnapshotResolver = typeof value.clientSnapshotResolver === "function"
+    ? value.clientSnapshotResolver
+    : function (clientId) {
+        return { version: 1, clientId, displayName: clientId };
+      };
+  const configuredPlatforms = Array.isArray(value.platforms) ? value.platforms : null;
+  const onDataInvalidated = typeof value.onDataInvalidated === "function"
+    ? value.onDataInvalidated
     : null;
-  const onDataInvalidated =
-    typeof value.onDataInvalidated === "function"
-      ? value.onDataInvalidated
-      : null;
 
   function notifyDataInvalidated(reasonCode) {
     if (!onDataInvalidated) return;
@@ -82,15 +67,12 @@ function createRegularQueueApplication(options) {
           operation: "data-invalidation-listener",
           phase: "notify",
           outcome: "listener-isolated",
-          reasonCode:
-            typeof reasonCode === "string" &&
-            /^[A-Za-z][A-Za-z0-9._:-]{0,127}$/.test(reasonCode)
-              ? reasonCode
-              : "UNSPECIFIED",
-          errorCode:
-            error && /^([A-Z][A-Z0-9_]{1,127})$/.test(error.code || "")
-              ? error.code
-              : "LISTENER_FAILED",
+          reasonCode: typeof reasonCode === "string" && /^[A-Za-z][A-Za-z0-9._:-]{0,127}$/.test(reasonCode)
+            ? reasonCode
+            : "UNSPECIFIED",
+          errorCode: error && /^([A-Z][A-Z0-9_]{1,127})$/.test(error.code || "")
+            ? error.code
+            : "LISTENER_FAILED",
         },
       });
     }
@@ -106,27 +88,16 @@ function createRegularQueueApplication(options) {
     const request = input || {};
     if (Object.prototype.hasOwnProperty.call(request, "batchId"))
       throw fail("REGULAR_QUEUE_INPUT_INVALID");
-    if (
-      request.targetPlatformIds !== undefined ||
-      request.accountProfiles !== undefined
-    )
+    if (request.targetPlatformIds !== undefined || request.accountProfiles !== undefined)
       throw fail("REGULAR_QUEUE_SINGLE_TARGET_REQUIRED");
-    if (
-      request.mediaResourceId !== undefined ||
-      (request.target && request.target.kind === "media")
-    )
+    if (request.mediaResourceId !== undefined || (request.target && request.target.kind === "media"))
       throw fail("REGULAR_QUEUE_PLATFORM_REQUIRED");
     if (typeof request.platformId !== "string" || !request.platformId.trim())
       throw fail("REGULAR_QUEUE_PLATFORM_REQUIRED");
-    if (
-      typeof request.accountProfileId !== "string" ||
-      !request.accountProfileId.trim()
-    )
+    if (typeof request.accountProfileId !== "string" || !request.accountProfileId.trim())
       throw fail("ACCOUNT_PROFILE_REQUIRED");
     const platformId = request.platformId.trim();
-    const platform = platformList().find(function (candidate) {
-      return candidate.id === platformId;
-    });
+    const platform = platformList().find(function (candidate) { return candidate.id === platformId; });
     if (!platform) throw fail("REGULAR_QUEUE_PLATFORM_UNSUPPORTED");
     let target;
     try {
@@ -145,9 +116,7 @@ function createRegularQueueApplication(options) {
       });
       return target;
     } catch (error) {
-      throw fail(
-        error && error.code ? error.code : "REGULAR_QUEUE_TARGET_INVALID",
-      );
+      throw fail(error && error.code ? error.code : "REGULAR_QUEUE_TARGET_INVALID");
     }
   }
 
@@ -156,20 +125,12 @@ function createRegularQueueApplication(options) {
     const raw = Array.isArray(request.articleRefs)
       ? request.articleRefs
       : Array.isArray(request.selections)
-        ? request.selections.map(function (item) {
-            return item && item.articleRef ? item.articleRef : item;
-          })
+        ? request.selections.map(function (item) { return item && item.articleRef ? item.articleRef : item; })
         : [];
     if (!raw.length) throw fail("REGULAR_QUEUE_ARTICLES_REQUIRED");
     try {
       const refs = canonicalArticleRefs(raw);
-      if (
-        new Set(
-          refs.map(function (ref) {
-            return ref.clientId;
-          }),
-        ).size > 1
-      )
+      if (new Set(refs.map(function (ref) { return ref.clientId; })).size > 1)
         throw fail("REGULAR_QUEUE_SINGLE_CLIENT_REQUIRED");
       return refs;
     } catch (_) {
@@ -181,22 +142,16 @@ function createRegularQueueApplication(options) {
   function queueConfigFrom(input) {
     const queueConfig = input && input.queueConfig;
     if (queueConfig === undefined) return undefined;
-    if (
-      !plainObject(queueConfig) ||
-      Object.keys(queueConfig).some(function (key) {
-        return (
-          key !== "queueGroupId" &&
-          key !== "imageCount" &&
-          key !== "submissionIntervalSeconds"
-        );
-      })
-    )
+    if (!plainObject(queueConfig) || Object.keys(queueConfig).some(function (key) {
+      return (
+        key !== "queueGroupId" &&
+        key !== "imageCount" &&
+        key !== "submissionIntervalSeconds"
+      );
+    }))
       throw fail("REGULAR_QUEUE_CONFIG_INVALID");
-    if (
-      queueConfig.queueGroupId !== undefined &&
-      (typeof queueConfig.queueGroupId !== "string" ||
-        !queueConfig.queueGroupId.trim())
-    )
+    if (queueConfig.queueGroupId !== undefined &&
+        (typeof queueConfig.queueGroupId !== "string" || !queueConfig.queueGroupId.trim()))
       throw fail("REGULAR_QUEUE_CONFIG_INVALID");
     if (
       queueConfig.imageCount !== undefined &&
@@ -270,9 +225,7 @@ function createRegularQueueApplication(options) {
   }
 
   function groupImagePublishingSupported(platformId) {
-    const platform = platformList().find(function (candidate) {
-      return candidate.id === platformId;
-    });
+    const platform = platformList().find(function (candidate) { return candidate.id === platformId; });
     return Boolean(platform && platform.imagePublishing);
   }
 
@@ -287,11 +240,7 @@ function createRegularQueueApplication(options) {
   function queueConfigForTarget(input, target) {
     const queueConfig = queueConfigFrom(input);
     if (groupImagePublishingSupported(target.platformId)) return queueConfig;
-    if (
-      queueConfig &&
-      queueConfig.imageCount !== undefined &&
-      queueConfig.imageCount !== 0
-    )
+    if (queueConfig && queueConfig.imageCount !== undefined && queueConfig.imageCount !== 0)
       throw fail("REGULAR_QUEUE_IMAGE_PUBLISHING_UNSUPPORTED");
     return Object.freeze({
       ...(queueConfig && queueConfig.queueGroupId
@@ -299,30 +248,15 @@ function createRegularQueueApplication(options) {
         : {}),
       imageCount: 0,
       ...(queueConfig && queueConfig.submissionIntervalSeconds !== undefined
-        ? {
-            submissionIntervalSeconds: queueConfig.submissionIntervalSeconds,
-          }
+        ? { submissionIntervalSeconds: queueConfig.submissionIntervalSeconds }
         : {}),
     });
   }
 
   function factsFor(refs) {
-    return (
-      transitions.listArticleLifecycleFacts({
-        articleIds: [
-          ...new Set(
-            refs.map(function (ref) {
-              return ref.articleId;
-            }),
-          ),
-        ],
-      }) || {
-        publications: [],
-        submissionItems: [],
-        orders: [],
-        attentionItems: [],
-      }
-    );
+    return transitions.listArticleLifecycleFacts({
+      articleIds: [...new Set(refs.map(function (ref) { return ref.articleId; }))],
+    }) || { publications: [], submissionItems: [], orders: [], attentionItems: [] };
   }
 
   function targetKey(target) {
@@ -336,17 +270,15 @@ function createRegularQueueApplication(options) {
       typeof groupTransitions.listRegularQueueGroupSnapshots !== "function"
     )
       return null;
-    const groups =
-      groupTransitions.listRegularQueueGroupSnapshots({
-        queueGroupId,
-      }) || [];
+    const groups = groupTransitions.listRegularQueueGroupSnapshots({
+      queueGroupId,
+    }) || [];
     if (!Array.isArray(groups)) return null;
     const group = groups.find(function (candidate) {
       return candidate && candidate.queueGroupId === queueGroupId;
     });
     const reasonCode = group && group.actions && group.actions.reasonCode;
-    return typeof reasonCode === "string" &&
-      /^[A-Z][A-Z0-9_]{0,127}$/.test(reasonCode)
+    return typeof reasonCode === "string" && /^[A-Z][A-Z0-9_]{0,127}$/.test(reasonCode)
       ? reasonCode
       : null;
   }
@@ -394,18 +326,10 @@ function createRegularQueueApplication(options) {
       articleRefs: Object.freeze(refs),
       items: Object.freeze(items),
       totalCount: items.length,
-      queueableCount: items.filter(function (item) {
-        return item.status === "queueable";
-      }).length,
-      idempotentCount: items.filter(function (item) {
-        return item.status === "idempotent";
-      }).length,
-      missingCount: items.filter(function (item) {
-        return item.status === "missing";
-      }).length,
-      conflictCount: items.filter(function (item) {
-        return item.status === "conflict";
-      }).length,
+      queueableCount: items.filter(function (item) { return item.status === "queueable"; }).length,
+      idempotentCount: items.filter(function (item) { return item.status === "idempotent"; }).length,
+      missingCount: items.filter(function (item) { return item.status === "missing"; }).length,
+      conflictCount: items.filter(function (item) { return item.status === "conflict"; }).length,
     });
   }
 
@@ -413,9 +337,7 @@ function createRegularQueueApplication(options) {
     const target = targetFrom(input);
     const refs = refsFrom(input);
     const queueConfig = queueConfigForTarget(input, target);
-    const platform = platformList().find(function (candidate) {
-      return candidate.id === target.platformId;
-    });
+    const platform = platformList().find(function (candidate) { return candidate.id === target.platformId; });
     const account = accountProfileResolver({
       accountProfileId: target.accountProfileId,
       platformId: target.platformId,
@@ -428,18 +350,14 @@ function createRegularQueueApplication(options) {
       accountProfileId: target.accountProfileId,
       accountLabel: account.displayName,
     });
-    const customerSnapshotsV1 = Object.freeze(
-      Object.fromEntries(
-        refs.map(function (ref) {
-          return [
-            ref.clientId,
-            domain.parseCustomerSnapshotV1(
-              clientSnapshotResolver(ref.clientId),
-            ),
-          ];
-        }),
-      ),
-    );
+    const customerSnapshotsV1 = Object.freeze(Object.fromEntries(
+      refs.map(function (ref) {
+        return [
+          ref.clientId,
+          domain.parseCustomerSnapshotV1(clientSnapshotResolver(ref.clientId)),
+        ];
+      }),
+    ));
     const result = coordinator.admitRegularQueueItems({
       articleRefs: refs,
       target,
@@ -449,12 +367,10 @@ function createRegularQueueApplication(options) {
     });
     if (result.admittedCount > 0)
       notifyDataInvalidated("SUBMISSION_BATCH_CREATED");
-    return Object.freeze(
-      Object.assign({}, result, {
-        target,
-        articleRefs: Object.freeze(refs),
-      }),
-    );
+    return Object.freeze(Object.assign({}, result, {
+      target,
+      articleRefs: Object.freeze(refs),
+    }));
   }
 
   function removePendingQueueItems(input) {
@@ -470,26 +386,16 @@ function createRegularQueueApplication(options) {
     const items = entries.map(function (item) {
       if (!plainObject(item)) throw fail("REGULAR_QUEUE_ITEM_INVALID");
       const ref = normalizeArticleRef(item.articleRef || item);
-      if (
-        typeof item.itemId !== "string" ||
-        !item.itemId.trim() ||
-        typeof item.batchId !== "string" ||
-        !item.batchId.trim()
-      )
+      if (typeof item.itemId !== "string" || !item.itemId.trim() || typeof item.batchId !== "string" || !item.batchId.trim())
         throw fail("REGULAR_QUEUE_ITEM_INVALID");
       return Object.assign({}, item, { articleRef: ref });
     });
-    const result = coordinator.removePendingQueueItems({
-      items,
-      operationId: request.operationId,
-    });
+    const result = coordinator.removePendingQueueItems({ items, operationId: request.operationId });
     if (result.removedCount > 0)
       notifyDataInvalidated("SUBMISSION_BATCH_CANCELLED");
-    return Object.freeze(
-      Object.assign({}, result, {
-        items: Object.freeze(result.items || []),
-      }),
-    );
+    return Object.freeze(Object.assign({}, result, {
+      items: Object.freeze(result.items || []),
+    }));
   }
 
   function updateRegularQueueGroupImageCount(input) {
