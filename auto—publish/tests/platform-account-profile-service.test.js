@@ -55,7 +55,7 @@ function fixture() {
       return {
         verified: true,
         platformId: input.platformId,
-        displayName: "remote",
+        displayName: "remote-account",
         remoteFingerprint,
       };
     },
@@ -72,19 +72,40 @@ function fixture() {
   };
 }
 
-test("creating an account profile binds the verified remote identity before success", async () => {
+test("creating or reconnecting a platform account keeps one profile and uses verified remote identity", async () => {
   const state = fixture();
   const service = createPlatformAccountProfileService(state);
-  const profile = await service.createAndBind({
+  const first = await service.createAndBind({
     platformId: "lieju",
-    displayName: "23",
+    displayName: "manual-label",
   });
-  assert.equal(profile.bindingStatus, "bound");
+  const second = await service.createAndBind({
+    platformId: "lieju",
+    displayName: "another-manual-label",
+  });
+  assert.equal(first.bindingStatus, "bound");
+  assert.equal(first.displayName, "remote-account");
+  assert.equal(second.accountProfileId, first.accountProfileId);
   assert.equal(state.profiles.size, 1);
-  assert.deepEqual(state.bindings.get(profile.accountProfileId), {
+  assert.deepEqual(state.bindings.get(first.accountProfileId), {
     platformId: "lieju",
     remoteFingerprint: "a".repeat(64),
   });
+});
+
+test("a different current remote account never creates a second profile for the platform", async () => {
+  const state = fixture();
+  const service = createPlatformAccountProfileService(state);
+  await service.createAndBind({
+    platformId: "lieju",
+    displayName: "first",
+  });
+  state.setRemoteFingerprint("b".repeat(64));
+  await assert.rejects(
+    service.createAndBind({ platformId: "lieju", displayName: "second" }),
+    { code: "ACCOUNT_PROFILE_REMOTE_MISMATCH" },
+  );
+  assert.equal(state.profiles.size, 1);
 });
 
 test("binding failure rolls back the newly created local profile", async () => {
@@ -102,6 +123,40 @@ test("binding failure rolls back the newly created local profile", async () => {
   assert.equal(state.profiles.size, 0);
 });
 
+test("automatic connection reuses one legacy unbound profile instead of creating a duplicate", async () => {
+  const state = fixture();
+  const legacy = state.operationalStore.createAccountProfile({
+    platformId: "lieju",
+    displayName: "legacy",
+  });
+  const service = createPlatformAccountProfileService(state);
+  const connected = await service.createAndBind({
+    platformId: "lieju",
+    displayName: "ignored",
+  });
+  assert.equal(connected.accountProfileId, legacy.accountProfileId);
+  assert.equal(connected.bindingStatus, "bound");
+  assert.equal(state.profiles.size, 1);
+});
+
+test("multiple historical profiles do not cause another profile to be created", async () => {
+  const state = fixture();
+  state.operationalStore.createAccountProfile({
+    platformId: "lieju",
+    displayName: "legacy-a",
+  });
+  state.operationalStore.createAccountProfile({
+    platformId: "lieju",
+    displayName: "legacy-b",
+  });
+  const service = createPlatformAccountProfileService(state);
+  await assert.rejects(
+    service.createAndBind({ platformId: "lieju", displayName: "new" }),
+    { code: "ACCOUNT_PROFILE_REMOTE_MISMATCH" },
+  );
+  assert.equal(state.profiles.size, 2);
+});
+
 test("legacy unbound profile can be explicitly bound but an existing binding never silently changes", async () => {
   const state = fixture();
   const profile = state.operationalStore.createAccountProfile({
@@ -110,7 +165,11 @@ test("legacy unbound profile can be explicitly bound but an existing binding nev
   });
   const service = createPlatformAccountProfileService(state);
   assert.equal(service.list()[0].bindingStatus, "unbound");
-  assert.equal((await service.bindExisting({ accountProfileId: profile.accountProfileId })).bindingStatus, "bound");
+  assert.equal(
+    (await service.bindExisting({ accountProfileId: profile.accountProfileId }))
+      .bindingStatus,
+    "bound",
+  );
   state.setRemoteFingerprint("b".repeat(64));
   await assert.rejects(
     service.bindExisting({ accountProfileId: profile.accountProfileId }),
@@ -125,7 +184,10 @@ test("legacy unbound profile can be explicitly bound but an existing binding nev
 test("deleting a profile removes it from the local profile list and clears its binding", async () => {
   const state = fixture();
   const service = createPlatformAccountProfileService(state);
-  const profile = await service.createAndBind({ platformId: "lieju", displayName: "delete-me" });
+  const profile = await service.createAndBind({
+    platformId: "lieju",
+    displayName: "delete-me",
+  });
   service.delete({ accountProfileId: profile.accountProfileId });
   assert.equal(service.list().length, 0);
   assert.equal(state.bindings.has(profile.accountProfileId), false);
@@ -139,12 +201,19 @@ test("queue admission can resolve only an already bound profile", async () => {
     displayName: "legacy-unbound",
   });
   assert.throws(
-    () => service.assertBound({ accountProfileId: legacy.accountProfileId, platformId: "lieju" }),
+    () =>
+      service.assertBound({
+        accountProfileId: legacy.accountProfileId,
+        platformId: "lieju",
+      }),
     { code: "ACCOUNT_PROFILE_NOT_BOUND" },
   );
   await service.bindExisting({ accountProfileId: legacy.accountProfileId });
   assert.deepEqual(
-    service.assertBound({ accountProfileId: legacy.accountProfileId, platformId: "lieju" }),
+    service.assertBound({
+      accountProfileId: legacy.accountProfileId,
+      platformId: "lieju",
+    }),
     {
       accountProfileId: legacy.accountProfileId,
       platformId: "lieju",
@@ -152,7 +221,11 @@ test("queue admission can resolve only an already bound profile", async () => {
     },
   );
   assert.throws(
-    () => service.assertBound({ accountProfileId: legacy.accountProfileId, platformId: "toutiao" }),
+    () =>
+      service.assertBound({
+        accountProfileId: legacy.accountProfileId,
+        platformId: "toutiao",
+      }),
     { code: "ACCOUNT_PROFILE_PLATFORM_MISMATCH" },
   );
 });

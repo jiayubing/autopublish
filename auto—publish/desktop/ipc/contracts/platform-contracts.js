@@ -102,7 +102,8 @@ const COMMON_ERRORS = {
   ACCOUNT_PROFILE_REMOTE_MISMATCH: {
     category: "authentication",
     retryability: "never",
-    userMessage: "当前登录账号与该档案已绑定账号不一致，请切换回原账号或新建档案。",
+    userMessage:
+      "当前登录账号与已保存档案不一致。请切换回原账号；如需更换账号，请先删除不用的旧档案后重新绑定。",
   },
   PLATFORM_ACCOUNT_IDENTITY_UNAVAILABLE: {
     category: "authentication",
@@ -260,6 +261,7 @@ const platformContracts = [
     },
     [
       "ACCOUNT_PROFILE_CONFIRMATION_REQUIRED",
+      "ACCOUNT_PROFILE_REMOTE_MISMATCH",
       "PLATFORM_ACCOUNT_IDENTITY_UNAVAILABLE",
       "PLATFORM_ACCOUNT_IDENTITY_UNVERIFIED",
       "PLATFORM_ACCOUNT_BINDING_STORAGE_UNAVAILABLE",
