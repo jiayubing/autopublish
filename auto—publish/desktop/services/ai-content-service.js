@@ -7,6 +7,7 @@ const { createArticleGenerator } = require("../../src/content/article-generator"
 const { createClientMaterialStore } = require("../../src/content/client-material-store");
 const { buildPrompt } = require("../../src/content/prompt-builder");
 const crypto = require("crypto");
+const { createClientGroupStore } = require("../../src/content/client-group-store");
 const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
 function clone(value) {
@@ -94,6 +95,7 @@ function createAiContentService(opts) {
   }
   const workspaceRoot = options.workspaceRoot;
   const paths = options.paths;
+  const clientGroupStore = workspaceRoot ? createClientGroupStore(workspaceRoot, { paths }) : null;
   const clientKnowledge = options.clientKnowledge || {
     listClients: function() { return listClients(workspaceRoot); },
     listClientIdentities: function() { return listClientIdentities(workspaceRoot); },
@@ -250,6 +252,20 @@ function createAiContentService(opts) {
   async function getClientSafe(clientId) {
     assertId(clientId, "Client id");
     return materializeClient(await clientKnowledge.getClient(clientId));
+  }
+
+  function getClientGroups() {
+    if (disposed || !clientGroupStore) throw contentError("CLIENT_GROUP_UNAVAILABLE", "Client groups are unavailable");
+    return clientGroupStore.read();
+  }
+
+  async function updateClientGroups(input) {
+    if (disposed || !clientGroupStore) throw contentError("CLIENT_GROUP_UNAVAILABLE", "Client groups are unavailable");
+    const clients = input && input.action === "assign"
+      ? await (typeof clientKnowledge.listClientIdentities === "function" ? clientKnowledge.listClientIdentities() : clientKnowledge.listClients())
+      : [];
+    if (disposed) throw contentError("CLIENT_GROUP_UNAVAILABLE", "Client groups are unavailable");
+    return clientGroupStore.update(input, clients.map((client) => client.id));
   }
 
   async function saveClientLiejuPublicationProfile(input) {
@@ -519,6 +535,8 @@ function createAiContentService(opts) {
 
   return {
     listClients: listClientsSafe,
+    getClientGroups,
+    updateClientGroups,
     getClient: getClientSafe,
     getClientDetails: getClientDetails,
     saveClientLiejuPublicationProfile: saveClientLiejuPublicationProfile,

@@ -4,7 +4,9 @@
 
 ## 当前执行入口
 
-- [AutoPublish 可靠性与批量能力改进计划](../.scratch/reliability-batch-follow-up/RELIABILITY-BATCH-FOLLOW-UP-PLAN.md)：本次仅执行 R4；前序合并核验、候选取舍、执行映射和验证边界由该计划 §11.4 维护。R4 未合并，不进入 R5。
+- [客户分组与选择](../.scratch/client-groups/CLIENT-GROUPS-PLAN.md)：本轮功能入口；单层分组、搜索与批次客户选择，提交 PR 后等待人工合并。
+
+本轮基线包含 PR #36（R5 集成收口）的 master 合并；原验证记录见 [可靠性与批量能力改进计划](../.scratch/reliability-batch-follow-up/RELIABILITY-BATCH-FOLLOW-UP-PLAN.md)，不作为本轮实施入口。
 
 前序参考：[文章生成与发布链路优化计划](../.scratch/generation-publication-optimization/GENERATION-PUBLICATION-OPTIMIZATION-PLAN.md)，不作为本线程实施入口。
 

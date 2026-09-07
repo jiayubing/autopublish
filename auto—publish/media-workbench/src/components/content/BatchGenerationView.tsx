@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ClientSelection, type ClientGrouping } from './ClientSelector';
 import { Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { ContentClient, ContentCommandStaleResult, ContentMaterial, ContentResearch, ContentTemplate, ContentTemplateCatalog } from '../../types/content';
 import type { GenerationBatch, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState } from '../../types/generation';
@@ -12,6 +13,7 @@ import { isContentCommandStaleResult } from '../../content-command-result';
 
 interface BatchGenerationViewProps {
   clients: ContentClient[];
+  grouping?: ClientGrouping;
   currentClientId?: string;
   researchByClient: Record<string, ContentResearch[]>;
   getClientDetails?: (clientId: string) => Promise<{ client: ContentClient; research: ContentResearch[] }>;
@@ -50,7 +52,7 @@ function errorReason(code: string) {
   return labels[code] || code;
 }
 
-export default function BatchGenerationView({ clients, currentClientId, researchByClient, getClientDetails, templateCatalog, commands, commandStates, onViewBatchArticles }: BatchGenerationViewProps) {
+export default function BatchGenerationView({ clients, grouping, currentClientId, researchByClient, getClientDetails, templateCatalog, commands, commandStates, onViewBatchArticles }: BatchGenerationViewProps) {
   const { confirm } = useConfirmation();
   const [viewMode, setViewMode] = useState<BatchViewMode>('wizard');
   const [step, setStep] = useState(0);
@@ -180,12 +182,6 @@ export default function BatchGenerationView({ clients, currentClientId, research
     if (batch && !newBatchWizardRef.current) setViewMode('monitoring');
   }, [batch]);
 
-  function toggleAllClients() {
-    clientSelectionTouchedRef.current = true;
-    setSelectedClientIds((current) => current.length === clients.length ? [] : clients.map((client) => client.id));
-    setPreviewResult(null);
-  }
-
   function toggleTemplate(template: ContentTemplate) {
     templateSelectionTouchedRef.current = true;
     setSelectedTemplates((current) => current.some((item) => item.platform === template.platform && item.templateId === template.id)
@@ -307,7 +303,6 @@ export default function BatchGenerationView({ clients, currentClientId, research
   }
 
   const selectedCount = selectedClientIds.length;
-  const allSelected = selectedCount > 0 && selectedCount === resolvedClients.length;
   const stepTitles = ['选择批次客户', '选择跨平台模板', '检查生成来源', '确认任务并启动'];
 
   return <div className="batch-generation-view flex h-full min-h-0 flex-col overflow-hidden" aria-label="四步批量生成" data-view-mode={viewMode} data-batch-running={batchRunning}>
@@ -318,13 +313,10 @@ export default function BatchGenerationView({ clients, currentClientId, research
       {hydrationError && <div role="alert" aria-live="polite" className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">{hydrationError}</div>}
       {viewMode === 'wizard' && <>
       {step === 0 && <section className="rounded-md border border-slate-200 bg-white p-4">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-sm font-semibold">选择批次客户</h2><p className="mt-1 text-xs text-slate-500">已选 {selectedCount} 个客户</p></div><div className="flex gap-2"><button type="button" onClick={toggleAllClients} className="rounded border border-slate-300 px-3 py-2 text-xs">全选客户</button><button type="button" onClick={() => { clientSelectionTouchedRef.current = true; setSelectedClientIds([]); setPreviewResult(null); }} disabled={!selectedCount} className="rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40">取消全选</button></div></div>
-        <label className="mb-3 flex items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={allSelected} onChange={toggleAllClients} />全选客户</label>
-        <div className="grid gap-3 sm:grid-cols-2">{resolvedClients.map((client) => {
-          return <article key={client.id} className="rounded border border-slate-200 p-3 text-sm">
-            <label className="flex items-center gap-2"><input type="checkbox" checked={selectedClientIds.includes(client.id)} onChange={(event) => { clientSelectionTouchedRef.current = true; setSelectedClientIds((current) => event.target.checked ? [...new Set([...current, client.id])] : current.filter((id) => id !== client.id)); }} /><span className="min-w-0 flex-1"><span className="block">{client.name}</span><span className={`block text-xs ${clientReadiness(client) === '可生成' ? 'text-emerald-600' : 'text-amber-700'}`}>{clientReadiness(client)}</span></span></label>
-          </article>;
-        })}</div>
+        <h2 className="mb-3 text-sm font-semibold">选择批次客户</h2>
+        <ClientSelection clients={resolvedClients} selectedIds={selectedClientIds} grouping={grouping}
+          onChange={(ids) => { clientSelectionTouchedRef.current = true; setSelectedClientIds(ids); setPreviewResult(null); }}
+          disabled={loading || batchRunning} describeClient={clientReadiness} />
       </section>}
       {step === 1 && <section className="rounded-md border border-slate-200 bg-white p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><h2 className="text-sm font-semibold">选择跨平台写作模板</h2><p className="mt-1 text-xs text-slate-500">模板按平台分组，已选 {selectedTemplates.length} 个 · 潜在 AI 调用数：{potentialTaskCount}</p></div>{customTemplateCount > 0 && <label className="inline-flex items-center gap-1 text-xs text-slate-500"><input type="checkbox" aria-label="显示内置模板" checked={showBuiltinTemplates} onChange={(event) => setShowBuiltinTemplates(event.target.checked)} />显示内置模板</label>}</div>{riskWarning && <div role="status" className="mt-3 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">潜在任务数超过 {GENERATION_BATCH_RISK_THRESHOLD}，可能增加 AI 调用费用，请确认客户和模板选择。</div>}<div className="mt-4 grid gap-4 md:grid-cols-3">{(Object.entries(templateGroups) as Array<[string, ContentTemplate[]]>).map(([platform, platformTemplates]) => <div key={platform} className="rounded border border-slate-200 p-3"><h3 className="text-xs font-semibold text-slate-700">{templatePlatformDisplayName(catalog, platform)}</h3><div className="mt-2 grid gap-2">{platformTemplates.map((template) => <label key={template.id} className="flex items-start gap-2 text-xs text-slate-600"><input type="checkbox" checked={selectedTemplates.some((item) => item.platform === platform && item.templateId === template.id)} onChange={() => toggleTemplate(template)} /><span><span className="block font-medium">{templateTitle(template)} · {templateSourceLabel(template)}</span>{templateScenarioLabel(template) && <span className="text-slate-400">{templateScenarioLabel(template)}</span>}</span></label>)}</div></div>)}</div></section>}
       {step === 2 && <section className="grid gap-3">

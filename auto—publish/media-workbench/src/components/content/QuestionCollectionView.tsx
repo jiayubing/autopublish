@@ -4,12 +4,14 @@ import type { ContentClient, ContentCommandStaleResult, ContentQuestion, Content
 import CollectionTaskBar from './CollectionTaskBar';
 import ManualResearchEditorPanel from './ManualResearchEditorPanel';
 import QuestionBatchControls from './QuestionBatchControls';
+import type { ClientGrouping } from './ClientSelector';
 import QuestionResearchList from './QuestionResearchList';
 import { createManualAnswerSession, manualAnswerDraftDirty, ManualAnswerDraft, ManualAnswerSession, sameManualAnswerSession } from '../../content-question-editor-session';
 import { useConfirmation } from '../../confirmation';
 
 interface QuestionCollectionViewProps {
   clients: ContentClient[];
+  grouping?: ClientGrouping;
   clientId: string;
   questions: ContentQuestion[];
   research: ContentResearch[];
@@ -45,7 +47,7 @@ interface QuestionCollectionViewProps {
   loginQuery: { loading: boolean; error?: { userMessage?: string } | null };
 }
 
-export default function QuestionCollectionView({ clients, clientId, questions, research, query, commands, commandStates, queue, login, queueQuery, loginQuery }: QuestionCollectionViewProps) {
+export default function QuestionCollectionView({ clients, grouping, clientId, questions, research, query, commands, commandStates, queue, login, queueQuery, loginQuery }: QuestionCollectionViewProps) {
   const { confirm } = useConfirmation();
   const [questionDraftId, setQuestionDraftId] = useState<string | null>(null);
   const [questionDraftText, setQuestionDraftText] = useState('');
@@ -227,6 +229,7 @@ export default function QuestionCollectionView({ clients, clientId, questions, r
     <div className="flex min-h-0 flex-1">
       <div className="min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto p-4">
       <QuestionBatchControls
+        grouping={grouping}
         clients={clients}
         initialClientId={clientId}
         isCollecting={isCollecting}

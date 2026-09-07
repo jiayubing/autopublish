@@ -17,6 +17,21 @@ export interface ContentMaterial {
   contentHash?: string;
   source?: "text" | "docx" | string;
 }
+export interface ClientGroupCatalog {
+  revision: number;
+  groups: Array<{ id: string; name: string }>;
+  memberships: Array<{ clientId: string; groupId: string }>;
+}
+export type ClientGroupChange =
+  | { action: "create"; revision: number; name: string }
+  | { action: "rename"; revision: number; groupId: string; name: string }
+  | { action: "delete"; revision: number; groupId: string }
+  | {
+      action: "assign";
+      revision: number;
+      groupId: string | null;
+      clientIds: string[];
+    };
 export interface ContentClient {
   id: string;
   name: string;

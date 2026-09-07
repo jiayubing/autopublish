@@ -4,6 +4,8 @@ const {
   exactObject,
   integerField,
   nullableField,
+  literalField,
+  oneOf,
   optionalField,
 } = require("./registry");
 const {
@@ -115,7 +117,50 @@ const templateCatalog = exactObject({
   diagnostics: arrayField(templateDiagnostic, { max: 10000 }),
 });
 
+const clientGroupCatalog = exactObject({
+  revision: integerField({ min: 0 }),
+  groups: arrayField(exactObject({ id, name: text(40) }), { max: 200 }),
+  memberships: arrayField(exactObject({ clientId: id, groupId: id }), { max: 10000 }),
+});
+const groupRevision = integerField({ min: 0 });
+const clientGroupErrors = Object.freeze({
+  CLIENT_GROUP_INPUT_INVALID: { category: "validation", retryability: "never", userMessage: "分组名称须为 1–40 个字符，不能使用“全部客户”或“未分组”；请检查操作内容。" },
+  CLIENT_GROUP_NAME_EXISTS: { category: "conflict", retryability: "never", userMessage: "已有同名客户分组，请换一个名称。" },
+  CLIENT_GROUP_NOT_FOUND: { category: "conflict", retryability: "safe", userMessage: "客户分组已变化，请刷新后重新选择。" },
+  CLIENT_GROUP_CLIENT_NOT_FOUND: { category: "conflict", retryability: "safe", userMessage: "部分客户已不存在，请刷新客户列表后重新选择。" },
+  CLIENT_GROUP_CONFLICT: { category: "conflict", retryability: "safe", userMessage: "分组已被更新，请根据最新分组重新操作。" },
+  CLIENT_GROUP_LIMIT: { category: "validation", retryability: "never", userMessage: "客户分组数量或成员数量已达上限。" },
+  CLIENT_GROUP_DATA_INVALID: { category: "storage", retryability: "manual-check", userMessage: "客户分组文件无法读取，原文件已保留；请检查内容库后重试。" },
+  CLIENT_GROUP_STORAGE_FAILED: { category: "storage", retryability: "manual-check", userMessage: "客户分组读写失败，请检查内容库并刷新分组后再操作。" },
+  CLIENT_GROUP_UNAVAILABLE: { category: "conflict", retryability: "safe", userMessage: "客户分组暂不可用，请重新打开内容库。" },
+});
+
 const contentLibraryContracts = Object.freeze([
+  contentContract({
+    capability: "content.getClientGroups",
+    channel: "content:get-client-groups",
+    feature: "content",
+    kind: "query",
+    request: emptyRequest,
+    success: clientGroupCatalog,
+    fromArgs: noArgs,
+    toArgs: noInput,
+  }, clientGroupErrors),
+  contentContract({
+    capability: "content.updateClientGroups",
+    channel: "content:update-client-groups",
+    feature: "content",
+    kind: "command",
+    request: exactObject({ change: oneOf([
+      exactObject({ action: literalField("create"), revision: groupRevision, name: text(40) }),
+      exactObject({ action: literalField("rename"), revision: groupRevision, groupId: id, name: text(40) }),
+      exactObject({ action: literalField("delete"), revision: groupRevision, groupId: id }),
+      exactObject({ action: literalField("assign"), revision: groupRevision, groupId: nullableField(id), clientIds: arrayField(id, { min: 1, max: 10000 }) }),
+    ]) }),
+    success: clientGroupCatalog,
+    fromArgs: (args) => ({ change: args[0] }),
+    toArgs: (payload) => [payload.change],
+  }, clientGroupErrors),
   contentContract({
     capability: "content.saveClientLiejuPublicationProfile",
     channel: "content:save-client-lieju-publication-profile",

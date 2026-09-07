@@ -7,6 +7,7 @@ import ArticleGenerationView from "./content/ArticleGenerationView";
 import GeneratedArticleEditorPanel from "./content/GeneratedArticleEditorPanel";
 import GeneratedArticlesView from "./content/GeneratedArticlesView";
 import QuestionCollectionView from "./content/QuestionCollectionView";
+import { CurrentClientSelector, type ClientGrouping } from "./content/ClientSelector";
 import { type ArticleWorkflowFilter } from "../article-workflow";
 import ArticleLibraryFilters from "./content/ArticleLibraryFilters";
 import { useConfirmation, useConfirmationScope } from "../confirmation";
@@ -134,6 +135,15 @@ export default function ContentWorkbench({
     string | null
   >(null);
   const historySourceRef = useRef<HTMLElement | null>(null);
+
+  const grouping: ClientGrouping = {
+    catalog: content.snapshot.clientGroups,
+    loading: content.snapshot.clientGroupsQuery.loading,
+    busy: content.snapshot.commands.updateClientGroups?.busy || false,
+    error: content.snapshot.clientGroupsQuery.error?.userMessage,
+    reload: () => { void content.refreshClientGroups("manual"); },
+    update: content.commands.updateClientGroups,
+  };
 
   function saveClientLiejuPublicationProfile(input: { clientId: string; profile: LiejuPublicationProfile }) {
     return content.commands.saveClientLiejuPublicationProfile(input);
@@ -302,7 +312,8 @@ export default function ContentWorkbench({
 
   async function refreshClientsAndTemplates() {
     setRefreshConfirmationVisible(false);
-    if (await content.refresh("manual")) setRefreshConfirmationVisible(true);
+    const [refreshed] = await Promise.all([content.refresh("manual"), content.refreshClientGroups("manual")]);
+    if (refreshed) setRefreshConfirmationVisible(true);
   }
 
   function changeTab(nextTab: WorkbenchTab) {
@@ -386,22 +397,7 @@ export default function ContentWorkbench({
           );
         })}
         <div className="ml-auto flex items-center gap-2">
-          <label className="text-xs text-slate-500">
-            当前客户
-          </label>
-          <select
-            aria-label="当前客户"
-            value={clientId}
-            onChange={(event) => handleClientChange(event.target.value)}
-            className="h-9 min-w-32 rounded-md border border-slate-300 bg-white px-2 text-sm"
-          >
-            <option value="">暂无客户</option>
-            {clients.map((client) => (
-              <option key={client.id} value={client.id}>
-                {client.name}
-              </option>
-            ))}
-          </select>
+          <div key={content.snapshot.scope?.workspaceRuntimeId || "unscoped"}><CurrentClientSelector clients={clients} clientId={clientId} onChange={handleClientChange} grouping={grouping} /></div>
           <button
             type="button"
             onClick={() => void refreshClientsAndTemplates()}
@@ -435,9 +431,10 @@ export default function ContentWorkbench({
           {visibleError}
         </div>
       )}
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div key={content.snapshot.scope?.workspaceRuntimeId || "unscoped"} className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {tab === "questions" && (
           <QuestionCollectionView
+            grouping={grouping}
             clients={clients}
             clientId={clientId}
             questions={questions}
@@ -453,6 +450,7 @@ export default function ContentWorkbench({
         )}
         {(tab === "single" || tab === "batch") && (
           <ArticleGenerationView
+            grouping={grouping}
             client={clients.find((item) => item.id === clientId)}
             clients={clients}
             clientId={clientId}

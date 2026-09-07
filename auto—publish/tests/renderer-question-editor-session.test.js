@@ -472,7 +472,7 @@ describe(
         true,
       );
       assert.equal(
-        await page.getByRole("button", { name: "全选客户" }).isDisabled(),
+        await page.getByRole("button", { name: /全选当前结果/ }).isDisabled(),
         true,
       );
       assert.equal(

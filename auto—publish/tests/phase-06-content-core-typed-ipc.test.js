@@ -44,6 +44,8 @@ const {
 } = require("../src/infrastructure/operational-store/operational-store");
 
 const CHANNELS = [
+  "content:get-client-groups",
+  "content:update-client-groups",
   "content:list-clients",
   "content:get-client-details",
   "content:save-client-lieju-publication-profile",
@@ -69,7 +71,7 @@ const CHANNELS = [
   "content:article-removal-transaction",
 ].sort();
 
-test("content core declares exactly 23 versioned path-free capabilities", function () {
+test("content core declares exactly 25 versioned path-free capabilities", function () {
   const registry = createContractRegistry(contentCoreContracts);
   assert.deepEqual(
     contentCoreContracts.map((contract) => contract.channel).sort(),

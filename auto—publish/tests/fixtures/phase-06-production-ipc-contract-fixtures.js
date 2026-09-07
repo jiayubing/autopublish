@@ -859,6 +859,20 @@ const rawProductionIpcContractFixtures = [
     },
   },
   {
+    capability: "content.getClientGroups",
+    channel: "content:get-client-groups",
+    owner: "content",
+    request: {},
+    result: { revision: 0, groups: [], memberships: [] },
+  },
+  {
+    capability: "content.updateClientGroups",
+    channel: "content:update-client-groups",
+    owner: "content",
+    request: { change: { action: "create", revision: 0, name: "重点推进" } },
+    result: { revision: 1, groups: [{ id: "group-1", name: "重点推进" }], memberships: [] },
+  },
+  {
     capability: "content.listClients",
     channel: "content:list-clients",
     owner: "content",
