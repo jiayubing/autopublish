@@ -1,6 +1,6 @@
 "use strict";
 
-function createPlatformRuntimeComposition(options) {
+async function createPlatformRuntimeComposition(options) {
   const value = options || {};
   const workspaceRoot = value.workspaceRoot;
   const paths = value.paths;
