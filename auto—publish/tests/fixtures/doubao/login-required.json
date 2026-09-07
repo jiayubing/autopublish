@@ -1,6 +1,7 @@
 {
   "url": "https://www.doubao.com/chat/fixture",
   "inputAvailable": false,
+  "loginRequired": true,
   "generating": false,
   "challenge": false,
   "errorText": "",

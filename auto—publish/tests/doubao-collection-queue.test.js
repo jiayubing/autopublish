@@ -304,10 +304,15 @@ describe("Doubao collection queue", { concurrency: false }, function() {
       sleep: async function() {}
     });
 
-    const firstResult = await queue.start([
+    const firstRun = queue.start([
       { clientId: "client", questionId: "q1" },
       { clientId: "client", questionId: "q2" }
     ]);
+    await tick();
+    assert.equal(queue.getState().status, "paused");
+    assert.deepStrictEqual(queue.getState().tasks.map(function(task) { return task.status; }), ["failed", "pending"]);
+    queue.resume();
+    const firstResult = await firstRun;
     assert.deepStrictEqual(firstResult.tasks.map(function(task) { return task.status; }), ["failed", "succeeded"]);
     const originalIds = firstResult.tasks.map(function(task) { return task.id; });
 

@@ -509,7 +509,8 @@ describe("Doubao browser adapter", { concurrency: false }, function() {
           calls.push(input);
           elapsed += 10;
           if (input.action === "send-question") return { ok: true };
-          return streamingFixture;
+          // This deadline case starts on an idle page, then streams after sending.
+          return calls.length === 1 ? { ...streamingFixture, generating: false } : streamingFixture;
         },
       },
       timeoutMs: 100,

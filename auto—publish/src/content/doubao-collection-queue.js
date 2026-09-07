@@ -1,4 +1,8 @@
 const MAX_TASKS = 500;
+const SESSION_FAILURES = new Set([
+  "DOUBAO_TIMEOUT", "DOUBAO_PAGE_ERROR", "DOUBAO_SEND_FAILED",
+  "PLAYWRIGHT_TIMEOUT", "PLAYWRIGHT_SESSION_NOT_OPEN", "PLAYWRIGHT_EXEC_FAILED"
+]);
 const SAME_CLIENT_MIN_DELAY_MS = 3000;
 const SAME_CLIENT_MAX_DELAY_MS = 8000;
 const CLIENT_SWITCH_MIN_DELAY_MS = 6000;
@@ -313,6 +317,12 @@ function createDoubaoCollectionQueue(options) {
         }
         task.error = safeError(error);
         markTerminal(task, "failed");
+        // A timed-out send/answer is not evidence that the shared page is idle.
+        // Keep the failed task terminal; resume continues only pending tasks.
+        // Re-sending this question remains an explicit retryFailed operation.
+        if (!stopRequested && SESSION_FAILURES.has(task.error.code) && tasks.some(function(item) { return item.status === "pending"; })) {
+          pauseRequested = true;
+        }
         emit("task_failed");
       }
 
