@@ -20,7 +20,7 @@ function reportContentProductionDiagnostic(code, operation) {
   });
 }
 
-function createContentProductionComposition(options) {
+async function createContentProductionComposition(options) {
   const value = options || {};
   if (typeof value.workspaceRoot !== "string" || !value.workspaceRoot.trim())
     throw new Error("CONTENT_PRODUCTION_WORKSPACE_REQUIRED");
@@ -152,7 +152,7 @@ function createContentProductionComposition(options) {
       dispose,
     });
   } catch (error) {
-    void dispose();
+    await dispose();
     throw error;
   }
 }
