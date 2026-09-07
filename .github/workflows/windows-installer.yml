@@ -1,4 +1,5 @@
 name: Windows Installer
+# Temporary package trigger for PR #37 install testing.
 
 on:
   workflow_run:
