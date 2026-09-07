@@ -70,3 +70,5 @@ jobs:
             auto—publish/release-alpha/*.exe
           if-no-files-found: error
           retention-days: 14
+
+# Temporary packaging trigger for PR #37 commit 97d7c6a; close without merge.
