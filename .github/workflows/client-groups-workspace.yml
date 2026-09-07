@@ -1,0 +1,41 @@
+name: Client groups offline workspace
+
+on:
+  push:
+    branches: [feat/client-groups]
+    paths: [.github/workflows/client-groups-workspace.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  workspace:
+    if: github.event.deleted == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: auto—publish
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: auto—publish/media-workbench
+      - name: Prepare source and locked dependencies (no credentials or runtime data)
+        run: |
+          mkdir -p /tmp/client-groups-workspace/tools
+          git archive HEAD | tar -x -C /tmp/client-groups-workspace
+          git rev-parse HEAD > /tmp/client-groups-workspace/SOURCE_HEAD
+          cp "$(command -v node)" /tmp/client-groups-workspace/tools/node
+          cp -a auto—publish/node_modules /tmp/client-groups-workspace/auto—publish/
+          cp -a auto—publish/media-workbench/node_modules /tmp/client-groups-workspace/auto—publish/media-workbench/
+          tar -czf /tmp/client-groups-workspace.tar.gz -C /tmp/client-groups-workspace .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: client-groups-offline-workspace
+          path: /tmp/client-groups-workspace.tar.gz
+          retention-days: 1
+          if-no-files-found: error
