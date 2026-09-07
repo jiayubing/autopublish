@@ -63,6 +63,7 @@ const domainTypeSymbols = {
     "PlatformStatus",
     "PlatformSubmitState",
     "PlatformTaskReference",
+    "PlatformTerminalResult",
     "PlatformTaskSnapshot",
     "PlatformSubmitPlan",
     "PlatformSubmitTask",
