@@ -16,24 +16,47 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
-      - name: Apply exact tested source tree and remove temporary workflow
+          fetch-depth: 3
+      - name: Apply exact tested source tree
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           python3 - <<'PYCODE'
-          import base64, gzip, hashlib, subprocess
+          import base64, gzip, hashlib, json, os, subprocess, urllib.request
           subprocess.run(["git", "diff", "--exit-code", "dbe3699701ae934f2a963291b7291186b13f2720", "HEAD", "--", ".", ":(exclude).github/workflows/client-groups-workspace.yml"], check=True)
-          data = (
-            "H4sIAAAAAAAC/+y9aXcbx5Uw/F2/oo2ZMwQjAARXSdQWWpIdvqMtIpXM8yo6UhNoih2BaAQNSuLQOEdetNnaHNuyrcWyHC9KYi12bGuzrHOen5IhQPJT/sJ7l6rqql4AcPHMPPM+OTMW2F19q+rWrbvXraI7OWlls8fcmmX35PxC1a4VpnoKJdcp17LHqt5Mxe/ZsXt0197x7KsH9h3cP5bdv3tkb266aE0sq/m6snPSmnRLjjXtFR2rN58fGhhY55aLzikrz//L5YYG7YHJwf512WzW6ik6J3rKM6XSuvXr1y+3s1/+0srmM3lrfW9mYIP1y1+uW/9PVuP+Z83zjxrnzy48e2v+8eWl0xea7/x53Xp49U/W4sU3Gze+g6eN208Xnr7Apwvv34Xmzcvnm7fe/MeP1xvPni789Z3G27cX33wOMJrvP2g8+aFx/5PmteeNR98u3r+7eP/pwvW39E7+8eON5pWr808/t/Yf+MePF+cfX1o895fG23cbV8/Dt/9x+o1167k7a9r2a04VejmaH9o0sXFjYbKvt9/u6+sdmsxvnCz0DvUP9RYmNkza/YXJH6TRu4wSa6i3Z6jXWjp9ffHFuX/8eH4vqkB9A7m+fC4PWNjtlmdO/ePHC5L13fy6cfMhEtWbz7mrxdffX3j+LmKQ5gYc2i4XprJeuTRrnfSqxydL3kmr8eDHxrmnC9/+tHDnvvUq6nPVwpR7wkFyeP91FP0/3Vr8Hrm4JfqHrpGtwxCvXoZ1pY9qVccJJg5i0zo6YBcKxU2TzqZNvYNDdn9xYiA/ONi7sVAY2jQ5WByayPf3bRzYaG86SkKdBhgM6uZdVpKYeuYf3wOhBvtbcAbA+hlg46cXnp0HJckqgjIq2cD9T4BQGvcvwiriOH86w8oO0A2K9PmnTxuPvmBNivTvPOYZpc"
-          )
-          patch = gzip.decompress(base64.b64decode(data))
+          chunks = [
+              "d3feb21ef152e3edf907210210cc48bead002063",
+              "29fbf08521aa78707615fe91113f5d9e876b281b",
+              "e2ae00ff08adc2964054a8662da52102e16da6ed",
+              "1a4e4410a1219ff1c722cfac690d6a6d145a8ed3",
+              "0908cce82c5f85eb50e800909488e6dd16bab85f",
+              "3546a5683e7f177515f05394bd9ca78c0d706865",
+              "62ac9d50b5457e0382388d86ea125bf9ac33ce1f",
+              "f2a4a7225d871c24e3d63fe85c37eee8868e8b49",
+          ]
+          compressed = b""
+          for sha in chunks:
+              request = urllib.request.Request(
+                  "https://api.github.com/repos/jiayubing/autopublish/git/blobs/" + sha,
+                  headers={"Authorization": "Bearer " + os.environ["GH_TOKEN"], "Accept": "application/vnd.github+json"},
+              )
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  blob = json.load(response)
+              data = base64.b64decode(blob["content"])
+              assert hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest() == sha
+              compressed += data
+          patch = gzip.decompress(compressed)
           assert hashlib.sha256(patch).hexdigest() == "ecb99d38fd7221142c229a2f69f07465ead209e7606f5525cae93604b92dcc46"
           subprocess.run(["git", "apply", "--index", "--binary", "-"], input=patch, check=True)
           subprocess.run(["git", "rm", "--", ".github/workflows/client-groups-workspace.yml"], check=True)
           subprocess.run(["git", "diff", "--cached", "--check"], check=True)
           tree = subprocess.check_output(["git", "write-tree"], text=True).strip()
           assert tree == "5085088394143b541f6fa0640ee8337df6434b33", tree
-          print("Verified tested source tree:", tree)
+          print("Verified tested final source tree:", tree)
+          # The connector removes this temporary workflow after this push.
+          # Keep its HEAD contents unchanged in the Actions-token commit.
+          subprocess.run(["git", "restore", "--source=HEAD", "--staged", "--worktree", ".github/workflows/client-groups-workspace.yml"], check=True)
           PYCODE
           git config user.name "AutoPublish Assistant"
           git config user.email "autopublish-assistant@users.noreply.github.com"
