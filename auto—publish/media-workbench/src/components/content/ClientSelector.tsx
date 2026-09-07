@@ -67,7 +67,7 @@ function ClientFilters({ clients, grouping, filter, label, disabled, allowManage
   </>;
 }
 
-export function ClientSelection({ clients, selectedIds, onChange, grouping, disabled = false, describeClient, allowManage = true }: {
+function ClientSelectionList({ clients, selectedIds, onChange, grouping, disabled = false, describeClient, allowManage = true }: {
   clients: ContentClient[];
   selectedIds: string[];
   onChange: (ids: string[]) => void;
@@ -88,7 +88,7 @@ export function ClientSelection({ clients, selectedIds, onChange, grouping, disa
   const currentPage = Math.min(page, pages);
   const visible = rows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
   const changeFilter = () => { setPage(1); setShowSelected(false); };
-  return <div className="min-w-0 space-y-2" data-client-selection>
+  return <div className="min-w-0 space-y-2" data-client-selection-list>
     <ClientFilters clients={clients} grouping={grouping} filter={filter} label="批次客户" disabled={disabled} allowManage={allowManage} onFilterChange={changeFilter} />
     <div className="flex flex-wrap items-center gap-2">
       <button type="button" disabled={disabled || !filter.matched.length} onClick={() => onChange([...new Set([...selectedClients.map((client) => client.id), ...matchedIds])])} className={button}>全选当前结果（{filter.matched.length}）</button>
@@ -108,23 +108,66 @@ export function ClientSelection({ clients, selectedIds, onChange, grouping, disa
   </div>;
 }
 
+export function ClientSelection({ clients, selectedIds, onChange, grouping, disabled = false, describeClient, allowManage = true }: {
+  clients: ContentClient[];
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
+  grouping?: ClientGrouping;
+  disabled?: boolean;
+  describeClient?: (client: ContentClient) => React.ReactNode;
+  allowManage?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const selected = new Set(selectedIds);
+  const selectedClients = clients.filter((client) => selected.has(client.id));
+  const summary = selectedClients.length
+    ? `${selectedClients.slice(0, 3).map((client) => client.name).join('、')}${selectedClients.length > 3 ? ` 等 ${selectedClients.length} 个` : ''}`
+    : '尚未选择客户';
+
+  useEffect(() => {
+    if (!open) return;
+    const dialog = dialogRef.current;
+    dialog?.showModal();
+    return () => dialog?.close();
+  }, [open]);
+
+  return <div className="min-w-0 space-y-2" data-client-selection>
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
+      <p role="status" className="min-w-0 flex-1 text-xs text-slate-600">已选 {selectedClients.length} 个客户：<span className="text-slate-800">{summary}</span></p>
+      <button type="button" onClick={() => setOpen(true)} disabled={disabled} className={button}>选择客户</button>
+      <button type="button" onClick={() => onChange([])} disabled={disabled || !selectedClients.length} className={button}>清空选择</button>
+    </div>
+    {open && <dialog ref={dialogRef} aria-label="选择批次客户" onCancel={(event) => { event.preventDefault(); if (!disabled) setOpen(false); }} className="m-auto max-h-[90vh] w-11/12 max-w-4xl overflow-y-auto rounded-lg border border-slate-200 bg-white p-5 shadow-xl backdrop:bg-black/30">
+      <div className="mb-3 flex items-center justify-between gap-2"><div><h2 className="text-sm font-semibold">选择批次客户</h2><p className="mt-1 text-xs text-slate-500">按分组或名称筛选后勾选；切换筛选不会丢失已选客户。</p></div><button type="button" onClick={() => setOpen(false)} disabled={disabled} className={button}>完成选择</button></div>
+      <ClientSelectionList clients={clients} selectedIds={selectedIds} onChange={onChange} grouping={grouping} disabled={disabled} describeClient={describeClient} allowManage={allowManage} />
+    </dialog>}
+  </div>;
+}
+
 export function CurrentClientSelector({ clients, clientId, onChange, grouping }: {
   clients: ContentClient[]; clientId: string; onChange: (id: string) => void; grouping?: ClientGrouping;
 }) {
-  const filter = useClientFilter(clients, grouping);
-  const current = clients.find((client) => client.id === clientId);
-  const currentOutside = current && !filter.matched.some((client) => client.id === clientId);
-  return <div className="flex min-w-0 flex-wrap items-center gap-2">
-    <ClientFilters clients={clients} grouping={grouping} filter={filter} label="客户" />
-    <label className="flex min-w-0 items-center gap-2 text-xs text-slate-500">当前客户
-      <select aria-label="当前客户" value={clientId} onChange={(event) => onChange(event.target.value)} className={`${control} w-48 max-w-full`}>
-        <option value="" disabled={clients.length > 0}>{clients.length ? '请选择客户' : '暂无客户'}</option>
-        {currentOutside && <option value={current.id}>当前：{current.name}（筛选外）</option>}
-        {filter.matched.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
-        {!filter.matched.length && clients.length > 0 && <option disabled>没有匹配客户</option>}
-      </select>
-    </label>
-  </div>;
+  const catalog = grouping?.error ? EMPTY_CATALOG : grouping?.catalog || EMPTY_CATALOG;
+  const memberships = new Map(catalog.memberships.map((member) => [member.clientId, member.groupId] as const));
+  const groupedIds = new Set<string>();
+  const grouped = catalog.groups.map((group) => {
+    const members = clients.filter((client) => memberships.get(client.id) === group.id);
+    members.forEach((client) => groupedIds.add(client.id));
+    return { group, members };
+  }).filter((entry) => entry.members.length > 0);
+  const ungrouped = clients.filter((client) => !groupedIds.has(client.id));
+  const useFlatList = Boolean(grouping?.error);
+
+  return <label className="flex min-w-0 items-center gap-2 text-xs text-slate-500">当前客户
+    <select aria-label="当前客户" value={clientId} onChange={(event) => onChange(event.target.value)} className={`${control} w-52 max-w-full`} title="可直接键入客户名称快速定位">
+      <option value="" disabled={clients.length > 0}>{clients.length ? '请选择客户' : '暂无客户'}</option>
+      {useFlatList ? clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>) : <>
+        {grouped.map(({ group, members }) => <optgroup key={group.id} label={`${group.name}（${members.length}）`}>{members.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</optgroup>)}
+        {ungrouped.length > 0 && <optgroup label={`未分组（${ungrouped.length}）`}>{ungrouped.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</optgroup>}
+      </>}
+    </select>
+  </label>;
 }
 
 function ClientGroupManager({ clients, grouping, onClose }: { clients: ContentClient[]; grouping: ClientGrouping; onClose: () => void }) {
@@ -191,7 +234,7 @@ function ClientGroupManager({ clients, grouping, onClose }: { clients: ContentCl
       <div className="mt-2 flex gap-2"><button type="button" disabled={unavailable} onClick={() => void save({ action: 'delete', revision: grouping.catalog.revision, groupId: editing.id })} className={button}>确认删除分组</button><button type="button" disabled={busy} onClick={() => setDeleteRequested(false)} className={button}>取消删除</button></div>
     </div>}
     <h3 className="mb-2 text-xs font-semibold">批量移动客户</h3>
-    <ClientSelection clients={clients} selectedIds={selectedIds} onChange={setSelectedIds} grouping={grouping} disabled={unavailable} allowManage={false} />
+    <ClientSelectionList clients={clients} selectedIds={selectedIds} onChange={setSelectedIds} grouping={grouping} disabled={unavailable} allowManage={false} />
     <div className="mt-3 flex flex-wrap items-center gap-2">
       <label className="text-xs">移入分组 <select aria-label="移入分组" value={destinationId} onChange={(event) => setDestinationId(event.target.value)} disabled={unavailable} className={`${control} max-w-56`}><option value="">未分组</option>{grouping.catalog.groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label>
       <button type="button" disabled={unavailable || !selectedIds.length} onClick={async () => { if (await save({ action: 'assign', revision: grouping.catalog.revision, groupId: destinationId || null, clientIds: [...selectedIds] })) setSelectedIds([]); }} className={button}>移动选中客户（{selectedIds.length}）</button>
