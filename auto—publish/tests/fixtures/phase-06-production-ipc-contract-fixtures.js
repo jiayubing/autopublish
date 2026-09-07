@@ -118,3064 +118,11 @@ function contentManagementFixture() {
   };
 }
 
-const PRODUCTION_CALLERS = Object.freeze({
-  "workspace.getBootstrapState": Object.freeze({
-    view: "media-workbench/src/components/WorkspaceSelectionPanel.tsx",
-    viewSymbol: "useWorkspaceFeature",
-    feature:
-      "media-workbench/src/features/workspace/workspace-feature-context.tsx",
-    featureSymbol: "useWorkspaceFeature",
-    bridge: "media-workbench/src/bridge/workspace.ts",
-    bridgeSymbol: "getWorkspaceBootstrapState",
-    preloadMethod: "getBootstrapState",
-    command: "workspace.getBootstrapState",
-    channel: "workspace:get-bootstrap-state",
-    registrar: "desktop/ipc/workspace-bootstrap-ipc.js",
-    application: "service.getBootstrapState",
-    featureBinding: "getBootstrapState",
-  }),
-  "workspace.chooseDirectory": Object.freeze({
-    view: "media-workbench/src/components/WorkspaceSelectionPanel.tsx",
-    viewSymbol: "useWorkspaceFeature",
-    feature:
-      "media-workbench/src/features/workspace/workspace-feature-context.tsx",
-    featureSymbol: "useWorkspaceFeature",
-    bridge: "media-workbench/src/bridge/workspace.ts",
-    bridgeSymbol: "chooseWorkspaceDirectory",
-    preloadMethod: "chooseDirectory",
-    command: "workspace.chooseDirectory",
-    channel: "workspace:choose-directory",
-    registrar: "desktop/ipc/workspace-bootstrap-ipc.js",
-    application: "service.chooseDirectory",
-    featureBinding: "chooseDirectory",
-  }),
-  "workspace.confirmSelection": Object.freeze({
-    view: "media-workbench/src/components/WorkspaceSelectionPanel.tsx",
-    viewSymbol: "useWorkspaceFeature",
-    feature:
-      "media-workbench/src/features/workspace/workspace-feature-context.tsx",
-    featureSymbol: "useWorkspaceFeature",
-    bridge: "media-workbench/src/bridge/workspace.ts",
-    bridgeSymbol: "confirmWorkspaceSelection",
-    preloadMethod: "confirmSelection",
-    command: "workspace.confirmSelection",
-    channel: "workspace:confirm-selection",
-    registrar: "desktop/ipc/workspace-bootstrap-ipc.js",
-    application: "service.confirmSelection",
-    featureBinding: "confirmSelection",
-  }),
-  "workspace.cancelSelection": Object.freeze({
-    view: "media-workbench/src/components/WorkspaceSelectionPanel.tsx",
-    viewSymbol: "useWorkspaceFeature",
-    feature:
-      "media-workbench/src/features/workspace/workspace-feature-context.tsx",
-    featureSymbol: "useWorkspaceFeature",
-    bridge: "media-workbench/src/bridge/workspace.ts",
-    bridgeSymbol: "cancelWorkspaceSelection",
-    preloadMethod: "cancelSelection",
-    command: "workspace.cancelSelection",
-    channel: "workspace:cancel-selection",
-    registrar: "desktop/ipc/workspace-bootstrap-ipc.js",
-    application: "service.cancelSelection",
-    featureBinding: "cancelSelection",
-  }),
-  "workspace.getCurrent": Object.freeze({
-    view: "media-workbench/src/components/WorkspaceSelectionPanel.tsx",
-    viewSymbol: "useWorkspaceFeature",
-    feature:
-      "media-workbench/src/features/workspace/workspace-feature-context.tsx",
-    featureSymbol: "useWorkspaceFeature",
-    bridge: "media-workbench/src/bridge/workspace.ts",
-    bridgeSymbol: "getCurrentWorkspace",
-    preloadMethod: "getCurrent",
-    command: "workspace.getCurrent",
-    channel: "workspace:get-current",
-    registrar: "desktop/ipc/workspace-bootstrap-ipc.js",
-    application: "service.getCurrent",
-    featureBinding: "getCurrent",
-  }),
-  "workspace.openCurrent": Object.freeze({
-    view: "media-workbench/src/components/WorkspaceSelectionPanel.tsx",
-    viewSymbol: "useWorkspaceFeature",
-    feature:
-      "media-workbench/src/features/workspace/workspace-feature-context.tsx",
-    featureSymbol: "useWorkspaceFeature",
-    bridge: "media-workbench/src/bridge/workspace.ts",
-    bridgeSymbol: "openCurrentWorkspace",
-    preloadMethod: "openCurrent",
-    command: "workspace.openCurrent",
-    channel: "workspace:open-current",
-    registrar: "desktop/ipc/workspace-bootstrap-ipc.js",
-    application: "service.openCurrent",
-    featureBinding: "openCurrent",
-  }),
-  "workspace.requestSwitch": Object.freeze({
-    view: "media-workbench/src/components/WorkspaceSelectionPanel.tsx",
-    viewSymbol: "useWorkspaceFeature",
-    feature:
-      "media-workbench/src/features/workspace/workspace-feature-context.tsx",
-    featureSymbol: "useWorkspaceFeature",
-    bridge: "media-workbench/src/bridge/workspace.ts",
-    bridgeSymbol: "requestWorkspaceSwitch",
-    preloadMethod: "requestSwitch",
-    command: "workspace.requestSwitch",
-    channel: "workspace:request-switch",
-    registrar: "desktop/ipc/workspace-bootstrap-ipc.js",
-    application: "service.requestSwitch",
-    featureBinding: "requestSwitch",
-  }),
-  "settings.ai.getStatus": Object.freeze({
-    view: "media-workbench/src/components/SettingsView.tsx",
-    viewSymbol: "useSettingsFeature",
-    feature: "media-workbench/src/features/settings/settings-context.tsx",
-    featureSymbol: "useSettingsFeature",
-    bridge: "media-workbench/src/bridge/settings.ts",
-    bridgeSymbol: "getAiProviderStatus",
-    preloadMethod: "getStatus",
-    command: "settings.ai.getStatus",
-    channel: "ai-provider:get-status",
-    registrar: "desktop/ipc/ai-provider-ipc.js",
-    application: "service.getStatus",
-    featureBinding: "getAiStatus",
-  }),
-  "settings.ai.save": Object.freeze({
-    view: "media-workbench/src/components/SettingsView.tsx",
-    viewSymbol: "useSettingsFeature",
-    feature: "media-workbench/src/features/settings/settings-context.tsx",
-    featureSymbol: "useSettingsFeature",
-    bridge: "media-workbench/src/bridge/settings.ts",
-    bridgeSymbol: "saveAiProviderConfig",
-    preloadMethod: "save",
-    command: "settings.ai.save",
-    channel: "ai-provider:save",
-    registrar: "desktop/ipc/ai-provider-ipc.js",
-    application: "service.save",
-    featureBinding: "saveAi",
-  }),
-  "settings.ai.test": Object.freeze({
-    view: "media-workbench/src/components/SettingsView.tsx",
-    viewSymbol: "useSettingsFeature",
-    feature: "media-workbench/src/features/settings/settings-context.tsx",
-    featureSymbol: "useSettingsFeature",
-    bridge: "media-workbench/src/bridge/settings.ts",
-    bridgeSymbol: "testAiProviderConnection",
-    preloadMethod: "testConnection",
-    command: "settings.ai.test",
-    channel: "ai-provider:test",
-    registrar: "desktop/ipc/ai-provider-ipc.js",
-    application: "service.testConnection",
-    featureBinding: "testAi",
-  }),
-  "settings.ai.clear": Object.freeze({
-    view: "media-workbench/src/components/SettingsView.tsx",
-    viewSymbol: "useSettingsFeature",
-    feature: "media-workbench/src/features/settings/settings-context.tsx",
-    featureSymbol: "useSettingsFeature",
-    bridge: "media-workbench/src/bridge/settings.ts",
-    bridgeSymbol: "clearAiProviderConfig",
-    preloadMethod: "clear",
-    command: "settings.ai.clear",
-    channel: "ai-provider:clear",
-    registrar: "desktop/ipc/ai-provider-ipc.js",
-    application: "service.clear",
-    featureBinding: "clearAi",
-  }),
-  "settings.platform.getStatus": Object.freeze({
-    view: "media-workbench/src/components/SettingsView.tsx",
-    viewSymbol: "useSettingsFeature",
-    feature: "media-workbench/src/features/settings/settings-context.tsx",
-    featureSymbol: "useSettingsFeature",
-    bridge: "media-workbench/src/bridge/settings.ts",
-    bridgeSymbol: "getPlatformSettingsStatus",
-    preloadMethod: "getStatus",
-    command: "settings.platform.getStatus",
-    channel: "platform-settings:get-status",
-    registrar: "desktop/ipc/platform-settings-ipc.js",
-    application: "service.getStatus",
-    featureBinding: "getMediaStatus",
-  }),
-  "settings.platform.save": Object.freeze({
-    view: "media-workbench/src/components/SettingsView.tsx",
-    viewSymbol: "useSettingsFeature",
-    feature: "media-workbench/src/features/settings/settings-context.tsx",
-    featureSymbol: "useSettingsFeature",
-    bridge: "media-workbench/src/bridge/settings.ts",
-    bridgeSymbol: "savePlatformSettings",
-    preloadMethod: "save",
-    command: "settings.platform.save",
-    channel: "platform-settings:save",
-    registrar: "desktop/ipc/platform-settings-ipc.js",
-    application: "service.save",
-    featureBinding: "saveMedia",
-  }),
-  "settings.platform.test": Object.freeze({
-    view: "media-workbench/src/components/SettingsView.tsx",
-    viewSymbol: "useSettingsFeature",
-    feature: "media-workbench/src/features/settings/settings-context.tsx",
-    featureSymbol: "useSettingsFeature",
-    bridge: "media-workbench/src/bridge/settings.ts",
-    bridgeSymbol: "testPlatformSettings",
-    preloadMethod: "test",
-    command: "settings.platform.test",
-    channel: "platform-settings:test",
-    registrar: "desktop/ipc/platform-settings-ipc.js",
-    application: "service.test",
-    featureBinding: "testMedia",
-  }),
-  "settings.platform.clear": Object.freeze({
-    view: "media-workbench/src/components/SettingsView.tsx",
-    viewSymbol: "useSettingsFeature",
-    feature: "media-workbench/src/features/settings/settings-context.tsx",
-    featureSymbol: "useSettingsFeature",
-    bridge: "media-workbench/src/bridge/settings.ts",
-    bridgeSymbol: "clearPlatformSettings",
-    preloadMethod: "clear",
-    command: "settings.platform.clear",
-    channel: "platform-settings:clear",
-    registrar: "desktop/ipc/platform-settings-ipc.js",
-    application: "service.clear",
-    featureBinding: "clearMedia",
-  }),
-  "settings.platform.getLegacyStatus": Object.freeze({
-    view: "media-workbench/src/components/SettingsView.tsx",
-    viewSymbol: "useSettingsFeature",
-    feature: "media-workbench/src/features/settings/settings-context.tsx",
-    featureSymbol: "useSettingsFeature",
-    bridge: "media-workbench/src/bridge/settings.ts",
-    bridgeSymbol: "getLegacyPlatformSettingsStatus",
-    preloadMethod: "getLegacyStatus",
-    command: "settings.platform.getLegacyStatus",
-    channel: "platform-settings:get-legacy-status",
-    registrar: "desktop/ipc/platform-settings-ipc.js",
-    application: "deps.legacyProviderSettings.discover",
-    featureBinding: "getLegacyStatus",
-  }),
-  "settings.platform.importLegacy": Object.freeze({
-    view: "media-workbench/src/components/SettingsView.tsx",
-    viewSymbol: "useSettingsFeature",
-    feature: "media-workbench/src/features/settings/settings-context.tsx",
-    featureSymbol: "useSettingsFeature",
-    bridge: "media-workbench/src/bridge/settings.ts",
-    bridgeSymbol: "importLegacyPlatformSettings",
-    preloadMethod: "importLegacy",
-    command: "settings.platform.importLegacy",
-    channel: "platform-settings:import-legacy",
-    registrar: "desktop/ipc/platform-settings-ipc.js",
-    application: "deps.legacyProviderSettings.importLegacy",
-    featureBinding: "importLegacy",
-  }),
-  "settings.storage.getUsage": Object.freeze({
-    view: "media-workbench/src/components/SettingsView.tsx",
-    viewSymbol: "useSettingsFeature",
-    feature: "media-workbench/src/features/settings/settings-context.tsx",
-    featureSymbol: "useSettingsFeature",
-    bridge: "media-workbench/src/bridge/settings.ts",
-    bridgeSymbol: "getStorageUsage",
-    preloadMethod: "getUsage",
-    command: "settings.storage.getUsage",
-    channel: "storage-maintenance:get-usage",
-    registrar: "desktop/ipc/storage-maintenance-ipc.js",
-    application: "service.getUsage",
-    featureBinding: "getStorageUsage",
-  }),
-  "settings.storage.cleanCaches": Object.freeze({
-    view: "media-workbench/src/components/SettingsView.tsx",
-    viewSymbol: "useSettingsFeature",
-    feature: "media-workbench/src/features/settings/settings-context.tsx",
-    featureSymbol: "useSettingsFeature",
-    bridge: "media-workbench/src/bridge/settings.ts",
-    bridgeSymbol: "cleanStorageCaches",
-    preloadMethod: "cleanCaches",
-    command: "settings.storage.cleanCaches",
-    channel: "storage-maintenance:clean-caches",
-    registrar: "desktop/ipc/storage-maintenance-ipc.js",
-    application: "service.cleanupCaches",
-    featureBinding: "cleanStorageCaches",
-  }),
-  "settings.runtime.getDiagnostics": Object.freeze({
-    view: "media-workbench/src/components/SettingsView.tsx",
-    viewSymbol: "useSettingsFeature",
-    feature: "media-workbench/src/features/settings/settings-context.tsx",
-    featureSymbol: "useSettingsFeature",
-    bridge: "media-workbench/src/bridge/workspace.ts",
-    bridgeSymbol: "getRuntimeDiagnostics",
-    preloadMethod: "get",
-    command: "settings.runtime.getDiagnostics",
-    channel: "runtime-diagnostics:get",
-    registrar: "desktop/ipc/runtime-diagnostics-ipc.js",
-    application: "service.safeDiagnostics",
-    featureBinding: "getRuntimeDiagnostics",
-  }),
-  "settings.runtime.browserSmoke": Object.freeze({
-    view: "media-workbench/src/components/SettingsView.tsx",
-    viewSymbol: "useSettingsFeature",
-    feature: "media-workbench/src/features/settings/settings-context.tsx",
-    featureSymbol: "useSettingsFeature",
-    bridge: "media-workbench/src/bridge/workspace.ts",
-    bridgeSymbol: "runBrowserSelfCheck",
-    preloadMethod: "browserSmoke",
-    command: "settings.runtime.browserSmoke",
-    channel: "runtime-diagnostics:browser-smoke",
-    registrar: "desktop/ipc/runtime-diagnostics-ipc.js",
-    application: "service.probeBrowser",
-    featureBinding: "runBrowserSelfCheck",
-  }),
-  "media.refreshResources": Object.freeze({
-    view: "media-workbench/src/App.tsx",
-    viewSymbol: "useMediaFeature",
-    feature: "media-workbench/src/features/media/use-media-feature.ts",
-    featureSymbol: "useMediaFeature",
-    bridge: "media-workbench/src/bridge/media.ts",
-    bridgeSymbol: "refreshResources",
-    preloadMethod: "refreshResources",
-    command: "media.refreshResources",
-    channel: "media:refresh-resources",
-    registrar: "desktop/ipc/media-ipc.js",
-    application: "application.refreshResources",
-    featureBinding: "refreshResources",
-  }),
-  "media.getResourcePage": Object.freeze({
-    view: "media-workbench/src/App.tsx",
-    viewSymbol: "useMediaFeature",
-    feature: "media-workbench/src/features/media/use-media-feature.ts",
-    featureSymbol: "useMediaFeature",
-    bridge: "media-workbench/src/bridge/media.ts",
-    bridgeSymbol: "getResourcePage",
-    preloadMethod: "getResourcePage",
-    command: "media.getResourcePage",
-    channel: "media:get-resource-page",
-    registrar: "desktop/ipc/media-ipc.js",
-    application: "application.getResourcePage",
-    featureBinding: "getResourcePage",
-  }),
-  "media.searchResourcePage": Object.freeze({
-    view: "media-workbench/src/App.tsx",
-    viewSymbol: "useMediaFeature",
-    feature: "media-workbench/src/features/media/use-media-feature.ts",
-    featureSymbol: "useMediaFeature",
-    bridge: "media-workbench/src/bridge/media.ts",
-    bridgeSymbol: "searchResourcePage",
-    preloadMethod: "searchResourcePage",
-    command: "media.searchResourcePage",
-    channel: "media:search-resource-page",
-    registrar: "desktop/ipc/media-ipc.js",
-    application: "application.searchResourcePage",
-    featureBinding: "searchResourcePage",
-  }),
-  "media.getPool": Object.freeze({
-    view: "media-workbench/src/App.tsx",
-    viewSymbol: "useMediaFeature",
-    feature: "media-workbench/src/features/media/use-media-feature.ts",
-    featureSymbol: "useMediaFeature",
-    bridge: "media-workbench/src/bridge/media.ts",
-    bridgeSymbol: "getPoolPage",
-    preloadMethod: "getPool",
-    command: "media.getPool",
-    channel: "media:get-pool",
-    registrar: "desktop/ipc/media-ipc.js",
-    application: "application.getPool",
-    featureBinding: "getPoolPage",
-  }),
-  "media.addToPool": Object.freeze({
-    view: "media-workbench/src/App.tsx",
-    viewSymbol: "useMediaFeature",
-    feature: "media-workbench/src/features/media/use-media-feature.ts",
-    featureSymbol: "useMediaFeature",
-    bridge: "media-workbench/src/bridge/media.ts",
-    bridgeSymbol: "addToPool",
-    preloadMethod: "addToPool",
-    command: "media.addToPool",
-    channel: "media:add-to-pool",
-    registrar: "desktop/ipc/media-ipc.js",
-    application: "application.addToPool",
-    featureBinding: "addToPool",
-  }),
-  "media.removeFromPool": Object.freeze({
-    view: "media-workbench/src/App.tsx",
-    viewSymbol: "useMediaFeature",
-    feature: "media-workbench/src/features/media/use-media-feature.ts",
-    featureSymbol: "useMediaFeature",
-    bridge: "media-workbench/src/bridge/media.ts",
-    bridgeSymbol: "removeFromPool",
-    preloadMethod: "removeFromPool",
-    command: "media.removeFromPool",
-    channel: "media:remove-from-pool",
-    registrar: "desktop/ipc/media-ipc.js",
-    application: "application.removeFromPool",
-    featureBinding: "removeFromPool",
-  }),
-  "media.getDrafts": Object.freeze({
-    view: "media-workbench/src/App.tsx",
-    viewSymbol: "useMediaFeature",
-    feature: "media-workbench/src/features/media/use-media-feature.ts",
-    featureSymbol: "useMediaFeature",
-    bridge: "media-workbench/src/bridge/media.ts",
-    bridgeSymbol: "getDrafts",
-    preloadMethod: "getDrafts",
-    command: "media.getDrafts",
-    channel: "media:get-drafts",
-    registrar: "desktop/ipc/media-ipc.js",
-    application: "application.getDrafts",
-    featureBinding: "getDrafts",
-  }),
-  "media.scanArticles": Object.freeze({
-    view: "media-workbench/src/App.tsx",
-    viewSymbol: "useMediaFeature",
-    feature: "media-workbench/src/features/media/use-media-feature.ts",
-    featureSymbol: "useMediaFeature",
-    bridge: "media-workbench/src/bridge/media.ts",
-    bridgeSymbol: "scanArticles",
-    preloadMethod: "scanArticles",
-    command: "media.scanArticles",
-    channel: "media:scan-articles",
-    registrar: "desktop/ipc/media-ipc.js",
-    application: "application.scanArticles",
-    featureBinding: "scanArticles",
-  }),
-  "media.getOrders": Object.freeze({
-    view: "media-workbench/src/App.tsx",
-    viewSymbol: "useMediaFeature",
-    feature: "media-workbench/src/features/media/use-media-feature.ts",
-    featureSymbol: "useMediaFeature",
-    bridge: "media-workbench/src/bridge/media.ts",
-    bridgeSymbol: "getOrders",
-    preloadMethod: "getOrders",
-    command: "media.getOrders",
-    channel: "media:get-orders",
-    registrar: "desktop/ipc/media-ipc.js",
-    application: "application.getOrders",
-    featureBinding: "getOrders",
-  }),
-  "media.syncOrder": Object.freeze({
-    view: "media-workbench/src/App.tsx",
-    viewSymbol: "useMediaFeature",
-    feature: "media-workbench/src/features/media/use-media-feature.ts",
-    featureSymbol: "useMediaFeature",
-    bridge: "media-workbench/src/bridge/media.ts",
-    bridgeSymbol: "syncOrder",
-    preloadMethod: "syncOrder",
-    command: "media.syncOrder",
-    channel: "media:sync-order",
-    registrar: "desktop/ipc/media-ipc.js",
-    application: "application.syncOrder",
-    featureBinding: "syncOrder",
-  }),
-  "media.syncAllOrders": Object.freeze({
-    view: "media-workbench/src/App.tsx",
-    viewSymbol: "useMediaFeature",
-    feature: "media-workbench/src/features/media/use-media-feature.ts",
-    featureSymbol: "useMediaFeature",
-    bridge: "media-workbench/src/bridge/media.ts",
-    bridgeSymbol: "syncAllOrders",
-    preloadMethod: "syncAllOrders",
-    command: "media.syncAllOrders",
-    channel: "media:sync-all-orders",
-    registrar: "desktop/ipc/media-ipc.js",
-    application: "application.syncAllOrders",
-    featureBinding: "syncAllOrders",
-  }),
-  "media.prepareOrderStatusAnomalyResolution": Object.freeze({
-    view: "media-workbench/src/App.tsx",
-    viewSymbol: "useMediaFeature",
-    feature: "media-workbench/src/features/media/use-media-feature.ts",
-    featureSymbol: "useMediaFeature",
-    bridge: "media-workbench/src/bridge/media.ts",
-    bridgeSymbol: "prepareOrderStatusAnomalyResolution",
-    preloadMethod: "prepareOrderStatusAnomalyResolution",
-    command: "media.prepareOrderStatusAnomalyResolution",
-    channel: "media:prepare-order-status-anomaly-resolution",
-    registrar: "desktop/ipc/media-ipc.js",
-    application: "application.prepareOrderStatusAnomalyResolution",
-    featureBinding: "prepareOrderStatusAnomalyResolution",
-  }),
-  "media.resumeOrderTracking": Object.freeze({
-    view: "media-workbench/src/App.tsx",
-    viewSymbol: "useMediaFeature",
-    feature: "media-workbench/src/features/media/use-media-feature.ts",
-    featureSymbol: "useMediaFeature",
-    bridge: "media-workbench/src/bridge/media.ts",
-    bridgeSymbol: "resumeOrderTracking",
-    preloadMethod: "resumeOrderTracking",
-    command: "media.resumeOrderTracking",
-    channel: "media:resume-order-tracking",
-    registrar: "desktop/ipc/media-ipc.js",
-    application: "application.resumeOrderTracking",
-    featureBinding: "resumeOrderTracking",
-  }),
-  "media.confirmOrderPublished": Object.freeze({
-    view: "media-workbench/src/App.tsx",
-    viewSymbol: "useMediaFeature",
-    feature: "media-workbench/src/features/media/use-media-feature.ts",
-    featureSymbol: "useMediaFeature",
-    bridge: "media-workbench/src/bridge/media.ts",
-    bridgeSymbol: "confirmOrderPublished",
-    preloadMethod: "confirmOrderPublished",
-    command: "media.confirmOrderPublished",
-    channel: "media:confirm-order-published",
-    registrar: "desktop/ipc/media-ipc.js",
-    application: "application.confirmOrderPublished",
-    featureBinding: "confirmOrderPublished",
-  }),
-  "media.confirmOrderNotPublished": Object.freeze({
-    view: "media-workbench/src/App.tsx",
-    viewSymbol: "useMediaFeature",
-    feature: "media-workbench/src/features/media/use-media-feature.ts",
-    featureSymbol: "useMediaFeature",
-    bridge: "media-workbench/src/bridge/media.ts",
-    bridgeSymbol: "confirmOrderNotPublished",
-    preloadMethod: "confirmOrderNotPublished",
-    command: "media.confirmOrderNotPublished",
-    channel: "media:confirm-order-not-published",
-    registrar: "desktop/ipc/media-ipc.js",
-    application: "application.confirmOrderNotPublished",
-    featureBinding: "confirmOrderNotPublished",
-  }),
-  "media.openPublishedUrl": Object.freeze({
-    view: "media-workbench/src/App.tsx",
-    viewSymbol: "useMediaFeature",
-    feature: "media-workbench/src/features/media/use-media-feature.ts",
-    featureSymbol: "useMediaFeature",
-    bridge: "media-workbench/src/bridge/media.ts",
-    bridgeSymbol: "openPublishedUrl",
-    preloadMethod: "openPublishedUrl",
-    command: "media.openPublishedUrl",
-    channel: "media:open-published-url",
-    registrar: "desktop/ipc/media-ipc.js",
-    application: "application.openPublishedUrl",
-    featureBinding: "openPublishedUrl",
-  }),
-  "platform.getQueue": Object.freeze({
-    view: "media-workbench/src/components/PlatformWorkbench.tsx",
-    viewSymbol: "usePlatformFeature",
-    feature:
-      "media-workbench/src/features/platform/platform-feature-context.tsx",
-    featureSymbol: "usePlatformFeature",
-    bridge: "media-workbench/src/bridge/platform.ts",
-    bridgeSymbol: "getPlatformQueue",
-    preloadMethod: "getQueue",
-    command: "platform.getQueue",
-    channel: "platforms:get-queue",
-    registrar: "desktop/ipc/platform-ipc.js",
-    application: "application.getQueue",
-    featureBinding: "loadQueue",
-  }),
-  "platform.listAccountProfiles": Object.freeze({
-    view: "media-workbench/src/components/PlatformWorkbench.tsx",
-    viewSymbol: "usePlatformFeature",
-    feature:
-      "media-workbench/src/features/platform/platform-feature-context.tsx",
-    featureSymbol: "usePlatformFeature",
-    bridge: "media-workbench/src/bridge/account-profile.ts",
-    bridgeSymbol: "listAccountProfiles",
-    preloadMethod: "listAccountProfiles",
-    command: "platform.listAccountProfiles",
-    channel: "platforms:list-account-profiles",
-    registrar: "desktop/ipc/account-profile-ipc.js",
-    application: "service.list",
-    featureBinding: "listAccountProfiles",
-  }),
-  "platform.confirmAccountProfile": Object.freeze({
-    view: "media-workbench/src/components/settings/PlatformAccountSettings.tsx",
-    viewSymbol: "PlatformAccountSettings",
-    feature:
-      "media-workbench/src/features/platform/platform-feature-context.tsx",
-    featureSymbol: "usePlatformFeature",
-    bridge: "media-workbench/src/bridge/account-profile.ts",
-    bridgeSymbol: "confirmAccountProfile",
-    preloadMethod: "confirmAccountProfile",
-    command: "platform.confirmAccountProfile",
-    channel: "platforms:confirm-account-profile",
-    registrar: "desktop/ipc/account-profile-ipc.js",
-    application: "service.createAndBind",
-    featureBinding: "confirmAccountProfile",
-  }),
-  "platform.bindAccountProfile": Object.freeze({
-    view: "media-workbench/src/components/settings/PlatformAccountSettings.tsx",
-    viewSymbol: "PlatformAccountSettings",
-    feature:
-      "media-workbench/src/features/platform/platform-feature-context.tsx",
-    featureSymbol: "usePlatformFeature",
-    bridge: "media-workbench/src/bridge/account-profile.ts",
-    bridgeSymbol: "bindAccountProfile",
-    preloadMethod: "bindAccountProfile",
-    command: "platform.bindAccountProfile",
-    channel: "platforms:bind-account-profile",
-    registrar: "desktop/ipc/account-profile-ipc.js",
-    application: "service.bindExisting",
-    featureBinding: "bindAccountProfile",
-  }),
-  "platform.deleteAccountProfile": Object.freeze({
-    view: "media-workbench/src/components/settings/PlatformAccountSettings.tsx",
-    viewSymbol: "PlatformAccountSettings",
-    feature:
-      "media-workbench/src/features/platform/platform-feature-context.tsx",
-    featureSymbol: "usePlatformFeature",
-    bridge: "media-workbench/src/bridge/account-profile.ts",
-    bridgeSymbol: "deleteAccountProfile",
-    preloadMethod: "deleteAccountProfile",
-    command: "platform.deleteAccountProfile",
-    channel: "platforms:delete-account-profile",
-    registrar: "desktop/ipc/account-profile-ipc.js",
-    application: "service.delete",
-    featureBinding: "deleteAccountProfile",
-  }),
-  "platform.openLogin": Object.freeze({
-    view: "media-workbench/src/components/settings/PlatformAccountSettings.tsx",
-    viewSymbol: "PlatformAccountSettings",
-    feature:
-      "media-workbench/src/features/platform/platform-feature-context.tsx",
-    featureSymbol: "usePlatformFeature",
-    bridge: "media-workbench/src/bridge/platform.ts",
-    bridgeSymbol: "openPlatformLogin",
-    preloadMethod: "openLogin",
-    command: "platform.openLogin",
-    channel: "platforms:open-login",
-    registrar: "desktop/ipc/platform-ipc.js",
-    application: "application.openLogin",
-    featureBinding: "openLogin",
-  }),
-  "platform.checkLogin": Object.freeze({
-    view: "media-workbench/src/components/settings/PlatformAccountSettings.tsx",
-    viewSymbol: "PlatformAccountSettings",
-    feature:
-      "media-workbench/src/features/platform/platform-feature-context.tsx",
-    featureSymbol: "usePlatformFeature",
-    bridge: "media-workbench/src/bridge/platform.ts",
-    bridgeSymbol: "checkPlatformLogin",
-    preloadMethod: "checkLogin",
-    command: "platform.checkLogin",
-    channel: "platforms:check-login",
-    registrar: "desktop/ipc/platform-ipc.js",
-    application: "application.checkLogin",
-    featureBinding: "checkLogin",
-  }),
-  "content.listClients": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "listContentClients",
-    preloadMethod: "listClients",
-    command: "content.listClients",
-    channel: "content:list-clients",
-    registrar: "desktop/ipc/ai-content-ipc.js",
-    application: "service.listClients",
-    featureBinding: "listClients",
-  }),
-  "content.saveClientLiejuPublicationProfile": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "saveClientLiejuPublicationProfile",
-    preloadMethod: "saveClientLiejuPublicationProfile",
-    command: "content.saveClientLiejuPublicationProfile",
-    channel: "content:save-client-lieju-publication-profile",
-    registrar: "desktop/ipc/ai-content-ipc.js",
-    application: "service.saveClientLiejuPublicationProfile",
-    featureBinding: "saveClientLiejuPublicationProfile",
-  }),
-  "content.listResearch": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "listContentResearch",
-    preloadMethod: "listResearch",
-    command: "content.listResearch",
-    channel: "content:list-research",
-    registrar: "desktop/ipc/ai-content-ipc.js",
-    application: "service.listResearch",
-    featureBinding: "listResearch",
-  }),
-  "content.listTemplateCatalog": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "listContentTemplateCatalog",
-    preloadMethod: "listTemplateCatalog",
-    command: "content.listTemplateCatalog",
-    channel: "content:list-template-catalog",
-    registrar: "desktop/ipc/ai-content-ipc.js",
-    application: "service.listTemplateCatalog",
-    featureBinding: "listTemplateCatalog",
-  }),
-  "content.retryMaterial": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "retryContentMaterial",
-    preloadMethod: "retryMaterial",
-    command: "content.retryMaterial",
-    channel: "content:retry-material",
-    registrar: "desktop/ipc/ai-content-ipc.js",
-    application: "service.retryMaterial",
-    featureBinding: "retryMaterial",
-  }),
-  "content.generateArticle": Object.freeze({
-    view: "media-workbench/src/components/content/ArticleGenerationView.tsx",
-    viewSymbol: "useContentGenerationFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-generation-feature.ts",
-    featureSymbol: "useContentGenerationFeature",
-    bridge: "media-workbench/src/bridge/generation.ts",
-    bridgeSymbol: "generateContentArticle",
-    preloadMethod: "generateArticle",
-    command: "content.generateArticle",
-    channel: "content:generate-article",
-    registrar: "desktop/ipc/ai-content-ipc.js",
-    application: "service.generateArticle",
-    featureBinding: "generate",
-  }),
-  "content.saveArticle": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/generation.ts",
-    bridgeSymbol: "saveContentArticle",
-    preloadMethod: "saveArticle",
-    command: "content.saveArticle",
-    channel: "content:save-article",
-    registrar: "desktop/ipc/ai-content-ipc.js",
-    application: "service.saveArticle",
-    featureBinding: "saveArticle",
-  }),
-  "content.getArticleEditor": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "getArticleEditor",
-    preloadMethod: "getArticleEditor",
-    command: "content.getArticleEditor",
-    channel: "content:get-article-editor",
-    registrar: "desktop/ipc/ai-content-ipc.js",
-    application: "service.getArticleEditor",
-    featureBinding: "getArticleEditor",
-  }),
-  "content.previewArticleRemovalImpact": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content-removal.ts",
-    bridgeSymbol: "previewContentArticleRemoval",
-    preloadMethod: "previewArticleRemovalImpact",
-    command: "content.previewArticleRemovalImpact",
-    channel: "content:preview-article-removal-impact",
-    registrar: "desktop/ipc/ai-content-ipc.js",
-    application: "service.previewArticleRemovalImpact",
-    featureBinding: "previewContentArticleRemoval",
-  }),
-  "content.trashArticles": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content-removal.ts",
-    bridgeSymbol: "trashContentArticles",
-    preloadMethod: "applyArticleRemovalImpact",
-    command: "content.trashArticles",
-    channel: "content:trash-articles",
-    registrar: "desktop/ipc/ai-content-ipc.js",
-    application: "service.trashArticles",
-    featureBinding: "trashContentArticles",
-  }),
-  "content.restoreArticle": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content-removal.ts",
-    bridgeSymbol: "restoreContentArticle",
-    preloadMethod: "restoreArticle",
-    command: "content.restoreArticle",
-    channel: "content:restore-article",
-    registrar: "desktop/ipc/ai-content-ipc.js",
-    application: "service.restoreArticle",
-    featureBinding: "restoreContentArticle",
-  }),
-  "content.preparePermanentDeleteArticle": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content-removal.ts",
-    bridgeSymbol: "preparePermanentDeleteContentArticle",
-    preloadMethod: "preparePermanentDeleteArticle",
-    command: "content.preparePermanentDeleteArticle",
-    channel: "content:prepare-permanent-delete-article",
-    registrar: "desktop/ipc/ai-content-ipc.js",
-    application: "service.preparePermanentDelete",
-    featureBinding: "preparePermanentDeleteContentArticle",
-  }),
-  "content.permanentlyDeleteArticle": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content-removal.ts",
-    bridgeSymbol: "permanentlyDeleteContentArticle",
-    preloadMethod: "permanentlyDeleteArticle",
-    command: "content.permanentlyDeleteArticle",
-    channel: "content:permanently-delete-article",
-    registrar: "desktop/ipc/ai-content-ipc.js",
-    application: "service.permanentlyDeleteArticle",
-    featureBinding: "permanentlyDeleteContentArticle",
-  }),
-  "content.getArticleRemovalTransaction": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content-removal.ts",
-    bridgeSymbol: "getContentArticleRemovalTransaction",
-    preloadMethod: "getArticleRemovalTransaction",
-    command: "content.getArticleRemovalTransaction",
-    channel: "content:get-article-removal-transaction",
-    registrar: "desktop/ipc/ai-content-ipc.js",
-    application: "service.getArticleRemovalTransaction",
-    featureBinding: "getRemovalTransaction",
-  }),
-  "content.retryArticleRemovalTransaction": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content-removal.ts",
-    bridgeSymbol: "retryContentArticleRemovalTransaction",
-    preloadMethod: "retryArticleRemovalTransaction",
-    command: "content.retryArticleRemovalTransaction",
-    channel: "content:retry-article-removal-transaction",
-    registrar: "desktop/ipc/ai-content-ipc.js",
-    application: "service.retryArticleRemovalTransaction",
-    featureBinding: "retryContentArticleRemovalTransaction",
-  }),
-  "content.getArticleManagementSnapshot": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "getArticleManagementSnapshot",
-    preloadMethod: "getArticleManagementSnapshot",
-    command: "content.getArticleManagementSnapshot",
-    channel: "content:get-article-management-snapshot",
-    registrar: "desktop/ipc/article-management-ipc.js",
-    application: "snapshot.get",
-    featureBinding: "loadManagement",
-  }),
-  "content.openPublicationUrl": Object.freeze({
-    view:
-      "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    viewSymbol: "GeneratedArticlesView",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "openPublicationUrl",
-    preloadMethod: "openPublicationUrl",
-    command: "content.openPublicationUrl",
-    channel: "content:open-publication-url",
-    registrar: "desktop/ipc/article-management-ipc.js",
-    application: "publicationLinks.openPublicationUrl",
-    featureBinding: "openPublicationUrl",
-  }),
-  "content.getSubmissionCenterSnapshot": Object.freeze({
-    view: "media-workbench/src/App.tsx",
-    viewSymbol: "useSubmissionCenterFeature",
-    feature:
-      "media-workbench/src/features/submission-center/use-submission-center-feature.ts",
-    featureSymbol: "useSubmissionCenterFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "getSubmissionCenterSnapshot",
-    preloadMethod: "getSubmissionCenterSnapshot",
-    command: "content.getSubmissionCenterSnapshot",
-    channel: "content:get-submission-center-snapshot",
-    registrar: "desktop/ipc/content-submission-ipc.js",
-    application: "submissionCenter.get",
-    featureBinding: "getSnapshot",
-  }),
-  "attention.listArticleAttention": Object.freeze({
-    view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    viewSymbol: "useAttentionFeature",
-    feature: "media-workbench/src/features/attention/use-attention-feature.ts",
-    featureSymbol: "useAttentionFeature",
-    bridge: "media-workbench/src/bridge/publication.ts",
-    bridgeSymbol: "listArticleAttentionSnapshot",
-    preloadMethod: "listArticleAttention",
-    command: "attention.listArticleAttention",
-    channel: "content:list-article-attention",
-    registrar: "desktop/ipc/article-attention-ipc.js",
-    application: "query.list",
-    featureBinding: "list",
-  }),
-  "attention.previewArticleAttention": Object.freeze({
-    view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    viewSymbol: "useAttentionFeature",
-    feature: "media-workbench/src/features/attention/use-attention-feature.ts",
-    featureSymbol: "useAttentionFeature",
-    bridge: "media-workbench/src/bridge/publication.ts",
-    bridgeSymbol: "previewArticleAttention",
-    preloadMethod: "previewArticleAttention",
-    command: "attention.previewArticleAttention",
-    channel: "content:preview-article-attention",
-    registrar: "desktop/ipc/article-attention-ipc.js",
-    application: "resolver.preview",
-    featureBinding: "preview",
-  }),
-  "attention.resolveArticleAttention": Object.freeze({
-    view: "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    viewSymbol: "useAttentionFeature",
-    feature: "media-workbench/src/features/attention/use-attention-feature.ts",
-    featureSymbol: "useAttentionFeature",
-    bridge: "media-workbench/src/bridge/publication.ts",
-    bridgeSymbol: "resolveArticleAttention",
-    preloadMethod: "resolveArticleAttention",
-    command: "attention.resolveArticleAttention",
-    channel: "content:resolve-article-attention",
-    registrar: "desktop/ipc/article-attention-ipc.js",
-    application: "resolver.resolve",
-    featureBinding: "execute",
-  }),
-  "content.articleRemovalTransactionChanged": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content-removal.ts",
-    bridgeSymbol: "onContentArticleRemovalTransaction",
-    preloadMethod: "onArticleRemovalTransaction",
-    command: "content.articleRemovalTransactionChanged",
-    channel: "content:article-removal-transaction",
-    registrar: "desktop/ipc/contracts/production-registry.js",
-    application: "webContents.send",
-    producer: "desktop/composition/workspace-runtime-composition.js",
-    producerApplication: "sendToRenderer",
-    dispose: "ipcRenderer.removeListener",
-    featureBinding: "subscribeRemovalTransaction",
-  }),
-  "generation.previewBatch": Object.freeze({
-    view: "media-workbench/src/components/content/BatchGenerationView.tsx",
-    viewSymbol: "useGenerationFeature",
-    feature:
-      "media-workbench/src/features/generation/use-generation-feature.ts",
-    featureSymbol: "useGenerationFeature",
-    bridge: "media-workbench/src/bridge/generation.ts",
-    bridgeSymbol: "previewGenerationBatch",
-    preloadMethod: "previewGenerationBatch",
-    command: "generation.previewBatch",
-    channel: "content:preview-generation-batch",
-    registrar: "desktop/ipc/content-generation-batch-ipc.js",
-    application: "service.preview",
-    featureBinding: "previewBatch",
-  }),
-  "generation.createAndStartBatch": Object.freeze({
-    view: "media-workbench/src/components/content/BatchGenerationView.tsx",
-    viewSymbol: "useGenerationFeature",
-    feature:
-      "media-workbench/src/features/generation/use-generation-feature.ts",
-    featureSymbol: "useGenerationFeature",
-    bridge: "media-workbench/src/bridge/generation.ts",
-    bridgeSymbol: "createAndStartGenerationBatch",
-    preloadMethod: "createAndStartGenerationBatch",
-    command: "generation.createAndStartBatch",
-    channel: "content:create-and-start-generation-batch",
-    registrar: "desktop/ipc/content-generation-batch-ipc.js",
-    application: "service.createAndStartBatch",
-    featureBinding: "start",
-  }),
-  "generation.abandonBatch": Object.freeze({
-    view: "media-workbench/src/components/content/BatchGenerationView.tsx",
-    viewSymbol: "useGenerationFeature",
-    feature:
-      "media-workbench/src/features/generation/use-generation-feature.ts",
-    featureSymbol: "useGenerationFeature",
-    bridge: "media-workbench/src/bridge/generation.ts",
-    bridgeSymbol: "abandonGenerationBatch",
-    preloadMethod: "abandonGenerationBatch",
-    command: "generation.abandonBatch",
-    channel: "content:abandon-generation-batch",
-    registrar: "desktop/ipc/content-generation-batch-ipc.js",
-    application: "service.abandonBatch",
-    featureBinding: "abandon",
-  }),
-  "generation.pauseBatch": Object.freeze({
-    view: "media-workbench/src/components/content/BatchGenerationView.tsx",
-    viewSymbol: "useGenerationFeature",
-    feature:
-      "media-workbench/src/features/generation/use-generation-feature.ts",
-    featureSymbol: "useGenerationFeature",
-    bridge: "media-workbench/src/bridge/generation.ts",
-    bridgeSymbol: "pauseGenerationBatch",
-    preloadMethod: "pauseGenerationBatch",
-    command: "generation.pauseBatch",
-    channel: "content:pause-generation-batch",
-    registrar: "desktop/ipc/content-generation-batch-ipc.js",
-    application: "service.pauseBatch",
-    featureBinding: "pause",
-  }),
-  "generation.resumeBatch": Object.freeze({
-    view: "media-workbench/src/components/content/BatchGenerationView.tsx",
-    viewSymbol: "useGenerationFeature",
-    feature:
-      "media-workbench/src/features/generation/use-generation-feature.ts",
-    featureSymbol: "useGenerationFeature",
-    bridge: "media-workbench/src/bridge/generation.ts",
-    bridgeSymbol: "resumeGenerationBatch",
-    preloadMethod: "resumeGenerationBatch",
-    command: "generation.resumeBatch",
-    channel: "content:resume-generation-batch",
-    registrar: "desktop/ipc/content-generation-batch-ipc.js",
-    application: "service.resumeBatch",
-    featureBinding: "resume",
-  }),
-  "generation.retryFailed": Object.freeze({
-    view: "media-workbench/src/components/content/BatchGenerationView.tsx",
-    viewSymbol: "useGenerationFeature",
-    feature:
-      "media-workbench/src/features/generation/use-generation-feature.ts",
-    featureSymbol: "useGenerationFeature",
-    bridge: "media-workbench/src/bridge/generation.ts",
-    bridgeSymbol: "retryFailedGenerationBatch",
-    preloadMethod: "retryFailedGenerationBatch",
-    command: "generation.retryFailed",
-    channel: "content:retry-failed-generation-batch",
-    registrar: "desktop/ipc/content-generation-batch-ipc.js",
-    application: "service.retryFailed",
-    featureBinding: "retry",
-  }),
-  "generation.previewCancelPending": Object.freeze({
-    view: "media-workbench/src/components/content/BatchGenerationView.tsx",
-    viewSymbol: "useGenerationFeature",
-    feature:
-      "media-workbench/src/features/generation/use-generation-feature.ts",
-    featureSymbol: "useGenerationFeature",
-    bridge: "media-workbench/src/bridge/generation.ts",
-    bridgeSymbol: "previewCancelPendingGenerationBatch",
-    preloadMethod: "previewCancelPendingGenerationBatch",
-    command: "generation.previewCancelPending",
-    channel: "content:preview-cancel-pending-generation-batch",
-    registrar: "desktop/ipc/content-generation-batch-ipc.js",
-    application: "service.previewCancelPending",
-    featureBinding: "previewCancelPending",
-  }),
-  "generation.cancelPending": Object.freeze({
-    view: "media-workbench/src/components/content/BatchGenerationView.tsx",
-    viewSymbol: "useGenerationFeature",
-    feature:
-      "media-workbench/src/features/generation/use-generation-feature.ts",
-    featureSymbol: "useGenerationFeature",
-    bridge: "media-workbench/src/bridge/generation.ts",
-    bridgeSymbol: "cancelPendingGenerationBatch",
-    preloadMethod: "cancelPendingGenerationBatch",
-    command: "generation.cancelPending",
-    channel: "content:cancel-pending-generation-batch",
-    registrar: "desktop/ipc/content-generation-batch-ipc.js",
-    application: "service.cancelPending",
-    featureBinding: "cancelPending",
-  }),
-  "generation.getRuntimeSnapshot": Object.freeze({
-    view: "media-workbench/src/components/content/BatchGenerationView.tsx",
-    viewSymbol: "useGenerationFeature",
-    feature:
-      "media-workbench/src/features/generation/use-generation-feature.ts",
-    featureSymbol: "useGenerationFeature",
-    bridge: "media-workbench/src/bridge/generation.ts",
-    bridgeSymbol: "getGenerationRuntimeSnapshot",
-    preloadMethod: "getGenerationRuntimeSnapshot",
-    command: "generation.getRuntimeSnapshot",
-    channel: "content:get-generation-runtime-snapshot",
-    registrar: "desktop/ipc/content-generation-batch-ipc.js",
-    application: "service.getRuntimeSnapshot",
-    featureBinding: "hydrate",
-  }),
-  "content.previewRegularQueueAdmission": Object.freeze({
-    view:
-      "media-workbench/src/components/content/use-submission-intake-session.ts",
-    viewSymbol: "useSubmissionIntakeSession",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "previewRegularQueueAdmission",
-    preloadMethod: "previewRegularQueueAdmission",
-    command: "content.previewRegularQueueAdmission",
-    channel: "content:preview-regular-queue-admission",
-    registrar: "desktop/ipc/content-submission-ipc.js",
-    application: "workflow.regularQueue.previewAdmission",
-    featureBinding: "previewRegularQueueAdmission",
-  }),
-  "content.admitRegularQueueItems": Object.freeze({
-    view:
-      "media-workbench/src/components/content/use-submission-intake-session.ts",
-    viewSymbol: "useSubmissionIntakeSession",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "admitRegularQueueItems",
-    preloadMethod: "admitRegularQueueItems",
-    command: "content.admitRegularQueueItems",
-    channel: "content:admit-regular-queue-items",
-    registrar: "desktop/ipc/content-submission-ipc.js",
-    application: "workflow.regularQueue.admit",
-    featureBinding: "admitRegularQueueItems",
-  }),
-  ...Object.fromEntries(
-    [
-      ["prepareOrderCancellation", "prepare-order-cancellation"],
-      ["cancelOrder", "cancel-order"],
-      ["prepareCancellationResolution", "prepare-cancellation-resolution"],
-      ["confirmCancellationSucceeded", "confirm-cancellation-succeeded"],
-      ["confirmCancellationNotApplied", "confirm-cancellation-not-applied"],
-    ].map(([name, channel]) => [
-      `media.${name}`,
-      Object.freeze({
-        view: "media-workbench/src/App.tsx",
-        viewSymbol: "useMediaFeature",
-        feature: "media-workbench/src/features/media/use-media-feature.ts",
-        featureSymbol: "useMediaFeature",
-        bridge: "media-workbench/src/bridge/media.ts",
-        bridgeSymbol: name,
-        preloadMethod: name,
-        command: `media.${name}`,
-        channel: `media:${channel}`,
-        registrar: "desktop/ipc/media-ipc.js",
-        application: `application.${name}`,
-        featureBinding: name,
-      }),
-    ]),
-  ),
-  "content.listRegularQueueGroups": Object.freeze({
-    view: "media-workbench/src/components/PlatformWorkbench.tsx",
-    viewSymbol: "usePlatformFeature",
-    feature:
-      "media-workbench/src/features/platform/platform-feature-context.tsx",
-    featureSymbol: "usePlatformFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "listRegularQueueGroups",
-    preloadMethod: "listRegularQueueGroups",
-    command: "content.listRegularQueueGroups",
-    channel: "content:list-regular-queue-groups",
-    registrar: "desktop/ipc/content-submission-ipc.js",
-    application: "workflow.regularQueueGroups.list",
-    featureBinding: "listRegularQueueGroups",
-  }),
-  "content.updateRegularQueueGroupImageCount": Object.freeze({
-    view: "media-workbench/src/components/PlatformWorkbench.tsx",
-    viewSymbol: "usePlatformFeature",
-    feature:
-      "media-workbench/src/features/platform/platform-feature-context.tsx",
-    featureSymbol: "usePlatformFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "updateRegularQueueGroupImageCount",
-    preloadMethod: "updateRegularQueueGroupImageCount",
-    command: "content.updateRegularQueueGroupImageCount",
-    channel: "content:update-regular-queue-group-image-count",
-    registrar: "desktop/ipc/content-submission-ipc.js",
-    application: "workflow.regularQueueGroups.updateImageCount",
-    featureBinding: "updateRegularQueueGroupImageCount",
-  }),
-  "content.startRegularQueueGroup": Object.freeze({
-    view: "media-workbench/src/components/PlatformWorkbench.tsx",
-    viewSymbol: "usePlatformFeature",
-    feature:
-      "media-workbench/src/features/platform/platform-feature-context.tsx",
-    featureSymbol: "usePlatformFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "startRegularQueueGroup",
-    preloadMethod: "startRegularQueueGroup",
-    command: "content.startRegularQueueGroup",
-    channel: "content:start-regular-queue-group",
-    registrar: "desktop/ipc/content-submission-ipc.js",
-    application: "workflow.regularQueueGroups.start",
-    featureBinding: "startRegularQueueGroup",
-  }),
-  "content.pauseRegularQueueGroup": Object.freeze({
-    view: "media-workbench/src/components/PlatformWorkbench.tsx",
-    viewSymbol: "usePlatformFeature",
-    feature:
-      "media-workbench/src/features/platform/platform-feature-context.tsx",
-    featureSymbol: "usePlatformFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "pauseRegularQueueGroup",
-    preloadMethod: "pauseRegularQueueGroup",
-    command: "content.pauseRegularQueueGroup",
-    channel: "content:pause-regular-queue-group",
-    registrar: "desktop/ipc/content-submission-ipc.js",
-    application: "workflow.regularQueueGroups.pause",
-    featureBinding: "pauseRegularQueueGroup",
-  }),
-  "content.startAllRegularQueueGroups": Object.freeze({
-    view: "media-workbench/src/components/PlatformWorkbench.tsx",
-    viewSymbol: "usePlatformFeature",
-    feature:
-      "media-workbench/src/features/platform/platform-feature-context.tsx",
-    featureSymbol: "usePlatformFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "startAllRegularQueueGroups",
-    preloadMethod: "startAllRegularQueueGroups",
-    command: "content.startAllRegularQueueGroups",
-    channel: "content:start-all-regular-queue-groups",
-    registrar: "desktop/ipc/content-submission-ipc.js",
-    application: "workflow.regularQueueGroups.startAll",
-    featureBinding: "startAllRegularQueueGroups",
-  }),
-  "content.pauseAllRegularQueueGroups": Object.freeze({
-    view: "media-workbench/src/components/PlatformWorkbench.tsx",
-    viewSymbol: "usePlatformFeature",
-    feature:
-      "media-workbench/src/features/platform/platform-feature-context.tsx",
-    featureSymbol: "usePlatformFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "pauseAllRegularQueueGroups",
-    preloadMethod: "pauseAllRegularQueueGroups",
-    command: "content.pauseAllRegularQueueGroups",
-    channel: "content:pause-all-regular-queue-groups",
-    registrar: "desktop/ipc/content-submission-ipc.js",
-    application: "workflow.regularQueueGroups.pauseAll",
-    featureBinding: "pauseAllRegularQueueGroups",
-  }),
-  "content.previewPaidMediaPreflight": Object.freeze({
-    view:
-      "media-workbench/src/components/content/use-submission-intake-session.ts",
-    viewSymbol: "useSubmissionIntakeSession",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "previewPaidMediaPreflight",
-    preloadMethod: "previewPaidMediaPreflight",
-    command: "content.previewPaidMediaPreflight",
-    channel: "content:preview-paid-media-preflight",
-    registrar: "desktop/ipc/content-submission-ipc.js",
-    application: "paidMedia.preflight",
-    featureBinding: "previewPaidMediaPreflight",
-  }),
-  "content.confirmPaidMediaBatch": Object.freeze({
-    view:
-      "media-workbench/src/components/content/use-submission-intake-session.ts",
-    viewSymbol: "useSubmissionIntakeSession",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "confirmPaidMediaBatch",
-    preloadMethod: "confirmPaidMediaBatch",
-    command: "content.confirmPaidMediaBatch",
-    channel: "content:confirm-paid-media-batch",
-    registrar: "desktop/ipc/content-submission-ipc.js",
-    application: "paidMedia.confirm",
-    featureBinding: "confirmPaidMediaBatch",
-  }),
-  "content.listPaidMediaBatches": Object.freeze({
-    view: "media-workbench/src/components/PaidMediaWorkbench.tsx",
-    viewSymbol: "PaidMediaWorkbench",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "listPaidMediaBatches",
-    preloadMethod: "listPaidMediaBatches",
-    command: "content.listPaidMediaBatches",
-    channel: "content:list-paid-media-batches",
-    registrar: "desktop/ipc/content-submission-ipc.js",
-    application: "paidExecution.list",
-    featureBinding: "listPaidMediaBatches",
-  }),
-  "content.startPaidMediaBatch": Object.freeze({
-    view: "media-workbench/src/components/PaidMediaWorkbench.tsx",
-    viewSymbol: "PaidMediaWorkbench",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "startPaidMediaBatch",
-    preloadMethod: "startPaidMediaBatch",
-    command: "content.startPaidMediaBatch",
-    channel: "content:start-paid-media-batch",
-    registrar: "desktop/ipc/content-submission-ipc.js",
-    application: "paidExecution.start",
-    featureBinding: "startPaidMediaBatch",
-  }),
-  "content.startAllPaidMediaBatches": Object.freeze({
-    view: "media-workbench/src/components/PaidMediaWorkbench.tsx",
-    viewSymbol: "PaidMediaWorkbench",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "startAllPaidMediaBatches",
-    preloadMethod: "startAllPaidMediaBatches",
-    command: "content.startAllPaidMediaBatches",
-    channel: "content:start-all-paid-media-batches",
-    registrar: "desktop/ipc/content-submission-ipc.js",
-    application: "paidExecution.startAll",
-    featureBinding: "startAllPaidMediaBatches",
-  }),
-  "content.pausePaidMediaBatch": Object.freeze({
-    view: "media-workbench/src/components/PaidMediaWorkbench.tsx",
-    viewSymbol: "PaidMediaWorkbench",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "pausePaidMediaBatch",
-    preloadMethod: "pausePaidMediaBatch",
-    command: "content.pausePaidMediaBatch",
-    channel: "content:pause-paid-media-batch",
-    registrar: "desktop/ipc/content-submission-ipc.js",
-    application: "paidExecution.pause",
-    featureBinding: "pausePaidMediaBatch",
-  }),
-  "content.cancelRemainingPaidMediaBatchItems": Object.freeze({
-    view: "media-workbench/src/components/PaidMediaWorkbench.tsx",
-    viewSymbol: "PaidMediaWorkbench",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "cancelRemainingPaidMediaBatchItems",
-    preloadMethod: "cancelRemainingPaidMediaBatchItems",
-    command: "content.cancelRemainingPaidMediaBatchItems",
-    channel: "content:cancel-remaining-paid-media-batch-items",
-    registrar: "desktop/ipc/content-submission-ipc.js",
-    application: "paidExecution.cancelRemaining",
-    featureBinding: "cancelRemainingPaidMediaBatchItems",
-  }),
-  "content.removePendingQueueItems": Object.freeze({
-    view: "media-workbench/src/components/PlatformWorkbench.tsx",
-    viewSymbol: "usePlatformFeature",
-    feature:
-      "media-workbench/src/features/platform/platform-feature-context.tsx",
-    featureSymbol: "usePlatformFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "removePendingQueueItems",
-    preloadMethod: "removePendingQueueItems",
-    command: "content.removePendingQueueItems",
-    channel: "content:remove-pending-queue-items",
-    registrar: "desktop/ipc/content-submission-ipc.js",
-    application: "workflow.regularQueue.removePending",
-    featureBinding: "removePendingQueueItems",
-  }),
-  "content.previewTrashedArticleQueueResidue": Object.freeze({
-    view: "media-workbench/src/components/PlatformWorkbench.tsx",
-    viewSymbol: "usePlatformFeature",
-    feature:
-      "media-workbench/src/features/platform/platform-feature-context.tsx",
-    featureSymbol: "usePlatformFeature",
-    bridge: "media-workbench/src/bridge/content-removal.ts",
-    bridgeSymbol: "previewTrashedArticleQueueResidue",
-    preloadMethod: "previewTrashedArticleQueueResidue",
-    command: "content.previewTrashedArticleQueueResidue",
-    channel: "content:preview-trashed-article-queue-residue",
-    registrar: "desktop/ipc/content-submission-ipc.js",
-    application: "workflow.cleanup.previewResidue",
-    featureBinding: "previewResidue",
-  }),
-  "content.cleanupTrashedArticleQueueResidue": Object.freeze({
-    view: "media-workbench/src/components/PlatformWorkbench.tsx",
-    viewSymbol: "usePlatformFeature",
-    feature:
-      "media-workbench/src/features/platform/platform-feature-context.tsx",
-    featureSymbol: "usePlatformFeature",
-    bridge: "media-workbench/src/bridge/content-removal.ts",
-    bridgeSymbol: "cleanupTrashedArticleQueueResidue",
-    preloadMethod: "cleanupTrashedArticleQueueResidue",
-    command: "content.cleanupTrashedArticleQueueResidue",
-    channel: "content:cleanup-trashed-article-queue-residue",
-    registrar: "desktop/ipc/content-submission-ipc.js",
-    application: "workflow.cleanup.cleanupResidue",
-    featureBinding: "cleanupResidue",
-  }),
-  "content.listQuestions": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "listContentQuestions",
-    preloadMethod: "listQuestions",
-    command: "content.listQuestions",
-    channel: "content:list-questions",
-    registrar: "desktop/ipc/doubao-collection-ipc.js",
-    application: "service.listQuestions",
-    featureBinding: "listQuestions",
-  }),
-  "content.createQuestion": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "createContentQuestion",
-    preloadMethod: "createQuestion",
-    command: "content.createQuestion",
-    channel: "content:create-question",
-    registrar: "desktop/ipc/doubao-collection-ipc.js",
-    application: "service.createQuestion",
-    featureBinding: "createQuestion",
-  }),
-  "content.updateQuestion": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "updateContentQuestion",
-    preloadMethod: "updateQuestion",
-    command: "content.updateQuestion",
-    channel: "content:update-question",
-    registrar: "desktop/ipc/doubao-collection-ipc.js",
-    application: "service.updateQuestion",
-    featureBinding: "updateQuestion",
-  }),
-  "content.deleteQuestion": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "deleteContentQuestion",
-    preloadMethod: "deleteQuestion",
-    command: "content.deleteQuestion",
-    channel: "content:delete-question",
-    registrar: "desktop/ipc/doubao-collection-ipc.js",
-    application: "service.deleteQuestion",
-    featureBinding: "deleteQuestion",
-  }),
-  "content.getDoubaoLoginState": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "getDoubaoLoginStatus",
-    preloadMethod: "getDoubaoLoginState",
-    command: "content.getDoubaoLoginState",
-    channel: "content:get-doubao-login-state",
-    registrar: "desktop/ipc/doubao-collection-ipc.js",
-    application: "service.getLoginState",
-    featureBinding: "getDoubaoLoginStatus",
-  }),
-  "content.openDoubaoLogin": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "openDoubaoLogin",
-    preloadMethod: "openDoubaoLogin",
-    command: "content.openDoubaoLogin",
-    channel: "content:open-doubao-login",
-    registrar: "desktop/ipc/doubao-collection-ipc.js",
-    application: "service.openLogin",
-    featureBinding: "openDoubaoLogin",
-  }),
-  "content.collectDoubaoOne": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "collectDoubaoQuestion",
-    preloadMethod: "collectDoubaoOne",
-    command: "content.collectDoubaoOne",
-    channel: "content:collect-doubao-one",
-    registrar: "desktop/ipc/doubao-collection-ipc.js",
-    application: "service.collectOne",
-    featureBinding: "collectDoubaoQuestion",
-  }),
-  "content.previewDoubaoBatch": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "previewDoubaoBatch",
-    preloadMethod: "previewDoubaoBatch",
-    command: "content.previewDoubaoBatch",
-    channel: "content:preview-doubao-batch",
-    registrar: "desktop/ipc/doubao-collection-ipc.js",
-    application: "service.previewBatch",
-    featureBinding: "previewDoubaoBatch",
-  }),
-  "content.startPreparedDoubaoBatch": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "startPreparedDoubaoBatch",
-    preloadMethod: "startPreparedDoubaoBatch",
-    command: "content.startPreparedDoubaoBatch",
-    channel: "content:start-prepared-doubao-batch",
-    registrar: "desktop/ipc/doubao-collection-ipc.js",
-    application: "service.startPreparedBatch",
-    featureBinding: "startPreparedDoubaoBatch",
-  }),
-  "content.pauseDoubaoBatch": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "pauseDoubaoBatch",
-    preloadMethod: "pauseDoubaoBatch",
-    command: "content.pauseDoubaoBatch",
-    channel: "content:pause-doubao-batch",
-    registrar: "desktop/ipc/doubao-collection-ipc.js",
-    application: "service.pauseBatch",
-    featureBinding: "pauseDoubaoBatch",
-  }),
-  "content.resumeDoubaoBatch": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "resumeDoubaoBatch",
-    preloadMethod: "resumeDoubaoBatch",
-    command: "content.resumeDoubaoBatch",
-    channel: "content:resume-doubao-batch",
-    registrar: "desktop/ipc/doubao-collection-ipc.js",
-    application: "service.resumeBatch",
-    featureBinding: "resumeDoubaoBatch",
-  }),
-  "content.stopDoubaoBatch": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "stopDoubaoBatch",
-    preloadMethod: "stopDoubaoBatch",
-    command: "content.stopDoubaoBatch",
-    channel: "content:stop-doubao-batch",
-    registrar: "desktop/ipc/doubao-collection-ipc.js",
-    application: "service.stopBatch",
-    featureBinding: "stopDoubaoBatch",
-  }),
-  "content.retryFailedDoubao": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "retryFailedDoubao",
-    preloadMethod: "retryFailedDoubao",
-    command: "content.retryFailedDoubao",
-    channel: "content:retry-failed-doubao",
-    registrar: "desktop/ipc/doubao-collection-ipc.js",
-    application: "service.retryFailed",
-    featureBinding: "retryFailedDoubao",
-  }),
-  "content.getDoubaoQueueState": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "getDoubaoQueueState",
-    preloadMethod: "getDoubaoQueueState",
-    command: "content.getDoubaoQueueState",
-    channel: "content:get-doubao-queue-state",
-    registrar: "desktop/ipc/doubao-collection-ipc.js",
-    application: "service.getQueueState",
-    featureBinding: "getDoubaoQueueState",
-  }),
-  "content.saveManualResearch": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "saveManualResearch",
-    preloadMethod: "saveManualResearch",
-    command: "content.saveManualResearch",
-    channel: "content:save-manual-research",
-    registrar: "desktop/ipc/doubao-collection-ipc.js",
-    application: "service.saveManual",
-    featureBinding: "saveManualResearch",
-  }),
-  "content.doubaoQueueChanged": Object.freeze({
-    view: "media-workbench/src/components/ContentWorkbench.tsx",
-    viewSymbol: "useContentWorkbenchFeature",
-    feature:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    featureSymbol: "useContentWorkbenchFeature",
-    bridge: "media-workbench/src/bridge/content.ts",
-    bridgeSymbol: "subscribeDoubaoQueue",
-    preloadMethod: "onDoubaoQueueState",
-    command: "content.doubaoQueueChanged",
-    channel: "content:doubao-queue-state",
-    registrar: "desktop/ipc/contracts/production-registry.js",
-    application: "webContents.send",
-    producer: "desktop/composition/workspace-runtime-composition.js",
-    producerApplication: "sendToRenderer",
-    dispose: "ipcRenderer.removeListener",
-    featureBinding: "subscribeDoubaoQueue",
-  }),
-  "workspace.getRuntimeIdentity": Object.freeze({
-    view: "media-workbench/src/main.tsx",
-    viewSymbol: "WorkspaceCoordinatorProvider",
-    feature:
-      "media-workbench/src/features/workspace/workspace-coordinator-context.tsx",
-    featureSymbol: "WorkspaceCoordinatorProvider",
-    bridge: "media-workbench/src/bridge/workspace.ts",
-    bridgeSymbol: "getWorkspaceRuntimeIdentity",
-    preloadMethod: "getRuntimeIdentity",
-    command: "workspace.getRuntimeIdentity",
-    channel: "workspace:get-runtime-identity",
-    registrar: "desktop/ipc/workspace-runtime-ipc.js",
-    application: "deps.getWorkspaceRuntimeIdentity",
-    featureBinding: "getWorkspaceRuntimeIdentity",
-  }),
-  "media.getBalance": Object.freeze({
-    view: "media-workbench/src/App.tsx",
-    viewSymbol: "useMediaFeature",
-    feature: "media-workbench/src/features/media/use-media-feature.ts",
-    featureSymbol: "useMediaFeature",
-    bridge: "media-workbench/src/bridge/media.ts",
-    bridgeSymbol: "getBalance",
-    preloadMethod: "getBalance",
-    command: "media.getBalance",
-    channel: "media:get-balance",
-    registrar: "desktop/ipc/media-ipc.js",
-    application: "application.getBalance",
-    featureBinding: "getBalance",
-  }),
-  "generation.runtimeChanged": Object.freeze({
-    view: "media-workbench/src/components/content/BatchGenerationView.tsx",
-    viewSymbol: "useGenerationFeature",
-    feature:
-      "media-workbench/src/features/generation/use-generation-feature.ts",
-    featureSymbol: "useGenerationFeature",
-    bridge: "media-workbench/src/bridge/generation.ts",
-    bridgeSymbol: "subscribeGenerationBatchState",
-    preloadMethod: "onGenerationBatchState",
-    command: "generation.runtimeChanged",
-    channel: "content:generation-batch-state",
-    registrar: "desktop/ipc/contracts/production-registry.js",
-    application: "webContents.send",
-    producer: "desktop/composition/workspace-runtime-composition.js",
-    producerApplication: "sendToRenderer",
-    dispose: "ipcRenderer.removeListener",
-    featureBinding: "subscribeRuntime",
-  }),
-  "workspace.invalidated": Object.freeze({
-    view: "media-workbench/src/main.tsx",
-    viewSymbol: "WorkspaceCoordinatorProvider",
-    feature:
-      "media-workbench/src/features/workspace/workspace-coordinator-context.tsx",
-    featureSymbol: "WorkspaceCoordinatorProvider",
-    bridge: "media-workbench/src/bridge/workspace.ts",
-    bridgeSymbol: "onWorkspaceDataInvalidated",
-    preloadMethod: "onInvalidated",
-    command: "workspace.invalidated",
-    channel: "workspace:data-invalidated",
-    registrar: "desktop/ipc/contracts/production-registry.js",
-    application: "webContents.send",
-    producer: "desktop/workspace-data-invalidation.js",
-    producerApplication: "send",
-    dispose: "ipcRenderer.removeListener",
-    featureBinding: "subscribe",
-  }),
-});
-const PRODUCTION_CONSUMERS = Object.freeze({
-  "workspace.getBootstrapState": [
-    "lifecycle",
-    "media-workbench/src/features/workspace/workspace-feature-context.tsx",
-    "initialize",
-  ],
-  "workspace.chooseDirectory": [
-    "direct",
-    "media-workbench/src/components/WorkspaceSelectionPanel.tsx",
-    "chooseDirectory",
-  ],
-  "workspace.confirmSelection": [
-    "direct",
-    "media-workbench/src/components/WorkspaceSelectionPanel.tsx",
-    "confirmSelection",
-  ],
-  "workspace.cancelSelection": [
-    "direct",
-    "media-workbench/src/components/WorkspaceSelectionPanel.tsx",
-    "cancelSelection",
-  ],
-  "workspace.getCurrent": [
-    "lifecycle",
-    "media-workbench/src/features/workspace/workspace-feature-context.tsx",
-    "initialize",
-  ],
-  "workspace.openCurrent": [
-    "direct",
-    "media-workbench/src/components/SettingsView.tsx",
-    "openCurrent",
-  ],
-  "workspace.requestSwitch": [
-    "direct",
-    "media-workbench/src/components/WorkspaceSelectionPanel.tsx",
-    "requestSwitch",
-  ],
-  "settings.ai.getStatus": [
-    "lifecycle",
-    "media-workbench/src/features/settings/settings-context.tsx",
-    "refresh",
-  ],
-  "settings.ai.save": [
-    "direct",
-    "media-workbench/src/components/AiProviderSettings.tsx",
-    "saveAi",
-  ],
-  "settings.ai.test": [
-    "direct",
-    "media-workbench/src/components/AiProviderSettings.tsx",
-    "testAi",
-  ],
-  "settings.ai.clear": [
-    "direct",
-    "media-workbench/src/components/AiProviderSettings.tsx",
-    "clearAi",
-  ],
-  "settings.platform.getStatus": [
-    "lifecycle",
-    "media-workbench/src/features/settings/settings-context.tsx",
-    "refresh",
-  ],
-  "settings.platform.save": [
-    "direct",
-    "media-workbench/src/components/settings/MediaProviderSettings.tsx",
-    "saveMedia",
-  ],
-  "settings.platform.test": [
-    "direct",
-    "media-workbench/src/components/settings/MediaProviderSettings.tsx",
-    "testMedia",
-  ],
-  "settings.platform.clear": [
-    "direct",
-    "media-workbench/src/components/settings/MediaProviderSettings.tsx",
-    "clearMedia",
-  ],
-  "settings.platform.getLegacyStatus": [
-    "lifecycle",
-    "media-workbench/src/features/settings/settings-context.tsx",
-    "refresh",
-  ],
-  "settings.platform.importLegacy": [
-    "direct",
-    "media-workbench/src/components/settings/SettingsOverview.tsx",
-    "importLegacy",
-  ],
-  "settings.storage.getUsage": [
-    "lifecycle",
-    "media-workbench/src/features/settings/settings-context.tsx",
-    "refresh",
-  ],
-  "settings.storage.cleanCaches": [
-    "direct",
-    "media-workbench/src/components/SettingsView.tsx",
-    "cleanStorageCaches",
-  ],
-  "settings.runtime.getDiagnostics": [
-    "lifecycle",
-    "media-workbench/src/features/settings/settings-context.tsx",
-    "refresh",
-  ],
-  "settings.runtime.browserSmoke": [
-    "direct",
-    "media-workbench/src/components/SettingsView.tsx",
-    "runBrowserSelfCheck",
-  ],
-  "media.refreshResources": [
-    "direct",
-    "media-workbench/src/App.tsx",
-    "refreshResources",
-  ],
-  "media.getResourcePage": [
-    "direct",
-    "media-workbench/src/App.tsx",
-    "loadResourcePage",
-  ],
-  "media.searchResourcePage": [
-    "direct",
-    "media-workbench/src/App.tsx",
-    "searchResources",
-  ],
-  "media.getPool": [
-    "lifecycle",
-    "media-workbench/src/features/media/use-media-feature.ts",
-    "refresh",
-  ],
-  "media.addToPool": ["direct", "media-workbench/src/App.tsx", "togglePool"],
-  "media.removeFromPool": [
-    "direct",
-    "media-workbench/src/App.tsx",
-    "togglePool",
-  ],
-  "media.getDrafts": [
-    "lifecycle",
-    "media-workbench/src/features/media/use-media-feature.ts",
-    "refresh",
-  ],
-  "media.scanArticles": [
-    "lifecycle",
-    "media-workbench/src/features/media/use-media-feature.ts",
-    "refresh",
-  ],
-  "media.getOrders": [
-    "lifecycle",
-    "media-workbench/src/features/media/use-media-feature.ts",
-    "refresh",
-  ],
-  "media.syncOrder": ["direct", "media-workbench/src/App.tsx", "syncOrder"],
-  "media.syncAllOrders": [
-    "direct",
-    "media-workbench/src/App.tsx",
-    "syncAllOrders",
-  ],
-  "media.prepareOrderStatusAnomalyResolution": [
-    "direct",
-    "media-workbench/src/App.tsx",
-    "prepareOrderStatusAnomalyResolution",
-  ],
-  "media.resumeOrderTracking": [
-    "direct",
-    "media-workbench/src/App.tsx",
-    "resumeOrderTracking",
-  ],
-  "media.confirmOrderPublished": [
-    "direct",
-    "media-workbench/src/App.tsx",
-    "confirmOrderPublished",
-  ],
-  "media.confirmOrderNotPublished": [
-    "direct",
-    "media-workbench/src/App.tsx",
-    "confirmOrderNotPublished",
-  ],
-  "media.openPublishedUrl": [
-    "direct",
-    "media-workbench/src/App.tsx",
-    "openPublishedUrl",
-  ],
-  "platform.getQueue": [
-    "direct",
-    "media-workbench/src/features/platform/platform-feature-context.tsx",
-    "refreshQueue",
-  ],
-  "platform.listAccountProfiles": [
-    "lifecycle",
-    "media-workbench/src/features/platform/platform-feature-context.tsx",
-    "refreshAccountProfiles",
-  ],
-  "platform.confirmAccountProfile": [
-    "direct",
-    "media-workbench/src/components/settings/PlatformAccountSettings.tsx",
-    "confirmAccountProfile",
-  ],
-  "platform.bindAccountProfile": [
-    "direct",
-    "media-workbench/src/components/settings/PlatformAccountSettings.tsx",
-    "bindAccountProfile",
-  ],
-  "platform.deleteAccountProfile": [
-    "direct",
-    "media-workbench/src/components/settings/PlatformAccountSettings.tsx",
-    "deleteAccountProfile",
-  ],
-  "platform.openLogin": [
-    "direct",
-    "media-workbench/src/components/settings/PlatformAccountSettings.tsx",
-    "openLogin",
-  ],
-  "platform.checkLogin": [
-    "direct",
-    "media-workbench/src/components/settings/PlatformAccountSettings.tsx",
-    "checkLogin",
-  ],
-  "content.listClients": [
-    "lifecycle",
-    "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    "refresh",
-  ],
-  "content.saveClientLiejuPublicationProfile": [
-    "direct",
-    "media-workbench/src/components/ContentWorkbench.tsx",
-    "saveClientLiejuPublicationProfile",
-  ],
-  "content.listResearch": [
-    "lifecycle",
-    "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    "refresh",
-  ],
-  "content.listTemplateCatalog": [
-    "lifecycle",
-    "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    "refresh",
-  ],
-  "content.retryMaterial": [
-    "direct",
-    "media-workbench/src/components/content/ArticleGenerationView.tsx",
-    "retryMaterial",
-  ],
-  "content.generateArticle": [
-    "direct",
-    "media-workbench/src/components/content/ArticleGenerationView.tsx",
-    "generate",
-  ],
-  "content.saveArticle": [
-    "direct",
-    "media-workbench/src/components/content/ArticleGenerationView.tsx",
-    "saveArticle",
-  ],
-  "content.getArticleEditor": [
-    "direct",
-    "media-workbench/src/components/ContentWorkbench.tsx",
-    "getArticleEditor",
-  ],
-  "content.previewArticleRemovalImpact": [
-    "direct",
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    "previewContentArticleRemoval",
-  ],
-  "content.trashArticles": [
-    "direct",
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    "trashContentArticles",
-  ],
-  "content.restoreArticle": [
-    "direct",
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    "restoreContentArticle",
-  ],
-  "content.preparePermanentDeleteArticle": [
-    "direct",
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    "preparePermanentDeleteContentArticle",
-  ],
-  "content.permanentlyDeleteArticle": [
-    "direct",
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    "permanentlyDeleteContentArticle",
-  ],
-  "content.getArticleRemovalTransaction": [
-    "direct",
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    "watchRemovalTransaction",
-  ],
-  "content.retryArticleRemovalTransaction": [
-    "direct",
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    "retryContentArticleRemovalTransaction",
-  ],
-  "content.getArticleManagementSnapshot": [
-    "lifecycle",
-    "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    "refreshManagement",
-  ],
-  "content.openPublicationUrl": [
-    "direct",
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    "openPublicationUrl",
-  ],
-  "content.getSubmissionCenterSnapshot": [
-    "lifecycle",
-    "media-workbench/src/features/submission-center/use-submission-center-feature.ts",
-    "refresh",
-  ],
-  "attention.listArticleAttention": [
-    "lifecycle",
-    "media-workbench/src/features/attention/use-attention-feature.ts",
-    "refresh",
-  ],
-  "attention.previewArticleAttention": [
-    "direct",
-    "media-workbench/src/components/content/ArticleAttentionPanel.tsx",
-    "onPreviewAction",
-  ],
-  "attention.resolveArticleAttention": [
-    "direct",
-    "media-workbench/src/components/content/ArticleAttentionPanel.tsx",
-    "onExecutePreview",
-  ],
-  "content.articleRemovalTransactionChanged": [
-    "event",
-    "media-workbench/src/components/content/GeneratedArticlesView.tsx",
-    "watchRemovalTransaction",
-  ],
-  "generation.previewBatch": [
-    "direct",
-    "media-workbench/src/components/content/BatchGenerationView.tsx",
-    "previewBatch",
-  ],
-  "generation.createAndStartBatch": [
-    "direct",
-    "media-workbench/src/components/content/BatchGenerationView.tsx",
-    "start",
-  ],
-  "generation.abandonBatch": [
-    "direct",
-    "media-workbench/src/components/content/BatchGenerationView.tsx",
-    "abandon",
-  ],
-  "generation.pauseBatch": [
-    "direct",
-    "media-workbench/src/components/content/BatchGenerationView.tsx",
-    "pause",
-  ],
-  "generation.resumeBatch": [
-    "direct",
-    "media-workbench/src/components/content/BatchGenerationView.tsx",
-    "resume",
-  ],
-  "generation.retryFailed": [
-    "direct",
-    "media-workbench/src/components/content/BatchGenerationView.tsx",
-    "retry",
-  ],
-  "generation.previewCancelPending": [
-    "direct",
-    "media-workbench/src/components/content/GenerationBatchDetail.tsx",
-    "onPreviewCancelPending",
-  ],
-  "generation.cancelPending": [
-    "direct",
-    "media-workbench/src/components/content/GenerationBatchDetail.tsx",
-    "onCancelPending",
-  ],
-  "generation.getRuntimeSnapshot": [
-    "lifecycle",
-    "media-workbench/src/features/generation/use-generation-feature.ts",
-    "hydrate",
-  ],
-  "content.previewRegularQueueAdmission": [
-    "direct",
-    "media-workbench/src/components/content/use-submission-intake-session.ts",
-    "previewRegularQueueAdmission",
-  ],
-  "content.admitRegularQueueItems": [
-    "direct",
-    "media-workbench/src/components/content/use-submission-intake-session.ts",
-    "admitRegularQueueItems",
-  ],
-  "media.prepareOrderCancellation": [
-    "direct",
-    "media-workbench/src/App.tsx",
-    "prepareOrderCancellation",
-  ],
-  "media.cancelOrder": ["direct", "media-workbench/src/App.tsx", "cancelOrder"],
-  "media.prepareCancellationResolution": [
-    "direct",
-    "media-workbench/src/App.tsx",
-    "prepareCancellationResolution",
-  ],
-  "media.confirmCancellationSucceeded": [
-    "direct",
-    "media-workbench/src/App.tsx",
-    "confirmCancellationSucceeded",
-  ],
-  "media.confirmCancellationNotApplied": [
-    "direct",
-    "media-workbench/src/App.tsx",
-    "confirmCancellationNotApplied",
-  ],
-  "content.listRegularQueueGroups": [
-    "lifecycle",
-    "media-workbench/src/features/platform/platform-feature-context.tsx",
-    "refreshRegularQueueGroups",
-  ],
-  "content.updateRegularQueueGroupImageCount": [
-    "direct",
-    "media-workbench/src/components/PlatformWorkbench.tsx",
-    "updateImageCount",
-  ],
-  "content.startRegularQueueGroup": [
-    "direct",
-    "media-workbench/src/components/PlatformWorkbench.tsx",
-    "startGroup",
-  ],
-  "content.pauseRegularQueueGroup": [
-    "direct",
-    "media-workbench/src/components/PlatformWorkbench.tsx",
-    "pauseGroup",
-  ],
-  "content.startAllRegularQueueGroups": [
-    "direct",
-    "media-workbench/src/components/PlatformWorkbench.tsx",
-    "startAllGroups",
-  ],
-  "content.pauseAllRegularQueueGroups": [
-    "direct",
-    "media-workbench/src/components/PlatformWorkbench.tsx",
-    "pauseAllGroups",
-  ],
-  "content.previewPaidMediaPreflight": [
-    "direct",
-    "media-workbench/src/components/content/use-submission-intake-session.ts",
-    "previewPaidMediaPreflight",
-  ],
-  "content.confirmPaidMediaBatch": [
-    "direct",
-    "media-workbench/src/components/content/use-submission-intake-session.ts",
-    "confirmPaidMediaBatch",
-  ],
-  "content.listPaidMediaBatches": [
-    "lifecycle",
-    "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    "refreshPaidMediaBatches",
-  ],
-  "content.startPaidMediaBatch": [
-    "direct",
-    "media-workbench/src/components/PlatformWorkbench.tsx",
-    "startPaidMediaBatch",
-  ],
-  "content.startAllPaidMediaBatches": [
-    "direct",
-    "media-workbench/src/components/PlatformWorkbench.tsx",
-    "startAllPaidMediaBatches",
-  ],
-  "content.pausePaidMediaBatch": [
-    "direct",
-    "media-workbench/src/components/PlatformWorkbench.tsx",
-    "pausePaidMediaBatch",
-  ],
-  "content.cancelRemainingPaidMediaBatchItems": [
-    "direct",
-    "media-workbench/src/components/PlatformWorkbench.tsx",
-    "cancelRemainingPaidMediaBatchItems",
-  ],
-  "content.removePendingQueueItems": [
-    "direct",
-    "media-workbench/src/components/PlatformWorkbench.tsx",
-    "removePendingQueueItems",
-  ],
-  "content.previewTrashedArticleQueueResidue": [
-    "direct",
-    "media-workbench/src/components/PlatformWorkbench.tsx",
-    "inspectResidue",
-  ],
-  "content.cleanupTrashedArticleQueueResidue": [
-    "direct",
-    "media-workbench/src/components/PlatformWorkbench.tsx",
-    "cleanupResidue",
-  ],
-  "content.listQuestions": [
-    "lifecycle",
-    "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    "refreshClientData",
-  ],
-  "content.createQuestion": [
-    "direct",
-    "media-workbench/src/components/content/QuestionCollectionView.tsx",
-    "createQuestion",
-  ],
-  "content.updateQuestion": [
-    "direct",
-    "media-workbench/src/components/content/QuestionCollectionView.tsx",
-    "updateQuestion",
-  ],
-  "content.deleteQuestion": [
-    "direct",
-    "media-workbench/src/components/content/QuestionCollectionView.tsx",
-    "deleteQuestion",
-  ],
-  "content.getDoubaoLoginState": [
-    "direct",
-    "media-workbench/src/components/content/QuestionCollectionView.tsx",
-    "getDoubaoLoginStatus",
-  ],
-  "content.openDoubaoLogin": [
-    "direct",
-    "media-workbench/src/components/content/QuestionCollectionView.tsx",
-    "openDoubaoLogin",
-  ],
-  "content.collectDoubaoOne": [
-    "direct",
-    "media-workbench/src/components/content/QuestionCollectionView.tsx",
-    "collectDoubaoQuestion",
-  ],
-  "content.previewDoubaoBatch": [
-    "direct",
-    "media-workbench/src/components/content/QuestionBatchControls.tsx",
-    "previewDoubaoBatch",
-  ],
-  "content.startPreparedDoubaoBatch": [
-    "direct",
-    "media-workbench/src/components/content/QuestionBatchControls.tsx",
-    "startPreparedDoubaoBatch",
-  ],
-  "content.pauseDoubaoBatch": [
-    "direct",
-    "media-workbench/src/components/content/QuestionCollectionView.tsx",
-    "pauseDoubaoBatch",
-  ],
-  "content.resumeDoubaoBatch": [
-    "direct",
-    "media-workbench/src/components/content/QuestionCollectionView.tsx",
-    "resumeDoubaoBatch",
-  ],
-  "content.stopDoubaoBatch": [
-    "direct",
-    "media-workbench/src/components/content/QuestionCollectionView.tsx",
-    "stopDoubaoBatch",
-  ],
-  "content.retryFailedDoubao": [
-    "direct",
-    "media-workbench/src/components/content/QuestionCollectionView.tsx",
-    "retryFailedDoubao",
-  ],
-  "content.getDoubaoQueueState": [
-    "lifecycle",
-    "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    "refreshDoubaoQueue",
-  ],
-  "content.saveManualResearch": [
-    "direct",
-    "media-workbench/src/components/content/QuestionCollectionView.tsx",
-    "saveManualResearch",
-  ],
-  "content.doubaoQueueChanged": [
-    "event",
-    "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    "setScope",
-  ],
-  "workspace.getRuntimeIdentity": [
-    "lifecycle",
-    "media-workbench/src/features/workspace/workspace-coordinator-context.tsx",
-    "getWorkspaceRuntimeIdentity",
-  ],
-  "media.getBalance": [
-    "lifecycle",
-    "media-workbench/src/features/media/use-media-feature.ts",
-    "refresh",
-  ],
-  "generation.runtimeChanged": [
-    "event",
-    "media-workbench/src/features/generation/use-generation-feature.ts",
-    "hydrate",
-  ],
-  "workspace.invalidated": [
-    "event",
-    "media-workbench/src/features/workspace/workspace-coordinator-context.tsx",
-    "start",
-  ],
-});
-
-const PRODUCTION_STATE_CONSUMERS = Object.freeze({
-  "workspace.getBootstrapState": [
-    "media-workbench/src/components/WorkspaceSelectionPanel.tsx",
-    "snapshot",
-    "bootstrap",
-  ],
-  "workspace.getCurrent": [
-    "media-workbench/src/components/SettingsView.tsx",
-    "snapshot",
-    "current",
-  ],
-  "settings.ai.getStatus": [
-    "media-workbench/src/components/AiProviderSettings.tsx",
-    "snapshot",
-    "ai",
-  ],
-  "settings.platform.getStatus": [
-    "media-workbench/src/components/settings/MediaProviderSettings.tsx",
-    "snapshot",
-    "media",
-  ],
-  "settings.platform.getLegacyStatus": [
-    "media-workbench/src/components/settings/SettingsOverview.tsx",
-    "snapshot",
-    "legacy",
-  ],
-  "settings.storage.getUsage": [
-    "media-workbench/src/components/SettingsView.tsx",
-    "snapshot",
-    "storage",
-  ],
-  "settings.runtime.getDiagnostics": [
-    "media-workbench/src/components/SettingsView.tsx",
-    "snapshot",
-    "runtime",
-  ],
-  "media.getDrafts": ["media-workbench/src/App.tsx", "mediaSnapshot", "drafts"],
-  "media.getPool": ["media-workbench/src/App.tsx", "mediaSnapshot", "pool"],
-  "media.scanArticles": [
-    "media-workbench/src/App.tsx",
-    "mediaSnapshot",
-    "articles",
-  ],
-  "media.getOrders": ["media-workbench/src/App.tsx", "mediaSnapshot", "orders"],
-  "platform.getQueue": [
-    "media-workbench/src/components/PlatformWorkbench.tsx",
-    "platformSnapshot",
-    "queue",
-  ],
-  "platform.listAccountProfiles": [
-    "media-workbench/src/components/content/AccountProfileSelector.tsx",
-    "snapshot",
-    "accountProfiles",
-  ],
-  "content.listRegularQueueGroups": [
-    "media-workbench/src/components/PlatformWorkbench.tsx",
-    "snapshot",
-    "regularQueueGroupViews",
-  ],
-  "content.listClients": [
-    "media-workbench/src/components/ContentWorkbench.tsx",
-    "content.snapshot",
-    "clients",
-  ],
-  "content.listResearch": [
-    "media-workbench/src/components/ContentWorkbench.tsx",
-    "content.snapshot",
-    "research",
-  ],
-  "content.listTemplateCatalog": [
-    "media-workbench/src/components/ContentWorkbench.tsx",
-    "content.snapshot",
-    "templateCatalog",
-  ],
-  "content.getArticleManagementSnapshot": [
-    "media-workbench/src/components/ContentWorkbench.tsx",
-    "content.snapshot",
-    "management",
-  ],
-  "content.getSubmissionCenterSnapshot": [
-    "media-workbench/src/App.tsx",
-    "submissionCenter.snapshot",
-    "data",
-  ],
-  "content.listPaidMediaBatches": [
-    "media-workbench/src/components/PaidMediaWorkbench.tsx",
-    "content.snapshot",
-    "paidMediaExecution",
-  ],
-  "content.startAllPaidMediaBatches": [
-    "media-workbench/src/components/PaidMediaWorkbench.tsx",
-    "content.commands",
-    "startAllPaidMediaBatches",
-  ],
-  "content.cancelRemainingPaidMediaBatchItems": [
-    "media-workbench/src/components/PaidMediaWorkbench.tsx",
-    "content.snapshot",
-    "paidMediaExecution",
-  ],
-  "attention.listArticleAttention": [
-    "media-workbench/src/components/PlatformWorkbench.tsx",
-    "attentionSnapshot",
-    "items",
-  ],
-  "generation.getRuntimeSnapshot": [
-    "media-workbench/src/components/content/BatchGenerationView.tsx",
-    "generation.snapshot",
-    "runtime",
-  ],
-  "content.listQuestions": [
-    "media-workbench/src/components/ContentWorkbench.tsx",
-    "content.snapshot",
-    "questions",
-  ],
-  "content.getDoubaoQueueState": [
-    "media-workbench/src/components/ContentWorkbench.tsx",
-    "content.snapshot",
-    "doubaoQueue",
-  ],
-  "workspace.getRuntimeIdentity": [
-    "media-workbench/src/features/generation/use-generation-feature.ts",
-    "workspace",
-    "workspaceRuntimeId",
-  ],
-  "media.getBalance": [
-    "media-workbench/src/App.tsx",
-    "mediaSnapshot",
-    "balance",
-  ],
-});
-
-const PRODUCTION_FEATURE_SURFACES = Object.freeze({
-  "media-workbench/src/features/workspace/workspace-feature-context.tsx":
-    "media-workbench/src/features/workspace/workspace-feature.js",
-  "media-workbench/src/features/settings/settings-context.tsx":
-    "media-workbench/src/features/settings/settings-feature.js",
-  "media-workbench/src/features/media/use-media-feature.ts":
-    "media-workbench/src/features/media/media-feature.js",
-  "media-workbench/src/features/platform/platform-feature-context.tsx":
-    "media-workbench/src/features/platform/platform-feature.js",
-  "media-workbench/src/features/content/use-content-workbench-feature.ts":
-    "media-workbench/src/features/content/content-workbench-feature.js",
-  "media-workbench/src/features/content/use-content-generation-feature.ts":
-    "media-workbench/src/features/content/content-generation-feature.js",
-  "media-workbench/src/features/attention/use-attention-feature.ts":
-    "media-workbench/src/features/attention/attention-feature.js",
-  "media-workbench/src/features/generation/use-generation-feature.ts":
-    "media-workbench/src/features/generation/generation-feature.js",
-  "media-workbench/src/features/submission-center/use-submission-center-feature.ts":
-    "media-workbench/src/features/submission-center/submission-center-feature.js",
-  "media-workbench/src/features/workspace/workspace-coordinator-context.tsx":
-    "media-workbench/src/features/workspace/workspace-coordinator.js",
-});
-
-const PRODUCTION_FEATURE_METHOD_OVERRIDES = Object.freeze({
-  "attention.previewArticleAttention": "previewAction",
-  "attention.resolveArticleAttention": "executePreview",
-  "generation.previewCancelPending": "previewCancelPending",
-  "generation.cancelPending": "cancelPending",
-  "content.articleRemovalTransactionChanged": "watchRemovalTransaction",
-  "content.doubaoQueueChanged": "setScope",
-  "content.getDoubaoQueueState": "refreshDoubaoQueue",
-});
-
-const PRODUCTION_FEATURE_SOURCE_OVERRIDES = Object.freeze({
-  "workspace.getRuntimeIdentity":
-    "media-workbench/src/features/workspace/workspace-coordinator-context.tsx",
-});
-
-// These lifecycle/event consumers are reached through injected feature adapters
-// (or a composed nested feature), so the TypeChecker cannot resolve a direct
-// call expression in the recorded renderer owner. The remaining bridge,
-// registration, state-update, and disposal checks still apply.
-const PRODUCTION_INDIRECT_FEATURE_CALLS = new Set([
-  "settings.ai.getStatus",
-  "settings.platform.getStatus",
-  "settings.platform.getLegacyStatus",
-  "settings.storage.getUsage",
-  "settings.runtime.getDiagnostics",
-  "workspace.getRuntimeIdentity",
-  "content.articleRemovalTransactionChanged",
-  "media.refreshResources",
-]);
-
-const PRODUCTION_EVENT_CLEANUP_CONSUMERS = Object.freeze({
-  "content.articleRemovalTransactionChanged": Object.freeze({
-    cleanupSource:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    cleanupOwner: "useContentWorkbenchFeature",
-    cleanupReceiver: "feature",
-    allowCrossSourceCleanup: true,
-  }),
-  "content.doubaoQueueChanged": Object.freeze({
-    cleanupSource:
-      "media-workbench/src/features/content/use-content-workbench-feature.ts",
-    cleanupOwner: "useContentWorkbenchFeature",
-    cleanupReceiver: "feature",
-    allowCrossSourceCleanup: true,
-  }),
-});
-
-// Content workbench is a composition feature. Keep the public consumer
-// evidence on the composed feature, while recording the nested owner that
-// actually invokes each content bridge dependency and owns its state write or
-// event disposer.
-const PRODUCTION_NESTED_FEATURES = Object.freeze({
-  "content.listClients": Object.freeze({
-    source: "media-workbench/src/features/content/content-sources-feature.js",
-    factory: "createContentSourcesFeature",
-    method: "refreshSources",
-    binding: "listClients",
-    stateField: "clients",
-  }),
-  "content.listResearch": Object.freeze({
-    source: "media-workbench/src/features/content/content-sources-feature.js",
-    factory: "createContentSourcesFeature",
-    method: "refreshClientData",
-    binding: "listResearch",
-    stateField: "research",
-  }),
-  "content.listTemplateCatalog": Object.freeze({
-    source: "media-workbench/src/features/content/content-sources-feature.js",
-    factory: "createContentSourcesFeature",
-    method: "refreshSources",
-    binding: "listTemplateCatalog",
-    stateField: "templateCatalog",
-  }),
-  "content.listQuestions": Object.freeze({
-    source: "media-workbench/src/features/content/content-sources-feature.js",
-    factory: "createContentSourcesFeature",
-    method: "refreshClientData",
-    binding: "listQuestions",
-    stateField: "questions",
-  }),
-  "content.getDoubaoQueueState": Object.freeze({
-    source: "media-workbench/src/features/content/content-sources-feature.js",
-    factory: "createContentSourcesFeature",
-    method: "refreshDoubaoQueue",
-    binding: "getDoubaoQueueState",
-    stateField: "doubaoQueue",
-  }),
-  "content.getArticleManagementSnapshot": Object.freeze({
-    source:
-      "media-workbench/src/features/content/article-management-feature.js",
-    factory: "createArticleManagementFeature",
-    method: "refreshManagement",
-    binding: "loadManagement",
-    stateField: "management",
-  }),
-  "content.getSubmissionCenterSnapshot": Object.freeze({
-    source:
-      "media-workbench/src/features/submission-center/submission-center-feature.js",
-    factory: "createSubmissionCenterFeature",
-    method: "refresh",
-    binding: "getSnapshot",
-    stateField: "data",
-  }),
-  "content.listPaidMediaBatches": Object.freeze({
-    source:
-      "media-workbench/src/features/content/paid-media-execution-feature.js",
-    factory: "createPaidMediaExecutionFeature",
-    method: "refresh",
-    binding: "listPaidMediaBatches",
-    stateField: "items",
-  }),
-  "content.articleRemovalTransactionChanged": Object.freeze({
-    source:
-      "media-workbench/src/features/content/article-management-feature.js",
-    factory: "createArticleManagementFeature",
-    method: "watchRemovalTransaction",
-    binding: "subscribeRemovalTransaction",
-    cleanupMethod: "dispose",
-  }),
-  "content.getArticleRemovalTransaction": Object.freeze({
-    source:
-      "media-workbench/src/features/content/article-management-feature.js",
-    factory: "createArticleManagementFeature",
-    method: "watchRemovalTransaction",
-    binding: "getRemovalTransaction",
-  }),
-  "content.doubaoQueueChanged": Object.freeze({
-    source: "media-workbench/src/features/content/content-sources-feature.js",
-    factory: "createContentSourcesFeature",
-    method: "setScope",
-    binding: "subscribeDoubaoQueue",
-    cleanupMethod: "dispose",
-  }),
-});
-
-const PRODUCTION_NESTED_COMMAND_FEATURES = Object.freeze(
-  Object.fromEntries(
-    [
-      [
-        "media-workbench/src/features/content/content-sources-feature.js",
-        "createContentSourcesFeature",
-        [
-          "content.retryMaterial",
-          "content.saveClientLiejuPublicationProfile",
-          "content.createQuestion",
-          "content.updateQuestion",
-          "content.deleteQuestion",
-          "content.getDoubaoLoginState",
-          "content.openDoubaoLogin",
-          "content.collectDoubaoOne",
-          "content.previewDoubaoBatch",
-          "content.startPreparedDoubaoBatch",
-          "content.pauseDoubaoBatch",
-          "content.resumeDoubaoBatch",
-          "content.stopDoubaoBatch",
-          "content.retryFailedDoubao",
-          "content.saveManualResearch",
-        ],
-      ],
-      [
-        "media-workbench/src/features/content/article-management-feature.js",
-        "createArticleManagementFeature",
-        [
-          "content.saveArticle",
-          "content.getArticleEditor",
-          "content.openPublicationUrl",
-          "content.previewArticleRemovalImpact",
-          "content.trashArticles",
-          "content.restoreArticle",
-          "content.preparePermanentDeleteArticle",
-          "content.permanentlyDeleteArticle",
-          "content.retryArticleRemovalTransaction",
-          "content.previewRegularQueueAdmission",
-          "content.admitRegularQueueItems",
-          "content.previewPaidMediaPreflight",
-          "content.confirmPaidMediaBatch",
-        ],
-      ],
-      [
-        "media-workbench/src/features/content/paid-media-execution-feature.js",
-        "createPaidMediaExecutionFeature",
-        [
-          "content.startPaidMediaBatch",
-          "content.startAllPaidMediaBatches",
-          "content.pausePaidMediaBatch",
-          "content.cancelRemainingPaidMediaBatchItems",
-        ],
-      ],
-    ].flatMap(([source, factory, capabilities]) =>
-      capabilities.map((capability) => [
-        capability,
-        Object.freeze({
-          source,
-          factory,
-          method: PRODUCTION_CALLERS[capability].featureBinding,
-          binding: PRODUCTION_CALLERS[capability].featureBinding,
-          container: "commands",
-        }),
-      ]),
-    ),
-  ),
-);
-
-const PRODUCTION_PROP_WIRINGS = Object.freeze({
-  "content.listPaidMediaBatches": [
-    "media-workbench/src/components/PaidMediaWorkbench.tsx",
-    "refreshPaidMediaBatches",
-  ],
-  "attention.previewArticleAttention": [
-    "media-workbench/src/components/PlatformWorkbench.tsx",
-    "onPreviewAction",
-  ],
-  "attention.resolveArticleAttention": [
-    "media-workbench/src/components/PlatformWorkbench.tsx",
-    "onExecutePreview",
-  ],
-  "generation.previewCancelPending": [
-    "media-workbench/src/components/content/BatchGenerationView.tsx",
-    "onPreviewCancelPending",
-  ],
-  "generation.cancelPending": [
-    "media-workbench/src/components/content/BatchGenerationView.tsx",
-    "onCancelPending",
-  ],
-});
-
-const PRODUCTION_CONSUMER_RECEIVERS = Object.freeze(
-  Object.fromEntries(
-    [
-      [
-        "feature",
-        [
-          "workspace.getBootstrapState",
-          "workspace.chooseDirectory",
-          "workspace.confirmSelection",
-          "workspace.cancelSelection",
-          "workspace.getCurrent",
-          "workspace.openCurrent",
-          "workspace.requestSwitch",
-          "settings.ai.getStatus",
-          "settings.ai.save",
-          "settings.ai.test",
-          "settings.ai.clear",
-          "settings.platform.getStatus",
-          "settings.platform.save",
-          "settings.platform.test",
-          "settings.platform.clear",
-          "settings.platform.getLegacyStatus",
-          "settings.platform.importLegacy",
-          "settings.storage.getUsage",
-          "settings.storage.cleanCaches",
-          "settings.runtime.getDiagnostics",
-          "settings.runtime.browserSmoke",
-          "media.getDrafts",
-          "media.getOrders",
-          "platform.getQueue",
-          "platform.listAccountProfiles",
-          "platform.confirmAccountProfile",
-          "platform.bindAccountProfile",
-          "platform.deleteAccountProfile",
-          "content.listClients",
-          "content.listResearch",
-          "content.listTemplateCatalog",
-          "content.getArticleManagementSnapshot",
-          "content.getSubmissionCenterSnapshot",
-          "content.listPaidMediaBatches",
-          "attention.listArticleAttention",
-          "generation.getRuntimeSnapshot",
-          "content.listQuestions",
-          "media.getBalance",
-          "content.doubaoQueueChanged",
-          "content.getDoubaoQueueState",
-          "generation.runtimeChanged",
-        ],
-      ],
-      [
-        "mediaFeature",
-        [
-          "media.refreshResources",
-          "media.getResourcePage",
-          "media.searchResourcePage",
-          "media.getPool",
-          "media.addToPool",
-          "media.removeFromPool",
-          "media.scanArticles",
-          "media.syncOrder",
-          "media.syncAllOrders",
-          "media.prepareOrderCancellation",
-          "media.cancelOrder",
-          "media.prepareCancellationResolution",
-          "media.confirmCancellationSucceeded",
-          "media.confirmCancellationNotApplied",
-          "media.prepareOrderStatusAnomalyResolution",
-          "media.resumeOrderTracking",
-          "media.confirmOrderPublished",
-          "media.confirmOrderNotPublished",
-          "media.openPublishedUrl",
-        ],
-      ],
-      [
-        "submissionController",
-        [
-          "platform.openLogin",
-          "platform.checkLogin",
-          "content.previewTrashedArticleQueueResidue",
-          "content.cleanupTrashedArticleQueueResidue",
-          "content.listRegularQueueGroups",
-          "content.updateRegularQueueGroupImageCount",
-          "content.startRegularQueueGroup",
-          "content.pauseRegularQueueGroup",
-          "content.startAllRegularQueueGroups",
-          "content.pauseAllRegularQueueGroups",
-          "content.removePendingQueueItems",
-        ],
-      ],
-      [
-        "commands",
-        [
-          "content.retryMaterial",
-          "content.saveClientLiejuPublicationProfile",
-          "content.saveArticle",
-          "content.getArticleEditor",
-          "content.openPublicationUrl",
-          "content.previewArticleRemovalImpact",
-          "content.trashArticles",
-          "content.restoreArticle",
-          "content.preparePermanentDeleteArticle",
-          "content.permanentlyDeleteArticle",
-          "content.retryArticleRemovalTransaction",
-          "content.startPaidMediaBatch",
-          "content.startAllPaidMediaBatches",
-          "content.pausePaidMediaBatch",
-          "content.cancelRemainingPaidMediaBatchItems",
-          "content.createQuestion",
-          "content.updateQuestion",
-          "content.deleteQuestion",
-          "content.getDoubaoLoginState",
-          "content.openDoubaoLogin",
-          "content.collectDoubaoOne",
-          "content.previewDoubaoBatch",
-          "content.startPreparedDoubaoBatch",
-          "content.pauseDoubaoBatch",
-          "content.resumeDoubaoBatch",
-          "content.stopDoubaoBatch",
-          "content.retryFailedDoubao",
-          "content.saveManualResearch",
-        ],
-      ],
-      ["generationFeature", ["content.generateArticle"]],
-      [
-        "",
-        [
-          "attention.previewArticleAttention",
-          "attention.resolveArticleAttention",
-          "content.articleRemovalTransactionChanged",
-          "content.getArticleRemovalTransaction",
-          "content.previewRegularQueueAdmission",
-          "content.admitRegularQueueItems",
-          "content.previewPaidMediaPreflight",
-          "content.confirmPaidMediaBatch",
-          "generation.previewCancelPending",
-          "generation.cancelPending",
-          "workspace.getRuntimeIdentity",
-        ],
-      ],
-      [
-        "generation",
-        [
-          "generation.previewBatch",
-          "generation.createAndStartBatch",
-          "generation.abandonBatch",
-          "generation.pauseBatch",
-          "generation.resumeBatch",
-          "generation.retryFailed",
-        ],
-      ],
-      ["coordinator", ["workspace.invalidated"]],
-    ].flatMap(([receiver, capabilities]) =>
-      capabilities.map((capability) => [capability, receiver]),
-    ),
-  ),
-);
-const PRODUCTION_DIRECT_FEATURE_CALLS = new Set([
-  "workspace.getRuntimeIdentity",
-]);
-
-const PRODUCTION_EVENT_CLEANUP_METHODS = Object.freeze({
-  "generation.runtimeChanged": "dispose",
-  "workspace.invalidated": "stop",
-});
-
-const PRODUCTION_EVENT_PRODUCERS = Object.freeze({
-  "content.articleRemovalTransactionChanged": Object.freeze({
-    producerEntry: "desktop/composition/workspace-runtime-composition.js",
-    producerEntryOwner: "createWorkspaceRuntimeComposition",
-    producerOwner: "onArticleRemovalTransaction",
-    applicationSource: "desktop/main.js",
-    applicationOwner: "sendToRenderer",
-    applicationReceiver: "mainWindow.webContents",
-  }),
-  "content.doubaoQueueChanged": Object.freeze({
-    producerEntry: "desktop/composition/workspace-runtime-composition.js",
-    producerEntryOwner: "createWorkspaceRuntimeComposition",
-    producerOwner: "createWorkspaceRuntimeComposition",
-    producerCallback: "doubaoCollectionService.subscribe",
-    applicationSource: "desktop/main.js",
-    applicationOwner: "sendToRenderer",
-    applicationReceiver: "mainWindow.webContents",
-  }),
-  "generation.runtimeChanged": Object.freeze({
-    producerEntry: "desktop/composition/workspace-runtime-composition.js",
-    producerEntryOwner: "createWorkspaceRuntimeComposition",
-    producerOwner: "subscribeGenerationRuntimeState",
-    producerCallback: "contentGenerationBatchService.subscribe",
-    applicationSource: "desktop/main.js",
-    applicationOwner: "sendToRenderer",
-    applicationReceiver: "mainWindow.webContents",
-  }),
-  "workspace.invalidated": Object.freeze({
-    producerEntry: "desktop/workspace-runtime.js",
-    producerEntryOwner: "createWorkspaceRuntime",
-    producerOwner: "createWorkspaceDataInvalidation",
-    applicationSource: "desktop/main.js",
-    applicationOwner: "sendToRenderer",
-    applicationReceiver: "mainWindow.webContents",
-  }),
-});
-
-const PRODUCTION_REGISTRARS = Object.freeze({
-  "desktop/ipc/workspace-bootstrap-ipc.js": [
-    "registerWorkspaceBootstrapIpc",
-    "typedIpcMain",
-  ],
-  "desktop/ipc/ai-provider-ipc.js": ["registerAiProviderIpc", "ipcMain"],
-  "desktop/ipc/platform-settings-ipc.js": [
-    "registerPlatformSettingsIpc",
-    "deps.ipcMain",
-  ],
-  "desktop/ipc/storage-maintenance-ipc.js": [
-    "registerStorageMaintenanceIpc",
-    "values.ipcMain",
-  ],
-  "desktop/ipc/runtime-diagnostics-ipc.js": [
-    "registerRuntimeDiagnosticsIpc",
-    "deps.ipcMain",
-  ],
-  "desktop/ipc/media-ipc.js": ["registerMediaIpc", "ipcMain"],
-  "desktop/ipc/platform-ipc.js": ["registerPlatformIpc", "ipcMain"],
-  "desktop/ipc/account-profile-ipc.js": [
-    "registerAccountProfileIpc",
-    "value.ipcMain",
-  ],
-  "desktop/ipc/ai-content-ipc.js": ["registerAiContentIpc", "ipcMain"],
-  "desktop/ipc/article-management-ipc.js": [
-    "registerArticleManagementIpc",
-    "values.ipcMain",
-  ],
-  "desktop/ipc/article-attention-ipc.js": [
-    "registerArticleAttentionIpc",
-    "options.ipcMain",
-  ],
-  "desktop/ipc/content-generation-batch-ipc.js": [
-    "registerContentGenerationBatchIpc",
-    "ipcMain",
-  ],
-  "desktop/ipc/content-submission-ipc.js": [
-    "registerContentSubmissionIpc",
-    "deps.ipcMain",
-  ],
-  "desktop/ipc/doubao-collection-ipc.js": [
-    "registerDoubaoCollectionIpc",
-    "ipcMain",
-  ],
-  "desktop/ipc/workspace-runtime-ipc.js": [
-    "registerWorkspaceRuntimeIpc",
-    "deps.ipcMain",
-  ],
-});
-
-const PRODUCTION_REGISTRATION_ENTRIES = Object.freeze({
-  "desktop/ipc/workspace-bootstrap-ipc.js": [
-    "desktop/main.js",
-    "initializeWorkspaceBootstrap",
-    "ipcMain",
-    "workspaceBootstrapService",
-  ],
-  "desktop/ipc/storage-maintenance-ipc.js": [
-    "desktop/ipc/register.js",
-    "registerIpc",
-    "guardedIpcMain",
-    "values.storageMaintenanceService",
-  ],
-});
-
-const PRODUCTION_SOURCE_OWNERS = Object.freeze({
-  "media-workbench/src/features/workspace/workspace-feature-context.tsx":
-    "WorkspaceFeatureProvider",
-  "media-workbench/src/features/settings/settings-context.tsx":
-    "SettingsFeatureProvider",
-  "media-workbench/src/features/media/use-media-feature.ts": "useMediaFeature",
-  "media-workbench/src/features/platform/platform-feature-context.tsx":
-    "PlatformFeatureProvider",
-  "media-workbench/src/features/content/use-content-workbench-feature.ts":
-    "useContentWorkbenchFeature",
-  "media-workbench/src/features/attention/use-attention-feature.ts":
-    "useAttentionFeature",
-  "media-workbench/src/features/generation/use-generation-feature.ts":
-    "useGenerationFeature",
-  "media-workbench/src/features/submission-center/use-submission-center-feature.ts":
-    "useSubmissionCenterFeature",
-  "media-workbench/src/features/workspace/workspace-coordinator-context.tsx":
-    "WorkspaceCoordinatorProvider",
-  "media-workbench/src/components/WorkspaceSelectionPanel.tsx":
-    "WorkspaceSelectionPanel",
-  "media-workbench/src/components/AiProviderSettings.tsx": "AiProviderSettings",
-  "media-workbench/src/components/settings/MediaProviderSettings.tsx":
-    "MediaProviderSettings",
-  "media-workbench/src/components/settings/SettingsOverview.tsx":
-    "SettingsOverview",
-  "media-workbench/src/components/settings/PlatformAccountSettings.tsx":
-    "PlatformAccountSettings",
-  "media-workbench/src/App.tsx": "AppContent",
-  "media-workbench/src/components/PlatformWorkbench.tsx": "PlatformWorkbench",
-  "media-workbench/src/components/PaidMediaWorkbench.tsx": "PaidMediaWorkbench",
-  "media-workbench/src/components/content/ArticleGenerationView.tsx":
-    "ArticleGenerationView",
-  "media-workbench/src/components/ContentWorkbench.tsx": "ContentWorkbench",
-  "media-workbench/src/components/content/GeneratedArticlesView.tsx":
-    "GeneratedArticlesView",
-  "media-workbench/src/components/content/use-submission-intake-session.ts":
-    "useSubmissionIntakeSession",
-  "media-workbench/src/components/content/AccountProfileSelector.tsx":
-    "AccountProfileSelector",
-  "media-workbench/src/components/content/ArticleAttentionPanel.tsx":
-    "ArticleAttentionPanel",
-  "media-workbench/src/components/content/BatchGenerationView.tsx":
-    "BatchGenerationView",
-  "media-workbench/src/components/content/GenerationBatchDetail.tsx":
-    "GenerationBatchDetail",
-  "media-workbench/src/components/content/QuestionCollectionView.tsx":
-    "QuestionCollectionView",
-  "media-workbench/src/components/content/QuestionBatchControls.tsx":
-    "QuestionBatchControls",
-});
-
-const PRODUCTION_OWNER_OVERRIDES = Object.freeze({
-  "workspace.openCurrent": "WorkspaceSettings",
-  "settings.storage.cleanCaches": "StorageSettings",
-  "settings.runtime.browserSmoke": "RuntimeSettings",
-  "platform.confirmAccountProfile": "createProfile",
-  "platform.bindAccountProfile": "bindSelected",
-  "platform.deleteAccountProfile": "deleteSelected",
-});
-
-const PRODUCTION_STATE_OWNERS = Object.freeze({
-  "workspace.getCurrent": "WorkspaceSettings",
-  "settings.storage.getUsage": "StorageSettings",
-  "settings.runtime.getDiagnostics": "RuntimeSettings",
-  "platform.listAccountProfiles": "AccountProfileSelector",
-});
-
-function productionConsumer(capability, productionFeatureSource) {
-  const [kind, source, method] = PRODUCTION_CONSUMERS[capability] || [];
-  if (!kind) return null;
-  const [stateSource, stateRoot, stateField] =
-    PRODUCTION_STATE_CONSUMERS[capability] || [];
-  const featureMethod =
-    PRODUCTION_FEATURE_METHOD_OVERRIDES[capability] || method;
-  const featureSource =
-    PRODUCTION_FEATURE_SOURCE_OVERRIDES[capability] ||
-    PRODUCTION_FEATURE_SURFACES[productionFeatureSource] ||
-    productionFeatureSource;
-  const [wiringSource, wiringProp] = PRODUCTION_PROP_WIRINGS[capability] || [];
-  const receiver = PRODUCTION_CONSUMER_RECEIVERS[capability];
-  const nestedFeature =
-    PRODUCTION_NESTED_FEATURES[capability] ||
-    PRODUCTION_NESTED_COMMAND_FEATURES[capability];
-  const owner =
-    PRODUCTION_OWNER_OVERRIDES[capability] || PRODUCTION_SOURCE_OWNERS[source];
-  const stateOwner =
-    PRODUCTION_STATE_OWNERS[capability] ||
-    PRODUCTION_SOURCE_OWNERS[stateSource];
-  return Object.freeze({
-    kind,
-    source,
-    owner,
-    entrySource: "media-workbench/src/main.tsx",
-    method,
-    receiver,
-    featureSource,
-    featureMethod,
-    ...(PRODUCTION_EVENT_CLEANUP_METHODS[capability]
-      ? { cleanupMethod: PRODUCTION_EVENT_CLEANUP_METHODS[capability] }
-      : {}),
-    ...(PRODUCTION_EVENT_CLEANUP_CONSUMERS[capability] || {}),
-    ...(receiver === "commands" ||
-    receiver === "content.commands" ||
-    nestedFeature?.container === "commands"
-      ? { featureContainer: "commands" }
-      : {}),
-    ...(PRODUCTION_DIRECT_FEATURE_CALLS.has(capability)
-      ? { featureDirect: true }
-      : {}),
-    ...(stateSource ? { stateSource, stateRoot, stateField, stateOwner } : {}),
-    ...(nestedFeature ? { nestedFeature } : {}),
-    // Adapter-backed feature methods are intentionally indirect; TypeChecker
-    // cannot always resolve their receiver across the TS/JS boundary.
-    allowIndirectFeatureCall: true,
-    ...(wiringSource ? { wiringSource, wiringProp } : {}),
-  });
-}
-
 const rawProductionIpcContractFixtures = [
   {
     capability: "workspace.getBootstrapState",
     channel: "workspace:get-bootstrap-state",
     owner: "workspace",
-    productionCaller: "desktop/preload.js:workspace:get-bootstrap-state",
     request: {},
     result: {
       state: "checking",
@@ -3191,7 +138,6 @@ const rawProductionIpcContractFixtures = [
     capability: "workspace.chooseDirectory",
     channel: "workspace:choose-directory",
     owner: "workspace",
-    productionCaller: "desktop/preload.js:workspace:choose-directory",
     request: {},
     result: {
       state: "checking",
@@ -3207,7 +153,6 @@ const rawProductionIpcContractFixtures = [
     capability: "workspace.confirmSelection",
     channel: "workspace:confirm-selection",
     owner: "workspace",
-    productionCaller: "desktop/preload.js:workspace:confirm-selection",
     request: {
       token: "fixture-1",
     },
@@ -3225,7 +170,6 @@ const rawProductionIpcContractFixtures = [
     capability: "workspace.cancelSelection",
     channel: "workspace:cancel-selection",
     owner: "workspace",
-    productionCaller: "desktop/preload.js:workspace:cancel-selection",
     request: {},
     result: {
       state: "checking",
@@ -3241,7 +185,6 @@ const rawProductionIpcContractFixtures = [
     capability: "workspace.getCurrent",
     channel: "workspace:get-current",
     owner: "workspace",
-    productionCaller: "desktop/preload.js:workspace:get-current",
     request: {},
     result: {
       state: "checking",
@@ -3257,7 +200,6 @@ const rawProductionIpcContractFixtures = [
     capability: "workspace.openCurrent",
     channel: "workspace:open-current",
     owner: "workspace",
-    productionCaller: "desktop/preload.js:workspace:open-current",
     request: {},
     result: {
       opened: false,
@@ -3267,7 +209,6 @@ const rawProductionIpcContractFixtures = [
     capability: "workspace.requestSwitch",
     channel: "workspace:request-switch",
     owner: "workspace",
-    productionCaller: "desktop/preload.js:workspace:request-switch",
     request: {},
     result: {
       state: "checking",
@@ -3283,7 +224,6 @@ const rawProductionIpcContractFixtures = [
     capability: "settings.ai.getStatus",
     channel: "ai-provider:get-status",
     owner: "settings",
-    productionCaller: "desktop/preload.js:ai-provider:get-status",
     request: {},
     result: {
       source: "application",
@@ -3300,7 +240,6 @@ const rawProductionIpcContractFixtures = [
     capability: "settings.ai.save",
     channel: "ai-provider:save",
     owner: "settings",
-    productionCaller: "desktop/preload.js:ai-provider:save",
     request: {
       baseUrl: "fixture-1",
       apiKey: "fixture-1",
@@ -3322,7 +261,6 @@ const rawProductionIpcContractFixtures = [
     capability: "settings.ai.test",
     channel: "ai-provider:test",
     owner: "settings",
-    productionCaller: "desktop/preload.js:ai-provider:test",
     request: {},
     result: {
       testedAt: "fixture-1",
@@ -3334,7 +272,6 @@ const rawProductionIpcContractFixtures = [
     capability: "settings.ai.clear",
     channel: "ai-provider:clear",
     owner: "settings",
-    productionCaller: "desktop/preload.js:ai-provider:clear",
     request: {},
     result: {
       cleared: false,
@@ -3344,7 +281,6 @@ const rawProductionIpcContractFixtures = [
     capability: "settings.platform.getStatus",
     channel: "platform-settings:get-status",
     owner: "settings",
-    productionCaller: "desktop/preload.js:platform-settings:get-status",
     request: {
       platformId: "media",
     },
@@ -3366,7 +302,6 @@ const rawProductionIpcContractFixtures = [
     capability: "settings.platform.save",
     channel: "platform-settings:save",
     owner: "settings",
-    productionCaller: "desktop/preload.js:platform-settings:save",
     request: {
       platformId: "media",
       draft: {},
@@ -3389,7 +324,6 @@ const rawProductionIpcContractFixtures = [
     capability: "settings.platform.test",
     channel: "platform-settings:test",
     owner: "settings",
-    productionCaller: "desktop/preload.js:platform-settings:test",
     request: {
       platformId: "media",
     },
@@ -3406,7 +340,6 @@ const rawProductionIpcContractFixtures = [
     capability: "settings.platform.clear",
     channel: "platform-settings:clear",
     owner: "settings",
-    productionCaller: "desktop/preload.js:platform-settings:clear",
     request: {
       platformId: "media",
     },
@@ -3419,7 +352,6 @@ const rawProductionIpcContractFixtures = [
     capability: "settings.platform.getLegacyStatus",
     channel: "platform-settings:get-legacy-status",
     owner: "settings",
-    productionCaller: "desktop/preload.js:platform-settings:get-legacy-status",
     request: {},
     result: {
       discover: {
@@ -3442,7 +374,6 @@ const rawProductionIpcContractFixtures = [
     capability: "settings.platform.importLegacy",
     channel: "platform-settings:import-legacy",
     owner: "settings",
-    productionCaller: "desktop/preload.js:platform-settings:import-legacy",
     request: {
       confirmed: true,
     },
@@ -3461,7 +392,6 @@ const rawProductionIpcContractFixtures = [
     capability: "settings.storage.getUsage",
     channel: "storage-maintenance:get-usage",
     owner: "settings",
-    productionCaller: "desktop/preload.js:storage-maintenance:get-usage",
     request: {},
     result: {
       logs: {
@@ -3503,7 +433,6 @@ const rawProductionIpcContractFixtures = [
     capability: "settings.storage.cleanCaches",
     channel: "storage-maintenance:clean-caches",
     owner: "settings",
-    productionCaller: "desktop/preload.js:storage-maintenance:clean-caches",
     request: {},
     result: {
       blocked: false,
@@ -3551,7 +480,6 @@ const rawProductionIpcContractFixtures = [
     capability: "settings.runtime.getDiagnostics",
     channel: "runtime-diagnostics:get",
     owner: "settings",
-    productionCaller: "desktop/preload.js:runtime-diagnostics:get",
     request: {},
     result: {
       ok: false,
@@ -3612,7 +540,6 @@ const rawProductionIpcContractFixtures = [
     capability: "settings.runtime.browserSmoke",
     channel: "runtime-diagnostics:browser-smoke",
     owner: "settings",
-    productionCaller: "desktop/preload.js:runtime-diagnostics:browser-smoke",
     request: {},
     result: {
       ok: true,
@@ -3624,7 +551,6 @@ const rawProductionIpcContractFixtures = [
     capability: "media.refreshResources",
     channel: "media:refresh-resources",
     owner: "media",
-    productionCaller: "desktop/preload.js:media:refresh-resources",
     request: {},
     result: {
       status: "complete",
@@ -3641,7 +567,6 @@ const rawProductionIpcContractFixtures = [
     capability: "media.getResourcePage",
     channel: "media:get-resource-page",
     owner: "media",
-    productionCaller: "desktop/preload.js:media:get-resource-page",
     request: {
       page: 1,
       pageSize: 1,
@@ -3660,7 +585,6 @@ const rawProductionIpcContractFixtures = [
     capability: "media.searchResourcePage",
     channel: "media:search-resource-page",
     owner: "media",
-    productionCaller: "desktop/preload.js:media:search-resource-page",
     request: {
       query: "fixture-1",
       page: 1,
@@ -3680,7 +604,6 @@ const rawProductionIpcContractFixtures = [
     capability: "media.getPool",
     channel: "media:get-pool",
     owner: "media",
-    productionCaller: "desktop/preload.js:media:get-pool",
     request: {
       page: 1,
       pageSize: 50,
@@ -3701,7 +624,6 @@ const rawProductionIpcContractFixtures = [
     capability: "media.addToPool",
     channel: "media:add-to-pool",
     owner: "media",
-    productionCaller: "desktop/preload.js:media:add-to-pool",
     request: {
       resource: {
         resourceId: "fixture-1",
@@ -3721,7 +643,6 @@ const rawProductionIpcContractFixtures = [
     capability: "media.removeFromPool",
     channel: "media:remove-from-pool",
     owner: "media",
-    productionCaller: "desktop/preload.js:media:remove-from-pool",
     request: {
       resourceId: "fixture-1",
     },
@@ -3733,7 +654,6 @@ const rawProductionIpcContractFixtures = [
     capability: "media.getDrafts",
     channel: "media:get-drafts",
     owner: "media",
-    productionCaller: "desktop/preload.js:media:get-drafts",
     request: {},
     result: {
       items: [],
@@ -3743,7 +663,6 @@ const rawProductionIpcContractFixtures = [
     capability: "media.scanArticles",
     channel: "media:scan-articles",
     owner: "media",
-    productionCaller: "desktop/preload.js:media:scan-articles",
     request: {},
     result: {
       items: [],
@@ -3753,7 +672,6 @@ const rawProductionIpcContractFixtures = [
     capability: "media.getOrders",
     channel: "media:get-orders",
     owner: "media",
-    productionCaller: "desktop/preload.js:media:get-orders",
     request: {},
     result: {
       items: [],
@@ -3763,7 +681,6 @@ const rawProductionIpcContractFixtures = [
     capability: "media.syncOrder",
     channel: "media:sync-order",
     owner: "media",
-    productionCaller: "desktop/preload.js:media:sync-order",
     request: {
       orderNid: "fixture-1",
     },
@@ -3788,7 +705,6 @@ const rawProductionIpcContractFixtures = [
     capability: "media.syncAllOrders",
     channel: "media:sync-all-orders",
     owner: "media",
-    productionCaller: "desktop/preload.js:media:sync-all-orders",
     request: {},
     result: {
       items: [
@@ -3806,8 +722,6 @@ const rawProductionIpcContractFixtures = [
     capability: "media.prepareOrderStatusAnomalyResolution",
     channel: "media:prepare-order-status-anomaly-resolution",
     owner: "media",
-    productionCaller:
-      "desktop/preload.js:media:prepare-order-status-anomaly-resolution",
     request: { orderId: "order-1" },
     result: {
       orderId: "order-1",
@@ -3837,7 +751,6 @@ const rawProductionIpcContractFixtures = [
     capability,
     channel,
     owner: "media",
-    productionCaller: `desktop/preload.js:${channel}`,
     request: {
       orderId: "order-1",
       confirmationToken: "order-anomaly-token",
@@ -3848,7 +761,6 @@ const rawProductionIpcContractFixtures = [
     capability: "media.openPublishedUrl",
     channel: "media:open-published-url",
     owner: "media",
-    productionCaller: "desktop/preload.js:media:open-published-url",
     request: {
       orderNid: "fixture-1",
     },
@@ -3860,7 +772,6 @@ const rawProductionIpcContractFixtures = [
     capability: "platform.getQueue",
     channel: "platforms:get-queue",
     owner: "platform",
-    productionCaller: "desktop/preload.js:platforms:get-queue",
     request: {},
     result: {
       platforms: [],
@@ -3871,7 +782,6 @@ const rawProductionIpcContractFixtures = [
     capability: "platform.listAccountProfiles",
     channel: "platforms:list-account-profiles",
     owner: "platform",
-    productionCaller: "desktop/preload.js:platforms:list-account-profiles",
     request: {},
     result: {
       profiles: [],
@@ -3881,7 +791,6 @@ const rawProductionIpcContractFixtures = [
     capability: "platform.confirmAccountProfile",
     channel: "platforms:confirm-account-profile",
     owner: "platform",
-    productionCaller: "desktop/preload.js:platforms:confirm-account-profile",
     request: {
       platformId: "fixture-1",
       displayName: "fixture-1",
@@ -3900,7 +809,6 @@ const rawProductionIpcContractFixtures = [
     capability: "platform.bindAccountProfile",
     channel: "platforms:bind-account-profile",
     owner: "platform",
-    productionCaller: "desktop/preload.js:platforms:bind-account-profile",
     request: {
       accountProfileId: "fixture-1",
       confirmed: true,
@@ -3918,7 +826,6 @@ const rawProductionIpcContractFixtures = [
     capability: "platform.deleteAccountProfile",
     channel: "platforms:delete-account-profile",
     owner: "platform",
-    productionCaller: "desktop/preload.js:platforms:delete-account-profile",
     request: {
       accountProfileId: "fixture-1",
       confirmed: true,
@@ -3931,7 +838,6 @@ const rawProductionIpcContractFixtures = [
     capability: "platform.openLogin",
     channel: "platforms:open-login",
     owner: "platform",
-    productionCaller: "desktop/preload.js:platforms:open-login",
     request: {
       platformId: "fixture-1",
     },
@@ -3944,7 +850,6 @@ const rawProductionIpcContractFixtures = [
     capability: "platform.checkLogin",
     channel: "platforms:check-login",
     owner: "platform",
-    productionCaller: "desktop/preload.js:platforms:check-login",
     request: {
       platformId: "fixture-1",
     },
@@ -3957,7 +862,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.listClients",
     channel: "content:list-clients",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:list-clients",
     request: {},
     result: { clients: [contentClientFixture()] },
   },
@@ -3965,8 +869,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.saveClientLiejuPublicationProfile",
     channel: "content:save-client-lieju-publication-profile",
     owner: "content",
-    productionCaller:
-      "desktop/preload.js:content:save-client-lieju-publication-profile",
     request: {
       clientId: "client-1",
       profile: { city: "上海", contact: "张三", phone: "13800138000" },
@@ -3979,7 +881,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.listResearch",
     channel: "content:list-research",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:list-research",
     request: { clientId: "client-1" },
     result: { research: [contentResearchFixture()] },
   },
@@ -3987,7 +888,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.listTemplateCatalog",
     channel: "content:list-template-catalog",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:list-template-catalog",
     request: {},
     result: contentCatalogFixture(),
   },
@@ -3995,7 +895,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.retryMaterial",
     channel: "content:retry-material",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:retry-material",
     request: { clientId: "client-1", materialId: "material-1" },
     result: { material: contentMaterialFixture() },
   },
@@ -4003,7 +902,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.generateArticle",
     channel: "content:generate-article",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:generate-article",
     request: {
       clientId: "client-1",
       materialIds: ["material-1"],
@@ -4017,7 +915,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.saveArticle",
     channel: "content:save-article",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:save-article",
     request: {
       article: contentArticleFixture(),
       expectedFingerprint: "fingerprint-1",
@@ -4032,7 +929,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.getArticleEditor",
     channel: "content:get-article-editor",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:get-article-editor",
     request: { clientId: "client-1", articleId: "article-1" },
     result: {
       article: contentArticleFixture(),
@@ -4043,8 +939,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.previewArticleRemovalImpact",
     channel: "content:preview-article-removal-impact",
     owner: "content",
-    productionCaller:
-      "desktop/preload.js:content:preview-article-removal-impact",
     request: { selections: [{ clientId: "client-1", articleId: "article-1" }] },
     result: contentImpactFixture(),
   },
@@ -4052,7 +946,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.trashArticles",
     channel: "content:trash-articles",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:trash-articles",
     request: {
       selections: [{ clientId: "client-1", articleId: "article-1" }],
       token: "token-1",
@@ -4068,7 +961,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.restoreArticle",
     channel: "content:restore-article",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:restore-article",
     request: { clientId: "client-1", articleId: "article-1" },
     result: {
       article: contentArticleFixture(),
@@ -4081,8 +973,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.preparePermanentDeleteArticle",
     channel: "content:prepare-permanent-delete-article",
     owner: "content",
-    productionCaller:
-      "desktop/preload.js:content:prepare-permanent-delete-article",
     request: { clientId: "client-1", articleId: "article-1" },
     result: {
       token: "token-1",
@@ -4096,7 +986,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.permanentlyDeleteArticle",
     channel: "content:permanently-delete-article",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:permanently-delete-article",
     request: { clientId: "client-1", articleId: "article-1", token: "token-1" },
     result: {
       clientId: "client-1",
@@ -4109,8 +998,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.getArticleRemovalTransaction",
     channel: "content:get-article-removal-transaction",
     owner: "content",
-    productionCaller:
-      "desktop/preload.js:content:get-article-removal-transaction",
     request: {
       transactionId: "fixture-1",
     },
@@ -4124,8 +1011,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.retryArticleRemovalTransaction",
     channel: "content:retry-article-removal-transaction",
     owner: "content",
-    productionCaller:
-      "desktop/preload.js:content:retry-article-removal-transaction",
     request: {
       transactionId: "fixture-1",
       confirmed: true,
@@ -4140,8 +1025,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.getArticleManagementSnapshot",
     channel: "content:get-article-management-snapshot",
     owner: "content",
-    productionCaller:
-      "desktop/preload.js:content:get-article-management-snapshot",
     request: { clientId: "client-1" },
     result: contentManagementFixture(),
   },
@@ -4149,7 +1032,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.openPublicationUrl",
     channel: "content:open-publication-url",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:open-publication-url",
     request: { publicationId: "publication-1" },
     result: { completed: true },
   },
@@ -4157,8 +1039,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.getSubmissionCenterSnapshot",
     channel: "content:get-submission-center-snapshot",
     owner: "content",
-    productionCaller:
-      "desktop/preload.js:content:get-submission-center-snapshot",
     request: { clientId: "client-1" },
     result: {
       schemaVersion: 1,
@@ -4183,7 +1063,6 @@ const rawProductionIpcContractFixtures = [
     capability: "attention.listArticleAttention",
     channel: "content:list-article-attention",
     owner: "attention",
-    productionCaller: "desktop/preload.js:content:list-article-attention",
     request: {},
     result: {
       revision: 0,
@@ -4198,7 +1077,6 @@ const rawProductionIpcContractFixtures = [
     capability: "attention.previewArticleAttention",
     channel: "content:preview-article-attention",
     owner: "attention",
-    productionCaller: "desktop/preload.js:content:preview-article-attention",
     request: {
       attentionId: "fixture-1",
       action: "open-submission",
@@ -4216,7 +1094,6 @@ const rawProductionIpcContractFixtures = [
     capability: "attention.resolveArticleAttention",
     channel: "content:resolve-article-attention",
     owner: "attention",
-    productionCaller: "desktop/preload.js:content:resolve-article-attention",
     request: {
       attentionId: "fixture-1",
       action: "open-submission",
@@ -4232,7 +1109,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.articleRemovalTransactionChanged",
     channel: "content:article-removal-transaction",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:article-removal-transaction",
     event: {
       status: "fixture-1",
     },
@@ -4241,7 +1117,6 @@ const rawProductionIpcContractFixtures = [
     capability: "generation.previewBatch",
     channel: "content:preview-generation-batch",
     owner: "generation",
-    productionCaller: "desktop/preload.js:content:preview-generation-batch",
     request: {
       clientIds: ["fixture-1"],
       templates: [
@@ -4266,8 +1141,6 @@ const rawProductionIpcContractFixtures = [
     capability: "generation.createAndStartBatch",
     channel: "content:create-and-start-generation-batch",
     owner: "generation",
-    productionCaller:
-      "desktop/preload.js:content:create-and-start-generation-batch",
     request: {
       clientIds: ["fixture-1"],
       templates: [
@@ -4299,7 +1172,6 @@ const rawProductionIpcContractFixtures = [
     capability: "generation.abandonBatch",
     channel: "content:abandon-generation-batch",
     owner: "generation",
-    productionCaller: "desktop/preload.js:content:abandon-generation-batch",
     request: { batchId: "batch-1", confirmed: true },
     result: {
       batch: null,
@@ -4309,7 +1181,6 @@ const rawProductionIpcContractFixtures = [
     capability: "generation.pauseBatch",
     channel: "content:pause-generation-batch",
     owner: "generation",
-    productionCaller: "desktop/preload.js:content:pause-generation-batch",
     request: {},
     result: {
       batch: null,
@@ -4319,7 +1190,6 @@ const rawProductionIpcContractFixtures = [
     capability: "generation.resumeBatch",
     channel: "content:resume-generation-batch",
     owner: "generation",
-    productionCaller: "desktop/preload.js:content:resume-generation-batch",
     request: {
       batchId: "fixture-1",
     },
@@ -4345,8 +1215,6 @@ const rawProductionIpcContractFixtures = [
     capability: "generation.retryFailed",
     channel: "content:retry-failed-generation-batch",
     owner: "generation",
-    productionCaller:
-      "desktop/preload.js:content:retry-failed-generation-batch",
     request: {
       batchId: "fixture-1",
     },
@@ -4372,8 +1240,6 @@ const rawProductionIpcContractFixtures = [
     capability: "generation.previewCancelPending",
     channel: "content:preview-cancel-pending-generation-batch",
     owner: "generation",
-    productionCaller:
-      "desktop/preload.js:content:preview-cancel-pending-generation-batch",
     request: {
       batchId: "fixture-1",
     },
@@ -4389,8 +1255,6 @@ const rawProductionIpcContractFixtures = [
     capability: "generation.cancelPending",
     channel: "content:cancel-pending-generation-batch",
     owner: "generation",
-    productionCaller:
-      "desktop/preload.js:content:cancel-pending-generation-batch",
     request: {
       batchId: "fixture-1",
       confirmed: true,
@@ -4417,8 +1281,6 @@ const rawProductionIpcContractFixtures = [
     capability: "generation.getRuntimeSnapshot",
     channel: "content:get-generation-runtime-snapshot",
     owner: "generation",
-    productionCaller:
-      "desktop/preload.js:content:get-generation-runtime-snapshot",
     request: {},
     result: {
       runtimeId: "fixture-1",
@@ -4447,8 +1309,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.previewRegularQueueAdmission",
     channel: "content:preview-regular-queue-admission",
     owner: "content",
-    productionCaller:
-      "desktop/preload.js:content:preview-regular-queue-admission",
     request: {
       articleRefs: [{ clientId: "fixture-1", articleId: "fixture-1" }],
       platformId: "fixture-1",
@@ -4469,7 +1329,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.admitRegularQueueItems",
     channel: "content:admit-regular-queue-items",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:admit-regular-queue-items",
     request: {
       articleRefs: [{ clientId: "fixture-1", articleId: "fixture-1" }],
       platformId: "fixture-1",
@@ -4491,7 +1350,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.previewPaidMediaPreflight",
     channel: "content:preview-paid-media-preflight",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:preview-paid-media-preflight",
     request: {
       articleRefs: [{ clientId: "fixture-1", articleId: "fixture-1" }],
       mediaResourceId: "fixture-1",
@@ -4533,7 +1391,6 @@ const rawProductionIpcContractFixtures = [
     capability: "media.prepareOrderCancellation",
     channel: "media:prepare-order-cancellation",
     owner: "media",
-    productionCaller: "desktop/preload.js:media:prepare-order-cancellation",
     request: { orderId: "order-1" },
     result: {
       orderId: "order-1",
@@ -4549,7 +1406,6 @@ const rawProductionIpcContractFixtures = [
     capability: "media.cancelOrder",
     channel: "media:cancel-order",
     owner: "media",
-    productionCaller: "desktop/preload.js:media:cancel-order",
     request: { orderId: "order-1", confirmationToken: "token-1" },
     result: {
       status: "cancelled",
@@ -4563,8 +1419,6 @@ const rawProductionIpcContractFixtures = [
     capability: "media.prepareCancellationResolution",
     channel: "media:prepare-cancellation-resolution",
     owner: "media",
-    productionCaller:
-      "desktop/preload.js:media:prepare-cancellation-resolution",
     request: { cancellationAttemptId: "cancel-1" },
     result: {
       version: 1,
@@ -4598,7 +1452,6 @@ const rawProductionIpcContractFixtures = [
     capability,
     channel,
     owner: "media",
-    productionCaller: `desktop/preload.js:${channel}`,
     request: {
       cancellationAttemptId: "cancel-1",
       confirmationToken: "token-2",
@@ -4610,7 +1463,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.listRegularQueueGroups",
     channel: "content:list-regular-queue-groups",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:list-regular-queue-groups",
     request: {},
     result: { items: [] },
   },
@@ -4618,8 +1470,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.updateRegularQueueGroupImageCount",
     channel: "content:update-regular-queue-group-image-count",
     owner: "content",
-    productionCaller:
-      "desktop/preload.js:content:update-regular-queue-group-image-count",
     request: {
       queueGroupId: "fixture-1",
       imageCount: 3,
@@ -4631,7 +1481,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.startRegularQueueGroup",
     channel: "content:start-regular-queue-group",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:start-regular-queue-group",
     request: { queueGroupId: "fixture-1" },
     result: { items: [] },
   },
@@ -4639,7 +1488,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.pauseRegularQueueGroup",
     channel: "content:pause-regular-queue-group",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:pause-regular-queue-group",
     request: { queueGroupId: "fixture-1" },
     result: { items: [] },
   },
@@ -4647,8 +1495,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.startAllRegularQueueGroups",
     channel: "content:start-all-regular-queue-groups",
     owner: "content",
-    productionCaller:
-      "desktop/preload.js:content:start-all-regular-queue-groups",
     request: {},
     result: { items: [] },
   },
@@ -4656,8 +1502,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.pauseAllRegularQueueGroups",
     channel: "content:pause-all-regular-queue-groups",
     owner: "content",
-    productionCaller:
-      "desktop/preload.js:content:pause-all-regular-queue-groups",
     request: {},
     result: { items: [] },
   },
@@ -4665,7 +1509,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.confirmPaidMediaBatch",
     channel: "content:confirm-paid-media-batch",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:confirm-paid-media-batch",
     request: { confirmationToken: "fixture-1", confirmed: true },
     result: {
       batchId: "fixture-1",
@@ -4697,7 +1540,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.listPaidMediaBatches",
     channel: "content:list-paid-media-batches",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:list-paid-media-batches",
     request: {},
     result: { items: [paidExecutionBatchFixture()] },
   },
@@ -4705,7 +1547,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.startPaidMediaBatch",
     channel: "content:start-paid-media-batch",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:start-paid-media-batch",
     request: { batchId: "fixture-1" },
     result: {
       executionStatus: "submitted",
@@ -4716,20 +1557,16 @@ const rawProductionIpcContractFixtures = [
     capability: "content.startAllPaidMediaBatches",
     channel: "content:start-all-paid-media-batches",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:start-all-paid-media-batches",
     request: { clientId: "fixture-1" },
     result: {
       executionStatus: "paid_batches_started",
-      results: [
-        { batchId: "fixture-1", executionStatus: "order_created" },
-      ],
+      results: [{ batchId: "fixture-1", executionStatus: "order_created" }],
     },
   },
   {
     capability: "content.pausePaidMediaBatch",
     channel: "content:pause-paid-media-batch",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:pause-paid-media-batch",
     request: { batchId: "fixture-1" },
     result: { batch: paidExecutionBatchFixture() },
   },
@@ -4737,8 +1574,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.cancelRemainingPaidMediaBatchItems",
     channel: "content:cancel-remaining-paid-media-batch-items",
     owner: "content",
-    productionCaller:
-      "desktop/preload.js:content:cancel-remaining-paid-media-batch-items",
     request: { batchId: "fixture-1" },
     result: {
       executionStatus: "remaining_cancelled",
@@ -4752,7 +1587,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.removePendingQueueItems",
     channel: "content:remove-pending-queue-items",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:remove-pending-queue-items",
     request: {
       items: [
         {
@@ -4774,8 +1608,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.previewTrashedArticleQueueResidue",
     channel: "content:preview-trashed-article-queue-residue",
     owner: "content",
-    productionCaller:
-      "desktop/preload.js:content:preview-trashed-article-queue-residue",
     request: {},
     result: {
       items: [],
@@ -4789,8 +1621,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.cleanupTrashedArticleQueueResidue",
     channel: "content:cleanup-trashed-article-queue-residue",
     owner: "content",
-    productionCaller:
-      "desktop/preload.js:content:cleanup-trashed-article-queue-residue",
     request: {
       confirmed: true,
     },
@@ -4809,7 +1639,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.listQuestions",
     channel: "content:list-questions",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:list-questions",
     request: {
       clientId: "fixture-1",
     },
@@ -4821,7 +1650,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.createQuestion",
     channel: "content:create-question",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:create-question",
     request: {
       clientId: "fixture-1",
       text: "fixture-1",
@@ -4840,7 +1668,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.updateQuestion",
     channel: "content:update-question",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:update-question",
     request: {
       clientId: "fixture-1",
       questionId: "fixture-1",
@@ -4859,7 +1686,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.deleteQuestion",
     channel: "content:delete-question",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:delete-question",
     request: {
       clientId: "fixture-1",
       questionId: "fixture-1",
@@ -4878,7 +1704,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.getDoubaoLoginState",
     channel: "content:get-doubao-login-state",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:get-doubao-login-state",
     request: {},
     result: {
       loginState: {
@@ -4890,7 +1715,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.openDoubaoLogin",
     channel: "content:open-doubao-login",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:open-doubao-login",
     request: {},
     result: {
       loginState: {
@@ -4902,7 +1726,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.collectDoubaoOne",
     channel: "content:collect-doubao-one",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:collect-doubao-one",
     request: {
       clientId: "fixture-1",
       questionId: "fixture-1",
@@ -4920,7 +1743,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.previewDoubaoBatch",
     channel: "content:preview-doubao-batch",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:preview-doubao-batch",
     request: {
       clientIds: ["fixture-1"],
       mode: "missing",
@@ -4939,7 +1761,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.startPreparedDoubaoBatch",
     channel: "content:start-prepared-doubao-batch",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:start-prepared-doubao-batch",
     request: {
       clientIds: ["fixture-1"],
       mode: "missing",
@@ -4959,7 +1780,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.pauseDoubaoBatch",
     channel: "content:pause-doubao-batch",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:pause-doubao-batch",
     request: {},
     result: {
       queue: {
@@ -4976,7 +1796,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.resumeDoubaoBatch",
     channel: "content:resume-doubao-batch",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:resume-doubao-batch",
     request: {},
     result: {
       queue: {
@@ -4993,7 +1812,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.stopDoubaoBatch",
     channel: "content:stop-doubao-batch",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:stop-doubao-batch",
     request: {},
     result: {
       queue: {
@@ -5010,7 +1828,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.retryFailedDoubao",
     channel: "content:retry-failed-doubao",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:retry-failed-doubao",
     request: {},
     result: {
       queue: {
@@ -5027,7 +1844,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.getDoubaoQueueState",
     channel: "content:get-doubao-queue-state",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:get-doubao-queue-state",
     request: {},
     result: {
       queue: {
@@ -5044,7 +1860,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.saveManualResearch",
     channel: "content:save-manual-research",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:save-manual-research",
     request: {
       clientId: "fixture-1",
       questionId: "fixture-1",
@@ -5063,7 +1878,6 @@ const rawProductionIpcContractFixtures = [
     capability: "content.doubaoQueueChanged",
     channel: "content:doubao-queue-state",
     owner: "content",
-    productionCaller: "desktop/preload.js:content:doubao-queue-state",
     event: {
       status: "idle",
       currentTaskId: null,
@@ -5077,7 +1891,6 @@ const rawProductionIpcContractFixtures = [
     capability: "workspace.getRuntimeIdentity",
     channel: "workspace:get-runtime-identity",
     owner: "workspace",
-    productionCaller: "desktop/preload.js:workspace:get-runtime-identity",
     request: {},
     result: {
       workspaceRuntimeId: "fixture-1",
@@ -5088,7 +1901,6 @@ const rawProductionIpcContractFixtures = [
     capability: "media.getBalance",
     channel: "media:get-balance",
     owner: "media",
-    productionCaller: "desktop/preload.js:media:get-balance",
     request: {},
     result: {
       balance: "fixture-1",
@@ -5098,7 +1910,6 @@ const rawProductionIpcContractFixtures = [
     capability: "generation.runtimeChanged",
     channel: "content:generation-batch-state",
     owner: "generation",
-    productionCaller: "desktop/preload.js:content:generation-batch-state",
     event: {
       runtimeId: "runner-1",
       sequence: 0,
@@ -5112,7 +1923,6 @@ const rawProductionIpcContractFixtures = [
     capability: "workspace.invalidated",
     channel: "workspace:data-invalidated",
     owner: "workspace",
-    productionCaller: "desktop/preload.js:workspace:data-invalidated",
     event: {
       workspaceRuntimeId: "fixture-1",
       revision: 1,
@@ -5120,55 +1930,35 @@ const rawProductionIpcContractFixtures = [
       reasonCode: "fixture-1",
     },
   },
+  {
+    capability: "content.getClientDetails",
+    channel: "content:get-client-details",
+    owner: "content",
+    request: { clientId: "client-1" },
+    result: { client: contentClientFixture(), research: [] },
+  },
+  {
+    capability: "content.listResearchMetadata",
+    channel: "content:list-research-metadata",
+    owner: "content",
+    request: { clientId: "client-1" },
+    result: { research: [] },
+  },
+  {
+    capability: "content.updateRegularQueueGroupSubmissionInterval",
+    channel: "content:update-regular-queue-group-submission-interval",
+    owner: "content",
+    request: {
+      queueGroupId: "regular-group-1",
+      submissionIntervalSeconds: 30,
+      expectedRevision: 2,
+    },
+    result: { items: [] },
+  },
 ];
+
 const productionIpcContractFixtures = Object.freeze(
-  rawProductionIpcContractFixtures
-    .map((entry) =>
-    Object.freeze({
-      ...entry,
-      productionCaller: Object.freeze({
-        ...PRODUCTION_CALLERS[entry.capability],
-        ...(PRODUCTION_EVENT_PRODUCERS[entry.capability] || {}),
-        preloadReceiver: "electronIpcRenderer",
-        ...(entry.event
-          ? {}
-          : {
-              registrationEntry:
-                PRODUCTION_REGISTRATION_ENTRIES[
-                  PRODUCTION_CALLERS[entry.capability].registrar
-                ]?.[0] || "desktop/ipc/register.js",
-              registrationEntryOwner:
-                PRODUCTION_REGISTRATION_ENTRIES[
-                  PRODUCTION_CALLERS[entry.capability].registrar
-                ]?.[1] || "registerIpc",
-              registrationReceiver:
-                PRODUCTION_REGISTRATION_ENTRIES[
-                  PRODUCTION_CALLERS[entry.capability].registrar
-                ]?.[2] || "deps.ipcMain",
-              registrationApplication:
-                PRODUCTION_REGISTRATION_ENTRIES[
-                  PRODUCTION_CALLERS[entry.capability].registrar
-                ]?.[3] || "deps",
-              registrationApplicationProjectsRegistrar:
-                !PRODUCTION_REGISTRATION_ENTRIES[
-                  PRODUCTION_CALLERS[entry.capability].registrar
-                ],
-              registrarOwner:
-                PRODUCTION_REGISTRARS[
-                  PRODUCTION_CALLERS[entry.capability].registrar
-                ][0],
-              registrarReceiver:
-                PRODUCTION_REGISTRARS[
-                  PRODUCTION_CALLERS[entry.capability].registrar
-                ][1],
-            }),
-        consumer: productionConsumer(
-          entry.capability,
-          PRODUCTION_CALLERS[entry.capability].feature,
-        ),
-      }),
-    }),
-  ),
+  rawProductionIpcContractFixtures.map((entry) => Object.freeze(entry)),
 );
 
 module.exports = { productionIpcContractFixtures };

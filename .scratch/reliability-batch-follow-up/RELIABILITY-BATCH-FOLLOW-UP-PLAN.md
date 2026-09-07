@@ -469,7 +469,7 @@ base SHA：    最终分支 SHA：    合并 SHA（尚未合并则注明）：
 
 ### 11.4 R4 执行记录 · 2026-09-07
 
-**状态：PARTIAL。** 仅实施测试配置维护减法；最终分支 SHA、PR 和该提交 CI 结果以本分支 PR 元数据及 checks 为准，不能用下述基线成功替代。未合并，主线验证待用户另行授权合并后取得；R5、Q1–Q4 未启动。
+**状态：PARTIAL。** 首轮配置减法与用户追加授权的源码证明链退役见本节末尾；最终分支 SHA、PR 和该提交 CI 结果以本分支 PR 元数据及 checks 为准，不能用下述基线成功替代。未合并，主线验证待用户另行授权合并后取得；R5、Q1–Q4 未启动。
 
 #### 基线与前序最小补记
 
@@ -506,3 +506,29 @@ R1 的 runner/store/service 恢复、R2 的 title-cache/progress-cost、R3 的 s
 基线时间来自 CI #275 的 `root-test-timings.json`，不是推算：Windows x64 / Node v24.19.0，push、attempt 1，npm cache 配置开启但机器/命中与 OS 缓存未控制。282 文件 / 1867 pass / 0 fail / 0 skipped，runner wall clock 557996 ms；parallel 255 文件 446116 ms，serial 27 文件 111877 ms。两个候选测试文件分别为 discovery 672 ms、CI contract 65 ms；architecture-seams 186 ms。没有可靠的同条件前后重复样本，不报告加速百分比；额外 CLI 行为检查也有少量成本。可确认的收益是取消 12 处重复名单字面量和 1 个冗余格式参数，而非减少测试或执行次数。
 
 提交前完成一次范围内审查，结合上述变异复核：原发现机制、未知新测试默认发现、专项和 strict 安全边界、失败返回以及业务回归入口保持；未发现本次直接阻塞性回归。完整依赖的定向/广域测试与 lint、bridge/main 类型、renderer/preload 构建、格式检查均由最终提交当前 CI 验证，PR checks 未结束时如实 pending。master-only 生产目录、alpha 产物、capacity、Auth container、dependency audit、release evidence 仍待合并后验证，不算 PR 通过。不触发安装包或真实平台验收，不提前执行 R5。
+
+#### R4 续做：退役内部源码证明链 · 2026-09-07
+
+用户在首轮后明确要求实际精简非业务的“检查器 + 检查器自测 + 内部调用清单”，并授权开始实施。上面首轮的文件数、未改 suite 和局部替身验证是 `a1c1669086fbc31b01d2c0806e6413ff94543fe6` 的历史记录；该提交 PR CI #276 已成功，不代表本次续做验证。继续同一 PR #35 / `chore/r4-test-ci-maintenance`，master 仍为上述 `7ac62d1`，无重叠的新 PR；不合并、不进入 R5/Q1–Q4。
+
+本次取得完整 Git bundle 和锁文件依赖，在独立本地工作树核对源码，不再以文件名夹具替代产品代码。取证提交 `901568df7653c231d4e0311bb9a7a9027dbf1297` 只添加临时分支工作流，产品/测试仍是 a1c1669；[CI #277](https://github.com/jiayubing/autopublish/actions/runs/34081858470) 成功。临时工作流在本次交付树删除；其低权限取证、离线编辑传输和短期依赖产物不进入主线长期流程，无新增测试框架。
+
+| 本次候选 | 原实际执行 / 去向 | 保留的保障与退役边界 |
+| --- | --- | --- |
+| TypeChecker 内部调用图分析器、自测、React 假声明 | 自测在 desktop root；调用图在 desktop-security IPC matrix；删除 helper、自测和专用声明，并移除 suite 中唯一已删除文件项 | 退役对任意源码写法、内部符号/路径及所有 View 调用可达性的静态证明要求；不把 schema 往返冒充所有页面端到端验证 |
+| 生产 IPC fixture 的内部调用表 | 原 5174 行 fixture 中移除内部路径/receiver/owner 映射；保留请求/结果/事件数据，仍供 IPC matrix 和打包导航 fixture 使用 | 原 118 项数据逐项 deepEqual 未变；补齐原例外的 3 项，现 121 项与实际 registry 集合一一对应，不再写死总数或维护例外表 |
+| IPC matrix | 独立 desktop-security job 与触发条件不变；改为实际 registry 往返及公开 preload 事件行为 | 版本、未知字段、必需字段、安全错误、Auth 例外检查保留；用现有 preload harness 验证全部 4 类事件的双订阅、非法数据拒绝、独立退订与监听释放 |
+| 发布按钮 CSS 字符串断言 | 删除第一条实现形状断言；现有 responsive browser 测试继续验证四种窗口尺寸的长标题、按钮可见及边界，补实际页面不出现冗长正文解释 | 主进程打开链接/禁止 window.open 及注意事项路由断言保留，不按整个文件删除 |
+| 文章管理固定 import 位置断言 | 仅删 architecture-seams 中该条；其余依赖方向、transport/legacy absence 保留 | 实际 IPC/schema、文章管理 service/feature 和 Renderer 回归保留；不要求实现永远使用原文件装配方式 |
+
+发现集合为 all 300→299、desktop-core 282→281、日常 core 62→62，18 项排除不变。唯一被移出发现的是已退役分析器的自测文件，不是业务文件。R1 runner/store/service、R2 title-cache/progress-cost、R3 snapshot-cache/storage-cost、#34 并发选择与 Renderer、豆包会话恢复/客户复用/parser/interaction/readiness 共 15 个直接回归入口均仍在 desktop-core。实际 Chromium 合成页面、生产 preload、安全隔离、迁移、打包和 Auth 的原工作流/required check 名称不改。
+
+体量按 901568d 跟踪的桌面 `.js/.mjs/.ts/.tsx` 物理行（含空行/注释）统计，排除 Auth、scripts、文档、依赖和生成物：tests（含 helpers/fixtures）98375 行，对照 src + desktop + media-workbench/src 为 102163 行。删除分析器 9413 行、自测 2931 行和专用声明 19 行；fixture 从 5174 行缩至 1964 行。整个续做差异另以最终 git diff 为准，不把体积等于价值，也不设删测数量目标。
+
+实际本地：Linux x64 / Node v22.16.0，依赖来自两个锁文件的 npm ci --ignore-scripts，Electron 二进制未安装。IPC matrix 6/6 通过；18 个直接邻域测试文件组合 128 pass / 2 fail / 0 skipped，其中 settings typed IPC 在 Electron import 阶段失败，discovery 的预期 skipped-suite 因相同 import 失败得到 failed 而非 skipped，均未修改断言。浏览器定向页面导航被环境策略 ERR_BLOCKED_BY_ADMINISTRATOR 拦截，不能算通过。完整 Windows/Electron/Chromium 结果由最终提交 CI 单独取得，不以这些环境失败放宽产品门禁。
+
+本地 lint、typecheck:bridge、typecheck:main、format:check、build:renderer（包含 Renderer 类型检查）、build:preload 全部成功。四项一次性真实代码故障注入均令相应测试 exit 1：事件退订 noop、事件数据校验旁路、生成暂停误接继续 channel、fixture channel 错配；注入后逐字节恢复，没有提交探针或生产修改。
+
+[临时基线 run 34081858531 / job 101618513287](https://github.com/jiayubing/autopublish/actions/runs/34081858531/job/101618513287)：PR / attempt 1、实际 checkout 901568d、Ubuntu 24.04.4 / Node v24.20.0、两次 npm ci --ignore-scripts、无 npm cache 配置。五个文件（旧分析器自测、IPC matrix、typed production、typed foundation、bridge fail-closed）共 196 pass / 0 fail / 0 skipped，147016 ms；其中调用图检查 143562.51 ms。仅一个 CI 基线样本，不能与本地 Node22 的 6 项 matrix 147.77 ms 混算加速比；确定收益是退役整个分析器及内部清单维护。最终 Windows PR step 耗时如有对照在 PR 留档，机器/cache 未控制不声称固定降幅。
+
+范围内审查已核对全部退役引用、118 项数据等价、3 项例外补齐、打包 fixture 消费者、真实事件行为和未变业务文件；未发现直接阻塞性代码回归。最终 SHA/CI 以 PR #35 当前 head/checks 为准；未合并、master-only 生产目录/产物/容量/Auth container/dependency audit/release evidence 待主线验证，因此 R4 仍 PARTIAL。没有全仓删测、依赖升级、业务改动或真实外部操作。

@@ -71,27 +71,6 @@ test("application services do not depend on IPC contracts or transport registry"
   }
 });
 
-test("article management capability has one service-to-IPC-to-feature assembly path", () => {
-  const {
-    productionIpcRegistry,
-  } = require("../desktop/ipc/contracts/production-registry");
-  assert.equal(
-    productionIpcRegistry.byCapability("content.getArticleManagementSnapshot")
-      .channel,
-    "content:get-article-management-snapshot",
-  );
-  assert.ok(
-    moduleSpecifiers(read("desktop/ipc/article-management-ipc.js")).includes(
-      "../services/article-management-snapshot",
-    ),
-  );
-  assert.ok(
-    moduleSpecifiers(
-      read("media-workbench/src/components/ContentWorkbench.tsx"),
-    ).includes("../features/content/use-content-workbench-feature"),
-  );
-});
-
 test("electron transport facade is gone and domains own their bridge seams", () => {
   assert.equal(
     fs.existsSync(path.join(root, "media-workbench/src/electron-api.ts")),

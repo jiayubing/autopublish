@@ -1000,6 +1000,7 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
           })
           .click();
         await page.getByText(`${longTitle} 7`, { exact: true }).waitFor();
+        assert.doesNotMatch(await page.locator("body").innerText(), /正文解释/);
 
         const measured = await page.evaluate(() => {
           const visible = (element) => {

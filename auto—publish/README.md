@@ -16,7 +16,7 @@ the installed package.
 ### 日常测试与完整验收
 
 `npm test` 运行核心 GEO 行为；提交前再运行 `npm run test:integration`。
-`npm run test:maintenance` 单独运行迁移、容量、诊断及静态分析器测试。
+`npm run test:maintenance` 单独运行迁移、容量及诊断测试。
 `npm run test:release` 是发布测试组，不包含 build 或真实外部验收。
 `npm run test:all` 保留全量执行；`npm run test:discover` 始终列出全量文件。
 

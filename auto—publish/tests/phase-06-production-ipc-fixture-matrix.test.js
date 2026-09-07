@@ -9,10 +9,7 @@ const {
 const {
   productionIpcContractFixtures,
 } = require("./fixtures/phase-06-production-ipc-contract-fixtures");
-const {
-  createProductionProgram,
-  verifyCapabilityEvidence,
-} = require("./helpers/typescript-symbol-evidence");
+const { loadPreloadHarness } = require("./helpers/preload-harness");
 
 const FEATURE_OWNERS = new Set([
   "workspace",
@@ -31,12 +28,6 @@ const AUTH_INVOKE_EXEMPTIONS = [
   "auth:logout",
 ];
 const AUTH_EVENT_EXEMPTIONS = ["auth-state-changed"];
-const KNOWN_UNFIXTURED_CAPABILITIES = new Set([
-  "content.getClientDetails",
-  "content.listResearchMetadata",
-  "content.updateRegularQueueGroupSubmissionInterval",
-]);
-
 function requiredKeys(schema, value) {
   if (schema.type === "oneOf") {
     const matching = schema.fields.find((candidate) => {
@@ -72,47 +63,20 @@ function assertContractError(action, expectedCodes, message) {
   assert.ok(expectedCodes.includes(caught.code), `${message}: ${caught.code}`);
 }
 
-let cachedProductionContext = null;
-function productionContext() {
-  if (cachedProductionContext) return cachedProductionContext;
-  const applicationRoot = path.resolve(__dirname, "..");
-  cachedProductionContext = {
-    ...createProductionProgram(applicationRoot),
-    applicationRoot,
-  };
-  return cachedProductionContext;
-}
-
-test("all 118 production capabilities close by TypeChecker symbol identity", () => {
-  const context = productionContext();
+test("every production capability has a unique fixture and valid wire round trips", () => {
   const contracts = productionIpcRegistry.list();
-
-  assert.equal(contracts.length, 121);
-  assert.equal(
-    productionIpcContractFixtures.length + KNOWN_UNFIXTURED_CAPABILITIES.size,
-    contracts.length,
-  );
   assert.equal(
     new Set(productionIpcContractFixtures.map((entry) => entry.capability))
       .size,
-    118,
+    productionIpcContractFixtures.length,
   );
   assert.equal(
     new Set(productionIpcContractFixtures.map((entry) => entry.channel)).size,
-    118,
+    productionIpcContractFixtures.length,
   );
   assert.deepEqual(
-    new Set(
-      contracts
-        .map((entry) => entry.capability)
-        .filter(
-          (capability) =>
-            !productionIpcContractFixtures.some(
-              (fixture) => fixture.capability === capability,
-            ),
-        ),
-    ),
-    KNOWN_UNFIXTURED_CAPABILITIES,
+    productionIpcContractFixtures.map((entry) => entry.capability).sort(),
+    contracts.map((entry) => entry.capability).sort(),
   );
 
   for (const fixture of productionIpcContractFixtures) {
@@ -121,15 +85,6 @@ test("all 118 production capabilities close by TypeChecker symbol identity", () 
     assert.equal(contract.channel, fixture.channel, fixture.capability);
     assert.ok(FEATURE_OWNERS.has(fixture.owner), fixture.capability);
     assert.equal(contract.feature, fixture.owner, fixture.capability);
-    const result = verifyCapabilityEvidence(context, {
-      ...fixture,
-      kind: contract.kind,
-    });
-    assert.equal(
-      result.ok,
-      true,
-      `${fixture.capability}: ${result.reasons.join("; ")}\n${JSON.stringify(result.trace)}`,
-    );
 
     if (contract.kind === "event") {
       const encoded = productionIpcRegistry.event(contract, fixture.event);
@@ -158,15 +113,54 @@ test("all 118 production capabilities close by TypeChecker symbol identity", () 
   }
 });
 
-const lifecycleFixtures = productionIpcContractFixtures.filter(
-  (entry) => entry.productionCaller.consumer.kind === "lifecycle",
-);
-const eventFixtures = productionIpcContractFixtures.filter(
-  (entry) => entry.event,
-);
-
-assert.equal(lifecycleFixtures.length, 25);
-assert.equal(eventFixtures.length, 4);
+test("public preload events deliver validated data and release their own subscriptions", () => {
+  const preload = loadPreloadHarness();
+  const subscriptions = [
+    [
+      "content.articleRemovalTransactionChanged",
+      preload.api.content.onArticleRemovalTransaction,
+    ],
+    ["content.doubaoQueueChanged", preload.api.content.onDoubaoQueueState],
+    ["generation.runtimeChanged", preload.api.content.onGenerationBatchState],
+    ["workspace.invalidated", preload.api.workspaceData.onInvalidated],
+  ];
+  assert.deepEqual(
+    subscriptions.map(([capability]) => capability).sort(),
+    productionIpcContractFixtures
+      .filter((entry) => entry.event)
+      .map((entry) => entry.capability)
+      .sort(),
+  );
+  for (const [capability, subscribe] of subscriptions) {
+    const fixture = productionIpcContractFixtures.find(
+      (entry) => entry.capability === capability,
+    );
+    const contract = productionIpcRegistry.byCapability(capability);
+    const first = [];
+    const second = [];
+    const disposeFirst = subscribe((payload) => first.push(payload));
+    const disposeSecond = subscribe((payload) => second.push(payload));
+    const encoded = productionIpcRegistry.event(contract, fixture.event);
+    preload.emit(fixture.channel, { ...encoded, unknownField: true });
+    assert.deepEqual(first, [], capability);
+    assert.deepEqual(second, [], capability);
+    preload.emit(fixture.channel, encoded);
+    assert.deepEqual(first, [fixture.event], capability);
+    assert.deepEqual(second, [fixture.event], capability);
+    disposeFirst();
+    preload.emit(fixture.channel, encoded);
+    assert.deepEqual(first, [fixture.event], capability);
+    assert.deepEqual(second, [fixture.event, fixture.event], capability);
+    disposeSecond();
+    preload.emit(fixture.channel, encoded);
+    assert.equal(second.length, 2, capability);
+    assert.equal(
+      preload.transportListeners.has(fixture.channel),
+      false,
+      capability,
+    );
+  }
+});
 
 test("shared registry rejects unknown versions and fields for every capability", () => {
   for (const fixture of productionIpcContractFixtures) {
