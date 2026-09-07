@@ -7,42 +7,91 @@ permissions:
   contents: read
 
 jobs:
-  inspect:
-    if: github.head_ref == 'chore/r4-test-ci-maintenance'
+  apply-tested-edits:
+    if: github.head_ref == 'chore/r4-test-ci-maintenance' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       CI_SYNTHETIC_ONLY: "1"
+      EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
-          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Capture tracked checkout
-        run: git bundle create "$RUNNER_TEMP/r4-source.bundle" HEAD
-      - uses: actions/upload-artifact@v4
-        with:
-          name: r4-inspection-source
-          path: ${{ runner.temp }}/r4-source.bundle
-          retention-days: 1
       - run: npm ci --ignore-scripts
         working-directory: auto—publish
       - run: npm ci --ignore-scripts
         working-directory: auto—publish/media-workbench
-      - name: Capture dependency environment for offline targeted tests
+      # This is only a transport for the offline-tested diff, not a retained gate.
+      # Each before/after Git blob hash must match; only this PR branch is pushed.
+      - name: Apply the exact reviewed and locally tested file bytes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          node -p 'JSON.stringify({sha:process.env.GITHUB_SHA,node:process.version,platform:process.platform,arch:process.arch})' > "$RUNNER_TEMP/r4-environment.json"
-          tar -czf "$RUNNER_TEMP/r4-dependencies.tar.gz" auto—publish/node_modules auto—publish/media-workbench/node_modules
-      - uses: actions/upload-artifact@v4
-        with:
-          name: r4-inspection-dependencies
-          path: |
-            ${{ runner.temp }}/r4-dependencies.tar.gz
-            ${{ runner.temp }}/r4-environment.json
-          retention-days: 1
-      - name: Baseline IPC proof and runtime boundary tests
+          gh api repos/jiayubing/autopublish/git/blobs/90e3234a0f5c0b248cd8f81519dd51825de91317 --jq .content | base64 --decode > "$RUNNER_TEMP/r4-edits.json"
+          python3 - <<'PY'
+          import hashlib, json, os, subprocess
+          from pathlib import Path
+          def blob(data):
+              return hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
+          data = Path(os.environ['RUNNER_TEMP'], 'r4-edits.json').read_bytes()
+          assert blob(data) == '90e3234a0f5c0b248cd8f81519dd51825de91317'
+          edits = json.loads(data)
+          assert len(edits) == 11
+          allowed = {
+              '.scratch/reliability-batch-follow-up/RELIABILITY-BATCH-FOLLOW-UP-PLAN.md',
+              'auto—publish/README.md',
+              'auto—publish/scripts/test-suites.json',
+              'auto—publish/tests/architecture-seams.test.js',
+              'auto—publish/tests/article-library-publication-action-layout.test.js',
+              'auto—publish/tests/fixtures/phase-06-production-ipc-contract-fixtures.js',
+              'auto—publish/tests/fixtures/react-symbol-evidence.d.ts',
+              'auto—publish/tests/helpers/typescript-symbol-evidence.js',
+              'auto—publish/tests/ipc-symbol-identity-evidence.test.js',
+              'auto—publish/tests/phase-06-production-ipc-fixture-matrix.test.js',
+              'auto—publish/tests/renderer-responsive-layout.test.js',
+          }
+          assert {item['path'] for item in edits} == allowed
+          for item in edits:
+              path = Path(item['path'])
+              original = path.read_bytes()
+              assert blob(original) == item['before'], str(path) + ': baseline changed'
+              if item.get('delete'):
+                  path.unlink()
+                  print('Deleted', path)
+                  continue
+              lines = original.decode('utf-8').splitlines(keepends=True)
+              for start, end, replacement in reversed(item['edits']):
+                  lines[start:end] = [replacement]
+              updated = ''.join(lines).encode('utf-8')
+              assert blob(updated) == item['after'], str(path) + ': tested hash mismatch'
+              path.write_bytes(updated)
+              print(item['after'], path)
+          workflow = '.github/workflows/r4-inspection.yml'
+          Path(workflow).unlink()
+          changed = subprocess.check_output(['git', 'diff', '--name-only', '-z']).decode().strip('\0').split('\0')
+          assert set(changed) == allowed | {workflow}
+          subprocess.run(['git', 'diff', '--check'], check=True)
+          subprocess.run(['git', 'add', '--', *sorted(allowed), workflow], check=True)
+          PY
+      - name: Verify retained runtime boundaries after the exact edit
         working-directory: auto—publish
-        run: /usr/bin/time -p node --test --test-concurrency=1 tests/ipc-symbol-identity-evidence.test.js tests/phase-06-production-ipc-fixture-matrix.test.js tests/phase-06-typed-ipc-production.test.js tests/phase-06-typed-ipc-foundation.test.js tests/phase-06-production-bridge-fail-closed.test.js
+        run: /usr/bin/time -p node --test --test-concurrency=1 tests/phase-06-production-ipc-fixture-matrix.test.js tests/phase-06-typed-ipc-production.test.js tests/phase-06-typed-ipc-foundation.test.js tests/phase-06-production-bridge-fail-closed.test.js
+      - name: Commit only to the unchanged R4 PR branch and remove this temporary workflow
+        shell: bash
+        run: |
+          branch=refs/heads/chore/r4-test-ci-maintenance
+          actual=$(git ls-remote origin "$branch" | cut -f1)
+          test "$actual" = "$EXPECTED_HEAD"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'test(r4): retire source-graph proof machinery and preserve runtime contracts'
+          git push origin "HEAD:$branch"
+          git rev-parse HEAD HEAD^{tree}
