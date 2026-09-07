@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
+const { collectTestFiles, parseArguments } = require("../scripts/run-tests");
 const {
   REQUIRED_CHECKS,
 } = require("../scripts/create-release-evidence-manifest");
@@ -104,33 +105,48 @@ test("CI keeps product regression checks on PRs and heavy artifact checks on mas
 });
 
 test("CI assigns specialized desktop tests and renderer typecheck to one ordinary owner", () => {
-  const desktopCore = packageJson.scripts["test:desktop-core"];
-  const specializedFiles = [
-    "tests/content-library-migration.test.js",
-    "tests/content-metadata-migration.test.js",
-    "tests/legacy-migration.test.js",
-    "tests/phase-02-migration.test.js",
-    "tests/structured-diagnostics.test.js",
-    "tests/runtime-diagnostics.test.js",
-    "tests/runtime-diagnostics-ipc.test.js",
-    "tests/phase-04-media-transport.test.js",
-  ];
-  for (const file of specializedFiles)
-    assert.ok(
-      desktopCore.includes("--exclude " + file),
-      file + " must stay outside the broad desktop core run",
-    );
-
-  for (const file of specializedFiles.slice(0, 4))
-    assert.ok(packageJson.scripts["test:migration"].includes(file), file);
-  for (const file of specializedFiles.slice(4, 7))
-    assert.ok(packageJson.scripts["test:diagnostics"].includes(file), file);
-  assert.ok(
-    packageJson.scripts["test:media-transport"].includes(specializedFiles[7]),
-  );
-
+  const command = packageJson.scripts["test:desktop-core"].split(/\s+/);
+  assert.deepEqual(command.slice(0, 2), ["node", "scripts/run-tests.js"]);
+  const options = parseArguments(command.slice(2));
+  assert.ok(options, "desktop core must use valid runner arguments");
+  const discovered = new Set(collectTestFiles());
+  const desktopFiles = new Set(collectTestFiles(options.excludedFiles));
   const workflow = fs.readFileSync(workflowPath, "utf8");
   const desktop = job(workflow, "desktop");
+  const security = job(workflow, "desktop-security");
+
+  // The npm commands own these file lists; do not copy them into the test.
+  for (const name of [
+    "test:packaging",
+    "test:migration",
+    "test:diagnostics",
+    "test:media-transport",
+  ]) {
+    const args = packageJson.scripts[name].split(/\s+/);
+    assert.deepEqual(args.slice(0, 2), ["node", "--test"], name);
+    const files = args.slice(2);
+    assert.ok(files.length > 0, name);
+    assert.equal(new Set(files).size, files.length, name);
+    for (const file of files) {
+      assert.ok(discovered.has(file), name + " must select an existing test");
+      assert.equal(
+        desktopFiles.has(file),
+        false,
+        file + " has a dedicated owner",
+      );
+    }
+    if (name === "test:migration") {
+      const migrationFiles = Array.from(
+        desktop.matchAll(/--test\s+(\S+)/g),
+        (match) => match[1],
+      );
+      assert.deepEqual(migrationFiles.sort(), [...files].sort());
+    } else {
+      const owner = name === "test:packaging" ? desktop : security;
+      assert.ok(owner.includes("npm run " + name), name);
+    }
+  }
+
   assert.equal(desktop.includes("npm run typecheck:renderer"), false);
   assert.ok(desktop.includes("npm run build:renderer"));
   assert.match(

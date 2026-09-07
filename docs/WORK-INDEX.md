@@ -4,7 +4,7 @@
 
 ## 当前执行入口
 
-- [AutoPublish 可靠性与批量能力改进计划](../.scratch/reliability-batch-follow-up/RELIABILITY-BATCH-FOLLOW-UP-PLAN.md)：本次仅执行 R2，R1 已由 PR #31 完成；详细状态、实测与验证由该计划 §11 维护。
+- [AutoPublish 可靠性与批量能力改进计划](../.scratch/reliability-batch-follow-up/RELIABILITY-BATCH-FOLLOW-UP-PLAN.md)：本次仅执行 R4；前序合并核验、候选取舍、执行映射和验证边界由该计划 §11.4 维护。R4 未合并，不进入 R5。
 
 前序参考：[文章生成与发布链路优化计划](../.scratch/generation-publication-optimization/GENERATION-PUBLICATION-OPTIMIZATION-PLAN.md)，不作为本线程实施入口。
 

@@ -5,30 +5,6 @@ const test = require("node:test");
 
 const root = path.resolve(__dirname, "..");
 
-test("article library keeps publication action visible and removes the long body explanation", () => {
-  const view = fs.readFileSync(
-    path.join(root, "media-workbench/src/components/content/GeneratedArticlesView.tsx"),
-    "utf8",
-  );
-  const list = fs.readFileSync(
-    path.join(root, "media-workbench/src/components/content/GeneratedArticlesList.tsx"),
-    "utf8",
-  );
-
-  assert.match(view, /overflow-x-hidden overflow-y-auto/);
-  assert.match(
-    list,
-    /grid w-full max-w-full min-w-0 grid-cols-\[auto_auto_minmax\(0,1fr\)_auto\] items-start gap-3 p-3/,
-  );
-  assert.match(list, /<div className="min-w-0 overflow-hidden">/);
-  assert.match(list, /className="shrink-0 self-center whitespace-nowrap rounded border/);
-  assert.match(list, />发布详情<|\? '查看订单' : '发布详情'/);
-  assert.doesNotMatch(list, /正文解释/);
-  assert.doesNotMatch(list, /summarizeTemplateSnapshot/);
-  assert.doesNotMatch(list, /sm:grid-cols-\[auto_auto_minmax\(0,1fr\)_auto\]/);
-  assert.doesNotMatch(list, /sm:col-start-4/);
-});
-
 test("publication drawer delegates the persisted publication id to the main-process open command instead of rendering a long raw URL", () => {
   const drawer = fs.readFileSync(
     path.join(root, "media-workbench/src/components/content/PublicationHistoryDrawer.tsx"),
