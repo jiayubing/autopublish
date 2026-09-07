@@ -4,6 +4,8 @@ import {
 } from '../../infrastructure/query-identity/query-identity.js';
 import { staleContentCommandResult } from './content-command-result.js';
 
+const EMPTY_GROUPS = Object.freeze({ revision: 0, groups: Object.freeze([]), memberships: Object.freeze([]) });
+
 const EMPTY_CATALOG = Object.freeze({
   revision: '',
   platforms: [],
@@ -24,6 +26,7 @@ const EMPTY_LOGIN = Object.freeze({ status: 'unknown', observation: 'unavailable
 const LOGIN_STATUSES = new Set(['unknown', 'checking', 'login_required', 'authenticated', 'session_error']);
 
 const SOURCE_COMMANDS = Object.freeze({
+  updateClientGroups: 'clientGroups',
   createQuestion: 'client',
   updateQuestion: 'client',
   deleteQuestion: 'client',
@@ -136,6 +139,7 @@ export function createContentSourcesFeature(adapters = {}) {
   }
 
   const identity = createQueryIdentity({ feature: 'content', query: 'workspaceSources' });
+  const groupIdentity = createQueryIdentity({ feature: 'content', query: 'clientGroups' });
   const clientIdentity = createQueryIdentity({ feature: 'content', query: 'clientSources' });
   const researchIndexIdentity = createQueryIdentity({ feature: 'content', query: 'researchIndex' });
   const queueIdentity = createQueryIdentity({ feature: 'content', query: 'doubaoQueue' });
@@ -150,6 +154,8 @@ export function createContentSourcesFeature(adapters = {}) {
   let disposed = false;
   let scope = null;
   let clients = [];
+  let clientGroups = EMPTY_GROUPS;
+  let clientGroupsQuery = Object.freeze({ loading: false, error: null, reason: null });
   let templateCatalog = EMPTY_CATALOG;
   let selectedClientId = '';
   let currentArticle = null;
@@ -179,6 +185,8 @@ export function createContentSourcesFeature(adapters = {}) {
       scope,
       clients: Object.freeze([...clients]),
       templateCatalog,
+      clientGroups,
+      clientGroupsQuery,
       selectedClientId,
       currentArticle,
       query,
@@ -292,6 +300,35 @@ export function createContentSourcesFeature(adapters = {}) {
     } catch (value) {
       if (!queueIdentity.isCurrent(token)) return false;
       doubaoQueueQuery = Object.freeze({ loading: false, error: safeError(value), reason });
+      publish();
+      return false;
+    }
+  };
+
+  const applyClientGroups = (value, reason) => {
+    clientGroups = Object.freeze({
+      revision: value.revision,
+      groups: Object.freeze(value.groups.map((group) => Object.freeze({ ...group }))),
+      memberships: Object.freeze(value.memberships.map((member) => Object.freeze({ ...member }))),
+    });
+    clientGroupsQuery = Object.freeze({ loading: false, error: null, reason });
+    publish();
+  };
+
+  const refreshClientGroups = async (reason = 'manual') => {
+    if (disposed || !scope) return false;
+    const token = groupIdentity.begin(undefined, reason);
+    clientGroupsQuery = Object.freeze({ loading: true, error: null, reason });
+    publish();
+    try {
+      if (typeof adapters.getClientGroups !== 'function') throw new Error('客户分组暂不可用');
+      const result = await adapters.getClientGroups();
+      if (!groupIdentity.isCurrent(token)) return false;
+      applyClientGroups(result, reason);
+      return true;
+    } catch (value) {
+      if (!groupIdentity.isCurrent(token)) return false;
+      clientGroupsQuery = Object.freeze({ loading: false, error: safeError(value), reason });
       publish();
       return false;
     }
@@ -475,6 +512,10 @@ export function createContentSourcesFeature(adapters = {}) {
         await refreshAfterCommand(name, 'stale-command-result');
         return staleContentCommandResult();
       }
+      if (name === 'updateClientGroups') {
+        groupIdentity.invalidate();
+        applyClientGroups(result, 'command-result');
+      }
       if (QUEUE_COMMANDS.has(name)) applyQueue(result, 'command-result', queueToken);
       if (LOGIN_COMMANDS.has(name)) applyLogin(result, 'command-result', loginToken);
       await refreshAfterCommand(name);
@@ -503,6 +544,8 @@ export function createContentSourcesFeature(adapters = {}) {
         doubaoLoginQuery = Object.freeze({ loading: false, error, reason: 'command' });
         publish();
       }
+      if (name === 'updateClientGroups') await refreshClientGroups('command-error');
+      if (!owner.isCurrent(token)) return staleContentCommandResult();
       owner.finalize(token, { error });
       publish();
       throw Object.assign(new Error(error.userMessage), error);
@@ -513,6 +556,7 @@ export function createContentSourcesFeature(adapters = {}) {
   // owns command policy, while explicit properties preserve TypeChecker
   // identity through the composed content feature.
   const commands = Object.freeze({
+    updateClientGroups: (input) => runCommand('updateClientGroups', input),
     createQuestion: (input) => runCommand('createQuestion', input),
     updateQuestion: (input) => runCommand('updateQuestion', input),
     deleteQuestion: (input) => runCommand('deleteQuestion', input),
@@ -545,11 +589,14 @@ export function createContentSourcesFeature(adapters = {}) {
       if (scope?.workspaceRuntimeId === nextScope.workspaceRuntimeId) return;
       scope = Object.freeze({ workspaceRuntimeId: nextScope.workspaceRuntimeId });
       identity.setScope(scope);
+      groupIdentity.setScope(scope);
       queueIdentity.setScope({ workspaceRuntimeId: scope.workspaceRuntimeId });
       loginIdentity.setScope({ workspaceRuntimeId: scope.workspaceRuntimeId });
       clearQueueSubscription();
       ensureQueueSubscription();
       clients = [];
+      clientGroups = EMPTY_GROUPS;
+      clientGroupsQuery = Object.freeze({ loading: false, error: null, reason: null });
       templateCatalog = EMPTY_CATALOG;
       selectedClientId = '';
       currentArticle = null;
@@ -585,6 +632,7 @@ export function createContentSourcesFeature(adapters = {}) {
       return clientResult && researchResult;
     },
     refreshSources,
+    refreshClientGroups,
     refreshClientData,
     refreshResearchIndex,
     refreshDoubaoQueue,
@@ -608,6 +656,7 @@ export function createContentSourcesFeature(adapters = {}) {
       if (disposed) return;
       disposed = true;
       identity.dispose();
+      groupIdentity.dispose();
       clientIdentity.dispose();
       researchIndexIdentity.dispose();
       queueIdentity.dispose();

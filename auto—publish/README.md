@@ -81,3 +81,21 @@ instructions.
 ```text
 node --test tests/generation-concurrency-choice.test.js tests/doubao-session-recovery.test.js tests/doubao-page-interaction.test.js tests/doubao-page-readiness.test.js tests/renderer-generation-concurrency.test.js
 ```
+
+
+## 客户分组与选择
+
+在内容生产或文章库的“管理分组”面板新增、改名、删除分组，并勾选客户批量移动。
+分组名可自定义为“重点推进”“低频维护”等；不自动执行采集、生成或投稿。
+每个客户最多属于一个分组，删除分组后组内客户回到“未分组”，客户资料、文章和历史记录不变。
+
+采集与批量生成支持分组和客户名称/ID搜索取交集；“全选当前结果”选择当前筛选下所有页的客户，
+不清除其他组的勾选。筛选和翻页保留本轮选择，隐藏的已选客户有数量提示，
+可通过“查看已选”逐项取消或“清空选择”。列表每页 50 个客户，固定高度滚动。
+当前客户仍是单选，筛选外的当前客户保持显示，不自动切换。各页面共享分组资料，
+不共享批次勾选；分组变化不会修改已经启动的任务名单。
+
+分组与成员关系一起保存在内容库 `.autopublish/client-groups.json`，随内容库目录整体移动。
+旧内容库无需预先整理或迁移，首次保存才创建该文件；不修改客户目录或 `client.json`。
+读写失败时保留原文件并提示重试，仍可搜索客户；旧版本保存会提示分组已变化，不能静默覆盖。
+名称上限 40 字符，最多 200 个组、10000 个归组客户。

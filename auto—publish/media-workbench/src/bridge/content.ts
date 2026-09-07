@@ -18,6 +18,8 @@ import type {
 } from "../types/publication";
 import type {
   ContentClient,
+  ClientGroupCatalog,
+  ClientGroupChange,
   LiejuPublicationProfile,
   ContentMaterial,
   ContentQuestion,
@@ -62,6 +64,10 @@ type ArticleManagementSnapshotWire = Omit<
   }>;
 };
 type CoreContentApi = {
+  getClientGroups: () => Promise<ContentIpcResponse<ClientGroupCatalog>>;
+  updateClientGroups: (
+    input: ClientGroupChange,
+  ) => Promise<ContentIpcResponse<ClientGroupCatalog>>;
   listClients: () => Promise<ContentIpcResponse<{ clients: ContentClient[] }>>;
   getClientDetails: (
     clientId: string,
@@ -316,6 +322,20 @@ export function rememberDoubaoLoginState(state: DoubaoLoginState): boolean {
   }
 }
 
+export async function getClientGroups(): Promise<ClientGroupCatalog> {
+  return callCoreContent(
+    (api) => requireBridgeMethod(api.getClientGroups)(),
+    "无法读取客户分组",
+  );
+}
+export async function updateClientGroups(
+  input: ClientGroupChange,
+): Promise<ClientGroupCatalog> {
+  return callCoreContent(
+    (api) => requireBridgeMethod(api.updateClientGroups)(input),
+    "无法保存客户分组",
+  );
+}
 export async function listContentClients(): Promise<ContentClient[]> {
   return callCoreContent(
     (api) => requireBridgeMethod(api.listClients)(),

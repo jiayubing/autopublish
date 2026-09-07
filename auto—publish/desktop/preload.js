@@ -298,6 +298,12 @@ const api = {
     },
   },
   content: {
+    getClientGroups: function () {
+      return ipcRenderer.invoke("content:get-client-groups");
+    },
+    updateClientGroups: function (input) {
+      return ipcRenderer.invoke("content:update-client-groups", input);
+    },
     listClients: function () {
       return ipcRenderer.invoke("content:list-clients");
     },

@@ -34,6 +34,8 @@ function registerAiContentIpc(deps) {
   const service = deps.aiContentService;
   if (!ipcMain || !service) throw new Error("AI content IPC requires the workspace content service");
 
+  ipcMain.handle("content:get-client-groups", function() { return wrap(function() { return service.getClientGroups(); }); });
+  ipcMain.handle("content:update-client-groups", function(event, input) { return wrap(function() { return service.updateClientGroups(input); }); });
   ipcMain.handle("content:list-clients", function() { return wrap(async function() { return { clients: (await service.listClients()).map(projectClient) }; }); });
   ipcMain.handle("content:get-client-details", function(event, clientId) { return wrap(async function() { const result = await service.getClientDetails(clientId); return { client: projectClient(result.client), research: result.research.map(projectResearch) }; }); });
   ipcMain.handle("content:save-client-lieju-publication-profile", function(event, input) {

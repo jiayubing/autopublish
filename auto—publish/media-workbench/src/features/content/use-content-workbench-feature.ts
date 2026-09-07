@@ -7,6 +7,8 @@ import {
   deleteContentQuestion,
   collectDoubaoQuestion,
   listContentClients,
+  getClientGroups,
+  updateClientGroups,
   getContentClientDetails,
   saveClientLiejuPublicationProfile,
   listContentQuestions,
@@ -66,6 +68,8 @@ export function useContentWorkbenchFeature() {
   if (!featureRef.current) {
     featureRef.current = createContentWorkbenchFeature({
       listClients: listContentClients,
+      getClientGroups,
+      updateClientGroups,
       saveClientLiejuPublicationProfile,
       listTemplateCatalog: listContentTemplateCatalog,
       listQuestions: listContentQuestions,
@@ -132,6 +136,7 @@ export function useContentWorkbenchFeature() {
     if (!workspace.workspaceRuntimeId) return;
     feature.setScope({ workspaceRuntimeId: workspace.workspaceRuntimeId });
     void feature.refresh("initial");
+    void feature.refreshClientGroups("initial");
     void feature.refreshDoubaoQueue("initial");
   }, [feature, workspace.workspaceRuntimeId]);
   useWorkspaceScope("contentSources", (event) => {
@@ -139,6 +144,7 @@ export function useContentWorkbenchFeature() {
     feature.setScope({ workspaceRuntimeId: event.workspaceRuntimeId });
     if (!["initial", "identity", "runtime-switch"].includes(event.kind)) {
       void feature.refreshContentSources(event.kind);
+      void feature.refreshClientGroups(event.kind);
       void feature.refreshDoubaoQueue(event.kind);
     }
   });
@@ -168,6 +174,7 @@ export function useContentWorkbenchFeature() {
     refresh: (reason = "manual") => feature.refresh(reason),
     refreshClientData: (reason = "manual") => feature.refreshClientData(reason),
     refreshManagement: feature.refreshManagement,
+    refreshClientGroups: feature.refreshClientGroups,
     refreshPaidMediaBatches: (reason = "manual") =>
       feature.refreshPaidMediaBatches(reason),
     refreshDoubaoQueue: feature.refreshDoubaoQueue,
