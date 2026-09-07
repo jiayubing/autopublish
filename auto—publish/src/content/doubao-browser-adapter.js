@@ -30,7 +30,7 @@ function defaultSleep(milliseconds) {
 }
 
 function timeoutError(phase, elapsedMs) {
-  const labels = { open: "打开浏览器", conversation: "切换客户对话", ready: "等待上一题结束", send: "确认问题已发送", answer: "等待本题完整回答" };
+  const labels = { open: "打开浏览器", conversation: "切换客户对话", ready: "等待对话就绪或上一题结束", send: "确认问题已发送", answer: "等待本题完整回答" };
   return codedError("DOUBAO_TIMEOUT", "豆包采集超时：" + labels[phase] + "；本题已等待 " + Math.floor(elapsedMs / 1000) + " 秒。请检查页面后继续，失败题可单独重试。");
 }
 
@@ -54,7 +54,6 @@ function withTimeout(promise, milliseconds) {
 function inspectPageScript() {
   return [
     "return await page.evaluate(function() {",
-    "  var input = document.querySelector('textarea, input[type=\\\"text\\\"], [contenteditable=\\\"true\\\"]');",
     "  var visible = function(node) {",
     "    if (!node) return false;",
     "    var style = window.getComputedStyle ? window.getComputedStyle(node) : null;",
@@ -149,7 +148,7 @@ function inspectPageScript() {
     "  var errorMatch = statusText.match(/(?:加载失败|出错了|服务异常|网络错误)[^\\n]*/i);",
     "  return {",
     "    url: location.href,",
-    "    inputAvailable: !!input,",
+    "    inputAvailable: Array.from(document.querySelectorAll('textarea, input[type=\"text\"], [contenteditable=\"true\"]')).some(visible),",
     "    loginRequired: loginRequired,",
     "    generating: generating,",
     "    challenge: challenge,",
@@ -418,8 +417,8 @@ function createDoubaoBrowserAdapter(options) {
     };
     const readPage = async function() {
       lastSnapshot = await evaluateWithDeadline({ action: "inspect-page", script: inspectPageScript() });
-      await assertPageCollectable(lastSnapshot);
-      rememberClientConversation(clientId, lastSnapshot);
+      const pageState = await assertPageCollectable(lastSnapshot);
+      if (pageState.status === "authenticated") rememberClientConversation(clientId, lastSnapshot);
       return lastSnapshot;
     };
     const waitForPoll = async function() {
@@ -435,7 +434,7 @@ function createDoubaoBrowserAdapter(options) {
       await ensureClientConversation(clientId, evaluateWithDeadline);
       phase = "ready";
       let initialSnapshot = await readPage();
-      while (initialSnapshot.generating) {
+      while (classifyPage(initialSnapshot).status === "unknown" || initialSnapshot.generating) {
         await waitForPoll();
         initialSnapshot = await readPage();
       }

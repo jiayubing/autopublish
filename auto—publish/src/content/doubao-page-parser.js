@@ -19,8 +19,9 @@ function classifyPage(snapshot) {
   if (page.loginRequired === true) {
     return { status: "login_required" };
   }
-  if (page.inputAvailable === false) {
-    return { status: "login_required" };
+  // A missing composer during hydration is not evidence of logout.
+  if (page.inputAvailable !== true) {
+    return { status: "unknown" };
   }
   return { status: "authenticated" };
 }

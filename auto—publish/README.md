@@ -67,6 +67,8 @@ instructions.
 豆包继续按客户分组串行采集，同一客户复用对话。发送前先等待上一题结束，
 发送后确认页面出现本轮用户消息，再按该消息身份读取回答。普通聊天正文中的登录、
 验证码或网络错误字样不作为页面故障；真正的登录与验证界面仍需人工处理。
+新建或切换对话时，输入框尚未出现不等于未登录；采集会在原有期限内等待可见输入框，
+登录状态查询暂报 unknown，不要求手动继续。只有明确的登录界面才报告需要登录。
 
 采集超时、页面错误、发送失败或已识别的浏览器会话故障会保留本题失败并暂停剩余任务。
 检查页面后“继续”只执行尚未开始的任务，不自动重发失败题；批次结束后可用现有
@@ -77,5 +79,5 @@ instructions.
 相关定向回归（使用合成数据；页面测试需要已安装的 Playwright Chromium）：
 
 ```text
-node --test tests/generation-concurrency-choice.test.js tests/doubao-session-recovery.test.js tests/doubao-page-interaction.test.js tests/renderer-generation-concurrency.test.js
+node --test tests/generation-concurrency-choice.test.js tests/doubao-session-recovery.test.js tests/doubao-page-interaction.test.js tests/doubao-page-readiness.test.js tests/renderer-generation-concurrency.test.js
 ```
