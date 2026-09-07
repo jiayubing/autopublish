@@ -42,6 +42,17 @@ function createPlatformAccountProfileService(options) {
     return profile;
   }
 
+  function profilesForPlatform(platformId) {
+    return operationalStore
+      .listAccountProfiles()
+      .filter(
+        (profile) =>
+          profile &&
+          profile.platformId === platformId &&
+          typeof profile.accountProfileId === "string",
+      );
+  }
+
   function present(profile) {
     const binding = bindingStore.get(profile.accountProfileId);
     const bound = Boolean(
@@ -77,16 +88,39 @@ function createPlatformAccountProfileService(options) {
   async function createAndBind(input) {
     const data = input || {};
     const platformId = safeText(data.platformId, 64);
-    const displayName = safeText(data.displayName, 128);
-    if (!platformId || !displayName)
+    const requestedDisplayName = safeText(data.displayName, 128);
+    if (!platformId || !requestedDisplayName)
       throw fail("ACCOUNT_PROFILE_CONFIRMATION_REQUIRED");
     const identity = await identityService.inspect({
       platformId,
       preserveCurrentPage: false,
     });
+    const verifiedDisplayName =
+      safeText(identity && identity.displayName, 128) || requestedDisplayName;
+    const existing = profilesForPlatform(platformId).map((profile) => ({
+      profile,
+      binding: bindingStore.get(profile.accountProfileId),
+    }));
+    const matching = existing.filter(
+      (item) =>
+        item.binding &&
+        item.binding.platformId === platformId &&
+        item.binding.remoteFingerprint === identity.remoteFingerprint,
+    );
+    if (matching.length === 1) return present(matching[0].profile);
+    if (existing.length === 1 && !existing[0].binding) {
+      bindingStore.bind({
+        accountProfileId: existing[0].profile.accountProfileId,
+        platformId,
+        remoteFingerprint: identity.remoteFingerprint,
+      });
+      return present(existing[0].profile);
+    }
+    if (existing.length > 0) throw fail("ACCOUNT_PROFILE_REMOTE_MISMATCH");
+
     const profile = operationalStore.createAccountProfile({
       platformId,
-      displayName,
+      displayName: verifiedDisplayName,
     });
     try {
       bindingStore.bind({

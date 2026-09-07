@@ -15,6 +15,8 @@
 4. 在 `auto—publish/config/platforms.json` 的 enabled ID 中加入该平台。配置只启用代码内置定义，不得复制展示名、host、capability 或 executable metadata。
 5. 增加平台协议专项测试，并通过通用 loader、目录、账号、队列、投稿中心、IPC、Renderer 和 package gate。
 
+当前产品按“一个平台一个当前账号”维护普通平台账号。首次连接由 `accountInspection` 读取远端真实身份并建立账号档案和 fingerprint 绑定；后续重复连接同一账号必须幂等复用原档案，不得继续创建重复档案。若当前远端身份与已有绑定不一致，必须 fail-closed，并要求用户切回原账号或先清理不用的旧档案后再重新绑定。历史工作区中已经存在的多个档案不得自动删除或静默改绑，应继续可见以便人工清理。
+
 声明 `imagePublishing: true` 的平台消费 `ImagePlanV1` 和进程内 `imageAssetReader`，并由平台 owner 负责槽位、表单/API 字段、平台大小限制和 best-effort 降级。不得直接依赖 `client-image-*` 内部路径、scanner、cache 或 metadata 文件。声明为 `false` 时，非零 `imageCount` 必须 fail-closed。
 
 标准平台不应要求实现者理解或修改文章冻结、队列事务、订单、attention、Renderer badge、publication writer 或 recovery internals。若接入需要这些改动，应先判断它是否其实是特殊平台或产品边界发生了变化。
