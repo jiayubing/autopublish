@@ -84,22 +84,33 @@ test("default test discovery collects both JavaScript module extensions", () => 
   );
 });
 
-test("desktop core test collection excludes only delegated packaging contracts", () => {
+test("desktop core CLI discovers every file except its configured exclusions", () => {
+  const command = JSON.parse(
+    fs.readFileSync(path.join(root, "package.json"), "utf8"),
+  ).scripts["test:desktop-core"].split(/\s+/);
+  assert.deepEqual(command.slice(0, 2), ["node", "scripts/run-tests.js"]);
+  const options = parseArguments(command.slice(2));
+  assert.ok(options, "desktop core must use valid runner arguments");
+  assert.equal(options.suite || "all", "all");
+
   const allFiles = collectTestFiles();
-  const excluded = [
-    "tests/production-packaging.test.js",
-    "tests/desktop-packaging.test.js",
-    "tests/packaging-runtime.test.js",
-    "tests/release-evidence.test.js",
-  ];
+  const excluded = options.excludedFiles;
+  assert.equal(new Set(excluded).size, excluded.length);
+  for (const file of excluded) assert.ok(allFiles.includes(file), file);
   const coreFiles = collectTestFiles(excluded);
   assert.equal(coreFiles.length, allFiles.length - excluded.length);
-  excluded.forEach((file) =>
-    assert.equal(
-      coreFiles.some((candidate) => candidate.replaceAll("\\", "/") === file),
-      false,
-    ),
-  );
+
+  const result = spawnSync(process.execPath, [...command.slice(1), "--list"], {
+    cwd: root,
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const listed = result.stdout
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith("- "))
+    .map((line) => line.slice(2));
+  assert.deepEqual(listed, coreFiles);
   assert.deepEqual(parseArguments(["--exclude", excluded[0]]), {
     excludedFiles: [excluded[0]],
     list: false,

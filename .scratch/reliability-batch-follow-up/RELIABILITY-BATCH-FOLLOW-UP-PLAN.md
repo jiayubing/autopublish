@@ -1,7 +1,7 @@
 # AutoPublish 可靠性与批量能力改进计划
 
 > 执行版 v1.0 · 2026-09-06
-> 执行更新：R1 已由 PR #31 合并并完成前序主线验证；本线程仅执行 R2。下文和 §10 中“从 R1 开始”是历史启动说明，不重新开启 R1。  
+> 执行更新：R1–R3 已合并，前序主线结果补记见 §11.4；本线程仅执行 R4（PARTIAL，未合并）。下文旧启动和交接记录不重新开启前序工作。  
 > 先复现并修复并发恢复，再按实测减少批量开销。不重建架构，不重做历史阶段。
 
 ## 1. 这份文档怎么用
@@ -35,9 +35,9 @@ Markdown 是后续执行和更新进度的唯一计划文本；Word 是同版阅
 | 工作包 | 本线程只解决什么 | 当前状态 | 推进条件 |
 | --- | --- | --- | --- |
 | R1 | 生成配置暂停被并发任务覆盖 | COMPLETE | PR #31 已合并；仅作为 R2 现有回归，不追溯扩大验收 |
-| R2 | 生成标题重复查询与整批事件加工 | PARTIAL | 本线程唯一实施范围；前后测量与恢复回归见 §11.3 |
-| R3 | 文章管理快照的低风险读取优化 | PENDING | R2 合并；只改证实的热点 |
-| R4 | 测试与 CI 剩余维护成本减法 | PENDING | R3 结项；不重做旧 D，不减少有效保障 |
+| R2 | 生成标题重复查询与整批事件加工 | COMPLETE | PR #32 已合并、主线 CI #264 成功；测量见 §11.3，补记见 §11.4 |
+| R3 | 文章管理快照的低风险读取优化 | COMPLETE | PR #33 已合并、主线 CI #268 成功；既有验收边界及补记见 §11.4 |
+| R4 | 测试与 CI 剩余维护成本减法 | PARTIAL | 本线程唯一范围；候选、映射和验证见 §11.4，未合并 |
 | R5 | 本轮集成验证与交接 | PENDING | R1–R4 结项；最终提交的验证闭合 |
 
 R2–R4 允许“经验证无需代码修改”结项，但必须说明测量或覆盖证据。不得为了让每一包都有提交而制造改动。第 9 节的条件事项不属于上述必做路线，不自动进入。
@@ -393,9 +393,9 @@ base SHA：    最终分支 SHA：    合并 SHA（尚未合并则注明）：
 | 工作包 | 结论/状态 | base → 最终 SHA | PR / 验证位置 | 待办 |
 | --- | --- | --- | --- | --- |
 | R1 | COMPLETE | 修复 `c448c32bd6b968d3f9c5b6a51f491d1857d6d48a`；合并 `9b8bdc70dbbd3a99d01f51c5efa1da9793ffdb88` | PR #31 已核验 merged 及包含关系；前序主线 CI/Windows Installer 成功由本次任务交接确认 | 不重新实施或扩大验收 |
-| R2 | PARTIAL | base `9b8bdc70dbbd3a99d01f51c5efa1da9793ffdb88` → `perf/r2-generation-progress` | PR #32；测量与验证记录见 §11.3 | 尚未合并，不标 COMPLETE |
-| R3 | PENDING | 未执行 | 未执行 | 读取热点验证 |
-| R4 | PENDING | 未执行 | 未执行 | 候选与覆盖映射 |
+| R2 | COMPLETE | base `9b8bdc70dbbd3a99d01f51c5efa1da9793ffdb88` → 合并 `d1c3373acbbc95ba6491e32728c78a97cdefc64e` | PR #32 / CI #264 success；§11.3、§11.4 | 不重做 |
+| R3 | COMPLETE | base `d1c3373acbbc95ba6491e32728c78a97cdefc64e` → 合并 `5d09efd7ca81113b5dcbcbcc2f39467d0a1a424b` | PR #33 / CI #268 success；§11.4 | 不重做 |
+| R4 | PARTIAL | base `7ac62d1e8f5fa4fd49b0c7c6eb019975733a1142` → `chore/r4-test-ci-maintenance` | 本分支 PR / 当前 SHA checks；§11.4 | 未合并；主线验证待办 |
 | R5 | PENDING | 未执行 | 未执行 | 最终集成验证 |
 
 重大新证据或范围调整，只追加日期、决定、理由和影响的工作包。已完成历史记录作为证据保留，不再充当另一套实时调度入口。
@@ -466,3 +466,43 @@ base SHA：    最终分支 SHA：    合并 SHA（尚未合并则注明）：
 一次范围内审查已完成：只改唯一生成 service owner；缓存不变成状态真源；复制隔离、可选标题清理、启动/终止释放、主动查询同 sequence 可被 feature 接受、R1 路径均核对。未发现阻塞性直接回归。收口文档提交后的 CI 需以该最终 SHA 的 PR checks 为准，不能借实现提交绿灯声称未结束的最终 checks 已通过。
 
 **剩余边界：** 完整事件仍遍历/序列化全批次，批次事务读写和公开刷新仍未优化；这不影响本次线性标题读取目标，不据此擅自启动 Q4。无真实平台/付费模型/人工桌面验收、无 1000 任务容量结论；R2 未合并，不宣称主线或新安装包验证完成。
+
+### 11.4 R4 执行记录 · 2026-09-07
+
+**状态：PARTIAL。** 仅实施测试配置维护减法；最终分支 SHA、PR 和该提交 CI 结果以本分支 PR 元数据及 checks 为准，不能用下述基线成功替代。未合并，主线验证待用户另行授权合并后取得；R5、Q1–Q4 未启动。
+
+#### 基线与前序最小补记
+
+实际 base 为 `7ac62d1e8f5fa4fd49b0c7c6eb019975733a1142`，独立分支 `chore/r4-test-ci-maintenance`。重新读取 master ref、PR 元数据和实际运行结果：PR #32 的最终分支 `8153ae3cb618ec2bb02ef3f1cfaf17d9cc6be7b9` 已合并为 `d1c3373acbbc95ba6491e32728c78a97cdefc64e`，[主线 CI #264 / 34036689877](https://github.com/jiayubing/autopublish/actions/runs/34036689877) 成功；PR #33 最终分支 `1ad973fcb9a7e65e107dae89e9a37f7d1f09dc59` 已合并为 `5d09efd7ca81113b5dcbcbcc2f39467d0a1a424b`，[主线 CI #268 / 34042284935](https://github.com/jiayubing/autopublish/actions/runs/34042284935) 成功。R3 的既有实施、测量修正和验收边界保留在 PR #33，不重算已撤回的字节统计、不扩大前序验收。
+
+PR #34 最终分支 `325f58147f746a8eec3a7789dd6bb586275affc6` 已合并；master 两个父提交恰为 R3 合并提交和 #34 最终分支。[基线 CI #275 / 34075094020](https://github.com/jiayubing/autopublish/actions/runs/34075094020) 为该 master SHA、push、attempt 1、completed/success。本次下载其 desktop-evidence，核对实际发现、执行文件和结果。§11.3 与前序 PR 正文中的“尚未合并 / 主线 pending”保留为当时记录，由本段补记取代；不据旧 PENDING 重做 R1–R3。
+
+开工可见活动 PR 仅 #20，修改 production composition，与本包不重叠；未修改该分支。容器没有完整克隆和用户工作树，不能声称检查了不可见的远端 worktree。使用 GitHub 读取及独立分支 Git Data 提交、非强制 fast-forward；局部文件修改前按 Git blob SHA 核对，无用户暂存区或生产数据操作。
+
+#### 候选与前后执行映射
+
+唯一测试发现/执行 owner 仍是 `run-tests.js`；suite 分配仍是 `test-suites.json`，串并行仍是 `test-runner-policy.js`。三个文件均不修改。基线真实发现 300 个文件；`npm test` 为 core 62，`test:all` 为 300，`test:desktop-core` 为 all 减 18 项、实际 282，不混称相同覆盖。新增未分配测试仍自动进入 integration 和 desktop 广域发现；没有新增平行清单或调度器。
+
+| 候选/命令 | 实际 job / 触发 | 保护行为与环境差异 | 前后去向 / 决定 |
+| --- | --- | --- | --- |
+| desktop-core 与两份配置合同测试 | desktop / PR、master push；手动 installer 沿用现有入口 | 全域发现、排除有效、专项归属、失败阻断 | 282 个文件与原 18 项排除不变。删掉测试里的 12 个重复文件名字面量，改用真实 npm 参数和实际 CLI `--list`；不删除测试文件或业务断言 |
+| packaging 4 项、migration 4 项 | desktop 专项步骤 / PR、push | 包合同；迁移恢复及 evidence | 命令和步骤不变；合同核对 npm 迁移列表与 workflow 实际 `--test` 参数一致，不再复制第三份名单 |
+| diagnostics 3 项、media transport 1 项、production IPC matrix 1 项 | desktop-security / PR、push | 诊断安全、transport、生产 IPC 边界 | 全部保留独立执行；不重做 PR #27 |
+| capacity 2 项；3 项既有排除的 Renderer 测试 | capacity 为 master push；Renderer 项不在普通 CI 广域执行 | 容量/浏览器环境依赖 | 保留既有分类，不将 PR skipped 或未运行项写成通过，不顺手扩大或削弱历史触发策略 |
+| test:links 中与其他 job 重复的测试 | link-security / PR、push，先 strict link-capability | 严格链接能力下的隔离边界不同 | 保留，不按名称重复删除 |
+| format:check | desktop toolchain / PR、push | 既有增量格式覆盖 | 只移除被已有 `scripts/production-*.js` 覆盖的 `scripts/production-smoke-arguments.js` 字面参数，覆盖集合不缩小；其余白名单不迁移、不全仓格式化 |
+| architecture-seams、串并行分类、类型/生产包检查 | 沿用现有 jobs 与触发 | 依赖方向、能力缺席、隔离、preload/产物 | 没有证据支持本次删除；保留。renderer 类型检查仍包含于 build:renderer，bridge/main 独立，不撤回生产构建 |
+
+原 desktop discovery 合同声称“只排除打包测试”，却只对自造的 4 项名单测试，根本未读取实际 18 项命令。原 CI 合同另外复制 8 个文件名，并要求 `--exclude 文件` 的字符串形状。本次读取真实 scripts 后仍验证发现、归属与互斥；CLI 输出直接验证运行器公开入口。无业务生产文件、workflow、依赖、超时、权限或公开协议变动。
+
+R1 的 runner/store/service 恢复、R2 的 title-cache/progress-cost、R3 的 snapshot-cache/storage-cost，以及 #34 的 generation-concurrency-choice、renderer-generation-concurrency、doubao-session-recovery、doubao-client-aware-queue、doubao-client-conversation-routing、doubao-page-parser、doubao-page-interaction、doubao-page-readiness 均在基线实际 root-test 文件报告中，不在排除清单；本次不改变其发现与执行入口。readiness / interaction 的 Chromium 合成页面验证继续使用 CI 已安装的真实浏览器，不以本地替身冒充。
+
+#### 验证、成本与审查
+
+本地为 Linux / Node v22.16.0，非 CI Node24。实际运行两个变更 JS 的 `node --check`；使用真实 runner/parser/suite 与基线发现的文件名夹具执行 5 个相关合同用例，5 pass / 0 fail。因无完整依赖，未执行的两个 evidence 入口由本地 loader 隔离，workflow 仅使用当前两个相关 job 的原文片段；此结果只证明选定的发现/命令合同，不代表全套测试、lint/typecheck/build 或真实 Chromium 通过。loader、文件名夹具和局部日志不提交。
+
+本地旧/新用例采用相同夹具的可证伪变异：正常配置两者通过；将单个合法参数改为等价 `--exclude=文件` 后旧 CI 合同误失败、新合同通过；排除一个不存在的文件时旧 discovery 合同漏检、新合同失败；从真实 workflow 片段移除一个迁移 `--test` 时旧合同漏检、新合同失败。另在临时目录用未修改的真实 runner 执行抛错测试，hybrid 与 serial 均 exit 1、报告 FAILED；未吞异常或禁用失败。第一次局部选择表达式误选了本地不存在 installer 文件的无关用例，随后仅收紧本地名称过滤，未修改或删除 installer 合同。
+
+基线时间来自 CI #275 的 `root-test-timings.json`，不是推算：Windows x64 / Node v24.19.0，push、attempt 1，npm cache 配置开启但机器/命中与 OS 缓存未控制。282 文件 / 1867 pass / 0 fail / 0 skipped，runner wall clock 557996 ms；parallel 255 文件 446116 ms，serial 27 文件 111877 ms。两个候选测试文件分别为 discovery 672 ms、CI contract 65 ms；architecture-seams 186 ms。没有可靠的同条件前后重复样本，不报告加速百分比；额外 CLI 行为检查也有少量成本。可确认的收益是取消 12 处重复名单字面量和 1 个冗余格式参数，而非减少测试或执行次数。
+
+提交前完成一次范围内审查，结合上述变异复核：原发现机制、未知新测试默认发现、专项和 strict 安全边界、失败返回以及业务回归入口保持；未发现本次直接阻塞性回归。完整依赖的定向/广域测试与 lint、bridge/main 类型、renderer/preload 构建、格式检查均由最终提交当前 CI 验证，PR checks 未结束时如实 pending。master-only 生产目录、alpha 产物、capacity、Auth container、dependency audit、release evidence 仍待合并后验证，不算 PR 通过。不触发安装包或真实平台验收，不提前执行 R5。
