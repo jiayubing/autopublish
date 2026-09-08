@@ -1,5 +1,14 @@
 import { useEffect, useState } from "react";
+import {
+  CirclePause,
+  CirclePlay,
+  Clock3,
+  Image,
+  ListChecks,
+  Trash2,
+} from "lucide-react";
 import type { RegularQueueGroupSnapshot } from "../types/publication";
+import { Button, StatusBadge, Surface } from "./ui/primitives";
 
 type QueueGroupView = Omit<RegularQueueGroupSnapshot, "manuallyPaused"> & {
   platformLabel: string;
@@ -39,6 +48,16 @@ const SYSTEM_PAUSE_REASON_LABELS: Record<string, string> = {
 
 function systemPauseReason(code: string) {
   return SYSTEM_PAUSE_REASON_LABELS[code] || code;
+}
+
+function groupTone(
+  group: QueueGroupView,
+): "neutral" | "info" | "success" | "warning" | "danger" {
+  if (group.pauseIntent === "system" && group.actions.reasonCode) return "danger";
+  if (group.runState === "running") return "success";
+  if (group.runState === "paused") return "warning";
+  if (group.actions.reasonCode === "REGULAR_QUEUE_GROUP_EMPTY") return "neutral";
+  return "info";
 }
 
 function QueueGroupImageCountControl({
@@ -92,9 +111,14 @@ function QueueGroupImageCountControl({
   }
 
   return (
-    <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-      <label className="grid gap-1 text-xs font-medium text-slate-700">
+    <div className="grid gap-2">
+      <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+          <Image className="h-3.5 w-3.5" />
+        </span>
         每篇图片数量
+      </div>
+      <div className="flex items-center gap-2">
         <input
           type="number"
           inputMode="numeric"
@@ -107,23 +131,24 @@ function QueueGroupImageCountControl({
             setDraft(event.target.value);
             setFeedback("");
           }}
-          className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm sm:w-24"
+          className="h-9 w-20 rounded-lg border border-slate-200 bg-white px-2 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10"
         />
-      </label>
-      <button
-        type="button"
-        disabled={busy || imageCount === null || !changed}
-        onClick={() => void save()}
-        className="rounded border border-sky-300 bg-white px-3 py-2 text-xs font-semibold text-sky-800 disabled:opacity-40"
-      >
-        {busy ? "保存中…" : "保存图片数量"}
-      </button>
+        <Button
+          size="sm"
+          disabled={busy || imageCount === null || !changed}
+          onClick={() => void save()}
+        >
+          {busy ? "保存中…" : "保存"}
+        </Button>
+      </div>
       {feedback && (
         <p
           role={feedback === "图片数量已保存。" ? "status" : "alert"}
-          className={`text-xs ${
-            feedback === "图片数量已保存。" ? "text-emerald-700" : "text-rose-700"
-          } sm:col-span-2`}
+          className={`text-[11px] ${
+            feedback === "图片数量已保存。"
+              ? "text-emerald-700"
+              : "text-rose-700"
+          }`}
         >
           {feedback}
         </p>
@@ -184,9 +209,14 @@ function QueueGroupSubmissionIntervalControl({
   }
 
   return (
-    <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-      <label className="grid gap-1 text-xs font-medium text-slate-700">
+    <div className="grid gap-2">
+      <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-50 text-violet-600">
+          <Clock3 className="h-3.5 w-3.5" />
+        </span>
         投稿间隔（秒）
+      </div>
+      <div className="flex items-center gap-2">
         <input
           type="number"
           inputMode="numeric"
@@ -200,25 +230,24 @@ function QueueGroupSubmissionIntervalControl({
             setDraft(event.target.value);
             setFeedback("");
           }}
-          className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm sm:w-28"
+          className="h-9 w-24 rounded-lg border border-slate-200 bg-white px-2 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10"
         />
-      </label>
-      <button
-        type="button"
-        disabled={busy || interval === null || !changed}
-        onClick={() => void save()}
-        className="rounded border border-sky-300 bg-white px-3 py-2 text-xs font-semibold text-sky-800 disabled:opacity-40"
-      >
-        {busy ? "保存中…" : "保存投稿间隔"}
-      </button>
+        <Button
+          size="sm"
+          disabled={busy || interval === null || !changed}
+          onClick={() => void save()}
+        >
+          {busy ? "保存中…" : "保存"}
+        </Button>
+      </div>
       {feedback && (
         <p
           role={feedback === "投稿间隔已保存。" ? "status" : "alert"}
-          className={`text-xs ${
+          className={`text-[11px] ${
             feedback === "投稿间隔已保存。"
               ? "text-emerald-700"
               : "text-rose-700"
-          } sm:col-span-2`}
+          }`}
         >
           {feedback}
         </p>
@@ -262,52 +291,136 @@ export default function RegularQueueGroupsPanel({
   }) => Promise<unknown>;
   onRemove: (item: RegularQueueGroupSnapshot["remaining"][number]) => void;
 }) {
-  if (loading) return <p role="status" className="text-sm text-slate-500">正在读取普通平台队列组…</p>;
-  if (!groups.length) return <p className="rounded border border-dashed border-slate-300 p-4 text-sm text-slate-500">暂无普通平台队列。请在文章库发起投稿后到此查看。</p>;
-  return <div className="grid gap-3">
-    {groups.map((group) => (
-      <section key={group.queueGroupId} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-semibold text-slate-800">{group.platformLabel}</h3>
-            {group.showAccount && <p className="mt-1 text-xs text-slate-500">账号：{group.accountLabel}</p>}
-            <p className="mt-2 text-xs text-slate-600">状态：{group.stateLabel}</p>
-            {group.pauseIntent === "system" && group.actions.reasonCode && group.actions.reasonCode !== "REGULAR_QUEUE_GROUP_EMPTY" && <p className="mt-1 text-xs text-rose-700">暂停原因：{systemPauseReason(group.actions.reasonCode)}</p>}
-          </div>
-          <div className="flex gap-2">
-            <button type="button" disabled={startBusy || !group.actions.canStart} onClick={() => onStart(group.queueGroupId)} className="rounded bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">开始</button>
-            <button type="button" disabled={pauseBusy || !group.actions.canPause} onClick={() => onPause(group.queueGroupId)} className="rounded border border-amber-300 px-3 py-2 text-xs font-semibold text-amber-800 disabled:opacity-40">暂停</button>
-          </div>
-        </div>
-        <div className="mt-3 grid gap-3 border-y border-slate-200 bg-slate-50 px-1 py-3 lg:grid-cols-2">
-          <QueueGroupImageCountControl
-            group={group}
-            busy={imageCountBusy}
-            onUpdate={onUpdateImageCount}
-          />
-          <QueueGroupSubmissionIntervalControl
-            group={group}
-            busy={submissionIntervalBusy}
-            onUpdate={onUpdateSubmissionInterval}
-          />
-        </div>
-        {group.current && <p className="mt-3 text-xs text-blue-700">当前文章：{articleLabel(group.current)}</p>}
-        <ol className="mt-3 list-decimal space-y-1 pl-5 text-xs text-slate-600">
-          {group.remaining.map((item) => (
-            <li key={item.itemId} className="flex flex-wrap items-center justify-between gap-2">
-              <span>{articleLabel(item)}</span>
-              <button
-                type="button"
-                disabled={removeBusy}
-                onClick={() => onRemove(item)}
-                className="rounded border border-amber-300 px-2 py-1 text-[11px] text-amber-800 disabled:opacity-40"
+  if (loading)
+    return (
+      <div
+        role="status"
+        className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500"
+      >
+        正在读取普通平台队列组…
+      </div>
+    );
+
+  if (!groups.length)
+    return (
+      <div className="rounded-xl border border-dashed border-slate-300 bg-white/70 p-8 text-center text-sm text-slate-500">
+        暂无普通平台队列。请在文章库发起投稿后到此查看。
+      </div>
+    );
+
+  return (
+    <div className="grid gap-3 xl:grid-cols-2">
+      {groups.map((group) => (
+        <Surface
+          key={group.queueGroupId}
+          className="overflow-hidden p-0 shadow-[0_8px_24px_rgba(15,23,42,0.04)]"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-4 py-4">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="truncate text-sm font-bold text-slate-900">
+                  {group.platformLabel}
+                </h3>
+                <StatusBadge tone={groupTone(group)}>
+                  {group.stateLabel}
+                </StatusBadge>
+              </div>
+              {group.showAccount && (
+                <p className="mt-1.5 text-xs text-slate-500">
+                  账号：{group.accountLabel}
+                </p>
+              )}
+              {group.pauseIntent === "system" &&
+                group.actions.reasonCode &&
+                group.actions.reasonCode !== "REGULAR_QUEUE_GROUP_EMPTY" && (
+                  <p className="mt-2 max-w-xl text-xs leading-5 text-rose-700">
+                    暂停原因：{systemPauseReason(group.actions.reasonCode)}
+                  </p>
+                )}
+            </div>
+            <div className="flex gap-2">
+              <Button
+                tone="success"
+                size="sm"
+                disabled={startBusy || !group.actions.canStart}
+                onClick={() => onStart(group.queueGroupId)}
               >
-                移除
-              </button>
-            </li>
-          ))}
-        </ol>
-      </section>
-    ))}
-  </div>;
+                <CirclePlay className="h-3.5 w-3.5" />
+                开始
+              </Button>
+              <Button
+                tone="warning"
+                size="sm"
+                disabled={pauseBusy || !group.actions.canPause}
+                onClick={() => onPause(group.queueGroupId)}
+              >
+                <CirclePause className="h-3.5 w-3.5" />
+                暂停
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid gap-4 border-b border-slate-100 bg-slate-50/60 px-4 py-4 sm:grid-cols-2">
+            <QueueGroupImageCountControl
+              group={group}
+              busy={imageCountBusy}
+              onUpdate={onUpdateImageCount}
+            />
+            <QueueGroupSubmissionIntervalControl
+              group={group}
+              busy={submissionIntervalBusy}
+              onUpdate={onUpdateSubmissionInterval}
+            />
+          </div>
+
+          <div className="px-4 py-4">
+            <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-slate-700">
+              <ListChecks className="h-4 w-4 text-slate-400" />
+              队列文章
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">
+                {group.remaining.length + (group.current ? 1 : 0)}
+              </span>
+            </div>
+
+            {group.current && (
+              <div className="mb-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2.5">
+                <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-blue-500">
+                  当前执行
+                </div>
+                <p className="text-xs font-medium leading-5 text-blue-800">
+                  {articleLabel(group.current)}
+                </p>
+              </div>
+            )}
+
+            <ol className="grid gap-1.5">
+              {group.remaining.map((item, index) => (
+                <li
+                  key={item.itemId}
+                  className="flex min-w-0 items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-slate-50"
+                >
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[10px] font-bold text-slate-500">
+                    {index + 1}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-xs text-slate-600">
+                    {articleLabel(item)}
+                  </span>
+                  <Button
+                    tone="ghost"
+                    size="sm"
+                    disabled={removeBusy}
+                    onClick={() => onRemove(item)}
+                    className="h-7 px-2 text-amber-700 hover:bg-amber-50 hover:text-amber-800"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    移除
+                  </Button>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </Surface>
+      ))}
+    </div>
+  );
 }
