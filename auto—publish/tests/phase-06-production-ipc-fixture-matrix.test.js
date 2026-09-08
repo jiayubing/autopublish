@@ -7,10 +7,17 @@ const {
   productionIpcRegistry,
 } = require("../desktop/ipc/contracts/production-registry");
 const {
-  productionIpcContractFixtures,
+  productionIpcContractFixtures: baseProductionIpcContractFixtures,
 } = require("./fixtures/phase-06-production-ipc-contract-fixtures");
+const {
+  clientGenerationIpcContractFixtures,
+} = require("./fixtures/client-generation-ipc-contract-fixtures");
 const { loadPreloadHarness } = require("./helpers/preload-harness");
 
+const productionIpcContractFixtures = Object.freeze([
+  ...baseProductionIpcContractFixtures,
+  ...clientGenerationIpcContractFixtures,
+]);
 const FEATURE_OWNERS = new Set([
   "workspace",
   "content",
@@ -122,6 +129,7 @@ test("public preload events deliver validated data and release their own subscri
     ],
     ["content.doubaoQueueChanged", preload.api.content.onDoubaoQueueState],
     ["generation.runtimeChanged", preload.api.content.onGenerationBatchState],
+    ["generation.clientOperationChanged", preload.api.content.onClientGenerationState],
     ["workspace.invalidated", preload.api.workspaceData.onInvalidated],
   ];
   assert.deepEqual(
