@@ -4,11 +4,11 @@
 
 ## 当前执行入口
 
-- [客户生成任务化与并发](../.scratch/client-generation-tasks/CLIENT-GENERATION-TASKS-PLAN.md)：本轮功能入口；将当前“单篇生成”改为客户生成任务，并发、跨客户后台执行、进度展示与共享 AI 执行调度器均由该计划拥有。
+- [代码库治理](../.scratch/codebase-governance/PLAN.md)：当前入口；历史代码、测试与文档清理，以及已确认的资源问题按该计划分批推进。
 
-本轮基线包含 PR #44（客户分组与选择）的 master 合并；前序计划 [客户分组与选择](../.scratch/client-groups/CLIENT-GROUPS-PLAN.md) 已完成，不作为本轮实施入口。
+关联功能合同：[客户生成任务化与并发](../.scratch/client-generation-tasks/CLIENT-GENERATION-TASKS-PLAN.md)，只在涉及其行为时读取。
 
-前序参考：[可靠性与批量能力改进计划](../.scratch/reliability-batch-follow-up/RELIABILITY-BATCH-FOLLOW-UP-PLAN.md)、[文章生成与发布链路优化计划](../.scratch/generation-publication-optimization/GENERATION-PUBLICATION-OPTIMIZATION-PLAN.md)，均不作为本线程实施入口。
+已完成计划和 handoff 通过[历史资料归档索引](../.scratch/ARCHIVE-INDEX.md)定位。
 
 ## 等待用户明确外部授权
 
@@ -20,19 +20,7 @@
 
 ## 最近已完成的本地计划
 
-以下计划保留为历史 evidence，不是默认执行入口：
-
-- [客户分组与选择](../.scratch/client-groups/CLIENT-GROUPS-PLAN.md)：已通过 PR #44 合并到 master；单层分组、搜索与批次客户选择作为本轮基线。
-- [非阻塞技术债后续处理计划](../.scratch/complexity-follow-up/NONBLOCKING-CLEANUP-PLAN.md)：COMPLETE；格式清理、测试命名、IPC 分析器和包体积调查结论及验证见计划 §7。
-- [复杂度收敛与测试瘦身计划](../.scratch/complexity-reduction/COMPLEXITY-REDUCTION-PLAN.md)：COMPLETE；测试入口、代码职责收敛及干净提交构建验收已完成，保留决策与证据见计划最终记录。
-- [GEO 批量发文：文章生成与列举网投稿修复计划](../.scratch/article-generation-and-lieju-remediation/ARTICLE-GENERATION-AND-LIEJU-REMEDIATION-PLAN.md) — `COMPLETE`；P0–P5、HTTP-only 列举网投稿决策、最终门禁和 bounded closure evidence 见计划 §10。
-- [Ticket 27：投稿结果闭环整改](../.scratch/article-lifecycle-and-submission/issues/27-publication-attention-result-closure-remediation.md) — `COMPLETE`；Combined Audit、remediation、final clean-HEAD gate 与最终边界见 [27-D handoff](../.scratch/article-lifecycle-and-submission/handoffs/27-D-result-closure-integration.md)。
-- [内容生产链路整改与优化计划](../.scratch/content-production/CONTENT-PRODUCTION-REMEDIATION-PLAN.md) — `COMPLETE`；Phase 0–6 已完成，最终集成验证与 bounded re-audit evidence 见计划 §16。
-- [平台账号档案 P1 收敛](../.scratch/platform-account-profile-p1/PLATFORM-ACCOUNT-PROFILE-P1-PLAN.md)
-- [Renderer 冷启动导航修复](../.scratch/archive/renderer-cold-start-navigation-fix/RENDERER-COLD-START-NAVIGATION-FIX-PLAN.md)
-- [Renderer UI 解耦与扩展性](../.scratch/archive/ui-decoupling-and-extensibility/UI-DECOUPLING-AND-EXTENSIBILITY-PLAN.md)
-- [投稿架构收尾](../.scratch/article-lifecycle-and-submission/archive/POST-WAVE-SUBMISSION-ARCHITECTURE-CLOSEOUT-PLAN.md)
-- [平台扩展性与图片边界](../.scratch/article-lifecycle-and-submission/archive/POST-WAVE-PLATFORM-EXTENSIBILITY-AND-IMAGE-BOUNDARY-PLAN.md)
+已完成计划、handoff 和过程证据统一见[历史资料归档索引](../.scratch/ARCHIVE-INDEX.md)，不再在此逐条展开。
 
 ## 维护规则
 
