@@ -58,15 +58,18 @@ test("content workspace source query shares identity across initial manual and i
   assert.equal(feature.getSnapshot().query.loading, false);
 });
 
-test("single article generation stays owned by the workspace across a production view remount", async () => {
+test("client generation stays owned by the workspace across a production view remount", async () => {
   const pending = deferred();
-  const generated = {
-    id: "article-a",
+  const completed = {
+    operationId: "operation-a",
     clientId: "client-a",
-    title: "A",
-    content: "Body",
-    status: "generated",
-    createdAt: "2026-08-21T00:00:00.000Z",
+    articleCount: 1,
+    concurrency: 2,
+    status: "completed",
+    counts: { total: 1, pending: 0, running: 0, succeeded: 1, failed: 0 },
+    tasks: [],
+    createdAt: "2026-09-08T00:00:00.000Z",
+    updatedAt: "2026-09-08T00:00:01.000Z",
   };
   const feature = createContentWorkbenchFeature({
     ...paidExecutionAdapters,
@@ -75,22 +78,25 @@ test("single article generation stays owned by the workspace across a production
     listQuestions: async () => [],
     listResearch: async () => [],
     loadManagement: async () => ({}),
-    generateArticle: async () => pending.promise,
+    startClientGeneration: async () => pending.promise,
+    getClientGenerationState: async () => null,
+    retryClientGeneration: async () => completed,
+    subscribeClientGeneration: () => () => {},
   });
   feature.setScope({ workspaceRuntimeId: "runtime-1" });
   await feature.refresh("initial");
 
   const firstViewGeneration = feature.production.generation;
-  const request = firstViewGeneration.generate({ clientId: "client-a" });
+  const request = firstViewGeneration.start({ clientId: "client-a" });
   assert.equal(firstViewGeneration.getSnapshot().command.busy, true);
 
   // The production view can unmount while the workspace feature remains alive.
   const secondViewGeneration = feature.production.generation;
   assert.equal(secondViewGeneration, firstViewGeneration);
-  pending.resolve(generated);
+  pending.resolve(completed);
   await request;
 
-  assert.equal(feature.getSnapshot().currentArticle.id, "article-a");
+  assert.equal(feature.getSnapshot().generation.operation.operationId, "operation-a");
   assert.equal(secondViewGeneration.getSnapshot().command.busy, false);
   feature.dispose();
 });
