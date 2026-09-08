@@ -78,6 +78,23 @@ it("overlapping identities stay scoped and a shared revision refreshes every aff
   }
 });
 
+it("retains only the latest cached revision for each client", async () => {
+  let revision = 1;
+  const service = createArticleManagementSnapshot({
+    getRevision: () => revision,
+    listArticles: (clientId) => [article(clientId, `revision-${revision}`)],
+  });
+
+  await service.get("client-a");
+  revision = 2;
+  await service.get("client-a");
+  revision = 3;
+  await service.get("client-a");
+  await service.get("client-b");
+
+  assert.equal(service.cacheSize(), 2);
+});
+
 it("late reads converge to the new revision and repeated revision changes still reject", async () => {
   let revision = 1;
   let reads = 0;
