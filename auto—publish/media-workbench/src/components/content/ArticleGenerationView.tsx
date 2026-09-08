@@ -48,6 +48,15 @@ function toMaterials(client?: ContentClient): ContentMaterial[] {
   }));
 }
 
+function normalizeMaterial(item: ContentMaterial): ContentMaterial {
+  return {
+    ...item,
+    id: item.id || item.name,
+    status: item.status || (item.content?.trim() ? 'ready' : 'error'),
+    characterCount: item.characterCount ?? item.content?.length ?? 0,
+  };
+}
+
 function statusLabel(status: string) {
   if (status === 'pending') return '排队中';
   if (status === 'running') return '生成中';
@@ -63,25 +72,15 @@ function statusClass(status: string) {
   return 'text-slate-500';
 }
 
-export default function ArticleGenerationView({
+function ClientGenerationView({
   clientId,
   client,
-  clients = [],
-  grouping,
   research,
-  researchByClient,
-  getClientDetails,
   templateCatalog,
   commands,
   commandStates,
   generationFeature,
-  generationMode = 'client',
-  onViewBatchArticles,
 }: ArticleGenerationViewProps) {
-  if (generationMode === 'batch') {
-    return <div className="min-h-0 flex-1"><BatchGenerationView clients={clients} grouping={grouping} currentClientId={clientId} researchByClient={researchByClient} getClientDetails={getClientDetails} templateCatalog={templateCatalog} commands={{ retryMaterial: commands.retryMaterial }} commandStates={commandStates} onViewBatchArticles={onViewBatchArticles} /></div>;
-  }
-
   const [materialItems, setMaterialItems] = useState<ContentMaterial[]>([]);
   const [materialIds, setMaterialIds] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -102,7 +101,7 @@ export default function ArticleGenerationView({
   const validResearch = useMemo(() => research.filter((item) => Boolean(item.answerText?.trim()) && item.isAnswerComplete !== false), [research]);
   const totalAnswerCharacters = useMemo(() => selectedIds.reduce((total, id) => total + (research.find((item) => item.id === id)?.answerText?.length || 0), 0), [research, selectedIds]);
   const totalMaterialCharacters = useMemo(() => materialIds.reduce((total, id) => total + (materials.find((item) => (item.id || item.name) === id)?.content?.length || 0), 0), [materials, materialIds]);
-  const catalog = templateCatalog || { revision: '', platforms: [], templates: [], diagnostics: [] };
+  const catalog: ContentTemplateCatalog = templateCatalog || { revision: '', platforms: [], templates: [], diagnostics: [] };
   const visibleTemplates = useMemo(() => visibleGenerationTemplates(catalog, showBuiltinTemplates), [catalog, showBuiltinTemplates]);
   const customTemplateCount = useMemo(() => catalog.templates.filter((item) => item.source === 'custom').length, [catalog.templates]);
   const visiblePlatformIds = useMemo(() => new Set(visibleTemplates.map((item) => item.platform)), [visibleTemplates]);
@@ -152,7 +151,7 @@ export default function ArticleGenerationView({
     try {
       const next = await commands.retryMaterial({ clientId, materialId });
       if (isContentCommandStaleResult(next)) return;
-      setMaterialItems((current) => current.map((item) => (item.id || item.name) === materialId ? toMaterials({ id: clientId, name: clientId, knowledgeFiles: [next] })[0] : item));
+      setMaterialItems((current) => current.map((item) => (item.id || item.name) === materialId ? normalizeMaterial(next) : item));
     } catch (value) {
       setError(value instanceof Error ? value.message : '资料重试失败');
     }
@@ -239,4 +238,23 @@ export default function ArticleGenerationView({
     </section>}
     {error && <div role="alert" className="rounded-md border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{error}</div>}
   </div>;
+}
+
+export default function ArticleGenerationView(props: ArticleGenerationViewProps) {
+  const {
+    clients = [],
+    grouping,
+    clientId,
+    researchByClient,
+    getClientDetails,
+    templateCatalog,
+    commands,
+    commandStates,
+    generationMode = 'client',
+    onViewBatchArticles,
+  } = props;
+  if (generationMode === 'batch') {
+    return <div className="min-h-0 flex-1"><BatchGenerationView clients={clients} grouping={grouping} currentClientId={clientId} researchByClient={researchByClient} getClientDetails={getClientDetails} templateCatalog={templateCatalog} commands={{ retryMaterial: commands.retryMaterial }} commandStates={commandStates} onViewBatchArticles={onViewBatchArticles} /></div>;
+  }
+  return <ClientGenerationView {...props} />;
 }
