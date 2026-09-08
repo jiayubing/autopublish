@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ClientSelection, type ClientGrouping } from './ClientSelector';
+import type { ClientGrouping } from './ClientSelector';
+import ClientGroupBatchSelector from './ClientGroupBatchSelector';
 import { Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { ContentClient, ContentCommandStaleResult, ContentMaterial, ContentResearch, ContentTemplate, ContentTemplateCatalog } from '../../types/content';
 import type { GenerationBatch, GenerationBatchPreview, GenerationBatchSourceSelection, GenerationBatchState } from '../../types/generation';
@@ -314,9 +315,14 @@ export default function BatchGenerationView({ clients, grouping, currentClientId
       {viewMode === 'wizard' && <>
       {step === 0 && <section className="rounded-md border border-slate-200 bg-white p-4">
         <h2 className="mb-3 text-sm font-semibold">选择批次客户</h2>
-        <ClientSelection clients={resolvedClients} selectedIds={selectedClientIds} grouping={grouping}
+        <ClientGroupBatchSelector
+          clients={resolvedClients}
+          selectedIds={selectedClientIds}
+          grouping={grouping}
           onChange={(ids) => { clientSelectionTouchedRef.current = true; setSelectedClientIds(ids); setPreviewResult(null); }}
-          disabled={loading || batchRunning} describeClient={clientReadiness} />
+          disabled={loading || batchRunning}
+          describeClient={clientReadiness}
+        />
       </section>}
       {step === 1 && <section className="rounded-md border border-slate-200 bg-white p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><h2 className="text-sm font-semibold">选择跨平台写作模板</h2><p className="mt-1 text-xs text-slate-500">模板按平台分组，已选 {selectedTemplates.length} 个 · 潜在 AI 调用数：{potentialTaskCount}</p></div>{customTemplateCount > 0 && <label className="inline-flex items-center gap-1 text-xs text-slate-500"><input type="checkbox" aria-label="显示内置模板" checked={showBuiltinTemplates} onChange={(event) => setShowBuiltinTemplates(event.target.checked)} />显示内置模板</label>}</div>{riskWarning && <div role="status" className="mt-3 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">潜在任务数超过 {GENERATION_BATCH_RISK_THRESHOLD}，可能增加 AI 调用费用，请确认客户和模板选择。</div>}<div className="mt-4 grid gap-4 md:grid-cols-3">{(Object.entries(templateGroups) as Array<[string, ContentTemplate[]]>).map(([platform, platformTemplates]) => <div key={platform} className="rounded border border-slate-200 p-3"><h3 className="text-xs font-semibold text-slate-700">{templatePlatformDisplayName(catalog, platform)}</h3><div className="mt-2 grid gap-2">{platformTemplates.map((template) => <label key={template.id} className="flex items-start gap-2 text-xs text-slate-600"><input type="checkbox" checked={selectedTemplates.some((item) => item.platform === platform && item.templateId === template.id)} onChange={() => toggleTemplate(template)} /><span><span className="block font-medium">{templateTitle(template)} · {templateSourceLabel(template)}</span>{templateScenarioLabel(template) && <span className="text-slate-400">{templateScenarioLabel(template)}</span>}</span></label>)}</div></div>)}</div></section>}
       {step === 2 && <section className="grid gap-3">
@@ -341,4 +347,3 @@ export default function BatchGenerationView({ clients, grouping, currentClientId
     {batch && <BatchRegularSubmissionDialog open={batchSubmissionOpen} batch={batch} clients={resolvedClients} onClose={() => setBatchSubmissionOpen(false)} onCommitted={(summary) => setBatchSubmissionFeedback(`已批量处理 ${summary.clientCount} 个客户：新增投稿 ${summary.admittedCount} 项，已存在跳过 ${summary.idempotentCount} 项，队列已请求自动开始。`)} />}
   </div>;
 }
-
