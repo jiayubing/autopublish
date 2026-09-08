@@ -67,14 +67,36 @@ async function createContentProductionComposition(options) {
         },
       ),
     );
+    const generationScheduler = ownService(
+      require("../../src/content/generation-execution-scheduler").createGenerationExecutionScheduler({
+        maxConcurrency: value.generationMaxConcurrency === undefined ? 4 : value.generationMaxConcurrency,
+      }),
+    );
+    function combinedGenerationState() {
+      const scheduled = generationScheduler.getState();
+      if (scheduled.isRunning) {
+        return {
+          state: "running",
+          isBatchRunning: true,
+          active: scheduled.active,
+          queued: scheduled.queued,
+          maxConcurrency: scheduled.maxConcurrency,
+        };
+      }
+      return typeof value.getBatchState === "function" ? value.getBatchState() || {} : {};
+    }
     const aiProviderService = ownService(
       require("../services/ai-provider-service").createAiProviderService({
         userDataPath: value.userDataPath,
         paths: value.paths,
         safeStorage: value.safeStorage,
-        getBatchState: value.getBatchState,
+        getBatchState: combinedGenerationState,
       }),
     );
+    const aiExecutionService = require("../services/ai-execution-service").createAiExecutionService({
+      scheduler: generationScheduler,
+      aiProviderService,
+    });
     const aiContentService = ownService(
       require("../services/ai-content-service").createAiContentService({
         workspaceRoot: value.workspaceRoot,
@@ -99,8 +121,8 @@ async function createContentProductionComposition(options) {
           value.onDataInvalidated("ARTICLE_REMOVAL_TRANSACTION_CHANGED");
         },
         onDataInvalidated: value.onDataInvalidated,
-        aiClientFactory: function () {
-          return aiProviderService.createClient();
+        aiClientFactory: function (groupId) {
+          return aiExecutionService.createClient(groupId || "client-generation:legacy");
         },
       }),
     );
@@ -133,6 +155,7 @@ async function createContentProductionComposition(options) {
           contentStore: value.contentStore,
           articleMutationCoordinator: value.articleMutationCoordinator,
           aiProviderService,
+          aiExecutionService,
           onDataInvalidated: value.onDataInvalidated,
         },
       ),
@@ -141,6 +164,7 @@ async function createContentProductionComposition(options) {
     return Object.freeze({
       doubaoCollectionService,
       aiProviderService,
+      aiExecutionService,
       aiContentService,
       contentGenerationBatchService,
       articleLifecycleOwner: aiContentService,
