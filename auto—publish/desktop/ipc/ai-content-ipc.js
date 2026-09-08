@@ -30,6 +30,12 @@ function generationInput(input) {
   return Object.assign({}, input);
 }
 
+function safeProgressTitle(value) {
+  if (typeof value !== "string") return null;
+  const title = value.replace(/[\x00-\x1f\x7f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 300);
+  return title || null;
+}
+
 function projectClientGenerationOperation(value) {
   if (!value) return null;
   return {
@@ -45,7 +51,7 @@ function projectClientGenerationOperation(value) {
         status: task.status,
         attempts: task.attempts,
         articleId: task.articleId || null,
-        articleTitle: typeof task.articleTitle === "string" && task.articleTitle ? task.articleTitle.slice(0, 300) : null,
+        articleTitle: safeProgressTitle(task.articleTitle),
         error: task.error ? {
           code: typeof task.error.code === "string" ? task.error.code.slice(0, 128) : "CONTENT_GENERATION_FAILED",
           message: "生成任务失败，请检查诊断信息。",
