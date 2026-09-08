@@ -1,4 +1,5 @@
 import React from "react";
+import { ArrowUpRight, CheckCircle2, Circle } from "lucide-react";
 import type {
   AiProviderStatus,
   HepanProviderStatus,
@@ -9,6 +10,7 @@ import type { SettingsSection } from "./SettingsNavigation";
 import { useConfirmation } from "../../confirmation";
 import { useSettingsFeature } from "../../features/settings/settings-context";
 import { usePlatformFeature } from "../../features/platform/platform-feature-context";
+import { Button, StatusBadge } from "../ui/primitives";
 
 const EMPTY_AI: AiProviderStatus = {
   source: "application",
@@ -93,7 +95,9 @@ export default function SettingsOverview({
     {
       id: "media",
       title: "付费媒体",
-      detail: media.apiKeyMask ? `${media.transport} · ${media.apiKeyMask}` : media.transport,
+      detail: media.apiKeyMask
+        ? `${media.transport} · ${media.apiKeyMask}`
+        : media.transport,
       configured: media.configured,
     },
     {
@@ -115,65 +119,90 @@ export default function SettingsOverview({
   ];
 
   return (
-    <section aria-labelledby="settings-overview-title" className="space-y-4">
+    <section aria-labelledby="settings-overview-title" className="grid gap-4">
       <div>
         <h3
           id="settings-overview-title"
-          className="text-base font-semibold text-slate-800"
+          className="text-sm font-bold text-slate-800"
         >
           服务配置概览
         </h3>
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-500">
           服务密钥与普通投稿账号分开维护；平台登录与账号绑定统一从“平台账号”进入。
         </p>
       </div>
+
       {error && (
-        <p role="alert" className="text-sm text-rose-700">
+        <p
+          role="alert"
+          className="rounded-xl border border-rose-100 bg-rose-50 px-3 py-2.5 text-xs text-rose-700"
+        >
           {error}
         </p>
       )}
+
       {legacy?.discover.importable && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          <p className="font-semibold">发现可导入的旧配置</p>
-          <p className="mt-1">
-            旧媒体 Key 会在你确认后导入并加密保存。
-          </p>
-          <button
-            type="button"
-            onClick={() => void importLegacy()}
-            disabled={legacyBusy}
-            className="mt-3 rounded-md border border-amber-400 px-3 py-2 text-sm font-semibold disabled:opacity-50"
-          >
-            {legacyBusy ? "处理中…" : "确认导入旧配置"}
-          </button>
+        <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 text-xs leading-5 text-amber-900">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="font-bold">发现可导入的旧配置</p>
+              <p className="mt-1">旧媒体 Key 会在你确认后导入并加密保存。</p>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => void importLegacy()}
+              disabled={legacyBusy}
+            >
+              {legacyBusy ? "处理中…" : "确认导入旧配置"}
+            </Button>
+          </div>
         </div>
       )}
+
       {legacyNotice && (
-        <p role="status" className="text-sm text-emerald-700">
+        <p role="status" className="text-xs font-medium text-emerald-700">
           {legacyNotice}
         </p>
       )}
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+
+      <div className="grid gap-2.5 md:grid-cols-2 xl:grid-cols-4">
         {items.map((item) => (
           <button
             key={item.id}
             type="button"
             onClick={() => onSelect(item.id)}
-            className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 text-left shadow-sm hover:border-blue-300"
+            className="group min-w-0 rounded-xl border border-slate-200 bg-white p-4 text-left shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-colors hover:border-blue-200 hover:bg-blue-50/20"
           >
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-semibold text-slate-700">{item.title}</span>
-              <span
-                className={`h-2.5 w-2.5 rounded-full ${item.configured ? "bg-emerald-500" : "bg-slate-300"}`}
-                aria-label={item.configured ? "已配置" : "未配置"}
-              />
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <span className="block truncate text-[13px] font-bold text-slate-800">
+                  {item.title}
+                </span>
+                <p className="mt-2 min-h-8 break-words text-[11px] leading-4 text-slate-500">
+                  {item.detail}
+                </p>
+              </div>
+              {item.configured ? (
+                <CheckCircle2
+                  className="h-4 w-4 shrink-0 text-emerald-500"
+                  aria-label="已配置"
+                />
+              ) : (
+                <Circle
+                  className="h-4 w-4 shrink-0 text-slate-300"
+                  aria-label="未配置"
+                />
+              )}
             </div>
-            <p className="mt-3 break-words text-sm text-slate-500">
-              {item.detail}
-            </p>
-            <span className="mt-4 inline-block text-xs font-semibold text-blue-700">
-              管理配置 →
-            </span>
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <StatusBadge tone={item.configured ? "success" : "neutral"}>
+                {item.configured ? "已配置" : "未配置"}
+              </StatusBadge>
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 group-hover:text-blue-700">
+                管理
+                <ArrowUpRight className="h-3 w-3" />
+              </span>
+            </div>
           </button>
         ))}
       </div>
