@@ -1,4 +1,10 @@
-import { RefreshCw } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  CirclePause,
+  CirclePlay,
+  RefreshCw,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { usePlatformFeature } from "../features/platform/platform-feature-context";
 import { useAttentionFeature } from "../features/attention/use-attention-feature";
@@ -11,6 +17,7 @@ import RegularQueueGroupsPanel from "./RegularQueueGroupsPanel";
 import PaidMediaWorkbench from "./PaidMediaWorkbench";
 import ArticleAttentionPanel from "./content/ArticleAttentionPanel";
 import ArticleAttentionDetailDrawer from "./content/ArticleAttentionDetailDrawer";
+import { Button, PageHeader, Surface } from "./ui/primitives";
 
 type SubmissionCenterSection = "regular" | "paid" | "attention";
 
@@ -21,6 +28,28 @@ interface PlatformWorkbenchProps {
   onOpenArticleLibrary: (intent?: ArticleLibraryNavigationIntent) => void;
   onOpenOrders: () => void;
 }
+
+const SECTIONS: Array<{
+  id: SubmissionCenterSection;
+  label: string;
+  description: string;
+}> = [
+  {
+    id: "regular",
+    label: "普通平台队列",
+    description: "执行列举网、蓝色河畔等普通平台任务",
+  },
+  {
+    id: "paid",
+    label: "已确认付费批次",
+    description: "执行已经确认费用的媒体批次",
+  },
+  {
+    id: "attention",
+    label: "需处理事项",
+    description: "人工核对不确定结果和异常状态",
+  },
+];
 
 export default function PlatformWorkbench({
   content,
@@ -39,10 +68,11 @@ export default function PlatformWorkbench({
   const center = submissionCenter.snapshot;
   const [clientFilter, setClientFilter] = useState<string>("");
   const [page, setPage] = useState(1);
-  const pageSize = center.data.pageSize || 100;
+
   useEffect(() => {
     setPage(center.data.page || 1);
   }, [center.data.page]);
+
   async function changeClientFilter(value: string) {
     setClientFilter(value);
     setPage(1);
@@ -55,6 +85,7 @@ export default function PlatformWorkbench({
     });
     await submissionCenter.feature.refresh("client-filter");
   }
+
   async function changePage(nextPage: number) {
     if (nextPage < 1 || !center.scope?.workspaceRuntimeId) return;
     setPage(nextPage);
@@ -63,6 +94,7 @@ export default function PlatformWorkbench({
     // scope stable while requesting the selected page.
     await submissionCenter.feature.refresh(`page-${nextPage}`);
   }
+
   const { snapshot: attentionSnapshot, feature: attentionFeature } =
     useAttentionFeature(center.data.clientId || undefined, {
       clientId: center.data.clientId,
@@ -71,17 +103,20 @@ export default function PlatformWorkbench({
       counts: {
         total: center.data.counts.attentionItems,
         actionable: center.data.attention.items.filter((item) =>
-          item.allowedActions.some((action) =>
-            !["inspect", "open-publication", "open-article"].includes(action),
+          item.allowedActions.some(
+            (action) =>
+              !["inspect", "open-publication", "open-article"].includes(action),
           ),
         ).length,
       },
     });
   const [section, setSection] =
     useState<SubmissionCenterSection>(initialSection);
+
   useEffect(() => {
     setSection(initialSection);
   }, [initialSection]);
+
   const [attentionDetail, setAttentionDetail] =
     useState<ArticleAttentionItem | null>(null);
   const [attentionError, setAttentionError] = useState("");
@@ -102,7 +137,8 @@ export default function PlatformWorkbench({
   const groupQuery = center.query;
   const commands = snapshot.commands;
   const residue = snapshot.residue;
-  const residueBusy = residue.phase === "checking" || residue.phase === "cleaning";
+  const residueBusy =
+    residue.phase === "checking" || residue.phase === "cleaning";
 
   async function removePendingItem(
     item: (typeof groups)[number]["remaining"][number],
@@ -110,7 +146,8 @@ export default function PlatformWorkbench({
     setActionError("");
     try {
       const title = item.articleSummary?.title || "标题不可用";
-      const customerName = item.articleSummary?.customerName || "客户信息不可用";
+      const customerName =
+        item.articleSummary?.customerName || "客户信息不可用";
       if (
         !(await confirm({
           title: "确认移除待执行队列项",
@@ -121,7 +158,11 @@ export default function PlatformWorkbench({
       )
         return;
       await feature.removePendingQueueItems([
-        { articleRef: item.articleRef, itemId: item.itemId, batchId: item.batchId },
+        {
+          articleRef: item.articleRef,
+          itemId: item.itemId,
+          batchId: item.batchId,
+        },
       ]);
     } catch {
       setActionError(
@@ -189,7 +230,10 @@ export default function PlatformWorkbench({
   }
 
   function openPublication(item: ArticleAttentionItem) {
-    if (item.kind === "paid_order_creation_uncertain" || item.kind === "order_status_anomaly") {
+    if (
+      item.kind === "paid_order_creation_uncertain" ||
+      item.kind === "order_status_anomaly"
+    ) {
       setAttentionDetail(item);
       return;
     }
@@ -230,103 +274,177 @@ export default function PlatformWorkbench({
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden">
-      <div className="shrink-0 rounded-md border border-slate-200 bg-white px-4 py-3">
-        <h1 className="text-lg font-bold text-slate-800">投稿中心</h1>
-        <p className="mt-1 text-xs text-slate-500">
-          普通平台队列、已确认付费批次和需处理事项集中在此处执行。
-        </p>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <label className="text-xs text-slate-600" htmlFor="submission-center-client-filter">客户筛选</label>
-          <select id="submission-center-client-filter" value={clientFilter} onChange={(event) => void changeClientFilter(event.target.value)} className="rounded border border-slate-300 bg-white px-2 py-1 text-xs">
-            <option value="">全部客户</option>
-            {content.snapshot.clients.map((client) => <option key={client.id} value={client.id}>{client.name || client.id}</option>)}
-          </select>
-          <span className="text-xs text-slate-500">第 {page} 页</span>
-          <button type="button" disabled={page <= 1 || center.query.loading} onClick={() => void changePage(page - 1)} className="rounded border border-slate-300 px-2 py-1 text-xs disabled:opacity-40">上一页</button>
-          <button type="button" disabled={!center.data.hasMore || center.query.loading} onClick={() => void changePage(page + 1)} className="rounded border border-slate-300 px-2 py-1 text-xs disabled:opacity-40">下一页</button>
+      <Surface className="shrink-0 overflow-hidden">
+        <div className="px-4 py-4 sm:px-5">
+          <PageHeader
+            title="投稿中心"
+            description="执行普通平台队列、已确认付费批次，并集中处理需要人工核对的异常结果。"
+            eyebrow="Publication Operations"
+          />
         </div>
-        <div className="mt-3 flex min-w-0 flex-wrap gap-2" role="tablist" aria-label="投稿中心分区">
-          {(
-            [
-              ["regular", "普通平台队列"],
-              ["paid", "已确认付费批次"],
-              ["attention", "需处理事项"],
-            ] as const
-          ).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              role="tab"
-              aria-selected={section === value}
-              onClick={() => setSection(value)}
-              className={`rounded-md px-3 py-2 text-xs font-semibold ${
-                section === value
-                  ? "bg-slate-900 text-white"
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
-            >
-              {label}
-              {value === "attention" && attentionSnapshot.items.length > 0
-                ? ` (${attentionSnapshot.items.length})`
-                : ""}
-            </button>
-          ))}
-        </div>
-      </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 border-t border-slate-100 bg-slate-50/55 px-4 py-2.5 sm:px-5">
+          <label
+            className="text-[11px] font-semibold text-slate-500"
+            htmlFor="submission-center-client-filter"
+          >
+            客户
+          </label>
+          <select
+            id="submission-center-client-filter"
+            value={clientFilter}
+            onChange={(event) => void changeClientFilter(event.target.value)}
+            className="h-8 min-w-36 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-700"
+          >
+            <option value="">全部客户</option>
+            {content.snapshot.clients.map((client) => (
+              <option key={client.id} value={client.id}>
+                {client.name || client.id}
+              </option>
+            ))}
+          </select>
+          <span className="ml-auto text-[11px] font-medium text-slate-400">
+            第 {page} 页
+          </span>
+          <Button
+            size="sm"
+            variant="ghost"
+            aria-label="上一页"
+            title="上一页"
+            disabled={page <= 1 || center.query.loading}
+            onClick={() => void changePage(page - 1)}
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            aria-label="下一页"
+            title="下一页"
+            disabled={!center.data.hasMore || center.query.loading}
+            onClick={() => void changePage(page + 1)}
+          >
+            <ChevronRight className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+
+        <div
+          className="flex min-w-0 flex-wrap gap-1 border-t border-slate-100 px-3 sm:px-4"
+          role="tablist"
+          aria-label="投稿中心分区"
+        >
+          {SECTIONS.map((item) => {
+            const active = section === item.id;
+            const attentionCount =
+              item.id === "attention" ? attentionSnapshot.items.length : 0;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                title={item.description}
+                onClick={() => setSection(item.id)}
+                className={`relative flex min-h-11 items-center gap-1.5 px-3 text-xs font-semibold transition-colors ${
+                  active
+                    ? "text-blue-600"
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                {item.label}
+                {attentionCount > 0 && (
+                  <span className="rounded-full bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold text-rose-600">
+                    {attentionCount}
+                  </span>
+                )}
+                {active && (
+                  <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-blue-600" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </Surface>
+
+      <div className="min-h-0 flex-1 overflow-y-auto pr-0.5">
         {section === "regular" && (
-          <div className="h-full p-1">
+          <div className="h-full">
             {center.data.failures?.length > 0 && (
-              <p role="status" className="mb-3 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-                部分投稿中心分区暂时无法读取：{center.data.failures.map((failure) => failure.section).join("、")}。可点击刷新重试。
+              <p
+                role="status"
+                className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800"
+              >
+                部分投稿中心分区暂时无法读取：
+                {center.data.failures
+                  .map((failure) => failure.section)
+                  .join("、")}
+                。可点击刷新重试。
               </p>
             )}
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="text-base font-semibold text-slate-800">普通平台队列</h2>
-                <p className="mt-1 text-xs text-slate-500">
-                  文章库负责发起投稿；队列查看与操作集中在此处。
+                <h2 className="text-sm font-bold text-slate-800">
+                  普通平台队列
+                </h2>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  文章库负责发起投稿；这里负责查看执行进度和控制队列节奏。
                 </p>
               </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
+              <div className="flex flex-wrap gap-1.5">
+                <Button
+                  size="sm"
                   disabled={groupQuery.loading}
-                  onClick={() => void submissionCenter.feature.refresh("manual")}
-                  className="rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40"
+                  onClick={() =>
+                    void submissionCenter.feature.refresh("manual")
+                  }
                 >
-                  <RefreshCw className={`mr-1 inline h-3.5 w-3.5 ${groupQuery.loading ? "animate-spin" : ""}`} />
+                  <RefreshCw
+                    className={`h-3.5 w-3.5 ${
+                      groupQuery.loading ? "animate-spin" : ""
+                    }`}
+                  />
                   {groupQuery.loading ? "刷新中…" : "刷新"}
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
                   disabled={commands.startAllGroups.busy}
                   onClick={() => void feature.startAllGroups()}
-                  className="rounded bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
                 >
+                  <CirclePlay className="h-3.5 w-3.5" />
                   开始全部
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  size="sm"
                   disabled={commands.pauseAllGroups.busy}
                   onClick={() => void feature.pauseAllGroups()}
-                  className="rounded border border-amber-300 px-3 py-2 text-xs font-semibold text-amber-800 disabled:opacity-40"
                 >
+                  <CirclePause className="h-3.5 w-3.5" />
                   暂停全部
-                </button>
+                </Button>
               </div>
             </div>
+
             {groupQuery.error && (
-              <p role="alert" className="mb-3 rounded border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+              <p
+                role="alert"
+                className="mb-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700"
+              >
                 {groupQuery.error.userMessage}
               </p>
             )}
-            {(actionError || commands.removePendingQueueItems.error?.userMessage) && (
-              <p role="alert" className="mb-3 rounded border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
-                {actionError || commands.removePendingQueueItems.error?.userMessage}
+            {(actionError ||
+              commands.removePendingQueueItems.error?.userMessage) && (
+              <p
+                role="alert"
+                className="mb-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700"
+              >
+                {actionError ||
+                  commands.removePendingQueueItems.error?.userMessage}
               </p>
             )}
+
             <RegularQueueGroupsPanel
               groups={groups}
               loading={groupQuery.loading}
@@ -343,27 +461,69 @@ export default function PlatformWorkbench({
               }
               onRemove={(item) => void removePendingItem(item)}
             />
+
             {center.data.hasMore && (
-              <p className="mt-3 text-center text-xs text-slate-500">当前为分页结果，还有更多队列项。</p>
+              <p className="mt-3 text-center text-[11px] text-slate-500">
+                当前为分页结果，还有更多队列项。
+              </p>
             )}
-            <section aria-labelledby="queue-residue-heading" className="mt-4 rounded border border-slate-200 bg-slate-50 p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
+
+            <Surface
+              tone="muted"
+              aria-labelledby="queue-residue-heading"
+              className="mt-4 p-3.5"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h3 id="queue-residue-heading" className="text-sm font-semibold text-slate-800">已删除文章队列残留</h3>
-                  <p className="mt-1 text-xs text-slate-500">只检查并清理本地队列残留；不会创建投稿、重试远端请求或删除发布事实。</p>
+                  <h3
+                    id="queue-residue-heading"
+                    className="text-xs font-bold text-slate-700"
+                  >
+                    已删除文章队列残留
+                  </h3>
+                  <p className="mt-1 max-w-3xl text-[11px] leading-5 text-slate-500">
+                    只检查并清理本地队列残留；不会创建投稿、重试远端请求或删除发布事实。
+                  </p>
                 </div>
-                <button type="button" disabled={residueBusy} onClick={() => void feature.inspectResidue()} className="rounded border border-slate-300 bg-white px-3 py-2 text-xs disabled:opacity-40">
+                <Button
+                  size="sm"
+                  disabled={residueBusy}
+                  onClick={() => void feature.inspectResidue()}
+                >
                   {residue.phase === "checking" ? "检查中…" : "检查残留"}
-                </button>
+                </Button>
               </div>
               {residue.phase === "awaiting-confirmation" && (
-                <div className="mt-3 flex flex-wrap items-center gap-2 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
-                  <span>可清理 {residue.cleanableCount} 项，另有 {residue.reportedCount} 项仅报告。</span>
-                  <button type="button" disabled={commands.cleanupResidue.busy} onClick={() => void feature.cleanupResidue({ confirmed: true })} className="rounded border border-amber-300 bg-white px-2 py-1 font-semibold disabled:opacity-40">确认清理本地残留</button>
+                <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[11px] text-amber-900">
+                  <span>
+                    可清理 {residue.cleanableCount} 项，另有 {residue.reportedCount} 项仅报告。
+                  </span>
+                  <Button
+                    size="sm"
+                    disabled={commands.cleanupResidue.busy}
+                    onClick={() =>
+                      void feature.cleanupResidue({ confirmed: true })
+                    }
+                  >
+                    确认清理本地残留
+                  </Button>
                 </div>
               )}
-              {residue.feedback && <p role={residue.feedback.kind === "error" ? "alert" : "status"} className={`mt-2 text-xs ${residue.feedback.kind === "error" ? "text-rose-700" : "text-emerald-700"}`}>{residue.feedback.text}</p>}
-            </section>
+              {residue.feedback && (
+                <p
+                  role={
+                    residue.feedback.kind === "error" ? "alert" : "status"
+                  }
+                  className={`mt-2 text-[11px] ${
+                    residue.feedback.kind === "error"
+                      ? "text-rose-700"
+                      : "text-emerald-700"
+                  }`}
+                >
+                  {residue.feedback.text}
+                </p>
+              )}
+            </Surface>
           </div>
         )}
 
@@ -387,8 +547,15 @@ export default function PlatformWorkbench({
         )}
 
         {section === "attention" && (
-          <div className="grid gap-3 p-1">
-            {attentionError && <p role="alert" className="rounded border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{attentionError}</p>}
+          <div className="grid gap-3">
+            {attentionError && (
+              <p
+                role="alert"
+                className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700"
+              >
+                {attentionError}
+              </p>
+            )}
             <ArticleAttentionPanel
               snapshot={attentionSnapshot}
               onRefresh={attentionFeature.refresh}
@@ -402,18 +569,15 @@ export default function PlatformWorkbench({
               onOpenArticleLibrary={openSubmission}
               onInspect={setAttentionDetail}
               onOpenArticle={openArticle}
-              onAttentionAction={(item, action) => setAttentionDetail(item)}
+              onAttentionAction={(item) => setAttentionDetail(item)}
             />
-            <button
-              type="button"
-              className="justify-self-start rounded border border-slate-300 px-3 py-2 text-xs text-slate-700"
-              onClick={onOpenOrders}
-            >
+            <Button className="justify-self-start" onClick={onOpenOrders}>
               查看真实订单
-            </button>
+            </Button>
           </div>
         )}
       </div>
+
       <ArticleAttentionDetailDrawer
         item={attentionDetail}
         onClose={() => setAttentionDetail(null)}
