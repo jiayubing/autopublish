@@ -10,6 +10,7 @@ const { buildPrompt } = require("../../src/content/prompt-builder");
 const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
 const RETRY_DELAYS = [5000, 15000];
+const DEFAULT_MAX_RETAINED_OPERATIONS = 50;
 const RETRYABLE_CODES = new Set([
   "AI_RATE_LIMITED", "AI_TIMEOUT", "AI_NETWORK_ERROR", "AI_SERVER_ERROR", "AI_REQUEST_FAILED",
   "ECONNRESET", "ECONNREFUSED", "ENETUNREACH", "ETIMEDOUT", "EAI_AGAIN",
@@ -126,6 +127,10 @@ function createClientGenerationService(options) {
   const listeners = new Set();
   const operations = new Map();
   const latestByClient = new Map();
+  const terminalOperationIds = [];
+  const maxRetainedOperations = Number.isSafeInteger(value.maxRetainedOperations) && value.maxRetainedOperations > 0
+    ? value.maxRetainedOperations
+    : DEFAULT_MAX_RETAINED_OPERATIONS;
   let disposed = false;
 
   function snapshot(operation) {
@@ -173,6 +178,17 @@ function createClientGenerationService(options) {
     operation.status = counts.failed > 0 ? (counts.succeeded > 0 ? "partial" : "failed") : "completed";
     operation.updatedAt = now();
     emit(operation);
+    const existingIndex = terminalOperationIds.indexOf(operation.id);
+    if (existingIndex >= 0) terminalOperationIds.splice(existingIndex, 1);
+    terminalOperationIds.push(operation.id);
+    while (terminalOperationIds.length > maxRetainedOperations) {
+      const evictedId = terminalOperationIds.shift();
+      const evicted = operations.get(evictedId);
+      if (evicted && evicted.status !== "running") {
+        operations.delete(evictedId);
+        if (latestByClient.get(evicted.clientId) === evicted) latestByClient.delete(evicted.clientId);
+      }
+    }
   }
 
   function findExisting(operationId) {
@@ -433,6 +449,9 @@ function createClientGenerationService(options) {
     active.forEach(function(operation) { operation.controller.abort(); });
     await Promise.allSettled(active.map(function(operation) { return operation.promise; }));
     listeners.clear();
+    operations.clear();
+    latestByClient.clear();
+    terminalOperationIds.length = 0;
   }
 
   return {

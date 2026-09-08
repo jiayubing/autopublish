@@ -23,6 +23,7 @@ const {
 const {
   createAiContentService,
 } = require("../desktop/services/ai-content-service");
+const { createClientGenerationService } = require("../desktop/services/client-generation-service");
 const {
   createArticleManagementSnapshot,
 } = require("../desktop/services/article-management-snapshot");
@@ -90,6 +91,14 @@ function createHarness(options) {
     },
     now: () => NOW,
   });
+  const clientKnowledge = {
+    getClient(clientId) {
+      return { id: clientId, displayName: "合成客户" };
+    },
+    listClients() {
+      return [{ id: CLIENT_ID, displayName: "合成客户" }];
+    },
+  };
   let generatedId = 0;
   const aiContentService = createAiContentService({
     workspaceRoot: root,
@@ -97,14 +106,13 @@ function createHarness(options) {
     operationalStore: store,
     articleMutationCoordinator: coordinator,
     articleTrashService: removalService,
-    clientKnowledge: {
-      getClient(clientId) {
-        return { id: clientId, displayName: "合成客户" };
-      },
-      listClients() {
-        return [{ id: CLIENT_ID, displayName: "合成客户" }];
-      },
-    },
+    clientKnowledge,
+  });
+  const clientGenerationService = createClientGenerationService({
+    workspaceRoot: root,
+    contentStore,
+    articleMutationCoordinator: coordinator,
+    clientKnowledge,
     researchStore: {
       getResearch() {
         return {
@@ -172,6 +180,7 @@ function createHarness(options) {
     contentStore,
     coordinator,
     removalService,
+    clientGenerationService,
     aiContentService,
     snapshot,
     bumpRevision() {
@@ -181,7 +190,9 @@ function createHarness(options) {
     add(valueArticle) {
       articleStore.createArticle(valueArticle);
     },
-    close() {
+    async close() {
+      await clientGenerationService.dispose();
+      await aiContentService.dispose();
       store.close();
       fs.rmSync(root, { recursive: true, force: true });
     },
@@ -289,7 +300,7 @@ test("public article generation, explicit save, and eligibility use no review or
   const harness = createHarness();
   t.after(() => harness.close());
 
-  const generated = await harness.aiContentService.generateArticle({
+  const generated = await harness.clientGenerationService.generateArticle({
     clientId: CLIENT_ID,
     platform: "toutiao",
     templateId: "ticket-25-b-template",

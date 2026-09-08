@@ -1,5 +1,8 @@
 const assert = require("node:assert/strict");
 const { it } = require("node:test");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
 const { createGenerationExecutionScheduler } = require("../src/content/generation-execution-scheduler");
 const { createAiExecutionService } = require("../desktop/services/ai-execution-service");
 const { createClientGenerationService } = require("../desktop/services/client-generation-service");
@@ -51,6 +54,163 @@ function baseInput(clientId, operationId, count, concurrency) {
     generationOperationId: operationId,
   };
 }
+
+function createSyntheticService(overrides = {}) {
+  let sequence = 0;
+  return createClientGenerationService({
+    workspaceRoot: ".",
+    contentStore: createMemoryContentStore(),
+    clientKnowledge: { getClient: (id) => ({ id, name: id }) },
+    researchStore: { getResearch: (clientId, id) => ({ question: id, answerText: "synthetic answer", references: [] }) },
+    materialStore: { getSelectedMaterials: async (clientId, ids) => ids.map((id) => ({ id, name: id, content: "synthetic facts" })) },
+    templateStore: { getCatalogTemplate: () => ({ id: "geo", body: "synthetic template", scenario: "guide" }) },
+    buildPrompt: () => ({ system: "synthetic", user: "synthetic" }),
+    aiClientFactory: () => ({ complete: async () => "# Synthetic title\n\nSynthetic body" }),
+    createId: () => `article-${++sequence}`,
+    ...overrides,
+  });
+}
+
+it("reuses persisted single and child results after restart without creating an AI client", async (t) => {
+  for (const count of [1, 2]) {
+    const contentStore = createMemoryContentStore();
+    const service = createSyntheticService({ contentStore });
+    t.after(() => service.dispose());
+    const input = baseInput("client-a", `restart-${count}`, count, 1);
+    const original = await service.generateArticle(input);
+    assert.equal(contentStore.articles.length, count);
+    assert.deepEqual(contentStore.articles.map((article) => article.generationOperationId),
+      count === 1 ? ["restart-1"] : ["restart-2-1", "restart-2-2"]);
+    await service.dispose();
+
+    let providerCalls = 0;
+    const restarted = createSyntheticService({ contentStore, aiClientFactory: () => {
+      providerCalls += 1;
+      throw new Error("Persisted results must not invoke the provider");
+    } });
+    t.after(() => restarted.dispose());
+    assert.deepEqual(await restarted.generateArticle(input), original);
+    assert.equal(contentStore.articles.length, count);
+    assert.equal(providerCalls, 0);
+  }
+});
+
+it("deduplicates concurrent single-generation calls and persists one article", async (t) => {
+  const gate = deferred();
+  const contentStore = createMemoryContentStore();
+  let providerCalls = 0;
+  const service = createSyntheticService({ contentStore, aiClientFactory: () => ({ complete: async () => {
+    providerCalls += 1;
+    await gate.promise;
+    return "# One title\n\nOne body";
+  } }) });
+  t.after(async () => { gate.resolve(); await service.dispose(); });
+  assert.equal(providerCalls, 0);
+  const input = baseInput("client-a", "duplicate-operation", 1, 1);
+  const first = service.generateArticle(input);
+  const second = service.generateArticle(input);
+  await waitFor(() => providerCalls > 0);
+  assert.equal(service.getState("client-a").status, "running");
+  gate.resolve();
+  const [article, repeated] = await Promise.all([first, second]);
+  assert.deepEqual(repeated, article);
+  assert.equal(article.generationOperationId, "duplicate-operation");
+  assert.equal(contentStore.articles.length, 1);
+  assert.equal(providerCalls, 1);
+  assert.equal(service.getState("client-a").status, "completed");
+});
+
+it("reads materials by logical client identity and persists ordered source snapshots", async (t) => {
+  const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "generation-logical-client-"));
+  const directory = path.join(workspaceRoot, "clients", "physical-client");
+  t.after(() => fs.rmSync(workspaceRoot, { recursive: true, force: true }));
+  fs.mkdirSync(directory, { recursive: true });
+  fs.writeFileSync(path.join(directory, "client.json"), JSON.stringify({ id: "logical-client", name: "Logical Client" }));
+  fs.writeFileSync(path.join(directory, "brand.md"), "logical client facts");
+  const service = createSyntheticService({ workspaceRoot, clientKnowledge: undefined, materialStore: undefined });
+  try {
+    const input = { ...baseInput("logical-client", "logical-operation", 1, 1), materialIds: ["brand.md"], researchQueryIds: ["question-2", "question-1"] };
+    const article = await service.generateArticle(input);
+    assert.equal(article.clientId, "logical-client");
+    assert.deepEqual(article.materialSnapshots.map(({ name, content }) => ({ name, content })), [{ name: "brand.md", content: "logical client facts" }]);
+    assert.deepEqual(article.researchSnapshots.map((source) => source.questionId), ["question-2", "question-1"]);
+    const singleSource = await service.generateArticle({ ...input, generationOperationId: "single-source", researchQueryIds: undefined, researchQueryId: "question-1" });
+    assert.deepEqual(singleSource.researchSnapshots.map((source) => source.questionId), ["question-1"]);
+  } finally {
+    await service.dispose();
+  }
+});
+
+it("rejects invalid generation selections and stale templates before invoking AI", async (t) => {
+  let providerCalls = 0;
+  const contentStore = createMemoryContentStore();
+  const service = createSyntheticService({ contentStore,
+    templateStore: { listCatalog: () => ({ revision: "current" }) },
+    aiClientFactory: () => { providerCalls += 1; throw new Error("Must reject before invoking AI"); },
+  });
+  t.after(() => service.dispose());
+  const oversized = Array.from({ length: 51 }, (_, index) => `source-${index}`);
+  const cases = [
+    [{ clientId: "" }, "CONTENT_INPUT_INVALID"],
+    [{ platform: "" }, "CONTENT_INPUT_INVALID"],
+    [{ templateId: "" }, "CONTENT_INPUT_INVALID"],
+    [{ generationOperationId: "../operation" }, "CONTENT_INPUT_INVALID"],
+    [{ articleCount: 101 }, "CONTENT_INPUT_INVALID"],
+    [{ researchQueryIds: [] }, "GEO_RESEARCH_REQUIRED"],
+    [{ researchQueryIds: ["question", "question"] }, "CONTENT_INPUT_INVALID"],
+    [{ researchQueryIds: oversized }, "CONTENT_INPUT_INVALID"],
+    [{ materialIds: [] }, "CLIENT_MATERIAL_REQUIRED"],
+    [{ materialIds: ["brand", "brand"] }, "CLIENT_MATERIAL_INVALID"],
+    [{ materialIds: ["../brand"] }, "CLIENT_MATERIAL_INVALID"],
+    [{ templateCatalogRevision: "old" }, "TEMPLATE_CATALOG_STALE"],
+  ];
+  for (const [overrides, code] of cases) {
+    assert.throws(() => service.generateArticle({ ...baseInput("client-a", "invalid-operation", 1, 1), ...overrides }), { code });
+  }
+  assert.equal(providerCalls, 0);
+  assert.equal(contentStore.articles.length, 0);
+});
+
+it("preserves safe AI configuration failures without retrying or persisting articles", async (t) => {
+  let providerCalls = 0;
+  const contentStore = createMemoryContentStore();
+  const service = createSyntheticService({ contentStore, aiClientFactory: () => {
+    providerCalls += 1;
+    throw Object.assign(new Error("AI client configuration is invalid"), { code: "AI_CONFIG_INVALID" });
+  } });
+  t.after(() => service.dispose());
+  assert.equal(providerCalls, 0);
+  await assert.rejects(service.generateArticle(baseInput("client-a", "config-failure", 1, 1)), {
+    code: "AI_CONFIG_INVALID", message: "AI client configuration is invalid",
+  });
+  assert.equal(providerCalls, 1);
+  assert.equal(contentStore.articles.length, 0);
+});
+
+it("disposal aborts an active request and prevents queued work from starting", async (t) => {
+  const contentStore = createMemoryContentStore();
+  let signal;
+  let providerCalls = 0;
+  const service = createSyntheticService({ contentStore, aiClientFactory: () => ({
+    complete(messages, options) {
+      providerCalls += 1;
+      signal = options.signal;
+      return new Promise((resolve, reject) => {
+        signal.addEventListener("abort", () => reject(Object.assign(new Error("Aborted"), { code: "AI_ABORTED" })), { once: true });
+      });
+    },
+  }) });
+  t.after(() => service.dispose());
+  const pending = service.generateArticle(baseInput("client-a", "dispose-operation", 2, 1));
+  await waitFor(() => signal);
+  await service.dispose();
+  const result = await pending;
+  assert.equal(signal.aborted, true);
+  assert.deepEqual(result.failures, [{ index: 0, code: "AI_ABORTED" }, { index: 1, code: "AI_ABORTED" }]);
+  assert.equal(providerCalls, 1);
+  assert.equal(contentStore.articles.length, 0);
+  assert.throws(() => service.start(baseInput("client-a", "after-dispose", 1, 1)), { code: "CONTENT_RUNTIME_DISPOSED" });
+});
 
 it("client generation allows different clients concurrently while shared scheduler caps total AI work", async (t) => {
   const scheduler = createGenerationExecutionScheduler({ maxConcurrency: 4 });
@@ -176,6 +336,12 @@ it("client generation keeps successful articles when one task fails and retries 
   service.start(baseInput("client-a", "partial-operation", 3, 2));
   const partial = await service.waitForOperation("partial-operation");
   assert.equal(partial.status, "partial");
+  assert.deepEqual(partial.failures, [{ index: 1, code: "SYNTHETIC_FAILURE" }]);
+  assert.deepEqual(partial.articles.map((item) => [item.index, item.article.generationOperationId]), [
+    [0, "partial-operation-1"], [2, "partial-operation-3"],
+  ]);
+  assert.deepEqual(await service.generateArticle(baseInput("client-a", "partial-operation", 3, 2)), partial);
+  assert.equal(Array.from(calls.values()).reduce((total, count) => total + count, 0), 3);
   let state = service.getState("client-a");
   assert.deepEqual(state.counts, { total: 3, pending: 0, running: 0, succeeded: 2, failed: 1 });
   assert.equal(contentStore.articles.length, 2, "successful tasks stay persisted after a sibling failure");
@@ -227,4 +393,41 @@ it("shared generation scheduler rotates queued groups instead of draining one gr
   assert.equal(started[3], "A3");
   gates[2].resolve();
   await Promise.all(promises);
+});
+
+it("bounds retained terminal operations and clears them on dispose", async () => {
+  const contentStore = createMemoryContentStore();
+  let sequence = 0;
+  const service = createClientGenerationService({
+    workspaceRoot: ".",
+    contentStore,
+    maxRetainedOperations: 2,
+    clientKnowledge: { getClient: (clientId) => ({ id: clientId, name: clientId }) },
+    researchStore: {},
+    materialStore: {},
+    templateStore: {},
+    aiClientFactory: () => ({ complete: async () => "unused" }),
+    articleGeneratorFactory: () => ({
+      async generateArticle(input) {
+        sequence += 1;
+        return {
+          id: `article-${sequence}`,
+          clientId: input.clientId,
+          title: input.generationOperationId,
+          content: "synthetic",
+          status: "generated",
+          generationOperationId: input.generationOperationId,
+        };
+      },
+    }),
+  });
+
+  for (const [clientId, operationId] of [["client-a", "operation-a"], ["client-b", "operation-b"], ["client-c", "operation-c"]]) {
+    service.start(baseInput(clientId, operationId, 1, 1));
+    await service.waitForOperation(operationId);
+  }
+  await assert.rejects(service.waitForOperation("operation-a"), { code: "CONTENT_GENERATION_OPERATION_NOT_FOUND" });
+
+  await service.dispose();
+  await assert.rejects(service.waitForOperation("operation-b"), { code: "CONTENT_GENERATION_OPERATION_NOT_FOUND" });
 });

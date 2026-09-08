@@ -68,9 +68,14 @@ async function createContentProductionComposition(options) {
       ),
     );
     const generationScheduler = ownService(
-      require("../../src/content/generation-execution-scheduler").createGenerationExecutionScheduler({
-        maxConcurrency: value.generationMaxConcurrency === undefined ? 4 : value.generationMaxConcurrency,
-      }),
+      require("../../src/content/generation-execution-scheduler").createGenerationExecutionScheduler(
+        {
+          maxConcurrency:
+            value.generationMaxConcurrency === undefined
+              ? 4
+              : value.generationMaxConcurrency,
+        },
+      ),
     );
     function combinedGenerationState() {
       const scheduled = generationScheduler.getState();
@@ -83,7 +88,9 @@ async function createContentProductionComposition(options) {
           maxConcurrency: scheduled.maxConcurrency,
         };
       }
-      return typeof value.getBatchState === "function" ? value.getBatchState() || {} : {};
+      return typeof value.getBatchState === "function"
+        ? value.getBatchState() || {}
+        : {};
     }
     const aiProviderService = ownService(
       require("../services/ai-provider-service").createAiProviderService({
@@ -93,11 +100,12 @@ async function createContentProductionComposition(options) {
         getBatchState: combinedGenerationState,
       }),
     );
-    const aiExecutionService = require("../services/ai-execution-service").createAiExecutionService({
-      scheduler: generationScheduler,
-      aiProviderService,
-    });
-    const legacyAiContentService = ownService(
+    const aiExecutionService =
+      require("../services/ai-execution-service").createAiExecutionService({
+        scheduler: generationScheduler,
+        aiProviderService,
+      });
+    const articleContentService = ownService(
       require("../services/ai-content-service").createAiContentService({
         workspaceRoot: value.workspaceRoot,
         paths: value.paths,
@@ -121,55 +129,63 @@ async function createContentProductionComposition(options) {
           value.onDataInvalidated("ARTICLE_REMOVAL_TRANSACTION_CHANGED");
         },
         onDataInvalidated: value.onDataInvalidated,
-        aiClientFactory: function () {
-          return aiExecutionService.createClient("client-generation:legacy");
-        },
       }),
     );
     const clientGenerationService = ownService(
-      require("../services/client-generation-service").createClientGenerationService({
-        workspaceRoot: value.workspaceRoot,
-        paths: value.paths,
-        contentStore: value.contentStore,
-        articleMutationCoordinator: value.articleMutationCoordinator,
-        onDataInvalidated: value.onDataInvalidated,
-        aiClientFactory: function (groupId) {
-          return aiExecutionService.createClient(groupId);
+      require("../services/client-generation-service").createClientGenerationService(
+        {
+          workspaceRoot: value.workspaceRoot,
+          paths: value.paths,
+          contentStore: value.contentStore,
+          articleMutationCoordinator: value.articleMutationCoordinator,
+          onDataInvalidated: value.onDataInvalidated,
+          aiClientFactory: function (groupId) {
+            return aiExecutionService.createClient(groupId);
+          },
         },
+      ),
+    );
+    // Article management and client generation have separate owners. The
+    // facade only maps the public IPC surface and must not remain mutable.
+    const aiContentService = Object.freeze(
+      Object.assign({}, articleContentService, {
+        generateArticle: clientGenerationService.generateArticle,
+        startClientGeneration: clientGenerationService.start,
+        getClientGenerationState: clientGenerationService.getState,
+        retryClientGeneration: clientGenerationService.retryFailed,
+        subscribeClientGeneration: clientGenerationService.subscribe,
+        getState: clientGenerationService.getState,
       }),
     );
-    const aiContentService = Object.assign({}, legacyAiContentService, {
-      generateArticle: clientGenerationService.generateArticle,
-      startClientGeneration: clientGenerationService.start,
-      getClientGenerationState: clientGenerationService.getState,
-      retryClientGeneration: clientGenerationService.retryFailed,
-      subscribeClientGeneration: clientGenerationService.subscribe,
-      getState: clientGenerationService.getState,
-    });
-    const removalRecoveryScheduler = aiContentService.recoverPendingArticleRemovals
-      ? ownService(
-          require("../../src/content/article-removal-recovery-scheduler").createArticleRemovalRecoveryScheduler(
-            {
-              recover: aiContentService.recoverPendingArticleRemovals,
-              onDiagnostic: function (diagnostic) {
-                try {
-                  value.runtimeDiagnosticsService &&
-                    value.runtimeDiagnosticsService.report &&
-                    value.runtimeDiagnosticsService.report(diagnostic);
-                } catch (_) {
-                  reportContentProductionDiagnostic(
-                    "CONTENT_PRODUCTION_RECOVERY_DIAGNOSTIC_FAILED",
-                    "recovery-diagnostic",
-                  );
-                }
+    const removalRecoveryScheduler =
+      articleContentService.recoverPendingArticleRemovals
+        ? ownService(
+            require("../../src/content/article-removal-recovery-scheduler").createArticleRemovalRecoveryScheduler(
+              {
+                recover: articleContentService.recoverPendingArticleRemovals,
+                onDiagnostic: function (diagnostic) {
+                  try {
+                    value.runtimeDiagnosticsService &&
+                      value.runtimeDiagnosticsService.report &&
+                      value.runtimeDiagnosticsService.report(diagnostic);
+                  } catch (_) {
+                    reportContentProductionDiagnostic(
+                      "CONTENT_PRODUCTION_RECOVERY_DIAGNOSTIC_FAILED",
+                      "recovery-diagnostic",
+                    );
+                  }
+                },
               },
-            },
-          ),
-        )
-      : null;
+            ),
+          )
+        : null;
     const batchAiProvider = {
-      createClient: function () { return aiExecutionService.createClient("batch-generation"); },
-      getFingerprint: function () { return aiProviderService.getFingerprint(); },
+      createClient: function () {
+        return aiExecutionService.createClient("batch-generation");
+      },
+      getFingerprint: function () {
+        return aiProviderService.getFingerprint();
+      },
     };
     const contentGenerationBatchService = ownService(
       require("../services/content-generation-batch-service").createContentGenerationBatchService(
@@ -191,7 +207,7 @@ async function createContentProductionComposition(options) {
       aiContentService,
       clientGenerationService,
       contentGenerationBatchService,
-      articleLifecycleOwner: aiContentService,
+      articleLifecycleOwner: articleContentService,
       start: function () {
         if (disposed || started) return;
         started = true;
