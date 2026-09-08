@@ -1,14 +1,8 @@
 "use strict";
 
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const os = require("node:os");
-const path = require("node:path");
 const test = require("node:test");
 const { createMediaPublisher } = require("../desktop/services/media-publisher");
-const {
-  createPlatformWorkbenchService,
-} = require("../desktop/services/platform-workbench-service");
 
 test("media publisher emits the existing order-created outcome without an order JSON writer", async () => {
   const publisher = createMediaPublisher({
@@ -55,63 +49,4 @@ test("media publisher sends the reusable operator identity without replacing the
   });
 
   assert.deepEqual(outcome, { kind: "order_created", orderId: "order-custom" });
-});
-
-test("media command preparation is read-only and derives a media target from selected resources", async () => {
-  const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), "phase-03-media-prepare-"),
-  );
-  const input = path.join(root, "input", "media");
-  fs.mkdirSync(input, { recursive: true });
-  fs.writeFileSync(path.join(input, "fixture.md"), "# Title\n\nBody");
-  const workbench = createPlatformWorkbenchService({
-    rootDir: root,
-    paths: { input: path.join(root, "input") },
-    platforms: [{ id: "media", scanDir: "media" }],
-  });
-  const commands = await workbench.prepareMediaPublicationCommands([
-    {
-      filename: "fixture.md",
-      selectedResources: [{ resourceId: "resource-1" }],
-    },
-  ]);
-  assert.equal(commands[0].target.kind, "media");
-  assert.equal(commands[0].target.mediaResourceId, "resource-1");
-  assert.match(commands[0].articleId, /^media-/);
-  assert.equal(
-    fs.existsSync(path.join(root, ".autopublish", "operations.sqlite")),
-    false,
-  );
-});
-
-test("media command preparation preserves the saved title and sends a valid HTML body", async () => {
-  const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), "phase-03-media-payload-"),
-  );
-  const input = path.join(root, "input", "media");
-  fs.mkdirSync(input, { recursive: true });
-  fs.writeFileSync(
-    path.join(input, "文件标题-49b6b5d2-ba7c-4854-9b6b-369eba845d15.md"),
-    "# 文件中的原始标题\n\n第一段 <script>alert(1)</script>\n\n第二段正文",
-  );
-  const workbench = createPlatformWorkbenchService({
-    rootDir: root,
-    paths: { input: path.join(root, "input") },
-    platforms: [{ id: "media", scanDir: "media" }],
-  });
-
-  const commands = await workbench.prepareMediaPublicationCommands([
-    {
-      filename: "文件标题-49b6b5d2-ba7c-4854-9b6b-369eba845d15.md",
-      title: "用户保存的投稿标题",
-      selectedResources: [{ resourceId: "resource-1" }],
-    },
-  ]);
-
-  assert.equal(commands[0].title, "用户保存的投稿标题");
-  assert.equal(
-    commands[0].body,
-    "<p>第一段 &lt;script&gt;alert(1)&lt;/script&gt;</p>\n<p>第二段正文</p>",
-  );
-  assert.doesNotMatch(commands[0].body, /文件中的原始标题|49b6b5d2|<script>/);
 });

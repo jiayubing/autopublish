@@ -310,7 +310,6 @@ describe("source assembly and packaging contract", function() {
       "src/content/research-store.js",
       "src/content/article-store.js",
       "src/content/legacy-migration.js",
-      "src/platforms/media/adapter.js",
       "desktop/ipc/content-submission-ipc.js",
       "desktop/ipc/media-ipc.js",
       "desktop/ipc/platform-ipc.js"

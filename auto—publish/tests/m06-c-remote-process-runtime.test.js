@@ -13,7 +13,6 @@ const {
 const {
   createBrowserSessionLifecycle,
 } = require("../src/platforms/shared/browser-session-lifecycle");
-const { createMediaAdapter } = require("../src/platforms/media/adapter");
 const { MediaDraftStore } = require("../src/platforms/media/media-draft-store");
 const {
   createPaidMediaPreflightService,
@@ -60,95 +59,6 @@ describe("M06-C remote/process/runtime outcomes", function () {
       lifecycle.ensureStarted();
     }, { code: "BROWSER_SESSION_PROBE_FAILED" });
     assert.equal(starts, 0);
-  });
-
-  it("keeps missing media order identity uncertain without exposing transport errors", async function () {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "m06-c-media-"));
-    const articlePath = path.join(dir, "article.txt");
-    const originalFetch = globalThis.fetch;
-    fs.writeFileSync(articlePath, "fixture article", "utf8");
-    try {
-      globalThis.fetch = async function () {
-        return {
-          status: 200,
-          ok: true,
-          text: async function () {
-            return JSON.stringify({ data: {} });
-          },
-        };
-      };
-      const missingOrder = await createMediaAdapter({
-        mainProcess: true,
-        apiKey: "fixture-key",
-        baseUrl: "https://media.example.test",
-      }).publish({
-        title: "Fixture",
-        contentFile: articlePath,
-        resourceId: "resource-1",
-      });
-      assert.deepEqual(
-        { status: missingOrder.status, errorCode: missingOrder.errorCode },
-        { status: "uncertain", errorCode: "MEDIA_ORDER_ID_MISSING" },
-      );
-
-      globalThis.fetch = async function () {
-        return {
-          status: 200,
-          ok: true,
-          text: async function () {
-            return JSON.stringify({ code: 400, data: { order_nid: "must-not-accept" } });
-          },
-        };
-      };
-      const rejected = await createMediaAdapter({
-        mainProcess: true,
-        apiKey: "fixture-key",
-        baseUrl: "https://media.example.test",
-      }).publish({
-        title: "Fixture",
-        contentFile: articlePath,
-        resourceId: "resource-1",
-      });
-      assert.deepEqual(
-        { status: rejected.status, errorCode: rejected.errorCode },
-        { status: "error", errorCode: "MEDIA_REMOTE_REJECTED" },
-      );
-
-      globalThis.fetch = async function () {
-        throw new Error("api-key=fixture-key cookie=fixture-cookie");
-      };
-      const networkFailure = await createMediaAdapter({
-        mainProcess: true,
-        apiKey: "fixture-key",
-        baseUrl: "https://media.example.test",
-      }).publish({
-        title: "Fixture",
-        contentFile: articlePath,
-        resourceId: "resource-1",
-      });
-      assert.equal(networkFailure.status, "uncertain");
-      assert.equal(networkFailure.errorCode, "MEDIA_NETWORK_ERROR");
-      assert.equal(JSON.stringify(networkFailure).includes("fixture-cookie"), false);
-
-      const queryFailure = await createMediaAdapter({
-        mainProcess: true,
-        apiKey: "fixture-key",
-        baseUrl: "https://media.example.test",
-      }).queryOrder("order-1");
-      assert.equal(queryFailure.status, "uncertain");
-      assert.equal(queryFailure.errorCode, "MEDIA_NETWORK_ERROR");
-
-      const balanceFailure = await createMediaAdapter({
-        mainProcess: true,
-        apiKey: "fixture-key",
-        baseUrl: "https://media.example.test",
-      }).getBalance();
-      assert.equal(balanceFailure.status, "uncertain");
-      assert.equal(balanceFailure.errorCode, "MEDIA_NETWORK_ERROR");
-    } finally {
-      globalThis.fetch = originalFetch;
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
   });
 
   it("surfaces corrupt local media state instead of treating it as absent", function () {

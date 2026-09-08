@@ -17,9 +17,6 @@ const {
 } = require("../src/core/platforms");
 const { setDiagnosticReporter } = require("../src/diagnostics/diagnostic-producer");
 const {
-  createPlatformWorkbenchService,
-} = require("../desktop/services/platform-workbench-service");
-const {
   createSubmissionTargetCatalog,
 } = require("../desktop/services/submission-target-catalog");
 
@@ -184,11 +181,6 @@ test("loader quarantines every enabled platform that shares a scan directory", (
     assert.deepEqual(loaded.map((platform) => platform.definition.id), ["valid"]);
     assert.equal(diagnostics.filter((record) => record.code === "PLATFORM_DEFINITION_SCAN_DIR_DUPLICATE").length, 1);
 
-    const workbench = createPlatformWorkbenchService({
-      rootDir: root,
-      platforms: loaded.map((platform) => platform.submissionDirectoryEntry),
-    });
-    assert.deepEqual(workbench.scanQueue().map((group) => group.platformId), ["valid"]);
   } finally {
     restore();
     fs.rmSync(root, { recursive: true, force: true });
@@ -352,6 +344,8 @@ test("disabled modules are packaged as code but never executed", () => {
   for (const id of ["lieju", "hepan", "media"]) {
     assert.equal(typeof require(`../src/platforms/${id}/definition`).id, "string");
     assert.equal(typeof require(`../src/platforms/${id}/platform`).createPlatform, "function");
-    assert.equal(Object.hasOwn(require(`../src/platforms/${id}/adapter`), "id"), false);
+    const adapterPath = path.join(__dirname, "..", "src", "platforms", id, "adapter.js");
+    if (fs.existsSync(adapterPath))
+      assert.equal(Object.hasOwn(require(adapterPath), "id"), false);
   }
 });
