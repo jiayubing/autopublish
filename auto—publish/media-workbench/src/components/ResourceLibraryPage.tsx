@@ -1,5 +1,6 @@
 import type { useMediaFeature } from "../features/media/use-media-feature";
 import ResourceLibrary from "./ResourceLibrary";
+import { PageHeader } from "./ui/primitives";
 
 type MediaFeatureState = ReturnType<typeof useMediaFeature>;
 
@@ -27,34 +28,41 @@ export default function ResourceLibraryPage({
     snapshot.resources.query.error?.userMessage;
 
   return (
-    <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm">
-      <ResourceLibrary
-        resources={snapshot.resources.items}
-        selectedResourceIds={[]}
-        mode="management"
-        activeArticleLabel=""
-        poolResourceIds={snapshot.pool.memberResourceIds}
-        onTogglePool={(resource) => {
-          void feature.togglePool(resource);
-        }}
-        onRefreshResources={() => {
-          void feature.refreshResources();
-        }}
-        isRefreshingResources={snapshot.commands.refreshResources.busy}
-        onPickResource={() => {}}
-        totalResources={snapshot.resources.total}
-        resourcePage={snapshot.resources.page}
-        resourcePageSize={snapshot.resources.pageSize}
-        resourceSearch={snapshot.resources.search}
-        onResourceSearch={(query) => {
-          void feature.searchResources(query);
-        }}
-        onResourcePageChange={(page) => {
-          void feature.loadResourcePage(page, "manual");
-        }}
-        errorMessage={errorMessage}
-        statusMessage={statusMessage}
+    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3">
+      <PageHeader
+        eyebrow="Media Library"
+        title="媒体资源"
+        description="浏览媒体服务商资源、维护资源池，并为后续付费媒体投稿提供可选资源。"
       />
+      <div className="min-h-0">
+        <ResourceLibrary
+          resources={snapshot.resources.items}
+          selectedResourceIds={[]}
+          mode="management"
+          activeArticleLabel=""
+          poolResourceIds={snapshot.pool.memberResourceIds}
+          onTogglePool={(resource) => {
+            void feature.togglePool(resource);
+          }}
+          onRefreshResources={() => {
+            void feature.refreshResources();
+          }}
+          isRefreshingResources={snapshot.commands.refreshResources.busy}
+          onPickResource={() => {}}
+          totalResources={snapshot.resources.total}
+          resourcePage={snapshot.resources.page}
+          resourcePageSize={snapshot.resources.pageSize}
+          resourceSearch={snapshot.resources.search}
+          onResourceSearch={(query) => {
+            void feature.searchResources(query);
+          }}
+          onResourcePageChange={(page) => {
+            void feature.loadResourcePage(page, "manual");
+          }}
+          errorMessage={errorMessage}
+          statusMessage={statusMessage}
+        />
+      </div>
     </div>
   );
 }
