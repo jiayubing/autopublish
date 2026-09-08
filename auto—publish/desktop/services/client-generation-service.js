@@ -184,26 +184,33 @@ function createClientGenerationService(options) {
   }
 
   function saveGeneratedArticle(article) {
-    const saved = articleMutationCoordinator && typeof articleMutationCoordinator.createArticle === "function"
-      ? articleMutationCoordinator.createArticle(article)
-      : typeof contentStore.createArticle === "function"
-        ? contentStore.createArticle(article)
-        : contentStore.saveArticle(article);
+    if (articleMutationCoordinator && typeof articleMutationCoordinator.createArticle === "function") {
+      articleMutationCoordinator.createArticle(article);
+    } else if (typeof contentStore.createArticle === "function") {
+      contentStore.createArticle(article);
+    } else {
+      contentStore.saveArticle(article);
+    }
     if (typeof value.onDataInvalidated === "function") value.onDataInvalidated("ARTICLE_SAVED");
-    return saved === undefined ? article : saved;
+    return article;
   }
 
   async function generateOnce(operation, task) {
     const childOperationId = operation.articleCount === 1 ? operation.id : operation.id + "-" + String(task.index + 1);
     const existing = findExisting(childOperationId);
     if (existing) return existing;
+    const executionClient = aiClientFactory("client-generation:" + operation.id);
     const generator = articleGeneratorFactory({
       getClient: function(id) { return clientKnowledge.getClient(id); },
       researchStore: researchStore,
       materialStore: materialStore,
       templateStore: templateStore,
       buildPrompt: promptBuilder,
-      aiClient: aiClientFactory("client-generation:" + operation.id),
+      aiClient: {
+        complete: function(messages) {
+          return executionClient.complete(messages, { signal: operation.controller.signal });
+        },
+      },
       createId: createId,
       seenIds: seenIds,
     });
