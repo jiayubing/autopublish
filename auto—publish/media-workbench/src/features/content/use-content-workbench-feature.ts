@@ -41,7 +41,13 @@ import {
   subscribeDoubaoQueue,
   updateContentQuestion,
 } from "../../bridge/content";
-import { generateContentArticle, saveContentArticle } from "../../bridge/generation";
+import { saveContentArticle } from "../../bridge/generation";
+import {
+  getClientGenerationState,
+  retryClientGeneration,
+  startClientGeneration,
+  subscribeClientGeneration,
+} from "../../bridge/client-generation";
 import {
   getContentArticleRemovalTransaction,
   onContentArticleRemovalTransaction,
@@ -89,7 +95,10 @@ export function useContentWorkbenchFeature() {
         article: GeneratedContentArticle;
         expectedFingerprint: string;
       }) => saveContentArticle(input.article, input.expectedFingerprint),
-      generateArticle: generateContentArticle,
+      startClientGeneration,
+      getClientGenerationState,
+      retryClientGeneration,
+      subscribeClientGeneration,
       collectDoubaoQuestion,
       startPreparedDoubaoBatch: (input: { clientIds: string[]; mode: DoubaoBatchMode }) =>
         startPreparedDoubaoBatch(input),
