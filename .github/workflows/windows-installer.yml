@@ -1,4 +1,5 @@
 name: Windows Installer
+# Temporary branch-only trigger for the client-group workflow experience build.
 
 on:
   workflow_run:
