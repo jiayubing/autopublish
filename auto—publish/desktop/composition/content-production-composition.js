@@ -97,7 +97,7 @@ async function createContentProductionComposition(options) {
       scheduler: generationScheduler,
       aiProviderService,
     });
-    const aiContentService = ownService(
+    const legacyAiContentService = ownService(
       require("../services/ai-content-service").createAiContentService({
         workspaceRoot: value.workspaceRoot,
         paths: value.paths,
@@ -121,11 +121,31 @@ async function createContentProductionComposition(options) {
           value.onDataInvalidated("ARTICLE_REMOVAL_TRANSACTION_CHANGED");
         },
         onDataInvalidated: value.onDataInvalidated,
-        aiClientFactory: function (groupId) {
-          return aiExecutionService.createClient(groupId || "client-generation:legacy");
+        aiClientFactory: function () {
+          return aiExecutionService.createClient("client-generation:legacy");
         },
       }),
     );
+    const clientGenerationService = ownService(
+      require("../services/client-generation-service").createClientGenerationService({
+        workspaceRoot: value.workspaceRoot,
+        paths: value.paths,
+        contentStore: value.contentStore,
+        articleMutationCoordinator: value.articleMutationCoordinator,
+        onDataInvalidated: value.onDataInvalidated,
+        aiClientFactory: function (groupId) {
+          return aiExecutionService.createClient(groupId);
+        },
+      }),
+    );
+    const aiContentService = Object.assign({}, legacyAiContentService, {
+      generateArticle: clientGenerationService.generateArticle,
+      startClientGeneration: clientGenerationService.start,
+      getClientGenerationState: clientGenerationService.getState,
+      retryClientGeneration: clientGenerationService.retryFailed,
+      subscribeClientGeneration: clientGenerationService.subscribe,
+      getState: clientGenerationService.getState,
+    });
     const removalRecoveryScheduler = aiContentService.recoverPendingArticleRemovals
       ? ownService(
           require("../../src/content/article-removal-recovery-scheduler").createArticleRemovalRecoveryScheduler(
@@ -147,6 +167,10 @@ async function createContentProductionComposition(options) {
           ),
         )
       : null;
+    const batchAiProvider = {
+      createClient: function () { return aiExecutionService.createClient("batch-generation"); },
+      getFingerprint: function () { return aiProviderService.getFingerprint(); },
+    };
     const contentGenerationBatchService = ownService(
       require("../services/content-generation-batch-service").createContentGenerationBatchService(
         {
@@ -154,8 +178,7 @@ async function createContentProductionComposition(options) {
           paths: value.paths,
           contentStore: value.contentStore,
           articleMutationCoordinator: value.articleMutationCoordinator,
-          aiProviderService,
-          aiExecutionService,
+          aiProviderService: batchAiProvider,
           onDataInvalidated: value.onDataInvalidated,
         },
       ),
@@ -166,6 +189,7 @@ async function createContentProductionComposition(options) {
       aiProviderService,
       aiExecutionService,
       aiContentService,
+      clientGenerationService,
       contentGenerationBatchService,
       articleLifecycleOwner: aiContentService,
       start: function () {
