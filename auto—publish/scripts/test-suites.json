@@ -2,6 +2,7 @@
   "core": [
     "tests/ai-client.test.js",
     "tests/ai-content-service.test.js",
+    "tests/client-generation-tasks.test.js",
     "tests/article-generator.test.js",
     "tests/article-store.test.js",
     "tests/article-submission-eligibility.test.js",

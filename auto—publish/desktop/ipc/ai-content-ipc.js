@@ -1,4 +1,5 @@
 const { wrap } = require("../services/ipc-response");
+const { productionIpcRegistry } = require("./contracts/production-registry");
 const {
   projectClient,
   projectMaterial,
@@ -27,6 +28,39 @@ function generationInput(input) {
     throw contentInputError("Generation input must be an object");
   }
   return Object.assign({}, input);
+}
+
+function safeProgressTitle(value) {
+  if (typeof value !== "string") return null;
+  const title = value.replace(/[\x00-\x1f\x7f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 300);
+  return title || null;
+}
+
+function projectClientGenerationOperation(value) {
+  if (!value) return null;
+  return {
+    operationId: value.operationId,
+    clientId: value.clientId,
+    articleCount: value.articleCount,
+    concurrency: value.concurrency,
+    status: value.status,
+    counts: value.counts,
+    tasks: Array.isArray(value.tasks) ? value.tasks.slice(0, 100).map(function(task) {
+      return {
+        index: task.index,
+        status: task.status,
+        attempts: task.attempts,
+        articleId: task.articleId || null,
+        articleTitle: safeProgressTitle(task.articleTitle),
+        error: task.error ? {
+          code: typeof task.error.code === "string" ? task.error.code.slice(0, 128) : "CONTENT_GENERATION_FAILED",
+          message: "生成任务失败，请检查诊断信息。",
+        } : null,
+      };
+    }) : [],
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+  };
 }
 
 function registerAiContentIpc(deps) {
@@ -59,6 +93,24 @@ function registerAiContentIpc(deps) {
     }
     return { article: projectArticle(result) };
   }); });
+  ipcMain.handle("content:start-client-generation", function(event, input) {
+    return wrap(function() {
+      if (typeof service.startClientGeneration !== "function") throw contentInputError("Client generation is unavailable");
+      return { operation: projectClientGenerationOperation(service.startClientGeneration(generationInput(input))) };
+    });
+  });
+  ipcMain.handle("content:get-client-generation-state", function(event, input) {
+    return wrap(function() {
+      if (typeof service.getClientGenerationState !== "function") throw contentInputError("Client generation is unavailable");
+      return { operation: projectClientGenerationOperation(service.getClientGenerationState(input && input.clientId)) };
+    });
+  });
+  ipcMain.handle("content:retry-client-generation", function(event, input) {
+    return wrap(function() {
+      if (typeof service.retryClientGeneration !== "function") throw contentInputError("Client generation is unavailable");
+      return { operation: projectClientGenerationOperation(service.retryClientGeneration(generationInput(input))) };
+    });
+  });
   ipcMain.handle("content:save-article", function(event, input) {
     return wrap(function() {
       const result = service.saveArticle(input);
@@ -116,6 +168,16 @@ function registerAiContentIpc(deps) {
       return { transaction: projectArticleRemovalTransaction(service.retryArticleRemovalTransaction(input)) };
     });
   });
+
+  const eventContract = productionIpcRegistry.byCapability("generation.clientOperationChanged");
+  const unsubscribe = typeof service.subscribeClientGeneration === "function"
+    ? service.subscribeClientGeneration(function(operation) {
+        if (typeof deps.sendToRenderer !== "function") return;
+        const projected = projectClientGenerationOperation(operation);
+        deps.sendToRenderer(eventContract.channel, productionIpcRegistry.event(eventContract, projected));
+      })
+    : function() {};
+  return { dispose: unsubscribe };
 }
 
-module.exports = { registerAiContentIpc };
+module.exports = { registerAiContentIpc, projectClientGenerationOperation };

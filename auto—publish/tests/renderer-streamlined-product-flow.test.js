@@ -28,9 +28,9 @@ test("streamlined product flow keeps batch results truthful and production navig
   assert.doesNotMatch(detail, /投稿请先进入文章库/);
   assert.match(detail, /task\.articleTitle/);
 
-  assert.match(workbench, /"questions", "single", "batch"/);
+  assert.match(workbench, /"questions", "client", "batch"/);
   assert.match(workbench, /问题采集/);
-  assert.match(workbench, /单篇生成/);
+  assert.match(workbench, /客户生成/);
   assert.match(workbench, /批量生成/);
   assert.doesNotMatch(workbench, /"questions", "generate"/);
   assert.doesNotMatch(generation, /generation-mode-control/);

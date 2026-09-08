@@ -67,15 +67,45 @@ async function createContentProductionComposition(options) {
         },
       ),
     );
+    const generationScheduler = ownService(
+      require("../../src/content/generation-execution-scheduler").createGenerationExecutionScheduler(
+        {
+          maxConcurrency:
+            value.generationMaxConcurrency === undefined
+              ? 4
+              : value.generationMaxConcurrency,
+        },
+      ),
+    );
+    function combinedGenerationState() {
+      const scheduled = generationScheduler.getState();
+      if (scheduled.isRunning) {
+        return {
+          state: "running",
+          isBatchRunning: true,
+          active: scheduled.active,
+          queued: scheduled.queued,
+          maxConcurrency: scheduled.maxConcurrency,
+        };
+      }
+      return typeof value.getBatchState === "function"
+        ? value.getBatchState() || {}
+        : {};
+    }
     const aiProviderService = ownService(
       require("../services/ai-provider-service").createAiProviderService({
         userDataPath: value.userDataPath,
         paths: value.paths,
         safeStorage: value.safeStorage,
-        getBatchState: value.getBatchState,
+        getBatchState: combinedGenerationState,
       }),
     );
-    const aiContentService = ownService(
+    const aiExecutionService =
+      require("../services/ai-execution-service").createAiExecutionService({
+        scheduler: generationScheduler,
+        aiProviderService,
+      });
+    const articleContentService = ownService(
       require("../services/ai-content-service").createAiContentService({
         workspaceRoot: value.workspaceRoot,
         paths: value.paths,
@@ -99,32 +129,64 @@ async function createContentProductionComposition(options) {
           value.onDataInvalidated("ARTICLE_REMOVAL_TRANSACTION_CHANGED");
         },
         onDataInvalidated: value.onDataInvalidated,
-        aiClientFactory: function () {
-          return aiProviderService.createClient();
-        },
       }),
     );
-    const removalRecoveryScheduler = aiContentService.recoverPendingArticleRemovals
-      ? ownService(
-          require("../../src/content/article-removal-recovery-scheduler").createArticleRemovalRecoveryScheduler(
-            {
-              recover: aiContentService.recoverPendingArticleRemovals,
-              onDiagnostic: function (diagnostic) {
-                try {
-                  value.runtimeDiagnosticsService &&
-                    value.runtimeDiagnosticsService.report &&
-                    value.runtimeDiagnosticsService.report(diagnostic);
-                } catch (_) {
-                  reportContentProductionDiagnostic(
-                    "CONTENT_PRODUCTION_RECOVERY_DIAGNOSTIC_FAILED",
-                    "recovery-diagnostic",
-                  );
-                }
+    const clientGenerationService = ownService(
+      require("../services/client-generation-service").createClientGenerationService(
+        {
+          workspaceRoot: value.workspaceRoot,
+          paths: value.paths,
+          contentStore: value.contentStore,
+          articleMutationCoordinator: value.articleMutationCoordinator,
+          onDataInvalidated: value.onDataInvalidated,
+          aiClientFactory: function (groupId) {
+            return aiExecutionService.createClient(groupId);
+          },
+        },
+      ),
+    );
+    // Article management and client generation have separate owners. The
+    // facade only maps the public IPC surface and must not remain mutable.
+    const aiContentService = Object.freeze(
+      Object.assign({}, articleContentService, {
+        generateArticle: clientGenerationService.generateArticle,
+        startClientGeneration: clientGenerationService.start,
+        getClientGenerationState: clientGenerationService.getState,
+        retryClientGeneration: clientGenerationService.retryFailed,
+        subscribeClientGeneration: clientGenerationService.subscribe,
+        getState: clientGenerationService.getState,
+      }),
+    );
+    const removalRecoveryScheduler =
+      articleContentService.recoverPendingArticleRemovals
+        ? ownService(
+            require("../../src/content/article-removal-recovery-scheduler").createArticleRemovalRecoveryScheduler(
+              {
+                recover: articleContentService.recoverPendingArticleRemovals,
+                onDiagnostic: function (diagnostic) {
+                  try {
+                    value.runtimeDiagnosticsService &&
+                      value.runtimeDiagnosticsService.report &&
+                      value.runtimeDiagnosticsService.report(diagnostic);
+                  } catch (_) {
+                    reportContentProductionDiagnostic(
+                      "CONTENT_PRODUCTION_RECOVERY_DIAGNOSTIC_FAILED",
+                      "recovery-diagnostic",
+                    );
+                  }
+                },
               },
-            },
-          ),
-        )
-      : null;
+            ),
+          )
+        : null;
+    const batchAiProvider = {
+      createClient: function () {
+        return aiExecutionService.createClient("batch-generation");
+      },
+      getFingerprint: function () {
+        return aiProviderService.getFingerprint();
+      },
+    };
     const contentGenerationBatchService = ownService(
       require("../services/content-generation-batch-service").createContentGenerationBatchService(
         {
@@ -132,7 +194,7 @@ async function createContentProductionComposition(options) {
           paths: value.paths,
           contentStore: value.contentStore,
           articleMutationCoordinator: value.articleMutationCoordinator,
-          aiProviderService,
+          aiProviderService: batchAiProvider,
           onDataInvalidated: value.onDataInvalidated,
         },
       ),
@@ -141,9 +203,11 @@ async function createContentProductionComposition(options) {
     return Object.freeze({
       doubaoCollectionService,
       aiProviderService,
+      aiExecutionService,
       aiContentService,
+      clientGenerationService,
       contentGenerationBatchService,
-      articleLifecycleOwner: aiContentService,
+      articleLifecycleOwner: articleContentService,
       start: function () {
         if (disposed || started) return;
         started = true;

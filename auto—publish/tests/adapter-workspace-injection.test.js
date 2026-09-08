@@ -7,21 +7,6 @@ const { createWorkspacePaths } = require("../src/infrastructure/workspace/worksp
 const { createPlatformRuntimeContext } = require("../src/platforms/platform-runtime-context");
 const { loadPlatforms } = require("../src/core/platforms");
 
-it("media adapters scan only their injected workspace input without module reload", function() {
-  const { createMediaAdapter } = require("../src/platforms/media/adapter");
-  const one = fs.mkdtempSync(path.join(os.tmpdir(), "media-adapter-one-"));
-  const two = fs.mkdtempSync(path.join(os.tmpdir(), "media-adapter-two-"));
-  try {
-    const oneInput = path.join(one, "input", "media");
-    const twoInput = path.join(two, "input", "media");
-    fs.mkdirSync(oneInput, { recursive: true }); fs.mkdirSync(twoInput, { recursive: true });
-    fs.writeFileSync(path.join(oneInput, "one.txt"), "one"); fs.writeFileSync(path.join(twoInput, "two.txt"), "two");
-    assert.deepStrictEqual(createMediaAdapter({ paths: { mediaInput: oneInput } }).scanArticles(), []);
-    assert.deepStrictEqual(createMediaAdapter({ mainProcess: true, apiKey: "test", paths: { mediaInput: oneInput } }).scanArticles().map((x) => x.filename), ["one.txt"]);
-    assert.deepStrictEqual(createMediaAdapter({ mainProcess: true, apiKey: "test", paths: { mediaInput: twoInput } }).scanArticles().map((x) => x.filename), ["two.txt"]);
-  } finally { fs.rmSync(one, { recursive: true, force: true }); fs.rmSync(two, { recursive: true, force: true }); }
-});
-
 it("platform loader constructs current adapters from explicit workspace and browser runtime dependencies", function() {
   const one = fs.mkdtempSync(path.join(os.tmpdir(), "platform-runtime-one-"));
   const two = fs.mkdtempSync(path.join(os.tmpdir(), "platform-runtime-two-"));

@@ -30,6 +30,14 @@ const domainTypeSymbols = {
     "ContentTemplateDiagnostic",
     "ContentTemplateCatalog",
   ],
+  "types/client-generation.ts": [
+    "ClientGenerationTaskStatus",
+    "ClientGenerationOperationStatus",
+    "ClientGenerationCounts",
+    "ClientGenerationTask",
+    "ClientGenerationOperation",
+    "StartClientGenerationInput",
+  ],
   "types/generation.ts": [
     "ContentGenerationOperation",
     "GenerationBatchState",
@@ -173,6 +181,8 @@ const domainTypeSymbols = {
 const typeAliasSymbols = new Set([
   "AiProviderSource",
   "ArticleRemovalTransactionStatus",
+  "ClientGenerationOperationStatus",
+  "ClientGenerationTaskStatus",
   "ClientGroupChange",
   "ContentSubmissionItemStatus",
   "DoubaoBatchMode",
@@ -233,7 +243,7 @@ test("renderer shared types have one domain owner and no legacy barrel", () => {
     }
   }
 
-  assert.equal(expectedOwners.size, 147);
+  assert.equal(expectedOwners.size, 153);
 
   const actualDeclarations = new Map();
   const expectedOwnerFiles = Object.keys(domainTypeSymbols)
@@ -265,7 +275,7 @@ test("renderer shared types have one domain owner and no legacy barrel", () => {
     }
   }
 
-  assert.equal(actualDeclarations.size, 147);
+  assert.equal(actualDeclarations.size, 153);
   assert.deepEqual(
     [...actualDeclarations.keys()].sort(),
     [...expectedOwners.keys()].sort(),
@@ -296,6 +306,7 @@ test("renderer bridges expose named domain entries without method dispatch", () 
   const bridgeDirectory = path.join(rendererRoot, "bridge");
   for (const entry of [
     "auth.ts",
+    "client-generation.ts",
     "content.ts",
     "content-removal.ts",
     "generation.ts",

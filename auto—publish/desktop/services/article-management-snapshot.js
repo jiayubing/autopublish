@@ -169,6 +169,8 @@ function safePublishedArchive(entry, scopedClientId) {
 function createArticleManagementSnapshot(options) {
   const opts = options || {};
   const cache = new Map();
+  const latestCacheKeyByClient = new Map();
+  const latestCacheRevisionByClient = new Map();
   const workspaceIdentity = String(
     opts.workspaceIdentity || opts.workspaceRoot || "workspace",
   );
@@ -377,12 +379,26 @@ function createArticleManagementSnapshot(options) {
     }
     // Store the existing JSON read model once; each caller still owns its copy.
     const serialized = JSON.stringify(snapshot);
-    cache.set(cacheKey, serialized);
+    // Keep one revision per client. Revisions are immutable read-model keys;
+    // retaining every revision would make a long-lived desktop process grow
+    // without bound after repeated writes.
+    const previousKey = latestCacheKeyByClient.get(clientId);
+    const previousRevision = latestCacheRevisionByClient.get(clientId);
+    if (previousKey && (previousRevision === undefined || revision >= previousRevision)) {
+      cache.delete(previousKey);
+    }
+    if (previousRevision === undefined || revision >= previousRevision) {
+      cache.set(cacheKey, serialized);
+      latestCacheKeyByClient.set(clientId, cacheKey);
+      latestCacheRevisionByClient.set(clientId, revision);
+    }
     return JSON.parse(serialized);
   }
 
   function invalidate() {
     cache.clear();
+    latestCacheKeyByClient.clear();
+    latestCacheRevisionByClient.clear();
   }
   function cacheSize() {
     return cache.size;

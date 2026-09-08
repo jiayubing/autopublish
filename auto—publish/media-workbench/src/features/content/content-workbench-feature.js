@@ -7,21 +7,25 @@ export function createContentWorkbenchFeature(adapters = {}) {
   const sources = createContentSourcesFeature(adapters);
   const paidMediaExecution = createPaidMediaExecutionFeature(adapters);
   const management = createArticleManagementFeature(adapters);
-  const generation = typeof adapters.generateArticle === "function"
+  const generation = typeof adapters.startClientGeneration === "function" &&
+    typeof adapters.getClientGenerationState === "function" &&
+    typeof adapters.retryClientGeneration === "function" &&
+    typeof adapters.subscribeClientGeneration === "function"
     ? createContentGenerationFeature({
-        generate: adapters.generateArticle,
-        commit: (article) => {
-          sources.setCurrentArticle(article);
-          void management.refreshManagement("command-result");
-        },
-        refreshCurrent: (reason) => management.refreshManagement(reason),
+        start: adapters.startClientGeneration,
+        getState: adapters.getClientGenerationState,
+        retry: adapters.retryClientGeneration,
+        subscribeOperation: adapters.subscribeClientGeneration,
       })
     : null;
   const generationBoundary = generation
     ? Object.freeze({
         getSnapshot: generation.getSnapshot,
         subscribe: generation.subscribe,
+        start: generation.start,
         generate: generation.generate,
+        retry: generation.retry,
+        refresh: generation.refresh,
       })
     : null;
   const listeners = new Set();

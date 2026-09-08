@@ -18,6 +18,7 @@ const {
 const { articleManagementContracts } = require("./article-management-contracts");
 const { articleAttentionContracts } = require("./article-attention-contracts");
 const { generationContracts, generationEventContracts } = require("./generation-contracts");
+const { clientGenerationContracts, clientGenerationEventContracts } = require("./client-generation-contracts");
 const { contentOperationsContracts } = require("./content-operations-contracts");
 
 // This module is deliberately an assembly-only registry. Wire schemas and
@@ -34,10 +35,12 @@ const contracts = [
   ...articleAttentionContracts,
   ...articleRemovalEventContracts,
   ...generationContracts,
+  ...clientGenerationContracts,
   ...contentOperationsContracts,
   ...workspaceRuntimeContracts,
   ...mediaLifecycleContracts,
   ...generationEventContracts,
+  ...clientGenerationEventContracts,
   ...workspaceEventContracts,
 ];
 

@@ -1,19 +1,6 @@
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const os = require("node:os");
-const path = require("node:path");
-
 const { createAiContentService } = require("../desktop/services/ai-content-service");
-const { getClient } = require("../src/content/client-knowledge");
-const { createClientMaterialStore } = require("../src/content/client-material-store");
-
-function error(code, message) {
-  const value = new Error(message || code);
-  value.code = code;
-  return value;
-}
-
 function createService(overrides) {
   const calls = [];
   const client = { id: "client-1", name: "Client", knowledgeFiles: [{ name: "facts.md", content: "facts" }] };
@@ -39,53 +26,19 @@ function createService(overrides) {
       listArticles: function(id) { calls.push("listArticles:" + id); return [article]; },
       getArticle: function(clientId, id) { calls.push("getArticle:" + clientId + ":" + id); return article; }
     },
-    aiClientFactory: function() { calls.push("aiClientFactory"); return { complete: async function() { return "# Title\nBody"; } }; },
-    articleGeneratorFactory: function(deps) { calls.push("articleGeneratorFactory"); return { generateArticle: async function(input) { calls.push("generate:" + input.clientId); return article; } }; },
-    buildPrompt: function() { return { system: "s", user: "u" }; },
-    createId: function() { return "article-1"; },
-    seenIds: new Set()
   }, overrides || {});
   return { service: createAiContentService(deps), calls: calls, article: article };
 }
 
 describe("ai content service", function() {
-  it("reads single-generation materials through a logical client id", async function() {
-    const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ai-logical-client-"));
-    const physicalDirectory = path.join(workspaceRoot, "clients", "physical-client");
-    try {
-      fs.mkdirSync(physicalDirectory, { recursive: true });
-      fs.writeFileSync(path.join(physicalDirectory, "client.json"), JSON.stringify({ id: "logical-client", name: "Logical Client" }), "utf8");
-      fs.writeFileSync(path.join(physicalDirectory, "brand.md"), "single generation facts", "utf8");
-      const materialStore = createClientMaterialStore({ workspaceRoot: workspaceRoot });
-      let materials;
-      const service = createAiContentService({
-        workspaceRoot: workspaceRoot,
-        clientKnowledge: { getClient: function(id) { return getClient(workspaceRoot, id); } },
-        contentStore: { saveArticle: function(value) { return value; } },
-        materialStore: materialStore,
-        researchStore: { getResearch: function() { return { id: "q1", answerText: "answer" }; } },
-        templateStore: { getCatalogTemplate: function() { return { id: "template-1", body: "body", scenario: "guide" }; } },
-        aiClientFactory: function() { return { complete: async function() { return "# title\nbody"; } }; },
-        articleGeneratorFactory: function(deps) { return { generateArticle: async function(input) {
-          materials = await deps.materialStore.getSelectedMaterials(input.clientId, input.materialIds);
-          return { id: "article-1" };
-        } }; }
-      });
-
-      await service.generateArticle({ clientId: "logical-client", materialIds: ["brand.md"], researchQueryId: "q1", platform: "ctrip", templateId: "template-1" });
-      assert.equal(materials[0].content, "single generation facts");
-    } finally {
-      fs.rmSync(workspaceRoot, { recursive: true, force: true });
-    }
-  });
-
-  it("lists local content without creating an AI client", async function() {
+  it("lists local content without AI configuration", async function() {
     const setup = createService();
     const clients = await setup.service.listClients();
     assert.deepStrictEqual(clients, [{ id: "client-1", name: "Client", knowledgeFiles: [{ name: "facts.md", content: "facts" }] }]);
     assert.deepStrictEqual(setup.service.listResearch("client-1").map(function(item) { return item.id; }), ["query-1"]);
     assert.deepStrictEqual(setup.service.listTemplates("ctrip").map(function(item) { return item.id; }), ["template-1"]);
-    assert.equal(setup.calls.includes("aiClientFactory"), false);
+    assert.equal(setup.service.listGeneratedArticles("client-1")[0].id, "article-1");
+    assert.throws(() => setup.service.getGeneratedArticle("client-1", ""), { code: "CONTENT_INPUT_INVALID" });
   });
 
   it("exposes one file-driven template catalog for single and batch consumers", function() {
@@ -94,177 +47,6 @@ describe("ai content service", function() {
       listCatalog: function() { return { revision: "fixture-revision", platforms: [{ id: "new-platform", displayName: "新平台", description: "", order: 0 }], templates: [{ id: "first-template", templateId: "first-template", platform: "new-platform", displayName: "first-template", scenario: "first-template", body: "body" }], diagnostics: [] }; }
     } });
     assert.equal(setup.service.listTemplateCatalog().revision, "fixture-revision");
-  });
-
-  it("creates the AI client only while generating and persists the generated article", async function() {
-    const setup = createService();
-    const generated = await setup.service.generateArticle({ clientId: "client-1", materialIds: ["facts.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" });
-    assert.equal(generated.id, "article-1");
-    assert.equal(setup.calls.includes("aiClientFactory"), true);
-    assert.equal(setup.calls.filter(function(value) { return value === "saveArticle"; }).length, 1);
-  });
-
-  it("generates and persists each requested article independently while retaining partial failures", async function() {
-    let invocation = 0;
-    const saved = [];
-    const setup = createService({
-      contentStore: { saveArticle: function(value) { saved.push(value); return value; } },
-      articleGeneratorFactory: function() {
-        return { generateArticle: async function(input) {
-          invocation += 1;
-          if (invocation === 2) throw error("AI_RATE_LIMITED");
-          return Object.assign({}, setup.article, { id: "article-" + invocation, generationOperationId: input.generationOperationId });
-        } };
-      }
-    });
-    const result = await setup.service.generateArticle({
-      generationOperationId: "parent-operation",
-      articleCount: 3,
-      clientId: "client-1", materialIds: ["facts.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1"
-    });
-    assert.deepEqual(result.articles.map(function(item) { return [item.index, item.article.id, item.article.generationOperationId]; }), [
-      [0, "article-1", "parent-operation-1"],
-      [2, "article-3", "parent-operation-3"],
-    ]);
-    assert.deepEqual(result.failures, [{ index: 1, code: "AI_RATE_LIMITED" }]);
-    assert.equal(result.status, "partial");
-    assert.equal(saved.length, 2);
-    const repeated = await setup.service.generateArticle({
-      generationOperationId: "parent-operation", articleCount: 3,
-      clientId: "client-1", materialIds: ["facts.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1"
-    });
-    assert.deepEqual(repeated, result);
-    assert.equal(invocation, 3);
-  });
-
-  it("reuses persisted child results after a runtime restart", async function() {
-    let invocations = 0;
-    const persisted = new Map();
-    const setup = createService({
-      contentStore: {
-        saveArticle: function(value) { persisted.set(value.generationOperationId, value); return value; },
-        findByGenerationOperationId: function(id) { const article = persisted.get(id); return article ? { kind: "one", article: article } : { kind: "none" }; },
-      },
-      articleGeneratorFactory: function() { return { generateArticle: async function(input) { invocations += 1; return Object.assign({}, setup.article, { id: "persisted-" + invocations, generationOperationId: input.generationOperationId }); } }; },
-    });
-    await setup.service.generateArticle({ generationOperationId: "restart-op", articleCount: 2, clientId: "client-1", materialIds: ["facts.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" });
-    assert.equal(invocations, 2);
-    const restarted = createService({
-      contentStore: {
-        saveArticle: function(value) { persisted.set(value.generationOperationId, value); return value; },
-        findByGenerationOperationId: function(id) { const article = persisted.get(id); return article ? { kind: "one", article: article } : { kind: "none" }; },
-      },
-      articleGeneratorFactory: function() { return { generateArticle: async function() { throw new Error("must not regenerate persisted child"); } }; },
-    });
-    const result = await restarted.service.generateArticle({ generationOperationId: "restart-op", articleCount: 2, clientId: "client-1", materialIds: ["facts.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" });
-    assert.equal(result.status, "completed");
-    assert.deepEqual(result.articles.map(function(item) { return item.article.id; }), ["persisted-1", "persisted-2"]);
-  });
-
-  it("deduplicates concurrent single-generation calls by operation identity", async function() {
-    let release;
-    let generateCalls = 0;
-    const saved = [];
-    const setup = createService({
-      contentStore: {
-        createArticle: function(value) { saved.push(value); return value; },
-        findByGenerationOperationId: function() { return { kind: "none" }; },
-      },
-      articleGeneratorFactory: function() {
-        return { generateArticle: async function(input) {
-          generateCalls += 1;
-          assert.equal(input.generationOperationId, "operation-1");
-          await new Promise(function(resolve) { release = resolve; });
-          return Object.assign({}, setup.article, { generationOperationId: input.generationOperationId });
-        } };
-      }
-    });
-    const input = { generationOperationId: "operation-1", clientId: "client-1", materialIds: ["facts.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" };
-    const first = setup.service.generateArticle(input);
-    const second = setup.service.generateArticle(input);
-    assert.equal(setup.service.getState().status, "running");
-    assert.equal(generateCalls, 1);
-    release();
-    const results = await Promise.all([first, second]);
-    assert.deepEqual(results[0], results[1]);
-    assert.equal(saved.length, 1);
-    assert.equal(results[0].generationOperationId, "operation-1");
-    assert.equal(setup.service.getState().status, "idle");
-  });
-
-  it("returns a persisted operation result without invoking the provider again", async function() {
-    const persisted = Object.assign({}, createService().article, { generationOperationId: "operation-persisted" });
-    let generatorCalls = 0;
-    const setup = createService({
-      contentStore: {
-        findByGenerationOperationId: function(id) {
-          assert.equal(id, "operation-persisted");
-          return { kind: "one", article: persisted };
-        }
-      },
-      articleGeneratorFactory: function() {
-        return { generateArticle: async function() { generatorCalls += 1; throw new Error("provider must not run"); } };
-      }
-    });
-    const result = await setup.service.generateArticle({ generationOperationId: "operation-persisted", clientId: "client-1", materialIds: ["facts.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" });
-    assert.deepEqual(result, persisted);
-    assert.equal(generatorCalls, 0);
-  });
-
-  it("exposes an uncertain outcome when runtime disposal interrupts a remote call", async function() {
-    let release;
-    const setup = createService({
-      articleGeneratorFactory: function() {
-        return { generateArticle: async function() {
-          await new Promise(function(resolve) { release = resolve; });
-          return setup.article;
-        } };
-      }
-    });
-    const pending = setup.service.generateArticle({ generationOperationId: "operation-dispose", clientId: "client-1", materialIds: ["facts.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" });
-    await setup.service.dispose();
-    assert.deepEqual(setup.service.getState(), { status: "uncertain", operationId: "operation-dispose", outcome: "result-uncertain" });
-    release();
-    await pending;
-  });
-
-  it("preserves safe AI configuration failures without touching local reads", async function() {
-    const setup = createService({ aiClientFactory: function() { throw error("AI_CONFIG_INVALID", "AI client configuration is invalid"); } });
-    assert.deepStrictEqual(setup.service.listGeneratedArticles("client-1").map(function(item) { return item.id; }), ["article-1"]);
-    await assert.rejects(setup.service.generateArticle({ clientId: "client-1", materialIds: ["facts.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" }), function(value) {
-      return value.code === "AI_CONFIG_INVALID" && !value.message.includes("key");
-    });
-  });
-
-  it("rejects missing request identifiers before invoking dependencies", async function() {
-    const setup = createService();
-    await assert.rejects(setup.service.generateArticle({ clientId: "", materialIds: ["facts.md"], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1" }), function(value) {
-      return value.code === "CONTENT_INPUT_INVALID";
-    });
-    assert.throws(function() { setup.service.getGeneratedArticle("client-1", ""); }, function(value) { return value.code === "CONTENT_INPUT_INVALID"; });
-  });
-
-  it("passes multiple research ids to the generator in the requested order", async function() {
-    let generatedInput;
-    const setup = createService({
-      articleGeneratorFactory: function() {
-        return { generateArticle: async function(input) { generatedInput = input; return setup.article; } };
-      }
-    });
-    await setup.service.generateArticle({ clientId: "client-1", materialIds: ["facts.md"], researchQueryIds: ["query-1", "query-2"], platform: "ctrip", templateId: "template-1" });
-    assert.deepStrictEqual(generatedInput.researchQueryIds, ["query-1", "query-2"]);
-  });
-
-  it("rejects empty, duplicate, and oversized research id arrays at the service boundary", async function() {
-    const setup = createService();
-    await assert.rejects(setup.service.generateArticle({ clientId: "client-1", materialIds: ["facts.md"], researchQueryIds: [], platform: "ctrip", templateId: "template-1" }), function(value) {
-      return value.code === "GEO_RESEARCH_REQUIRED";
-    });
-    for (const researchQueryIds of [["query-1", "query-1"], Array.from({ length: 51 }, function(_, index) { return "query-" + index; })]) {
-      await assert.rejects(setup.service.generateArticle({ clientId: "client-1", materialIds: ["facts.md"], researchQueryIds: researchQueryIds, platform: "ctrip", templateId: "template-1" }), function(value) {
-        return value.code === "CONTENT_INPUT_INVALID";
-      });
-    }
   });
 
   it("exposes material metadata through the client DTO and retries one material", async function() {
@@ -301,29 +83,11 @@ describe("ai content service", function() {
     });
   });
 
-  it("does not expose a review or batch-review operation", function() {
+  it("does not expose retired review operations or a second generation owner", function() {
     const setup = createService();
     assert.equal("reviewArticles" in setup.service, false);
-    assert.equal(setup.calls.some(function(value) { return value.includes("review"); }), false);
+    assert.equal("generateArticle" in setup.service, false);
+    assert.equal("getState" in setup.service, false);
   });
 
-  it("requires explicit material and research selections and forwards provenance ids", async function() {
-    const setup = createService();
-    await assert.rejects(setup.service.generateArticle({
-      clientId: "client-1", materialIds: [], researchQueryId: "query-1", platform: "ctrip", templateId: "template-1"
-    }), function(value) { return value.code === "CLIENT_MATERIAL_REQUIRED"; });
-    await assert.rejects(setup.service.generateArticle({
-      clientId: "client-1", materialIds: ["facts.md"], researchQueryIds: [], platform: "ctrip", templateId: "template-1"
-    }), function(value) { return value.code === "GEO_RESEARCH_REQUIRED"; });
-    let generatedInput;
-    const configured = createService({
-      articleGeneratorFactory: function() {
-        return { generateArticle: async function(input) { generatedInput = input; return configured.article; } };
-      }
-    });
-    await configured.service.generateArticle({
-      clientId: "client-1", materialIds: ["facts.md"], researchQueryIds: ["query-1"], platform: "ctrip", templateId: "template-1"
-    });
-    assert.deepStrictEqual(generatedInput.materialIds, ["facts.md"]);
-  });
 });

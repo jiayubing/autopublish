@@ -412,14 +412,6 @@ function verifyDeadExportAbsence() {
   const snapshotExports = Object.keys(
     require("../desktop/services/article-management-snapshot"),
   );
-  const workbench =
-    require("../desktop/services/platform-workbench-service").createPlatformWorkbenchService(
-      {
-        rootDir: ROOT,
-        platforms: [],
-      },
-    );
-  const workbenchExports = Object.keys(workbench);
   const staleFiles = [
     "desktop/services/publication-submission-service.js",
     "scripts/repair-article-removal-regressions.js",
@@ -428,9 +420,6 @@ function verifyDeadExportAbsence() {
     ...snapshotExports
       .filter((entry) => entry === "deriveWorkflow")
       .map((entry) => `article-management-snapshot:${entry}`),
-    ...workbenchExports
-      .filter((entry) => entry === "buildSelectedPlan")
-      .map((entry) => `platform-workbench:${entry}`),
   ];
   if (staleFiles.length || staleExports.length)
     throw absenceError(
@@ -439,7 +428,7 @@ function verifyDeadExportAbsence() {
       { staleFiles, staleExports },
     );
   return {
-    checkedExports: snapshotExports.length + workbenchExports.length,
+    checkedExports: snapshotExports.length,
     staleFiles: 0,
     staleExports: 0,
   };

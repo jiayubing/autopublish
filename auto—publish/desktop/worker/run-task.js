@@ -1,35 +1,8 @@
 const task = process.argv[2];
 const path = require("node:path");
-const {
-  createDiagnosticRecord,
-} = require("../../src/diagnostics/diagnostic-schema");
-const {
-  reportDiagnostic,
-  setDiagnosticReporter,
-} = require("../../src/diagnostics/diagnostic-producer");
-const {
-  createDiagnosticFileSink,
-} = require("../../src/diagnostics/diagnostic-file-sink");
-const {
-  initializeDiagnosticSink,
-} = require("../../src/diagnostics/diagnostic-startup-cleanup");
-var stopRequested = false;
 var activeRunId = null;
-var activeAbortController = null;
 var resultDisconnectScheduled = false;
-var platformRuntimeContext = null;
-var workerPlatformRuntimeContext = null;
-var activeWorkerPlatforms = null;
 const WORKER_SCHEMA_VERSION = 1;
-
-function loadWorkerPlatforms() {
-  const { loadPlatforms } = require("../../src/core/platforms");
-  return loadPlatforms(
-    platformRuntimeContext || workerPlatformRuntimeContext
-      ? { runtimeContext: Object.assign({}, platformRuntimeContext || {}, workerPlatformRuntimeContext || {}) }
-      : undefined,
-  );
-}
 
 if (!task) {
   process.exit(1);
@@ -71,55 +44,6 @@ function send(type, payload) {
     process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
 }
 
-function installWorkerDiagnosticReporter(paths) {
-  if (!paths || typeof paths.logs !== "string" || !paths.logs.trim())
-    return function () {};
-  let sink;
-  try {
-    sink = createDiagnosticFileSink({
-      directory: paths.logs,
-      root: paths.localState || paths.logs,
-    });
-    initializeDiagnosticSink(sink);
-  } catch (_) {
-    reportWorkerDiagnostic(
-      "PLATFORM_WORKER_DIAGNOSTIC_SINK_SETUP_FAILED",
-      "storage",
-      "diagnostic-sink",
-      { action: "setup" },
-    );
-    return function () {};
-  }
-  return setDiagnosticReporter(function (record) {
-    try {
-      const correlated =
-        record.runId === null && activeRunId
-          ? createDiagnosticRecord(
-              Object.assign({}, record, { runId: activeRunId }),
-            )
-          : record;
-      sink.append(correlated);
-      return true;
-    } catch (_) {
-      // A diagnostic sink cannot report its own append failure without recursion.
-      // Returning false keeps the worker result path intact while the failure is
-      // classified as best-effort diagnostic delivery.
-      return false;
-    }
-  });
-}
-
-function reportWorkerDiagnostic(code, category, operationId, metadata) {
-  reportDiagnostic({
-    code: code,
-    module: "desktop-worker",
-    category: category,
-    operationId: operationId,
-    runId: activeRunId,
-    metadata: metadata,
-  });
-}
-
 function configureWorkerEnvironment(paths) {
   if (!paths || typeof paths !== "object") return;
   const values = {
@@ -147,70 +71,6 @@ function configureWorkerEnvironment(paths) {
   });
 }
 
-process.on("message", function (message) {
-  if (!message) return;
-
-  if (
-    message.schemaVersion !== WORKER_SCHEMA_VERSION ||
-    message.runId !== activeRunId
-  )
-    return;
-
-  if (message.type === "stop" && !stopRequested) {
-    stopRequested = true;
-    if (activeAbortController) activeAbortController.abort("operator");
-    reportWorkerDiagnostic(
-      "PLATFORM_WORKER_STOP_REQUESTED",
-      "conflict",
-      "platform-stop",
-      { action: "stop" },
-    );
-    return;
-  }
-
-  if (message.type === "pause") {
-    // Immediately close all browser sessions to break the current blocking Playwright invocation
-    reportWorkerDiagnostic(
-      "PLATFORM_WORKER_PAUSE_REQUESTED",
-      "conflict",
-      "platform-pause",
-      { action: "pause" },
-    );
-    stopRequested = true;
-    try {
-      const platforms = activeWorkerPlatforms || loadWorkerPlatforms();
-      require("./publisher-executor").closeWorkerPlatforms(platforms, function () {
-        reportWorkerDiagnostic(
-          "PLATFORM_WORKER_SESSION_CLOSE_FAILED",
-          "storage",
-          "pause-close-session",
-          { action: "close-session" },
-        );
-      });
-    } catch (_) {
-      reportWorkerDiagnostic(
-        "PLATFORM_WORKER_SESSION_CLOSE_FAILED",
-        "storage",
-        "pause-close-session",
-        { action: "close-session" },
-      );
-    }
-    // Also set stop signal for throwIfStopped checkpoints
-    try {
-      const { requestStopSignal } = require("../../src/core/stop-signal");
-      requestStopSignal("operator_pause");
-    } catch (_) {
-      reportWorkerDiagnostic(
-        "PLATFORM_WORKER_STOP_SIGNAL_FAILED",
-        "conflict",
-        "pause-stop-signal",
-        { action: "stop-signal" },
-      );
-    }
-    return;
-  }
-});
-
 (async function main() {
   try {
     process.env.AUTO_PUBLISH_DESKTOP = "1";
@@ -220,131 +80,6 @@ process.on("message", function (message) {
       configureWorkerEnvironment(options.paths);
       const { createQueueSnapshot } = require("../../src/app/publish-batch");
       send("result", { ok: true, data: createQueueSnapshot(options) });
-      return;
-    }
-
-    if (task === "platform-submit") {
-      const options = process.argv[3] ? JSON.parse(process.argv[3]) : {};
-      configureWorkerEnvironment(options.paths);
-      platformRuntimeContext =
-        require("../../src/platforms/platform-runtime-context").createPlatformRuntimeContextFromWorkspacePaths(
-          options.paths,
-        );
-      const { createWorkerPublisherExecutor } = require("./publisher-executor");
-      const { clearStopSignal } = require("../../src/core/stop-signal");
-      const plan = options.plan || { tasks: [] };
-      const submitOptions = options.submitOptions || {
-        autoSubmit: true,
-        interactive: false,
-        closeAfterEach: false,
-        timeoutMs: 90000,
-      };
-      const runId = typeof options.runId === "string" ? options.runId : null;
-      if (!runId) throw new Error("Platform worker runId is required");
-      activeRunId = runId;
-      const restoreDiagnosticReporter = installWorkerDiagnosticReporter(
-        options.paths,
-      );
-
-      function sendPlatformState(state) {
-        send(
-          "state",
-          Object.assign({}, state || {}, {
-            runId: runId,
-            updatedAt: new Date().toISOString(),
-          }),
-        );
-      }
-
-      clearStopSignal();
-      activeAbortController = new AbortController();
-
-      try {
-        reportWorkerDiagnostic(
-          "PLATFORM_WORKER_STARTED",
-          "transport",
-          "platform-submit",
-          { taskKind: "platform-submit", taskCount: plan.tasks.length },
-        );
-
-        workerPlatformRuntimeContext = options.platformRuntimeContext || null;
-        const loadedPlatforms = loadWorkerPlatforms();
-        activeWorkerPlatforms = loadedPlatforms;
-        const adapters = {};
-        loadedPlatforms.forEach(function (platform) {
-          adapters[platform.definition.id] = platform;
-        });
-
-        var activeTask = null;
-        var heartbeat = setInterval(function () {
-          sendPlatformState({
-            phase: "heartbeat",
-            task: activeTask || undefined,
-          });
-        }, 250);
-        try {
-          const executor = createWorkerPublisherExecutor({
-            adapters: adapters,
-            paths: options.paths,
-            shouldStop: function () {
-              return stopRequested;
-            },
-            onState: function (state) {
-              if (state && state.task) activeTask = state.task;
-              sendPlatformState(state);
-            },
-          });
-          const result = await executor.execute(
-            plan,
-            Object.assign({}, submitOptions, {
-              signal: activeAbortController.signal,
-            }),
-          );
-          send("result", { ok: true, data: result });
-        } finally {
-          clearInterval(heartbeat);
-        }
-      } catch (error) {
-        reportWorkerDiagnostic(
-          "PLATFORM_WORKER_FAILED",
-          "internal",
-          "platform-submit",
-          { outcome: "failed" },
-        );
-        send("result", {
-          ok: false,
-          error: {
-            code: (error && error.code) || "PLATFORM_WORKER_FAILED",
-            category: "internal",
-            retryability: "manual-check",
-            userMessage: "投稿执行器未完成",
-          },
-        });
-      } finally {
-        activeAbortController = null;
-        restoreDiagnosticReporter();
-        try {
-          const loadedPlatforms = activeWorkerPlatforms || loadWorkerPlatforms();
-          require("./publisher-executor").closeWorkerPlatforms(loadedPlatforms, function () {
-            reportWorkerDiagnostic(
-              "PLATFORM_WORKER_SESSION_CLOSE_FAILED",
-              "storage",
-              "final-close-session",
-              { action: "close-session" },
-            );
-          });
-        } catch (_) {
-          reportWorkerDiagnostic(
-            "PLATFORM_WORKER_PLATFORM_CLEANUP_FAILED",
-            "storage",
-            "platform-cleanup",
-            { action: "cleanup" },
-          );
-        } finally {
-          activeWorkerPlatforms = null;
-          workerPlatformRuntimeContext = null;
-        }
-      }
       return;
     }
 

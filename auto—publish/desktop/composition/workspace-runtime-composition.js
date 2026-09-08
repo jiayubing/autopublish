@@ -195,7 +195,6 @@ async function createWorkspaceRuntimeComposition(deps) {
       platformRuntimeComposition.regularSubmissionPorts;
     const remoteReviewPorts = platformRuntimeComposition.remoteReviewPorts;
     const loginSessionPorts = platformRuntimeComposition.loginSessionPorts;
-    const legacyQueuePorts = platformRuntimeComposition.legacyQueuePorts;
     const clientProfileReaders =
       platformRuntimeComposition.clientProfileReaders;
     const submissionPlatformDirectory =
@@ -401,10 +400,6 @@ async function createWorkspaceRuntimeComposition(deps) {
     await publicationRecoveryComposition.publicationRecovery.recover();
     contentProductionComposition.start();
 
-    const adapters = {};
-    legacyQueuePorts.forEach(function (platform) {
-      adapters[platform.id] = platform.port;
-    });
     const regularImagePlanService =
       require("../services/regular-image-plan-service").createRegularImagePlanService(
         { imageSelectionPort: clientImageLibrary.imageSelectionPort },
@@ -458,24 +453,12 @@ async function createWorkspaceRuntimeComposition(deps) {
         openExternal: options.openExternal,
         reportCompositionDiagnostic,
       });
-    const platformWorkbenchService = ownService(
-      require("../services/platform-workbench-service").createPlatformWorkbenchService(
-        {
-          rootDir: workspaceRoot,
-          paths: injectedPaths,
-          contentStore,
-          platforms: directoryEntries,
-          adapters,
-        },
-      ),
-    );
     const platformApplication =
       require("../services/platform-workbench-application").createPlatformWorkbenchApplication(
         {
           directoryEntries,
           loginSessionPorts,
           platformSessionService,
-          platformWorkbenchService,
           taskService,
           assertPlaywrightAvailable:
             platformRuntimeComposition.assertPlaywrightAvailable,
@@ -548,7 +531,6 @@ async function createWorkspaceRuntimeComposition(deps) {
         paidMediaBatchComposition.orderCreationResolutionService,
       aiContentService,
       contentGenerationBatchService,
-      platformWorkbenchService,
       platformAccountProfileService,
       publicationRecoveryComposition,
       attentionPorts,
@@ -575,7 +557,6 @@ async function createWorkspaceRuntimeComposition(deps) {
       regularQueueApplication,
       regularQueueGroupOrchestrator: regularQueueGroupComposition.orchestrator,
       contentGenerationBatchService,
-      platformWorkbenchService,
       platformApplication,
       mediaApplication,
       paidMediaPreflightService: Object.freeze({

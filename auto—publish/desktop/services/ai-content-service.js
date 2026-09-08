@@ -2,17 +2,9 @@ const { listClients, listClientIdentities, getClient, saveLiejuPublicationProfil
 const { createResearchStore } = require("../../src/content/research-store");
 const { createTemplateStore } = require("../../src/content/template-store");
 const { createArticleTrashService } = require("../../src/content/article-trash-service");
-const { createAiClient } = require("../../src/content/ai-client");
-const { createArticleGenerator } = require("../../src/content/article-generator");
 const { createClientMaterialStore } = require("../../src/content/client-material-store");
-const { buildPrompt } = require("../../src/content/prompt-builder");
-const crypto = require("crypto");
 const { createClientGroupStore } = require("../../src/content/client-group-store");
 const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
-
-function clone(value) {
-  return value === undefined ? value : JSON.parse(JSON.stringify(value));
-}
 
 function contentError(code, message) {
   const error = new Error(message);
@@ -24,52 +16,6 @@ function assertId(value, label) {
   if (typeof value !== "string" || !value.trim()) {
     throw contentError("CONTENT_INPUT_INVALID", label + " is required");
   }
-}
-
-function normalizeGenerationOperationId(value) {
-  if (value === undefined || value === null || value === "") return crypto.randomUUID();
-  if (typeof value !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,199}$/.test(value)) {
-    throw contentError("CONTENT_INPUT_INVALID", "Generation operation id is invalid");
-  }
-  return value;
-}
-
-function normalizeArticleCount(value) {
-  if (value === undefined) return 1;
-  if (!Number.isSafeInteger(value) || value < 1 || value > 100) {
-    throw contentError("CONTENT_INPUT_INVALID", "Article count must be an integer from 1 to 100");
-  }
-  return value;
-}
-
-function normalizeResearchQueryIds(input) {
-  const ids = input.researchQueryIds === undefined ? [input.researchQueryId] : input.researchQueryIds;
-  if (!Array.isArray(ids) || ids.length < 1 || ids.length > 50) {
-    throw contentError(ids && Array.isArray(ids) && ids.length === 0 ? "GEO_RESEARCH_REQUIRED" : "CONTENT_INPUT_INVALID", "At least one GEO research answer is required");
-  }
-  const seen = new Set();
-  ids.forEach(function(id) {
-    if (typeof id !== "string" || !id.trim() || seen.has(id)) {
-      throw contentError("CONTENT_INPUT_INVALID", "Research ids must be non-empty and unique");
-    }
-    seen.add(id);
-  });
-  return ids.slice();
-}
-
-function normalizeMaterialIds(input) {
-  const ids = input.materialIds;
-  if (!Array.isArray(ids) || ids.length < 1 || ids.length > 50) {
-    throw contentError("CLIENT_MATERIAL_REQUIRED", "At least one client material is required");
-  }
-  const seen = new Set();
-  ids.forEach(function(id) {
-    if (typeof id !== "string" || !id.trim() || id.includes("/") || id.includes("\\") || seen.has(id)) {
-      throw contentError("CLIENT_MATERIAL_INVALID", "Selected client material is invalid");
-    }
-    seen.add(id);
-  });
-  return ids.slice();
 }
 
 function clientDto(client) {
@@ -122,38 +68,9 @@ function createAiContentService(opts) {
     tokenTtlMs: options.articleRemovalTokenTtlMs,
     onTransactionStatus: notifyArticleRemovalTransaction
   })) || {};
-  const materialStore = options.materialStore || (workspaceRoot ? createClientMaterialStore({ workspaceRoot: workspaceRoot, paths: paths }) : {
-    getSelectedMaterials: async function(clientId, materialIds) {
-      const client = clientKnowledge.getClient(clientId);
-      const files = Array.isArray(client && client.knowledgeFiles) ? client.knowledgeFiles : [];
-      return materialIds.map(function(id) {
-        const item = files.find(function(file) { return file && (file.id === id || file.name === id); });
-        if (!item || typeof item.content !== "string" || !item.content.trim()) {
-          throw contentError("CLIENT_MATERIAL_INVALID", "Selected client material is invalid");
-        }
-        return Object.assign({ id: item.id || item.name, extension: "", status: "ready", source: "text" }, item);
-      });
-    }
-  });
-  const aiClientFactory = options.aiClientFactory || function() { return createAiClient(); };
-  const articleGeneratorFactory = options.articleGeneratorFactory || createArticleGenerator;
-  const promptBuilder = options.buildPrompt || buildPrompt;
-  const createId = options.createId || function() { return crypto.randomUUID(); };
-  const seenIds = options.seenIds || new Set();
+  const materialStore = options.materialStore || (workspaceRoot ? createClientMaterialStore({ workspaceRoot, paths }) : {});
   let articleRemovalRevision = 0;
   let disposed = false;
-  let activeOperation = null;
-  const completedOperations = new Map();
-
-  function operationState() {
-    if (!activeOperation) return { status: "idle", operationId: null, outcome: null };
-    return {
-      status: activeOperation.status,
-      operationId: activeOperation.id,
-      outcome: activeOperation.outcome || null,
-    };
-  }
-
   function notifyArticleRemovalTransaction(transaction) {
     const event = Object.assign({}, transaction || {});
     const terminal = event.status === "committed" || event.status === "superseded";
@@ -351,117 +268,6 @@ function createAiContentService(opts) {
     return clientDto({ knowledgeFiles: [await materialStore.retryMaterial(clientId, materialId)] }).knowledgeFiles[0];
   }
 
-  async function generateSingleArticle(input) {
-    if (disposed) throw contentError("CONTENT_RUNTIME_DISPOSED", "Content runtime is disposed");
-    const request = input || {};
-    assertId(request.clientId, "Client id");
-    const materialIds = normalizeMaterialIds(request);
-    const researchQueryIds = normalizeResearchQueryIds(request);
-    assertId(request.platform, "Platform");
-    assertId(request.templateId, "Template id");
-    const generationOperationId = normalizeGenerationOperationId(request.generationOperationId);
-    const articleCount = normalizeArticleCount(request.articleCount);
-    if (activeOperation) {
-      if (activeOperation.id !== generationOperationId) throw contentError("CONTENT_GENERATION_BUSY", "Another article generation is already running");
-      return activeOperation.promise;
-    }
-    if (contentStore && typeof contentStore.findByGenerationOperationId === "function") {
-      const existing = contentStore.findByGenerationOperationId(generationOperationId);
-      if (existing && existing.kind === "one") return existing.article;
-      if (existing && existing.kind === "many") throw contentError("CONTENT_GENERATION_ID_CONFLICT", "Generation operation identity is ambiguous");
-    }
-    if (request.templateCatalogRevision !== undefined && typeof templateStore.listCatalog === "function") {
-      assertId(request.templateCatalogRevision, "Template catalog revision");
-      const catalog = templateStore.listCatalog();
-      if (catalog && catalog.revision && catalog.revision !== request.templateCatalogRevision) {
-        throw contentError("TEMPLATE_CATALOG_STALE", "模板目录已变化，请刷新后重新选择模板");
-      }
-    }
-    const generator = articleGeneratorFactory({
-      getClient: function(id) { return clientKnowledge.getClient(id); },
-      researchStore: researchStore,
-      materialStore: materialStore,
-      templateStore: templateStore,
-      buildPrompt: promptBuilder,
-      aiClient: aiClientFactory(),
-      createId: createId,
-      seenIds: seenIds
-    });
-    const operation = { id: generationOperationId, status: "running", outcome: null, promise: null };
-    activeOperation = operation;
-    operation.promise = (async function() {
-      try {
-        const generated = await generator.generateArticle(Object.assign({}, request, { materialIds: materialIds, researchQueryIds: researchQueryIds, generationOperationId: generationOperationId, articleCount: articleCount }));
-        if (!generated || typeof generated !== "object") throw contentError("CONTENT_GENERATION_INVALID", "Generated article is invalid");
-        const article = generated.generationOperationId === generationOperationId
-          ? generated
-          : Object.assign({}, generated, { generationOperationId: generationOperationId });
-        if (!contentStore || (typeof contentStore.createArticle !== "function" && typeof contentStore.saveArticle !== "function")) {
-          throw contentError("CONTENT_STORE_REQUIRED", "Generated article cannot be persisted");
-        }
-        const saved = articleMutationCoordinator && typeof articleMutationCoordinator.createArticle === "function"
-          ? articleMutationCoordinator.createArticle(article)
-          : typeof contentStore.createArticle === "function"
-            ? contentStore.createArticle(article)
-            : contentStore.saveArticle(article);
-        notifyAttentionChange("ARTICLE_SAVED");
-        operation.status = "completed";
-        operation.outcome = "saved";
-        return saved === undefined ? article : saved;
-      } catch (error) {
-        operation.status = disposed ? "uncertain" : "failed";
-        operation.outcome = disposed ? "result-uncertain" : "failed";
-        throw error;
-      } finally {
-        if (activeOperation === operation && operation.status !== "uncertain") activeOperation = null;
-      }
-    })();
-    return operation.promise;
-  }
-
-  async function generateArticle(input) {
-    const request = input || {};
-    const count = normalizeArticleCount(request.articleCount);
-    if (count === 1) return generateSingleArticle(Object.assign({}, request, { articleCount: 1 }));
-    const parentOperationId = normalizeGenerationOperationId(request.generationOperationId);
-    const known = completedOperations.get(parentOperationId);
-    if (known) return clone(known);
-    const articles = [];
-    const failures = [];
-    for (let index = 0; index < count; index += 1) {
-      const childOperationId = parentOperationId + "-" + String(index + 1);
-      try {
-        if (contentStore && typeof contentStore.findByGenerationOperationId === "function") {
-          const existing = contentStore.findByGenerationOperationId(childOperationId);
-          if (existing && existing.kind === "one" && existing.article) {
-            articles.push({ index: index, article: existing.article });
-            continue;
-          }
-          if (existing && existing.kind === "many") {
-            failures.push({ index: index, code: "CONTENT_GENERATION_ID_CONFLICT" });
-            continue;
-          }
-        }
-        const article = await generateSingleArticle(Object.assign({}, request, {
-          articleCount: 1,
-          generationOperationId: childOperationId,
-        }));
-        articles.push({ index: index, article: article });
-      } catch (error) {
-        failures.push({ index: index, code: error && error.code ? error.code : "CONTENT_GENERATION_FAILED" });
-      }
-    }
-    const result = {
-      operationId: parentOperationId,
-      articleCount: count,
-      status: failures.length ? (articles.length ? "partial" : "failed") : "completed",
-      articles: articles,
-      failures: failures,
-    };
-    completedOperations.set(parentOperationId, result);
-    return clone(result);
-  }
-
   function saveArticle(input) {
     const request = input && input.article ? input : { article: input };
     if (!request.article || typeof request.article !== "object" || Array.isArray(request.article)) {
@@ -548,8 +354,6 @@ function createAiContentService(opts) {
     listTemplateCatalog: listTemplateCatalog,
     copyBuiltinTemplate: copyBuiltinTemplate,
     saveCustomTemplate: saveCustomTemplate,
-    generateArticle: generateArticle,
-    getState: operationState,
     saveArticle: saveArticle,
     getArticleEditor: getArticleEditor,
     listGeneratedArticles: listGeneratedArticles,
@@ -567,10 +371,6 @@ function createAiContentService(opts) {
     retryArticleRemovalTransaction: articleTrashService.retryArticleRemovalTransaction,
     dispose: async function() {
       disposed = true;
-      if (activeOperation && activeOperation.status === "running") {
-        activeOperation.status = "uncertain";
-        activeOperation.outcome = "result-uncertain";
-      }
     }
   };
 }

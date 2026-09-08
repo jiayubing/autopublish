@@ -17,7 +17,7 @@ import type { FavoriteMediaPage } from "./content/GeneratedArticlesView.types";
 import type { ArticleLibraryNavigationIntent } from "../article-library-navigation";
 
 type RefreshState = "idle" | "refreshing" | "error";
-type ProductionTab = "questions" | "single" | "batch";
+type ProductionTab = "questions" | "client" | "batch";
 type WorkbenchTab = ProductionTab | "history";
 
 const REFRESH_CONFIRMATION_MS = 3000;
@@ -36,7 +36,8 @@ const ARTICLE_STAGE_VALUES: ArticleWorkflowFilter[] = [
 function loadProductionTab(): ProductionTab {
   if (typeof localStorage === "undefined") return "questions";
   const value = localStorage.getItem(PRODUCTION_TAB_KEY);
-  return value === "single" || value === "batch" || value === "questions"
+  if (value === "single") return "client";
+  return value === "client" || value === "batch" || value === "questions"
     ? value
     : "questions";
 }
@@ -275,8 +276,6 @@ export default function ContentWorkbench({
           setHistoryEditingFingerprint(result.editFingerprint);
         })
         .catch(() => {
-          // The management snapshot remains a safe read-only fallback when the
-          // optional editor query is unavailable in an older renderer fixture.
           reportRuntimeDiagnostic(
             "ARTICLE_HISTORY_EDITOR_QUERY_UNAVAILABLE",
             "workspace-invalidation",
@@ -321,7 +320,7 @@ export default function ContentWorkbench({
     requestHistoryLeave(() => {
       closeHistoryEditor(true);
       setTab(nextTab);
-      if (nextTab === "questions" || nextTab === "single" || nextTab === "batch")
+      if (nextTab === "questions" || nextTab === "client" || nextTab === "batch")
         remember(PRODUCTION_TAB_KEY, nextTab);
     });
   }
@@ -364,7 +363,7 @@ export default function ContentWorkbench({
       : "idle";
   const visibleError = error || query.error?.userMessage || "";
   const tabs = mode === "production"
-    ? (["questions", "single", "batch"] as const)
+    ? (["questions", "client", "batch"] as const)
     : ([] as const);
   if (loading)
     return (
@@ -380,8 +379,8 @@ export default function ContentWorkbench({
           const label =
             id === "questions"
               ? "问题采集"
-              : id === "single"
-                ? "单篇生成"
+              : id === "client"
+                ? "客户生成"
                 : "批量生成";
           return (
             <button
@@ -448,7 +447,7 @@ export default function ContentWorkbench({
             loginQuery={doubaoLoginQuery}
           />
         )}
-        {(tab === "single" || tab === "batch") && (
+        {(tab === "client" || tab === "batch") && (
           <ArticleGenerationView
             grouping={grouping}
             client={clients.find((item) => item.id === clientId)}
