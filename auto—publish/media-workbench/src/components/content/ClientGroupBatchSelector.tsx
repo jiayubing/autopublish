@@ -91,35 +91,37 @@ export default function ClientGroupBatchSelector({ clients, grouping, selectedId
     {grouping?.loading && <p role="status" className="text-xs text-slate-500">正在加载客户分组…</p>}
     {grouping?.error && <div role="status" className="flex flex-wrap items-center gap-2 text-xs text-amber-800"><span>客户分组暂不可用，可继续选择具体客户。</span><button type="button" onClick={grouping.reload} disabled={grouping.loading} className={select}>重试分组</button></div>}
 
-    {!grouping?.loading && !grouping?.error && <div className="flex min-w-0 flex-wrap items-center gap-2" aria-label="客户分组快捷选择">
-      {visibleOptions.map((option) => {
-        const pressed = active?.id === option.id;
-        return <button
-          type="button"
-          key={option.id}
-          aria-pressed={pressed}
-          disabled={disabled || option.clientIds.length === 0}
-          onClick={() => onChange([...option.clientIds])}
-          className={`${chip} ${pressed ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-blue-300 hover:bg-blue-50'}`}
+    <div className="flex min-w-0 flex-wrap items-center gap-2" aria-label="客户批次选择方式">
+      <span className="contents" aria-label="客户分组快捷选择">
+        {!grouping?.loading && !grouping?.error && visibleOptions.map((option) => {
+          const pressed = active?.id === option.id;
+          return <button
+            type="button"
+            key={option.id}
+            aria-pressed={pressed}
+            disabled={disabled || option.clientIds.length === 0}
+            onClick={() => onChange([...option.clientIds])}
+            className={`${chip} ${pressed ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-blue-300 hover:bg-blue-50'}`}
+          >
+            {option.name} <span className={pressed ? 'text-blue-100' : 'text-slate-400'}>({option.clientIds.length})</span>
+          </button>;
+        })}
+        {!grouping?.loading && !grouping?.error && overflowOptions.length > 0 && <select
+          aria-label="更多客户分组"
+          defaultValue=""
+          disabled={disabled}
+          onChange={(event) => {
+            const option = options.find((item) => item.id === event.target.value);
+            if (option) onChange([...option.clientIds]);
+            event.currentTarget.value = '';
+          }}
+          className={select}
         >
-          {option.name} <span className={pressed ? 'text-blue-100' : 'text-slate-400'}>({option.clientIds.length})</span>
-        </button>;
-      })}
-      {overflowOptions.length > 0 && <select
-        aria-label="更多客户分组"
-        defaultValue=""
-        disabled={disabled}
-        onChange={(event) => {
-          const option = options.find((item) => item.id === event.target.value);
-          if (option) onChange([...option.clientIds]);
-          event.currentTarget.value = '';
-        }}
-        className={select}
-      >
-        <option value="">更多分组…</option>
-        {overflowOptions.map((option) => <option key={option.id} value={option.id} disabled={!option.clientIds.length}>{option.name}（{option.clientIds.length}）</option>)}
-      </select>}
-      {!options.length && <span className="text-xs text-slate-500">暂无可用分组。</span>}
+          <option value="">更多分组…</option>
+          {overflowOptions.map((option) => <option key={option.id} value={option.id} disabled={!option.clientIds.length}>{option.name}（{option.clientIds.length}）</option>)}
+        </select>}
+        {!grouping?.loading && !grouping?.error && !options.length && <span className="text-xs text-slate-500">暂无可用分组。</span>}
+      </span>
       <ClientSelection
         clients={clients}
         selectedIds={selectedIds}
@@ -131,19 +133,7 @@ export default function ClientGroupBatchSelector({ clients, grouping, selectedId
         triggerLabel="选择部分客户…"
         showSummary={false}
       />
-    </div>}
-
-    {(grouping?.loading || grouping?.error) && <ClientSelection
-      clients={clients}
-      selectedIds={selectedIds}
-      onChange={onChange}
-      grouping={grouping}
-      disabled={disabled}
-      describeClient={describeClient}
-      allowManage={false}
-      triggerLabel="选择部分客户…"
-      showSummary={false}
-    />}
+    </div>
 
     <div role="status" className="min-w-0 rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600">
       <span>已选：</span><span className="font-semibold text-slate-800">{selectionLabel}</span>
