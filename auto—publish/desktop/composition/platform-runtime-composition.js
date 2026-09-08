@@ -91,18 +91,6 @@ async function createPlatformRuntimeComposition(options) {
           });
         }),
     );
-    const legacyQueuePorts = Object.freeze(
-      loadedPlatforms
-        .filter(function (platform) {
-          return Boolean(platform.legacyQueue);
-        })
-        .map(function (platform) {
-          return Object.freeze({
-            id: platform.definition.id,
-            port: platform.legacyQueue,
-          });
-        }),
-    );
     const settingsAdapters = Object.freeze(
       loadedPlatforms
         .filter(function (platform) {
@@ -209,7 +197,6 @@ async function createPlatformRuntimeComposition(options) {
       accountInspectionPorts,
       remoteReviewPorts,
       loginSessionPorts,
-      legacyQueuePorts,
       clientProfileReaders,
       submissionPlatformDirectory,
       platformSettingsService,

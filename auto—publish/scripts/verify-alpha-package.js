@@ -66,8 +66,6 @@ const ARCHIVE_FILES = [
   "desktop/composition/publication-recovery-composition.js",
   "desktop/services/article-attention-query.js",
   "desktop/services/article-attention-resolver.js",
-  "desktop/services/platform-workbench/command-preparer.js",
-  "desktop/services/platform-workbench/queue-reader.js",
   "src/application/publication-recovery.js",
   "src/infrastructure/operational-store/operational-store.js",
   "src/diagnostics/diagnostic-schema.js",
