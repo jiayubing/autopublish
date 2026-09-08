@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import type { ContentClient } from '../../types/content';
 import { ClientSelection, type ClientGrouping } from './ClientSelector';
 
@@ -51,9 +51,10 @@ export function selectedClientGroup(clients: ContentClient[], grouping: ClientGr
 }
 
 export default function ClientGroupBatchSelector({ clients, grouping, selectedIds, onChange, disabled = false }: ClientGroupBatchSelectorProps) {
-  const options = useMemo(() => clientGroupOptions(clients, grouping), [clients, grouping?.catalog, grouping?.error]);
-  const active = useMemo(() => selectedClientGroup(clients, grouping, selectedIds), [clients, grouping, selectedIds]);
-  const selectedCount = selectedIds.filter((id) => clients.some((client) => client.id === id)).length;
+  const options = clientGroupOptions(clients, grouping);
+  const active = selectedClientGroup(clients, grouping, selectedIds);
+  const available = new Set(clients.map((client) => client.id));
+  const selectedCount = selectedIds.filter((id) => available.has(id)).length;
 
   return <div className="space-y-3" data-client-group-batch-selector>
     <div className="rounded-md border border-blue-100 bg-blue-50/50 p-3">
