@@ -80,10 +80,10 @@ export function createContentGenerationFeature(options = {}) {
       const next = kind === 'retry' ? await options.retry(input.operationId) : await options.start(input);
       if (!command.isCurrent(token)) return next;
       if (next?.clientId && next.clientId !== scope.clientId) {
-        const error = scopeError('CONTENT_SCOPE_MISMATCH', '生成结果与当前客户不一致。');
-        command.finalize(token, { error });
-        publish();
-        throw Object.assign(new Error(error.userMessage), error);
+        throw Object.assign(
+          new Error('生成结果与当前客户不一致。'),
+          { code: 'CONTENT_SCOPE_MISMATCH' },
+        );
       }
       operation = next || operation;
       command.finalize(token, { result: next });
@@ -91,7 +91,6 @@ export function createContentGenerationFeature(options = {}) {
       return next;
     } catch (value) {
       if (!command.isCurrent(token)) return undefined;
-      if (value?.code === 'CONTENT_SCOPE_MISMATCH') throw value;
       const error = scopeError(
         value && typeof value.code === 'string' ? value.code : 'CONTENT_GENERATION_FAILED',
         value instanceof Error && value.message ? value.message : '生成文章失败。',
