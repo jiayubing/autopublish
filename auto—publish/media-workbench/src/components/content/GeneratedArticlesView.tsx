@@ -5,6 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { Search, Send, Trash2 } from "lucide-react";
 import {
   articleMatchesLibraryDateRange,
   articleSelectionKey,
@@ -34,6 +35,7 @@ import { useSubmissionIntakeSession } from "./use-submission-intake-session";
 import SubmissionIntakeDialog from "./SubmissionIntakeDialog";
 import { useArticleRemovalSession } from "./use-article-removal-session";
 import ArticleRemovalDialog from "./ArticleRemovalDialog";
+import { Button, PageHeader, Surface } from "../ui/primitives";
 
 type GeneratedArticlesViewProps = {
   management: ArticleManagementReadModel;
@@ -90,9 +92,9 @@ export default function GeneratedArticlesView({
   const [filter, setFilter] = useState("");
   const [createdFrom, setCreatedFrom] = useState("");
   const [createdTo, setCreatedTo] = useState("");
-  const [selectedStage, setSelectedStage] = useState<
-    ArticleWorkflowFilter
-  >(stageFilter);
+  const [selectedStage, setSelectedStage] = useState<ArticleWorkflowFilter>(
+    stageFilter,
+  );
   const submissionPlatforms = useMemo(
     () =>
       allSubmissionPlatforms.filter((platform) => platform.contentQueueImport),
@@ -116,8 +118,7 @@ export default function GeneratedArticlesView({
 
   useEffect(() => {
     setSelectedStage(stageFilter);
-    if (stageFilter !== "trash")
-      lastNonTrashStageRef.current = stageFilter;
+    if (stageFilter !== "trash") lastNonTrashStageRef.current = stageFilter;
   }, [stageFilter]);
 
   useEffect(() => {
@@ -145,6 +146,7 @@ export default function GeneratedArticlesView({
     });
     return grouped;
   }, [publicationRecords]);
+
   const publicationArchivesByArticle = useMemo(() => {
     const grouped = new Map<string, PublicationArchiveEntry[]>();
     publishedArchives.forEach((archive) => {
@@ -156,20 +158,22 @@ export default function GeneratedArticlesView({
     });
     return grouped;
   }, [publishedArchives]);
+
   const publishedTimeFacts = useMemo(
     () => publishedTimeFactsByArticle(publishedArchives),
     [publishedArchives],
   );
   const workflowByArticle = useMemo(
-    () =>
-      new Map(
-        Object.entries(snapshotWorkflowByArticle),
-      ),
+    () => new Map(Object.entries(snapshotWorkflowByArticle)),
     [snapshotWorkflowByArticle],
   );
   const generationBatches = useMemo(
     () =>
-      [...new Set(articles.map((article) => article.generationBatchId).filter(Boolean))].sort(),
+      [
+        ...new Set(
+          articles.map((article) => article.generationBatchId).filter(Boolean),
+        ),
+      ].sort(),
     [articles],
   );
 
@@ -180,11 +184,8 @@ export default function GeneratedArticlesView({
   function canSubmitArticle(article: GeneratedContentArticle): boolean {
     const workflow = workflowForArticle(article);
     const allowed =
-      workflow?.operations?.submit?.allowed ??
-      workflow?.locks.canSubmit;
-    return (
-      allowed === true && !(dirtyArticleId && article.id === dirtyArticleId)
-    );
+      workflow?.operations?.submit?.allowed ?? workflow?.locks.canSubmit;
+    return allowed === true && !(dirtyArticleId && article.id === dirtyArticleId);
   }
 
   function canTrashArticle(article: GeneratedContentArticle): boolean {
@@ -238,6 +239,7 @@ export default function GeneratedArticlesView({
     selectedStage,
     workflowByArticle,
   ]);
+
   const groups = useMemo(
     () =>
       selectedStage === "published"
@@ -264,6 +266,7 @@ export default function GeneratedArticlesView({
     ? []
     : selectedArticles.filter(canSubmitArticle);
   const selectedTrashableArticles = selectedArticles.filter(canTrashArticle);
+
   const submissionSession = useSubmissionIntakeSession({
     scopeKey: workspaceScopeKey,
     availableArticleRefs: selectedSubmittableArticles.map((article) => ({
@@ -280,6 +283,7 @@ export default function GeneratedArticlesView({
   });
   const intake = submissionSession.snapshot;
   const intakeIntents = submissionSession.intents;
+
   const removalSession = useArticleRemovalSession({
     clientId,
     scopeKey: workspaceScopeKey,
@@ -428,180 +432,207 @@ export default function GeneratedArticlesView({
     );
 
   return (
-    <div className="relative h-full w-full min-w-0 overflow-x-hidden overflow-y-auto p-4">
-      <div className="mb-4 grid min-w-0 gap-3">
-        <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-          <h2 aria-label="文章库" className="text-base font-semibold text-slate-800">
-            文章库
-          </h2>
-          <p className="mt-1 max-w-prose text-xs leading-5 text-slate-500">
-            按文章当前阶段、生成批次和关键词筛选；编辑、发起投稿、进度与发布档案均从这里进入。
-          </p>
-          </div>
-        </div>
+    <div className="relative h-full w-full min-w-0 overflow-x-hidden overflow-y-auto p-3 sm:p-4">
+      <div className="mb-3 grid min-w-0 gap-3">
+        <PageHeader
+          eyebrow="Article Library"
+          title={<span aria-label="文章库">文章库</span>}
+          description="按文章阶段、生成批次和关键词筛选；编辑、发起投稿、进度与发布档案均从这里进入。"
+          actions={
+            <div className="text-right">
+              <span className="block text-[9px] font-semibold uppercase tracking-[0.09em] text-slate-400">
+                当前结果
+              </span>
+              <span className="mt-0.5 block font-mono text-sm font-bold text-slate-700">
+                {filtered.length} 篇
+              </span>
+            </div>
+          }
+        />
 
         <ClientLiejuPublicationProfileEditor
           client={client}
           saveProfile={saveClientLiejuPublicationProfile}
         />
 
-        <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)_auto_auto]">
-          <input
-            value={filter}
-            onChange={(event) => setFilter(event.target.value)}
-            placeholder="筛选标题、平台或模板"
-            aria-label="筛选文章库"
-            className="h-9 min-w-0 w-full rounded-md border border-slate-300 px-2 text-xs"
-          />
-          <select
-            aria-label="生成批次筛选"
-            value={generationBatchId || ""}
-            onChange={(event) =>
-              onGenerationBatchFilterChange?.(event.target.value || null)
-            }
-            disabled={!generationBatches.length && !generationBatchId}
-            className="h-9 min-w-0 rounded-md border border-slate-300 bg-white px-2 text-xs disabled:opacity-50"
-          >
-            <option value="">全部生成批次</option>
-            {generationBatchId && !generationBatches.includes(generationBatchId) && (
-              <option value={generationBatchId}>{generationBatchId}</option>
-            )}
-            {generationBatches.map((batchId) => (
-              <option key={batchId} value={batchId}>{batchId}</option>
-            ))}
-          </select>
-          <label className="flex h-9 items-center gap-1 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-500">
-            起始日期
-            <input
-              type="date"
-              aria-label={
-                selectedStage === "published"
-                  ? "文章发布时间起始日期"
-                  : "文章创建起始日期"
+        <Surface className="overflow-hidden">
+          <div className="grid min-w-0 gap-2 bg-slate-50/55 p-2.5 lg:grid-cols-[minmax(13rem,1fr)_minmax(10rem,auto)_auto_auto]">
+            <div className="relative min-w-0">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+              <input
+                value={filter}
+                onChange={(event) => setFilter(event.target.value)}
+                placeholder="筛选标题、平台或模板"
+                aria-label="筛选文章库"
+                className="ui-field h-9 pl-8"
+              />
+            </div>
+            <select
+              aria-label="生成批次筛选"
+              value={generationBatchId || ""}
+              onChange={(event) =>
+                onGenerationBatchFilterChange?.(event.target.value || null)
               }
-              value={createdFrom}
-              onChange={(event) => setCreatedFrom(event.target.value)}
-              className="min-w-0 bg-transparent text-slate-700 outline-none"
-            />
-          </label>
-          <label className="flex h-9 items-center gap-1 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-500">
-            结束日期
-            <input
-              type="date"
-              aria-label={
-                selectedStage === "published"
-                  ? "文章发布时间结束日期"
-                  : "文章创建结束日期"
-              }
-              value={createdTo}
-              onChange={(event) => setCreatedTo(event.target.value)}
-              className="min-w-0 bg-transparent text-slate-700 outline-none"
-            />
-          </label>
+              disabled={!generationBatches.length && !generationBatchId}
+              className="ui-field h-9 bg-white disabled:opacity-50"
+            >
+              <option value="">全部生成批次</option>
+              {generationBatchId &&
+                !generationBatches.includes(generationBatchId) && (
+                  <option value={generationBatchId}>{generationBatchId}</option>
+                )}
+              {generationBatches.map((batchId) => (
+                <option key={batchId} value={batchId}>
+                  {batchId}
+                </option>
+              ))}
+            </select>
+            <label className="flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-[11px] font-medium text-slate-500">
+              起始
+              <input
+                type="date"
+                aria-label={
+                  selectedStage === "published"
+                    ? "文章发布时间起始日期"
+                    : "文章创建起始日期"
+                }
+                value={createdFrom}
+                onChange={(event) => setCreatedFrom(event.target.value)}
+                className="min-w-0 bg-transparent text-slate-700 outline-none"
+              />
+            </label>
+            <label className="flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-[11px] font-medium text-slate-500">
+              结束
+              <input
+                type="date"
+                aria-label={
+                  selectedStage === "published"
+                    ? "文章发布时间结束日期"
+                    : "文章创建结束日期"
+                }
+                value={createdTo}
+                onChange={(event) => setCreatedTo(event.target.value)}
+                className="min-w-0 bg-transparent text-slate-700 outline-none"
+              />
+            </label>
+          </div>
+
           {generationBatchId && (
             <div
               role="status"
               data-testid="generation-batch-filter"
-              className="flex flex-wrap items-center justify-between gap-2 rounded border border-blue-100 bg-blue-50 p-2 text-xs text-blue-800"
+              className="flex flex-wrap items-center justify-between gap-2 border-t border-blue-100 bg-blue-50/70 px-3 py-2 text-[11px] text-blue-800"
             >
               <span>当前筛选：生成批次 {generationBatchId}</span>
               {onClearGenerationBatchFilter && (
-                <button
-                  type="button"
+                <Button
+                  size="sm"
+                  variant="ghost"
                   onClick={onClearGenerationBatchFilter}
-                  className="rounded border border-blue-200 px-2 py-1 text-blue-700"
                 >
                   清除批次筛选
-                </button>
+                </Button>
               )}
             </div>
           )}
-        </div>
+        </Surface>
 
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <button
-            type="button"
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-2 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
+          <span className="mr-1 text-[11px] font-medium text-slate-400">
+            已选 {selectedArticles.length}
+          </span>
+          <Button
+            variant="primary"
+            size="sm"
             onClick={openSubmissionIntake}
-            disabled={!selectedSubmittableArticles.length || Boolean(selectedDirtyArticle)}
-            title={selectedDirtyArticle ? "当前编辑文章有未保存修改，请先保存后投稿。" : undefined}
-            className="rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
+            disabled={
+              !selectedSubmittableArticles.length || Boolean(selectedDirtyArticle)
+            }
+            title={
+              selectedDirtyArticle
+                ? "当前编辑文章有未保存修改，请先保存后投稿。"
+                : undefined
+            }
           >
+            <Send className="h-3.5 w-3.5" />
             发起投稿 ({selectedSubmittableArticles.length})
-          </button>
-          <button
-            type="button"
-            onClick={toggleAll}
-            disabled={!operable.length}
-            className="rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40"
-          >
+          </Button>
+          <Button size="sm" onClick={toggleAll} disabled={!operable.length}>
             全选当前结果
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="danger"
+            size="sm"
             onClick={() => void trashSelected()}
             disabled={
               !selectedTrashableArticles.length ||
               removalSnapshot.trashBusy ||
               removalSnapshot.removalSubmitDisabled
             }
-            className="rounded bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
           >
+            <Trash2 className="h-3.5 w-3.5" />
             移入回收站 ({selectedTrashableArticles.length})
-          </button>
+          </Button>
         </div>
+
         {intake.feedback && (
           <div
             role={intake.feedback.kind === "error" ? "alert" : "status"}
-            aria-live={intake.feedback.kind === "error" ? "assertive" : "polite"}
+            aria-live={
+              intake.feedback.kind === "error" ? "assertive" : "polite"
+            }
             tabIndex={intake.feedback.kind === "error" ? -1 : undefined}
-            className={`min-w-0 rounded border p-2 text-xs ${intake.feedback.kind === "error" ? "border-rose-100 bg-rose-50 text-rose-700" : "border-blue-100 bg-blue-50 text-blue-700"}`}
+            className={`min-w-0 rounded-xl border p-3 text-xs ${
+              intake.feedback.kind === "error"
+                ? "border-rose-100 bg-rose-50 text-rose-700"
+                : "border-blue-100 bg-blue-50 text-blue-700"
+            }`}
           >
             {intake.feedback.text}
           </div>
         )}
+
         <ArticleRemovalDialog
           snapshot={removalSnapshot}
           intents={removalIntents}
         />
-
-        <div className="rounded-md border border-slate-200 bg-slate-50 p-2 text-xs text-slate-500">
-          选择文章后点击“发起投稿”，在确认面板中选择普通平台目标或收藏媒体。
-        </div>
       </div>
+
       {visibleError && (
         <div
           role="alert"
-          className="mb-3 rounded border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700"
+          className="mb-3 rounded-xl border border-rose-100 bg-rose-50 p-3 text-xs text-rose-700"
         >
           {visibleError}
         </div>
       )}
+
       <GeneratedArticlesList
-          groups={groups}
-          visibleError={visibleError}
-          clientId={clientId}
-          collapsed={collapsed}
-          selected={selected}
-          workflowByArticle={workflowByArticle}
-          publishedArchives={publishedArchives}
-          publishedView={selectedStage === "published"}
-          isArticleSelectable={isArticleSelectable}
-          isArticleSubmittable={canSubmitArticle}
-          removalSubmitDisabled={removalSnapshot.removalSubmitDisabled}
-          commandBusy={commandBusy}
-          onToggleCollapsed={(key) =>
-            setCollapsed((current) => ({
-              ...current,
-              [key]: current[key] === false,
-            }))
-          }
-          onToggleGroup={toggleGroup}
-          onToggleArticle={toggleArticle}
-          onOpenArticle={openArticle}
-          onOpenPublication={(article) => setDrawerArticle(article)}
-          onOpenOrder={onOpenOrders}
-        />
+        groups={groups}
+        visibleError={visibleError}
+        clientId={clientId}
+        collapsed={collapsed}
+        selected={selected}
+        workflowByArticle={workflowByArticle}
+        publishedArchives={publishedArchives}
+        publishedView={selectedStage === "published"}
+        isArticleSelectable={isArticleSelectable}
+        isArticleSubmittable={canSubmitArticle}
+        removalSubmitDisabled={removalSnapshot.removalSubmitDisabled}
+        commandBusy={commandBusy}
+        onToggleCollapsed={(key) =>
+          setCollapsed((current) => ({
+            ...current,
+            [key]: current[key] === false,
+          }))
+        }
+        onToggleGroup={toggleGroup}
+        onToggleArticle={toggleArticle}
+        onOpenArticle={openArticle}
+        onOpenPublication={(article) => setDrawerArticle(article)}
+        onOpenOrder={onOpenOrders}
+      />
+
       <PublicationHistoryDrawer
         article={drawerArticle}
         records={
