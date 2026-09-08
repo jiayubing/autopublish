@@ -328,6 +328,20 @@ const api = {
     generateArticle: function (input) {
       return ipcRenderer.invoke("content:generate-article", input);
     },
+    startClientGeneration: function (input) {
+      return ipcRenderer.invoke("content:start-client-generation", input || {});
+    },
+    getClientGenerationState: function (clientId) {
+      return ipcRenderer.invoke("content:get-client-generation-state", { clientId: clientId });
+    },
+    retryClientGeneration: function (operationId) {
+      return ipcRenderer.invoke("content:retry-client-generation", { operationId: operationId });
+    },
+    onClientGenerationState: function (listener) {
+      const handler = function (event, payload) { listener(payload); };
+      ipcRenderer.on("content:client-generation-state", handler);
+      return function () { ipcRenderer.removeListener("content:client-generation-state", handler); };
+    },
     saveArticle: function (input) {
       return ipcRenderer.invoke("content:save-article", input);
     },
