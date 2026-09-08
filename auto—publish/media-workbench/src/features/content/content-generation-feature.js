@@ -20,6 +20,7 @@ export function createContentGenerationFeature(options = {}) {
   let scope = null;
   let operation = null;
   let refreshSequence = 0;
+  let unsubscribeOperation = null;
   let snapshot = Object.freeze({ scope: null, command: command.getSnapshot(), operation: null });
 
   const emit = () => listeners.forEach((listener) => listener());
@@ -27,6 +28,21 @@ export function createContentGenerationFeature(options = {}) {
     snapshot = Object.freeze({ scope, command: command.getSnapshot(), operation });
     emit();
   };
+
+  const receiveOperation = (next) => {
+    if (disposed || !scope || !next || next.clientId !== scope.clientId) return;
+    operation = next;
+    publish();
+  };
+
+  function ensureOperationSubscription() {
+    if (disposed || unsubscribeOperation) return;
+    const unsubscribe = options.subscribeOperation(receiveOperation);
+    if (typeof unsubscribe !== 'function') {
+      throw new TypeError('Content generation subscription disposer is required');
+    }
+    unsubscribeOperation = unsubscribe;
+  }
 
   async function refresh() {
     if (disposed || !scope || scope.clientId === 'none') {
@@ -38,6 +54,7 @@ export function createContentGenerationFeature(options = {}) {
     try {
       const next = await options.getState(scope.clientId);
       if (disposed || sequence !== refreshSequence || !scope || next?.clientId && next.clientId !== scope.clientId) return null;
+      if (next?.status === 'running') ensureOperationSubscription();
       operation = next || null;
       publish();
       return operation;
@@ -46,12 +63,6 @@ export function createContentGenerationFeature(options = {}) {
       return null;
     }
   }
-
-  const unsubscribeOperation = options.subscribeOperation((next) => {
-    if (disposed || !scope || !next || next.clientId !== scope.clientId) return;
-    operation = next;
-    publish();
-  });
 
   async function runCommand(kind, input) {
     if (disposed || !scope) throw new Error('Content generation feature is unavailable');
@@ -65,14 +76,22 @@ export function createContentGenerationFeature(options = {}) {
     const token = command.begin(scope);
     publish();
     try {
+      ensureOperationSubscription();
       const next = kind === 'retry' ? await options.retry(input.operationId) : await options.start(input);
       if (!command.isCurrent(token)) return next;
+      if (next?.clientId && next.clientId !== scope.clientId) {
+        const error = scopeError('CONTENT_SCOPE_MISMATCH', '生成结果与当前客户不一致。');
+        command.finalize(token, { error });
+        publish();
+        throw Object.assign(new Error(error.userMessage), error);
+      }
       operation = next || operation;
       command.finalize(token, { result: next });
       publish();
       return next;
     } catch (value) {
       if (!command.isCurrent(token)) return undefined;
+      if (value?.code === 'CONTENT_SCOPE_MISMATCH') throw value;
       const error = scopeError(
         value && typeof value.code === 'string' ? value.code : 'CONTENT_GENERATION_FAILED',
         value instanceof Error && value.message ? value.message : '生成文章失败。',
@@ -117,6 +136,7 @@ export function createContentGenerationFeature(options = {}) {
       disposed = true;
       command.dispose();
       if (typeof unsubscribeOperation === 'function') unsubscribeOperation();
+      unsubscribeOperation = null;
       listeners.clear();
       scope = null;
       operation = null;
