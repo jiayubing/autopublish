@@ -50,7 +50,6 @@ function ClientFilters({ clients, grouping, filter, label, disabled, allowManage
   clients: ContentClient[]; grouping?: ClientGrouping; filter: FilterState; label: string;
   disabled?: boolean; allowManage?: boolean; onFilterChange?: () => void;
 }) {
-  const [managing, setManaging] = useState(false);
   return <>
     <div className="flex min-w-0 flex-wrap items-center gap-2">
       <select aria-label={`${label}分组`} value={filter.groupId} disabled={disabled || grouping?.loading || Boolean(grouping?.error)} onChange={(event) => { filter.setGroupId(event.target.value); onFilterChange?.(); }} className={`${control} max-w-56`}>
@@ -59,11 +58,10 @@ function ClientFilters({ clients, grouping, filter, label, disabled, allowManage
         <option value="ungrouped">未分组（{filter.counts.get('ungrouped') || 0}）</option>
       </select>
       <input aria-label={`搜索${label}`} type="search" value={filter.search} disabled={disabled} onChange={(event) => { filter.setSearch(event.target.value); onFilterChange?.(); }} placeholder="搜索客户名称" className={`${control} w-44 max-w-full`} />
-      {grouping && allowManage && <button type="button" onClick={() => setManaging(true)} disabled={disabled || grouping.loading || Boolean(grouping.error)} className={button}>管理分组</button>}
+      {grouping && allowManage && <ClientGroupManagerButton clients={clients} grouping={grouping} disabled={disabled} />}
     </div>
     {grouping?.loading && <p role="status" className="text-xs text-slate-500">正在加载客户分组…</p>}
     {grouping?.error && <div role="status" className="flex flex-wrap items-center gap-2 text-xs text-amber-800"><span>客户分组暂不可用，可搜索全部客户。</span><button type="button" onClick={grouping.reload} disabled={grouping.loading} className={button}>重试分组</button></div>}
-    {managing && grouping && <ClientGroupManager clients={clients} grouping={grouping} onClose={() => setManaging(false)} />}
   </>;
 }
 
@@ -108,7 +106,7 @@ function ClientSelectionList({ clients, selectedIds, onChange, grouping, disable
   </div>;
 }
 
-export function ClientSelection({ clients, selectedIds, onChange, grouping, disabled = false, describeClient, allowManage = true }: {
+export function ClientSelection({ clients, selectedIds, onChange, grouping, disabled = false, describeClient, allowManage = true, triggerLabel = '选择客户', showSummary = true }: {
   clients: ContentClient[];
   selectedIds: string[];
   onChange: (ids: string[]) => void;
@@ -116,6 +114,8 @@ export function ClientSelection({ clients, selectedIds, onChange, grouping, disa
   disabled?: boolean;
   describeClient?: (client: ContentClient) => React.ReactNode;
   allowManage?: boolean;
+  triggerLabel?: string;
+  showSummary?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -134,8 +134,8 @@ export function ClientSelection({ clients, selectedIds, onChange, grouping, disa
 
   return <div className="min-w-0 space-y-2" data-client-selection>
     <div className="flex min-w-0 flex-wrap items-center gap-2">
-      <p role="status" className="min-w-0 flex-1 text-xs text-slate-600">已选 {selectedClients.length} 个客户：<span className="text-slate-800">{summary}</span></p>
-      <button type="button" onClick={() => setOpen(true)} disabled={disabled} className={button}>选择客户</button>
+      {showSummary && <p role="status" className="min-w-0 flex-1 text-xs text-slate-600">已选 {selectedClients.length} 个客户：<span className="text-slate-800">{summary}</span></p>}
+      <button type="button" onClick={() => setOpen(true)} disabled={disabled} className={button}>{triggerLabel}</button>
       <button type="button" onClick={() => onChange([])} disabled={disabled || !selectedClients.length} className={button}>清空选择</button>
     </div>
     {open && <dialog ref={dialogRef} aria-label="选择批次客户" onCancel={(event) => { event.preventDefault(); if (!disabled) setOpen(false); }} className="m-auto max-h-[90vh] w-11/12 max-w-4xl overflow-y-auto rounded-lg border border-slate-200 bg-white p-5 shadow-xl backdrop:bg-black/30">
@@ -168,6 +168,20 @@ export function CurrentClientSelector({ clients, clientId, onChange, grouping }:
       </>}
     </select>
   </label>;
+}
+
+export function ClientGroupManagerButton({ clients, grouping, disabled = false, label = '管理分组' }: {
+  clients: ContentClient[];
+  grouping: ClientGrouping;
+  disabled?: boolean;
+  label?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const unavailable = disabled || grouping.loading || Boolean(grouping.error);
+  return <>
+    <button type="button" onClick={() => setOpen(true)} disabled={unavailable} className={button}>{label}</button>
+    {open && <ClientGroupManager clients={clients} grouping={grouping} onClose={() => setOpen(false)} />}
+  </>;
 }
 
 function ClientGroupManager({ clients, grouping, onClose }: { clients: ContentClient[]; grouping: ClientGrouping; onClose: () => void }) {
