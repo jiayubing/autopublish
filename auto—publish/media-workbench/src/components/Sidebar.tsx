@@ -3,12 +3,12 @@ import type { ViewMode } from "../types/view";
 import {
   BookOpen,
   ClipboardList,
+  Feather,
   FolderOpen,
   PenLine,
   RefreshCw,
   Send,
   Settings,
-  Sparkles,
   Wallet,
 } from "lucide-react";
 import { motion } from "motion/react";
@@ -76,27 +76,36 @@ export default function Sidebar({
   return (
     <aside
       id="app-sidebar"
-      className="w-64 shrink-0 bg-slate-900 border-r border-slate-800 flex flex-col h-screen text-slate-300 select-none"
+      className="flex h-screen w-60 shrink-0 select-none flex-col border-r text-slate-300"
+      style={{
+        background: "var(--app-sidebar)",
+        borderColor: "var(--app-sidebar-border)",
+      }}
     >
       <div
-        className="app-sidebar-header p-6 border-b border-slate-800 flex items-center space-x-3"
+        className="app-sidebar-header flex items-center gap-3 border-b px-5 py-5"
+        style={{ borderColor: "var(--app-sidebar-border)" }}
         data-sidebar-section="header"
       >
-        <div className="w-9 h-9 shrink-0 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-lg shadow-blue-500/30">
-          <Sparkles className="w-5 h-5" />
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-950/30">
+          <Feather className="h-5 w-5" strokeWidth={2.1} />
         </div>
         <div className="sidebar-label min-w-0">
-          <h1 className="font-bold text-slate-100 text-lg leading-tight">ETO—001</h1>
-          <span className="text-[10px] text-slate-400 font-semibold uppercase">Auto Publish</span>
+          <h1 className="truncate text-[15px] font-bold tracking-tight text-white">
+            AutoPublish
+          </h1>
+          <span className="mt-0.5 block truncate text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+            GEO Content Workbench
+          </span>
         </div>
       </div>
 
       <nav
-        className="app-sidebar-navigation flex-1 p-4 space-y-1.5 overflow-y-auto"
+        className="app-sidebar-navigation flex-1 space-y-1 overflow-y-auto px-3 py-4"
         data-sidebar-section="navigation"
       >
-        <div className="app-sidebar-navigation-label sidebar-label px-3 mb-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-          主导航
+        <div className="app-sidebar-navigation-label sidebar-label mb-2 px-2.5 text-[9px] font-bold uppercase tracking-[0.16em] text-slate-600">
+          工作台
         </div>
         {NAVIGATION_ITEMS.map((item) => {
           const Icon = item.icon;
@@ -111,26 +120,29 @@ export default function Sidebar({
               onClick={() => onViewChange(item.id)}
               aria-label={item.label}
               aria-current={isActive ? "page" : undefined}
-              className={`app-sidebar-navigation-item w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 relative group ${
+              className={`app-sidebar-navigation-item group relative flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors duration-150 ${
                 isActive
-                  ? "bg-blue-600/10 text-blue-400 border border-blue-500/20 font-semibold"
-                  : "hover:bg-slate-800/60 text-slate-400 hover:text-slate-200 border border-transparent"
+                  ? "border-blue-400/15 bg-blue-500/12 text-white"
+                  : "border-transparent text-slate-400 hover:bg-white/[0.045] hover:text-slate-200"
               }`}
             >
-              <div className="app-sidebar-navigation-item-content flex min-w-0 items-center space-x-3">
+              <div className="app-sidebar-navigation-item-content flex min-w-0 items-center gap-3">
                 <Icon
-                  className={`w-4.5 h-4.5 shrink-0 transition-transform duration-200 group-hover:scale-110 ${
-                    isActive ? "text-blue-400" : "text-slate-400"
+                  className={`h-[17px] w-[17px] shrink-0 ${
+                    isActive
+                      ? "text-blue-400"
+                      : "text-slate-500 group-hover:text-slate-300"
                   }`}
+                  strokeWidth={1.9}
                 />
                 <span className="sidebar-label truncate">{item.label}</span>
               </div>
               {badge !== undefined && badge > 0 && (
                 <span
-                  className={`sidebar-badge text-xs px-2 py-0.5 rounded-full font-semibold transition-all ${
+                  className={`sidebar-badge min-w-5 rounded-full px-1.5 py-0.5 text-center text-[10px] font-bold ${
                     isActive
-                      ? "bg-blue-500/20 text-blue-300"
-                      : "bg-slate-800 text-slate-500 group-hover:bg-slate-700/80 group-hover:text-slate-300"
+                      ? "bg-blue-500/20 text-blue-200"
+                      : "bg-slate-800 text-slate-400"
                   }`}
                   title={item.badgeTitle}
                 >
@@ -140,7 +152,8 @@ export default function Sidebar({
               {isActive && (
                 <motion.div
                   layoutId="active-nav-indicator"
-                  className="absolute left-0 top-1/4 bottom-1/4 w-1 bg-blue-500 rounded-r"
+                  className="absolute bottom-2 left-0 top-2 w-0.5 rounded-r bg-blue-400"
+                  transition={{ duration: 0.16 }}
                 />
               )}
             </button>
@@ -149,17 +162,18 @@ export default function Sidebar({
       </nav>
 
       <div
-        className="app-sidebar-footer p-4 border-t border-slate-800 bg-slate-950/50"
+        className="app-sidebar-footer border-t p-3"
+        style={{ borderColor: "var(--app-sidebar-border)" }}
         data-sidebar-section="footer"
       >
         <div
           onClick={() => setShowWalletDetails((current) => !current)}
-          className="app-sidebar-wallet p-3.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition-all cursor-pointer group"
+          className="app-sidebar-wallet group cursor-pointer rounded-xl border border-white/[0.06] bg-white/[0.035] p-3 transition-colors hover:bg-white/[0.055]"
         >
-          <div className="flex items-center justify-between mb-1.5">
-            <div className="flex items-center space-x-2 text-xs text-slate-400 group-hover:text-slate-200">
-              <Wallet className="w-4 h-4 text-indigo-400" />
-              <span className="sidebar-label font-medium">媒体余额</span>
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2 text-[11px] text-slate-400">
+              <Wallet className="h-3.5 w-3.5 shrink-0 text-blue-400" />
+              <span className="sidebar-label truncate font-medium">媒体余额</span>
             </div>
             <button
               id="checkBalanceBtn"
@@ -168,16 +182,20 @@ export default function Sidebar({
                 onCheckBalance();
               }}
               disabled={isCheckingBalance}
-              className="p-1 rounded-md text-slate-500 hover:text-blue-400 hover:bg-slate-800 disabled:opacity-50 transition-colors"
+              className="rounded-md p-1 text-slate-500 transition-colors hover:bg-white/[0.06] hover:text-blue-300 disabled:opacity-50"
               title="刷新余额"
               aria-label="刷新余额"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isCheckingBalance ? "animate-spin text-blue-400" : ""}`} />
+              <RefreshCw
+                className={`h-3.5 w-3.5 ${
+                  isCheckingBalance ? "animate-spin text-blue-400" : ""
+                }`}
+              />
             </button>
           </div>
-          <div className="flex items-baseline space-x-1">
-            <span className="text-xs text-slate-500 font-semibold">¥</span>
-            <span className="text-lg font-bold text-slate-100 tracking-tight font-mono">
+          <div className="flex items-baseline gap-1">
+            <span className="text-[10px] font-semibold text-slate-500">¥</span>
+            <span className="font-mono text-base font-bold tracking-tight text-slate-100">
               {isCheckingBalance
                 ? "..."
                 : balance.toLocaleString("zh-CN", {
@@ -190,13 +208,15 @@ export default function Sidebar({
             <motion.div
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: "auto", opacity: 1 }}
-              className="sidebar-label mt-2.5 pt-2 border-t border-slate-800 text-[11px] text-slate-400"
+              className="sidebar-label mt-2.5 border-t border-white/[0.06] pt-2 text-[10px] leading-4 text-slate-500"
             >
               余额来自媒体资源 read model；媒体费用确认后才会形成订单。
             </motion.div>
           )}
         </div>
-        <div className="sidebar-label mt-3 text-center text-[10px] text-slate-600 font-medium">ETO—001</div>
+        <div className="sidebar-label mt-3 px-1 text-[9px] font-medium uppercase tracking-[0.13em] text-slate-700">
+          ETO—001 · Desktop
+        </div>
       </div>
     </aside>
   );
