@@ -65,7 +65,7 @@ function stageTone(
 ): "neutral" | "info" | "success" | "warning" | "danger" {
   if (stage === "published") return "success";
   if (stage === "needs_completion") return "warning";
-  if (stage === "queued" || stage === "submitting") return "info";
+  if (stage === "pending_submission" || stage === "in_submission") return "info";
   return "neutral";
 }
 
