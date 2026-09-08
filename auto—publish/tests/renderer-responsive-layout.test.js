@@ -664,7 +664,7 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
     }
   });
 
-  it("enables single article generation with the visible default template", async () => {
+  it("enables customer generation with the visible default template", async () => {
     const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
     try {
       page.setDefaultTimeout(5000);
@@ -683,7 +683,7 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
         window.desktopConsole.content.listResearch = () => result({ research });
         window.desktopConsole.content.listResearchMetadata = () => result({ research });
         window.desktopConsole.content.listTemplateCatalog = () => result({
-          revision: "single-default-template",
+          revision: "client-default-template",
           platforms: [{ id: "fixture", displayName: "测试平台", description: "", order: 1 }],
           templates: [{ id: "template-1", platform: "fixture", name: "模板一", scenario: "默认模板", body: "模板正文", bodyHash: "fixture", source: "custom" }],
           diagnostics: [],
@@ -692,7 +692,7 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
 
       await page.getByRole("button", { name: "刷新客户与模板" }).click();
       await page.locator("#nav-item-content-production").click();
-      await page.getByRole("button", { name: "单篇生成", exact: true }).click();
+      await page.getByRole("button", { name: "客户生成", exact: true }).click();
       await page.getByText(/资料 1 份 · 回答 1 条/).waitFor();
 
       assert.equal(await page.getByRole("button", { name: "生成 1 篇文章" }).isEnabled(), true);
