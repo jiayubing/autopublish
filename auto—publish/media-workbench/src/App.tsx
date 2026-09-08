@@ -9,9 +9,7 @@ import SettingsView from "./components/SettingsView";
 import { useWorkspaceRuntimeIdentity } from "./features/workspace/workspace-coordinator-context";
 import { PlatformFeatureProvider } from "./features/platform/platform-feature-context";
 import ConfirmationHost from "./components/ConfirmationHost";
-import {
-  RefreshCw,
-} from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useMediaFeature } from "./features/media/use-media-feature";
 import { useContentWorkbenchFeature } from "./features/content/use-content-workbench-feature";
@@ -28,6 +26,14 @@ const VIEW_MODES: ViewMode[] = [
   "resources",
   "settings",
 ];
+const VIEW_LABELS: Record<ViewMode, string> = {
+  "content-production": "内容生产",
+  "article-library": "文章库",
+  "submission-center": "投稿中心",
+  orders: "订单",
+  resources: "媒体资源",
+  settings: "设置",
+};
 
 function loadLastView(): ViewMode {
   if (typeof localStorage === "undefined") return "article-library";
@@ -143,8 +149,7 @@ function AppContent() {
   const consumeArticleLibraryIntent = () => setArticleLibraryIntent(null);
 
   return (
-    <div className="flex h-full w-full overflow-hidden bg-slate-50">
-      {/* 1. Fixed Left Sidebar */}
+    <div className="app-shell flex h-full w-full overflow-hidden">
       <Sidebar
         currentView={currentView}
         onViewChange={changeView}
@@ -156,36 +161,47 @@ function AppContent() {
         badges={navigationBadges}
       />
 
-      {/* 2. Main Content Viewport */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-        {/* Top Toolbar / Header bar */}
-        <header className="h-14 border-b border-slate-200 bg-white flex items-center px-6 shadow-sm z-10 shrink-0">
-          <div className="flex items-center justify-between w-full">
-            <div className="flex items-center space-x-3">
-              {dataLoaded ? (
-                <div className="flex items-center space-x-2 text-xs text-slate-500 font-medium">
-                  <div className="w-2 h-2 rounded-full bg-emerald-400"></div>
-                  <span>数据已就绪</span>
-                </div>
-              ) : (
-                <div className="flex items-center space-x-2 text-xs text-amber-500 font-medium">
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  <span>正在加载数据...</span>
-                </div>
-              )}
+      <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
+        <header className="app-topbar z-10 flex shrink-0 items-center px-4 sm:px-6">
+          <div className="flex w-full min-w-0 items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="truncate text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                AutoPublish · 工作台
+              </p>
+              <p className="mt-0.5 truncate text-sm font-semibold text-slate-700">
+                {VIEW_LABELS[currentView]}
+              </p>
             </div>
+            {dataLoaded ? (
+              <div
+                role="status"
+                className="flex shrink-0 items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50/80 px-3 py-1.5 text-[11px] font-semibold text-emerald-700"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                数据已就绪
+              </div>
+            ) : (
+              <div
+                role="status"
+                className="flex shrink-0 items-center gap-2 rounded-full border border-amber-100 bg-amber-50/90 px-3 py-1.5 text-[11px] font-semibold text-amber-700"
+              >
+                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                正在加载数据…
+              </div>
+            )}
           </div>
         </header>
-        {/* Scrollable Main Viewport */}
-        <main className="flex-1 overflow-y-auto p-3 sm:p-6 min-h-0 relative select-none">
-          <AnimatePresence mode="sync">
+
+        <main className="app-workspace relative min-h-0 flex-1 select-none overflow-y-auto p-3 sm:p-5 lg:p-6">
+          <div className="app-page-frame h-full">
+            <AnimatePresence mode="sync">
               {currentView === "content-production" && (
                 <motion.div
                   key="content-production-view"
-                  initial={{ opacity: 0, y: 5 }}
+                  initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -5 }}
-                  transition={{ duration: 0.15 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.14 }}
                   className="h-full"
                 >
                   <ContentWorkbench
@@ -197,15 +213,14 @@ function AppContent() {
                 </motion.div>
               )}
 
-              {/* View 2: Full Resources Management View */}
               {currentView === "resources" && (
                 <motion.div
                   key="resources-view"
-                  initial={{ opacity: 0, y: 5 }}
+                  initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -5 }}
-                  transition={{ duration: 0.15 }}
-                  className="max-w-4xl mx-auto h-full"
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.14 }}
+                  className="mx-auto h-full w-full max-w-6xl"
                 >
                   <ResourceLibraryPage
                     snapshot={mediaSnapshot}
@@ -217,10 +232,10 @@ function AppContent() {
               {currentView === "article-library" && (
                 <motion.div
                   key="article-library-view"
-                  initial={{ opacity: 0, y: 5 }}
+                  initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -5 }}
-                  transition={{ duration: 0.15 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.14 }}
                   className="h-full"
                 >
                   <ContentWorkbench
@@ -252,10 +267,10 @@ function AppContent() {
               {currentView === "submission-center" && (
                 <motion.div
                   key="submission-center-view"
-                  initial={{ opacity: 0, y: 5 }}
+                  initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -5 }}
-                  transition={{ duration: 0.15 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.14 }}
                   className="h-full"
                 >
                   <PlatformWorkbench
@@ -268,34 +283,33 @@ function AppContent() {
                 </motion.div>
               )}
 
-              {/* View 3: Orders Record list view */}
               {currentView === "orders" && (
                 <motion.div
                   key="orders-view"
-                  initial={{ opacity: 0, y: 5 }}
+                  initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -5 }}
-                  transition={{ duration: 0.15 }}
-                    className="max-w-5xl mx-auto h-full"
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.14 }}
+                  className="mx-auto h-full w-full max-w-7xl"
                 >
                   <OrdersPage snapshot={mediaSnapshot} feature={mediaFeature} />
                 </motion.div>
               )}
 
-              {/* View 4: System settings configure view */}
               {currentView === "settings" && (
                 <motion.div
                   key="settings-view"
-                  initial={{ opacity: 0, y: 5 }}
+                  initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -5 }}
-                  transition={{ duration: 0.15 }}
-                  className="max-w-6xl mx-auto h-full w-full"
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.14 }}
+                  className="mx-auto h-full w-full max-w-7xl"
                 >
                   <SettingsView />
                 </motion.div>
               )}
-          </AnimatePresence>
+            </AnimatePresence>
+          </div>
         </main>
       </div>
     </div>
