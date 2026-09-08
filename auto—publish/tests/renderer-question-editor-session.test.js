@@ -399,7 +399,7 @@ describe(
       await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
       await page.locator("#nav-item-content-production").click();
       await page.getByRole("heading", { name: "问题与采集" }).waitFor();
-      const recollect = page.getByRole("button", { name: "重新采集选中客户" });
+      const recollect = page.getByRole("button", { name: "重新采集", exact: true });
       await recollect.click();
       await page.getByText("批次预览失败", { exact: true }).waitFor();
       assert.equal(await page.getByRole("dialog").count(), 0);
@@ -427,7 +427,7 @@ describe(
       await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
       await page.locator("#nav-item-content-production").click();
       await page.getByRole("heading", { name: "问题与采集" }).waitFor();
-      await page.getByRole("button", { name: "重新采集选中客户" }).click();
+      await page.getByRole("button", { name: "重新采集", exact: true }).click();
       const confirmation = page.getByRole("dialog", {
         name: "重新采集选中客户",
       });
@@ -459,7 +459,7 @@ describe(
       await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
       await page.locator("#nav-item-content-production").click();
       await page.getByRole("heading", { name: "问题与采集" }).waitFor();
-      const recollect = page.getByRole("button", { name: "重新采集选中客户" });
+      const recollect = page.getByRole("button", { name: "重新采集", exact: true });
       await recollect.click();
       await page.waitForFunction(
         () =>
@@ -467,8 +467,9 @@ describe(
           typeof window.__questionFixture.resolvePreview === "function",
       );
 
-      const selection = page.locator("[data-client-selection]");
-      const chooseClients = selection.getByRole("button", { name: "选择客户", exact: true });
+      const batchSelector = page.locator("[data-client-group-batch-selector]").first();
+      const selection = batchSelector.locator("[data-client-selection]");
+      const chooseClients = selection.getByRole("button", { name: "选择部分客户…", exact: true });
       assert.equal(await chooseClients.isDisabled(), true);
       assert.equal(
         await selection.getByRole("button", { name: "清空选择", exact: true }).isDisabled(),
@@ -491,7 +492,7 @@ describe(
       assert.equal(await picker.getByRole("checkbox", { name: "客户 B", exact: true }).isChecked(), false);
       await picker.getByRole("checkbox", { name: "客户 B", exact: true }).check();
       await picker.getByRole("button", { name: "完成选择", exact: true }).click();
-      assert.match(await selection.innerText(), /已选 2 个客户/);
+      assert.match(await batchSelector.innerText(), /自定义选择 · 2 个客户/);
       assert.equal(
         await page.evaluate(() => window.__questionFixture.executeCalls),
         0,
@@ -510,7 +511,7 @@ describe(
       await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
       await page.locator("#nav-item-content-production").click();
       await page.getByRole("heading", { name: "问题与采集" }).waitFor();
-      await page.getByRole("button", { name: "重新采集选中客户" }).click();
+      await page.getByRole("button", { name: "重新采集", exact: true }).click();
       await page.waitForFunction(
         () => typeof window.__questionFixture.resolvePreview === "function",
       );
