@@ -31,7 +31,10 @@ it("renderer tracks background client operations while main composition shares t
   assert.match(generationFeature, /next\.clientId !== scope\.clientId/);
   assert.match(generationFeature, /void refresh\(\)/);
   assert.match(composition, /createGenerationExecutionScheduler/);
-  assert.match(composition, /maxConcurrency: value\.generationMaxConcurrency === undefined \? 4/);
+  assert.match(
+    composition,
+    /maxConcurrency:\s*value\.generationMaxConcurrency === undefined\s*\? 4/,
+  );
   assert.match(composition, /aiExecutionService\.createClient\("batch-generation"\)/);
   assert.match(composition, /aiExecutionService\.createClient\(groupId\)/);
 });
