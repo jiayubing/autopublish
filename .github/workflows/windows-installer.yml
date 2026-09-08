@@ -70,5 +70,3 @@ jobs:
             auto—publish/release-alpha/*.exe
           if-no-files-found: error
           retention-days: 14
-
-# Temporary touch to package the client-group v2 experience branch.
