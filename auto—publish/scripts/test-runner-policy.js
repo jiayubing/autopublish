@@ -24,10 +24,6 @@ const SERIAL_NAME_RULES = Object.freeze([
     "production and legacy absence checks inspect shared packaged outputs",
   ],
   [
-    /phase-04-platform-run|phase-08-cleanup-gates/i,
-    "platform lifecycle and Phase 8 gate tests own shared process state",
-  ],
-  [
     /renderer-harness|renderer-contract-artifact-absence|\.electron\.test\./i,
     "Renderer harness and Electron tests use browser or process resources",
   ],
