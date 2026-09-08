@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { ClientSelection, type ClientGrouping } from './ClientSelector';
+import type { ClientGrouping } from './ClientSelector';
+import ClientGroupBatchSelector from './ClientGroupBatchSelector';
 import type { ContentClient, ContentCommandStaleResult, DoubaoBatchMode, DoubaoBatchPreview, DoubaoQueueState } from '../../types/content';
 import { useConfirmation } from '../../confirmation';
 import { isContentCommandStaleResult } from '../../content-command-result';
@@ -76,11 +77,11 @@ export default function QuestionBatchControls({ clients, grouping, initialClient
 
   const batchActionBusy = isCollecting || batchActionPending;
   return <section className="rounded-md border border-slate-200 bg-white p-3">
-    <div className="mb-3"><h2 className="text-sm font-semibold">批次客户</h2><p className="mt-1 text-xs text-slate-500">同一客户连续使用同一个豆包对话。</p></div>
-    <ClientSelection clients={clients} selectedIds={selectedClientIds} onChange={updateSelection} grouping={grouping} disabled={batchActionBusy} />
-    <div className="mt-3 flex flex-wrap gap-2">
-      <button type="button" disabled={batchActionBusy || !selectedCount} onClick={() => void startBatch('missing')} className="collection-command-button rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">采集选中客户</button>
-      <button type="button" disabled={batchActionBusy || !selectedCount} onClick={() => void startBatch('recollect')} className="collection-command-button rounded-md border border-rose-300 px-3 py-2 text-xs font-semibold text-rose-700 disabled:opacity-40">重新采集选中客户</button>
+    <div className="mb-3"><h2 className="text-sm font-semibold">批次客户</h2><p className="mt-1 text-xs text-slate-500">选择本次要处理的客户；同一客户连续使用同一个豆包对话。</p></div>
+    <ClientGroupBatchSelector clients={clients} selectedIds={selectedClientIds} onChange={updateSelection} grouping={grouping} disabled={batchActionBusy} />
+    <div className="mt-3 flex flex-wrap items-center gap-2">
+      <button type="button" disabled={batchActionBusy || !selectedCount} onClick={() => void startBatch('missing')} className="collection-command-button rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">开始采集</button>
+      <button type="button" disabled={batchActionBusy || !selectedCount} onClick={() => void startBatch('recollect')} className="collection-command-button rounded-md border border-rose-300 px-3 py-2 text-xs font-semibold text-rose-700 disabled:opacity-40">重新采集</button>
     </div>
     {batchPreview && <p className="mt-2 text-xs text-slate-500">预览：{batchPreview.clientCount} 个客户 · {batchPreview.taskCount} 个问题进入队列 · 跳过 {batchPreview.skippedExisting} 个已有回答 · 排除 {batchPreview.disabledQuestions} 个停用问题</p>}
   </section>;
