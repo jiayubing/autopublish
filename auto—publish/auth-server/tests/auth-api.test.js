@@ -61,6 +61,24 @@ describe("isolated auth API", () => {
     });
   }
 
+  it("returns a safe 400 response for malformed JSON", async () => {
+    const base = await baseUrl;
+    const result = await new Promise((resolve, reject) => {
+      const req = http.request(`${base}/v1/auth/login`, {
+        method: "POST", headers: { "content-type": "application/json" },
+      }, (response) => {
+        let body = "";
+        response.on("data", (chunk) => { body += chunk; });
+        response.on("end", () => resolve({ status: response.statusCode, body: JSON.parse(body) }));
+      });
+      req.setTimeout(1000, () => req.destroy(new Error("Malformed JSON request did not settle")));
+      req.on("error", reject);
+      req.end("{");
+    });
+    assert.equal(result.status, 400);
+    assert.equal(result.body.error.code, "AUTH_INPUT_INVALID");
+  });
+
   it("supports login, refresh rotation, session and revoke without sensitive errors", async () => {
     assert.equal((await request("GET", "/healthz")).status, 200);
     assert.equal(

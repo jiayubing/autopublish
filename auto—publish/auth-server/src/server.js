@@ -110,8 +110,9 @@ function readBody(request) {
       if (settled) return;
       if (oversized) return fail(new AuthError("AUTH_INPUT_INVALID"));
       try {
+        const parsed = body ? JSON.parse(body) : {};
         settled = true;
-        resolve(body ? JSON.parse(body) : {});
+        resolve(parsed);
       } catch (_) {
         fail(new AuthError("AUTH_INPUT_INVALID"));
       }
