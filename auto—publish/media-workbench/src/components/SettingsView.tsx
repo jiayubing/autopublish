@@ -310,7 +310,7 @@ function StorageSettings() {
             className="rounded-lg border border-slate-100 bg-slate-50/70 px-3 py-3"
           >
             <span className="block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400">
-              {label}
+              {label}：
             </span>
             <span className="mt-1 block font-mono text-sm font-bold text-slate-700">
               {loading ? "读取中…" : formatBytes(bytes)}
