@@ -107,7 +107,7 @@ function QueueGroupImageCountControl({
           <ImageIcon className="h-3.5 w-3.5 text-slate-400" />
           每篇图片数量
         </span>
-        <div className="flex items-center gap-2">
+        <div className="grid gap-2 sm:grid-cols-[5rem_auto] sm:items-center">
           <input
             type="number"
             inputMode="numeric"
@@ -120,7 +120,7 @@ function QueueGroupImageCountControl({
               setDraft(event.target.value);
               setFeedback("");
             }}
-            className="ui-field h-8 w-20"
+            className="ui-field h-8 w-full sm:w-20"
           />
           <Button
             size="sm"
@@ -203,7 +203,7 @@ function QueueGroupSubmissionIntervalControl({
           <Clock3 className="h-3.5 w-3.5 text-slate-400" />
           投稿间隔（秒）
         </span>
-        <div className="flex items-center gap-2">
+        <div className="grid gap-2 sm:grid-cols-[6rem_auto] sm:items-center">
           <input
             type="number"
             inputMode="numeric"
@@ -217,7 +217,7 @@ function QueueGroupSubmissionIntervalControl({
               setDraft(event.target.value);
               setFeedback("");
             }}
-            className="ui-field h-8 w-24"
+            className="ui-field h-8 w-full sm:w-24"
           />
           <Button
             size="sm"

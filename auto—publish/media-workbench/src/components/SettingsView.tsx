@@ -90,7 +90,14 @@ function WorkspaceSettings() {
   return (
     <div className="grid gap-3">
       <Surface className="p-4 sm:p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+        <div
+          className="break-all rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 font-mono text-[11px] leading-5 text-slate-700"
+          aria-label="当前工作区状态"
+        >
+          {loading ? "读取中…" : current?.label || "工作区未选择"}
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-start justify-between gap-3">
           <div>
             <h3 className="flex items-center gap-2 text-sm font-bold text-slate-800">
               <FolderOpen className="h-4 w-4 text-blue-500" />
@@ -113,13 +120,6 @@ function WorkspaceSettings() {
           >
             {loading ? "检查中…" : stateLabel(current?.state)}
           </StatusBadge>
-        </div>
-
-        <div
-          className="mt-4 break-all rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 font-mono text-[11px] leading-5 text-slate-700"
-          aria-label="当前工作区状态"
-        >
-          {loading ? "读取中…" : current?.label || "未选择工作区"}
         </div>
 
         {environmentManaged && (

@@ -14,7 +14,6 @@ import type {
 } from "../../types/publication";
 import { publicationStatusLabel } from "../../publication-status";
 import { formatBeijingTime } from "../../time-format";
-import { StatusBadge } from "../ui/primitives";
 
 export interface ArticleGroup {
   key: string;
@@ -60,13 +59,12 @@ interface GeneratedArticlesListProps {
   onOpenOrder?: () => void;
 }
 
-function stageTone(
-  stage?: ArticleWorkflowStage,
-): "neutral" | "info" | "success" | "warning" | "danger" {
-  if (stage === "published") return "success";
-  if (stage === "needs_completion") return "warning";
-  if (stage === "pending_submission" || stage === "in_submission") return "info";
-  return "neutral";
+function stageBadgeClass(stage?: ArticleWorkflowStage): string {
+  if (stage === "published") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (stage === "needs_completion") return "border-amber-200 bg-amber-50 text-amber-700";
+  if (stage === "pending_submission" || stage === "in_submission")
+    return "border-blue-200 bg-blue-50 text-blue-700";
+  return "border-slate-200 bg-slate-50 text-slate-600";
 }
 
 export default function GeneratedArticlesList({
@@ -231,9 +229,13 @@ export default function GeneratedArticlesList({
                           </span>
                         </button>
                       </div>
-                      <StatusBadge tone={stageTone(workflow?.stage)}>
+                      <span
+                        className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${stageBadgeClass(
+                          workflow?.stage,
+                        )}`}
+                      >
                         {stageLabel}
-                      </StatusBadge>
+                      </span>
                       <button
                         type="button"
                         onClick={() =>

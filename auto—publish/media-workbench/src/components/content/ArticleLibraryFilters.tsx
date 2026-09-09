@@ -47,6 +47,7 @@ export default function ArticleLibraryFilters({
             type="button"
             role="tab"
             aria-selected={active}
+            aria-label={count === undefined ? stage.label : `${stage.label} (${count})`}
             onClick={() => onChange(stage.id)}
             className={`relative flex min-h-10 items-center gap-1.5 px-2.5 text-xs font-semibold transition-colors ${
               active

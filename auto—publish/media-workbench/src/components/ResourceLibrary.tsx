@@ -286,7 +286,7 @@ export default function ResourceLibrary({
       {totalPages > 1 && (
         <div className="pagination flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/50 px-4 py-2.5 text-[11px]">
           <span className="page-info text-slate-500">
-            第 <b>{visiblePage}</b> / <b>{totalPages}</b> 页 · 共 {usesRemotePaging ? totalResources || 0 : filteredResources.length} 项
+            第 <b>{visiblePage}</b> / <b>{totalPages}</b> 页 (共 {usesRemotePaging ? totalResources || 0 : filteredResources.length} 项)
           </span>
           <div className="flex items-center gap-1">
             <Button
