@@ -125,6 +125,7 @@ function createLiejuRuntime(runtimeContext) {
     imageAssetReader: context.imageAssetReader,
     accountInspection: null,
     preparationCache: new Map(),
+    loginEvidenceReadFailed: false,
     createHttpSession() {
       return createLiejuHttpSession({
         stateFile: session.stateFile,
@@ -150,13 +151,33 @@ function hasLoginIndicator(runtime) {
   try {
     return Boolean(
       runtime.evaluate(
-        "  var locator = page.locator(" +
-          JSON.stringify(LIEJU.selectors.loginIndicator) +
-          ").first();\n" +
-          "  return await locator.count() > 0;\n",
+        [
+          "  var logout = page.locator(" +
+            JSON.stringify(LIEJU.selectors.loginIndicator) +
+            ").first();",
+          "  if (await logout.count() > 0) return true;",
+          "  var current = new URL(page.url());",
+          "  var host = current.hostname.toLowerCase();",
+          "  if ((host !== 'lieju.com' && host !== 'www.lieju.com') || !/^\\/member\\/upage\\.php$/i.test(current.pathname)) return false;",
+          "  return await page.evaluate(function () {",
+          "    var anchors = Array.from(document.querySelectorAll('a[href]'));",
+          "    for (var i = 0; i < anchors.length; i += 1) {",
+          "      var href = anchors[i].getAttribute('href');",
+          "      var text = String(anchors[i].textContent || '').trim();",
+          "      if (!href || !text) continue;",
+          "      try {",
+          "        var parsed = new URL(href, window.location.href);",
+          "        var parsedHost = parsed.hostname.toLowerCase();",
+          "        if ((parsedHost === 'lieju.com' || parsedHost === 'www.lieju.com') && /^\\/u[0-9]{1,20}$/i.test(parsed.pathname)) return true;",
+          "      } catch (_) {}",
+          "    }",
+          "    return false;",
+          "  });",
+        ].join("\n"),
       ),
     );
   } catch (_) {
+    runtime.loginEvidenceReadFailed = true;
     return false;
   }
 }
@@ -169,10 +190,22 @@ function waitForLoginState(runtime, timeoutMs) {
 }
 
 function checkLogin(runtime) {
+  runtime.loginEvidenceReadFailed = false;
   try {
+    runtime.invoke(["goto", LIEJU.accountUrl], { timeout: 20000 });
+    if (waitForLoginState(runtime, LOGIN_STATE_SETTLE_MS)) return true;
+
     runtime.invoke(["goto", LIEJU.base], { timeout: 20000 });
-    return waitForLoginState(runtime, LOGIN_STATE_SETTLE_MS);
+    const authenticated = waitForLoginState(runtime, LOGIN_STATE_SETTLE_MS);
+    if (!authenticated && runtime.loginEvidenceReadFailed)
+      diagnose(
+        "LIEJU_LOGIN_EVIDENCE_CHECK_FAILED",
+        "authentication",
+        "login-check",
+      );
+    return authenticated;
   } catch (_) {
+    diagnose("LIEJU_LOGIN_CHECK_FAILED", "transport", "login-check");
     return false;
   }
 }
