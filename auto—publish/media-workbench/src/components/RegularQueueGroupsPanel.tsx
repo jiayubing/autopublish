@@ -280,7 +280,7 @@ export default function RegularQueueGroupsPanel({
   }) => Promise<unknown>;
   onRemove: (item: RegularQueueGroupSnapshot["remaining"][number]) => void;
 }) {
-  if (loading)
+  if (loading && !groups.length)
     return (
       <p role="status" className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
         正在读取普通平台队列组…

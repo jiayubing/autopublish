@@ -101,3 +101,9 @@ Gate: media renderer regressions + build.
 - Clarified in settings and deletion confirmation that deleting a profile does not log out of the website. Account binding, deletion guards, history, and publication state remain unchanged.
 - Live evidence: old code returned true after website logout; corrected adapter returned false in that same session, then true after the user logged in again. User confirmed session saving. Corrected HTTP account inspection returned verified identity with a non-navigation display name. After restarting the application and recreating the profile through its normal guarded UI, the user confirmed the displayed nickname is correct.
 - Final targeted validation: 48 tests passed across Lieju browser/transport/HTTP outcome, account-profile service, browser lifecycle and renderer settings. ESLint and main/renderer type checks passed; renderer build passed with the existing bundle-size warning. Bounded review covered the adapter, its session/identity callers and the changed fixtures. No full CI or live publishing claim is made.
+
+## Follow-up — submission-center refresh continuity
+
+- User reported a flash after each published article. Reproduced a terminal invalidation with a delayed snapshot response: the queue panel unmounted its existing controls whenever loading became true, losing input focus and an unsaved interval draft.
+- Keep existing queue groups mounted while refreshing; the loading placeholder is used only when there are no groups to display. Scope changes still clear data through the existing feature owner. No polling, event, queue or submission semantics changed.
+- Four renderer lifecycle tests pass, including focus/draft preservation through terminal refresh and saving afterward, runtime switching and configuration editing. ESLint, renderer typecheck and build pass. No real publishing was performed. Local follow-up is on `codex/batch-generation-eligibility`; no push or merge.

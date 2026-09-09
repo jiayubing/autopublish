@@ -220,6 +220,9 @@ function installDesktopFixture(page) {
         state.submissionCenterCalls += 1;
         const clientId =
           typeof input === "string" ? input : input?.clientId || null;
+        if (state.holdCenterRefresh) return new Promise(resolve => {
+          state.releaseCenterRefresh = () => { state.holdCenterRefresh = false; resolve({ok:true,data:submissionCenterData(clientId)}); };
+        });
         return response(submissionCenterData(clientId));
       },
       listRegularQueueGroups: () => response({ items: groupData() }),
@@ -671,4 +674,35 @@ describe("renderer platform queue lifecycle", { concurrency: false }, () => {
       .waitFor();
     await page.close();
   });
+  it("keeps queue controls mounted and preserves drafts during a terminal refresh", async () => {
+    const page = await browser.newPage({viewport:{width:1200,height:800}});
+    page.setDefaultTimeout(10000);
+    try {
+      await installDesktopFixture(page);
+      await page.goto(rendererUrl,{waitUntil:'domcontentloaded'});
+      await page.getByText('数据已就绪').waitFor();
+      await page.locator('#nav-item-submission-center').click();
+      const input = page.getByRole('spinbutton',{name:/投稿间隔（秒）/});
+      await input.fill('45');
+      const original = await input.elementHandle();
+      await page.evaluate(() => {
+        const fixture = window.__platformQueueLifecycle;
+        fixture.state.holdCenterRefresh = true;
+        fixture.state.queueRevision += 1;
+        fixture.emitWorkspaceInvalidated(fixture.state.workspaceRuntimeId, fixture.state.queueRevision);
+      });
+      await page.waitForFunction(() => typeof window.__platformQueueLifecycle.state.releaseCenterRefresh === 'function');
+      assert.equal(await original.evaluate(el=>el.isConnected),true,'background refresh must not replace the mounted queue');
+      assert.equal(await original.evaluate(el=>el===document.activeElement),true);
+      assert.equal(await input.inputValue(),'45');
+      await page.evaluate(() => window.__platformQueueLifecycle.state.releaseCenterRefresh());
+      await page.getByRole('button',{name:'刷新',exact:true}).waitFor();
+      assert.equal(await original.evaluate(el=>el.isConnected),true);
+      assert.equal(await input.inputValue(),'45');
+      await page.getByRole('button',{name:'保存投稿间隔',exact:true}).click();
+      await page.getByRole('status').filter({hasText:'投稿间隔已保存。'}).waitFor();
+      assert.deepEqual(await page.evaluate(()=>window.__platformQueueLifecycle.getSubmissionIntervalUpdates()),[45]);
+    } finally { await page.close(); }
+  });
+
 });
