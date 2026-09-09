@@ -105,7 +105,7 @@ export function PageHeader({
     <div className={classes("ui-page-header", className)}>
       <div className="min-w-0">
         {eyebrow ? <div className="ui-page-eyebrow">{eyebrow}</div> : null}
-        <h1 className="ui-page-title">{title}</h1>
+        <h2 className="ui-page-title">{title}</h2>
         {description ? (
           <p className="ui-page-description">{description}</p>
         ) : null}
