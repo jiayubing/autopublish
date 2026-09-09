@@ -6,6 +6,7 @@ const os = require("node:os");
 const path = require("node:path");
 
 const { createClientMaterialStore } = require("../src/content/client-material-store");
+const { setDiagnosticReporter } = require("../src/diagnostics/diagnostic-producer");
 
 const DOCX_FIXTURE = path.resolve(__dirname, "fixtures", "docx", "customer-material.docx");
 
@@ -179,6 +180,58 @@ describe("client material store", function() {
     } finally {
       fs.rmSync(localStateRoot, { recursive: true, force: true });
     }
+  });
+
+  it("parses and caches DOCX materials with long Chinese filenames without renaming the source", async function() {
+    const names = [
+      "客户门店资料：" + "中文长标题".repeat(10) + "第一份.docx",
+      "客户门店资料：" + "中文长标题".repeat(10) + "第二份.docx",
+    ];
+    const source = fs.readFileSync(DOCX_FIXTURE);
+    for (const name of names) fs.writeFileSync(path.join(clientDirectory, name), source);
+    const store = createClientMaterialStore({ workspaceRoot });
+    const first = (await store.listMaterials("client-1")).filter(item => names.includes(item.name));
+    assert.equal(first.length, 2);
+    for (const item of first) {
+      assert.equal(item.status, "ready");
+      assert.match(item.content, /客户资料标题/);
+      assert.equal(item.cacheHit, false);
+      assert.deepEqual(fs.readFileSync(path.join(clientDirectory, item.name)), source);
+    }
+    const second = (await store.listMaterials("client-1")).filter(item => names.includes(item.name));
+    assert.equal(second.every(item => item.cacheHit === true), true);
+    assert.notEqual(second[0].id, second[1].id);
+  });
+
+  it("keeps parsed material usable when cache persistence fails and converts again on the next read", async function(t) {
+    let conversions = 0;
+    const diagnostics = [];
+    t.after(setDiagnosticReporter(record => { diagnostics.push(record); return true; }));
+    const store = createClientMaterialStore({
+      workspaceRoot,
+      converter: async () => { conversions += 1; return "已解析的客户资料"; },
+      atomicWriter: { write() { throw Object.assign(new Error("private local path"), { code: "EACCES" }); } },
+    });
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const material = (await store.listMaterials("client-1")).find(item => item.name === "menu.docx");
+      assert.equal(material.status, "ready");
+      assert.equal(material.content, "已解析的客户资料");
+      assert.equal(material.characterCount, Array.from(material.content).length);
+      assert.equal(material.cacheHit, false);
+      assert.equal(JSON.stringify(material).includes("private local path"), false);
+    }
+    assert.equal(conversions, 2);
+    assert.equal(diagnostics.filter(record => record.code === "MATERIAL_CACHE_WRITE_FAILED").length, 2);
+    assert.equal(JSON.stringify(diagnostics).includes("private local path"), false);
+  });
+
+  it("does not reuse conversions from an earlier cache version", async function() {
+    const first = createClientMaterialStore({ workspaceRoot, cacheVersion: 2, converter: async () => "旧提取结果" });
+    await first.listMaterials("client-1");
+    const next = createClientMaterialStore({ workspaceRoot, cacheVersion: 3, converter: async () => "新提取结果" });
+    const material = (await next.listMaterials("client-1")).find(item => item.name === "menu.docx");
+    assert.equal(material.content, "新提取结果");
+    assert.equal(material.cacheHit, false);
   });
 
   it("returns a safe failure DTO and retries only the failed DOCX", async function() {

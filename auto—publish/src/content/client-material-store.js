@@ -6,6 +6,7 @@ const { extractDocxText } = require("../core/docx-text-extractor");
 const { createContentPathPolicy } = require("./content-path-policy");
 const { createAtomicFileWriter } = require("./content-file-transaction");
 const { getClient } = require("./client-knowledge");
+const { reportDiagnostic } = require("../diagnostics/diagnostic-producer");
 
 const SUPPORTED_EXTENSIONS = new Set([".txt", ".md", ".markdown", ".json", ".docx"]);
 const EXCLUDED_NAMES = new Set(["questions.json", "client.json", "search_query.txt"]);
@@ -150,7 +151,10 @@ function createClientMaterialStore(options) {
 
   function cachePath(clientId, name, sourceHash) {
     const cacheDirectory = getCacheDirectory(clientId);
-    return path.join(cacheDirectory, encodeMaterialId(name) + "-" + encodeMaterialId(String(sourceHash)) + "-v" + encodeMaterialId(String(cacheVersion)) + ".json");
+    const key = crypto.createHash("sha256")
+      .update(JSON.stringify([name, sourceHash, cacheVersion]))
+      .digest("hex");
+    return path.join(cacheDirectory, key + ".json");
   }
 
   function readCache(filename, clientId, name, sourceHash) {
@@ -205,7 +209,17 @@ function createClientMaterialStore(options) {
         characterCount: characterCount(content),
         convertedAt: new Date().toISOString()
       };
-      writeAtomic(filename, result);
+      try {
+        writeAtomic(filename, result);
+      } catch (_) {
+        // Cache persistence must not discard successfully extracted material.
+        reportDiagnostic({
+          code: "MATERIAL_CACHE_WRITE_FAILED",
+          module: "client-material-store",
+          category: "storage",
+          metadata: { action: "cache-write" }
+        });
+      }
       return { id: id, name: entry.name, extension: extension, status: "ready", content: content, characterCount: result.characterCount, contentHash: sourceHash, source: "docx", cacheHit: false };
     } catch (error) {
       return materialErrorDto(entry.name, extension, error);
