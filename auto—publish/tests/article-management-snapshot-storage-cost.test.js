@@ -196,9 +196,9 @@ for (const articleCount of [100, 1000]) {
           await read("switch", nextClient);
           assert.deepEqual(await read("switchBack", clientId), refreshed);
         }
-        // Each article reads JSON + Markdown; lock release verifies owner.json twice.
+        // Stable list reads validate JSON + Markdown without a write lock.
         assert.equal(costs.first.articleFileReads, articleCount * 2);
-        assert.equal(costs.first.lockFileReads, articleCount * 2);
+        assert.equal(costs.first.lockFileReads, 0);
         assert.equal(costs.first.fileReads, costs.first.articleFileReads + costs.first.lockFileReads);
         assert.ok(costs.first.sqlReads > 0);
         assert.equal(costs.hit.fileReads, 0);

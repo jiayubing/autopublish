@@ -158,7 +158,9 @@ function projectLegacyRun(singleLookup, taskCount) {
       assert.ok(after.fileReads <= legacySingleLookup.fileReads);
       assert.ok(after.maintenanceWrites <= legacySingleLookup.maintenanceWrites);
       assert.ok(after.fileReads < beforeModel.fileReads);
-      assert.ok(after.maintenanceWrites < beforeModel.maintenanceWrites);
+      // Both paths now use read-only stable enumeration; no lock writes remain.
+      assert.equal(after.maintenanceWrites, 0);
+      assert.equal(beforeModel.maintenanceWrites, 0);
     } finally {
       fs.rmSync(fixture.root, { recursive: true, force: true });
     }
@@ -181,7 +183,9 @@ it("real file-path identity lookup stays at one library enumeration for the 1000
     assert.ok(after.fileReads <= legacySingleLookup.fileReads);
     assert.ok(after.maintenanceWrites <= legacySingleLookup.maintenanceWrites);
     assert.ok(after.fileReads < beforeModel.fileReads);
-    assert.ok(after.maintenanceWrites < beforeModel.maintenanceWrites);
+    // Both paths now use read-only stable enumeration; no lock writes remain.
+      assert.equal(after.maintenanceWrites, 0);
+      assert.equal(beforeModel.maintenanceWrites, 0);
   } finally {
     fs.rmSync(fixture.root, { recursive: true, force: true });
   }

@@ -125,11 +125,23 @@ function createArticleStore(workspaceRoot, options) {
   function listArticles(clientId) {
     const files = articlePaths(clientId, "list-probe", false);
     if (!exists(files.directory)) return [];
-    const names = fsApi.readdirSync(files.directory, { withFileTypes: true })
-      .filter(function (entry) { return entry.isFile() && !entry.isSymbolicLink() && entry.name.toLowerCase().endsWith(".json"); })
-      .map(function (entry) { return entry.name.slice(0, -5); });
+    const names = [...new Set(fsApi.readdirSync(files.directory, { withFileTypes: true })
+      .filter(function (entry) { return entry.isFile() && !entry.isSymbolicLink() && (entry.name.toLowerCase().endsWith(".json") || (entry.name.endsWith(".journal") && !entry.name.endsWith(".trash.journal"))); })
+      .map(function (entry) { return entry.name.slice(0, entry.name.endsWith(".journal") ? -8 : -5); }))];
     return names.map(function (articleId) {
       const itemFiles = articlePaths(clientId, articleId, false);
+      // A stable pair can be read without creating a write lock. Any concurrent
+      // replacement or recovery marker falls back to the existing locked read.
+      const before = readVersion(itemFiles);
+      if (before !== null) {
+        let article, readError;
+        try { article = readArticle(clientId, articleId, itemFiles); }
+        catch (error) { readError = error; }
+        if (readVersion(itemFiles) === before) {
+          if (readError) throw readError;
+          return article;
+        }
+      }
       return articleLock.withLock(itemFiles, function () {
         transactions.recoverArticlePair(itemFiles);
         return readArticle(clientId, articleId);
@@ -138,6 +150,23 @@ function createArticleStore(workspaceRoot, options) {
       const created = Date.parse(right.createdAt) - Date.parse(left.createdAt);
       return created || String(left.id).localeCompare(String(right.id));
     });
+  }
+
+  function readVersion(files) {
+    const stem = files.json.slice(0, -5);
+    if (exists(stem + ".article-lock") || exists(stem + ".journal")) return null;
+    try {
+      const version = [files.json, files.markdown].map(function (filename) {
+        const stat = fsApi.lstatSync(filename, { bigint: true });
+        if (!stat.isFile() || stat.isSymbolicLink() || typeof stat.mtimeNs !== "bigint") return null;
+        return [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(":");
+      });
+      if (version.includes(null) || exists(stem + ".article-lock") || exists(stem + ".journal")) return null;
+      return version.join("|");
+    } catch (error) {
+      if (error && error.code === "ENOENT") return null;
+      throw error;
+    }
   }
 
   function getTrashedPaths(clientId, articleId, create) {

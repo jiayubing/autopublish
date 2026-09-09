@@ -62,6 +62,50 @@ describe("article store", function () {
     assert.deepStrictEqual(store.getArticle("client-1", "article-1"), article);
   });
 
+  it("lists stable articles without filesystem mutations and observes later edits", function () {
+    store.saveArticle(valid("article-1"));
+    const readonlyFs = new Proxy(fs, { get(target, name) {
+      if (["mkdirSync", "renameSync", "writeFileSync", "unlinkSync", "rmSync", "rmdirSync"].includes(name))
+        return () => { throw new Error("Read-only listing attempted a filesystem mutation"); };
+      return target[name];
+    } });
+    const reader = createArticleStore(root, { fs: readonlyFs });
+    assert.deepEqual(reader.listArticles("client-1"), [valid("article-1")]);
+    const updated = valid("article-1", { title: "Updated title" });
+    store.saveArticle(updated);
+    assert.deepEqual(reader.listArticles("client-1"), [updated]);
+  });
+
+  it("retries a pair replaced between JSON and Markdown reads", function () {
+    store.saveArticle(valid("article-1"));
+    const updated = valid("article-1", { title: "Concurrent replacement", content: "New content" });
+    let replaced = false;
+    const reader = createArticleStore(root, { fs: new Proxy(fs, { get(target, name) {
+      if (name !== "readFileSync") return target[name];
+      return (...args) => {
+        const result = target.readFileSync(...args);
+        if (!replaced && String(args[0]).endsWith("article-1.json")) {
+          replaced = true;
+          store.saveArticle(updated);
+        }
+        return result;
+      };
+    } }) });
+    assert.deepEqual(reader.listArticles("client-1"), [updated]);
+    assert.equal(replaced, true);
+  });
+
+  it("list reads recover interrupted pairs and reject stable corruption", function () {
+    store.saveArticle(valid("article-1"));
+    const writer = createArticleStore(root, { internalArticleFileFault(point) {
+      if (point === "after-article-markdown-install") throw new Error("Synthetic interruption");
+    } });
+    assert.throws(() => writer.saveArticle(valid("article-1", { title: "Interrupted" })), /Synthetic interruption/);
+    assert.deepEqual(store.listArticles("client-1"), [valid("article-1")]);
+    fs.writeFileSync(path.join(root, "generated", "client-1", "article-1.md"), "corrupt", "utf8");
+    assert.throws(() => store.listArticles("client-1"), { code: "ARTICLE_INVALID" });
+  });
+
   it("saves and reads a manual article without generation provenance", function () {
     const article = {
       id: "manual-1",
