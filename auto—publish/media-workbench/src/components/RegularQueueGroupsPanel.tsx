@@ -124,7 +124,7 @@ function QueueGroupImageCountControl({
           />
           <Button
             size="sm"
-            aria-label="保存图片数量"
+            aria-label={busy ? "保存中…" : "保存图片数量"}
             disabled={busy || imageCount === null || !changed}
             onClick={() => void save()}
           >
@@ -221,7 +221,7 @@ function QueueGroupSubmissionIntervalControl({
           />
           <Button
             size="sm"
-            aria-label="保存投稿间隔"
+            aria-label={busy ? "保存中…" : "保存投稿间隔"}
             disabled={busy || interval === null || !changed}
             onClick={() => void save()}
           >
