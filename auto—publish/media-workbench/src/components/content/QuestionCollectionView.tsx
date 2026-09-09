@@ -462,7 +462,7 @@ export default function QuestionCollectionView({
           <Surface className="p-3.5">
             <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h2 className="text-xs font-bold text-slate-800">问题与回答</h2>
+                <h2 className="text-xs font-bold text-slate-800">问题与采集</h2>
                 {questionDraftId && (
                   <p className="mt-1 max-w-xl truncate text-[11px] text-blue-700">
                     正在编辑：
