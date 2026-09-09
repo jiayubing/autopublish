@@ -12,10 +12,10 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
 
   after(closeRenderer);
 
-  async function checkBatch(batchStatus) {
+  async function checkBatch(batchStatus, endMixed = false) {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     page.setDefaultTimeout(8000);
-    await page.addInitScript((batchStatus) => {
+    await page.addInitScript(({ batchStatus, endMixed }) => {
       const ok = (data) => Promise.resolve({ ok: true, data });
       const client = { id: "client-a", name: "客户 A", knowledgeFiles: [] };
       const article = {
@@ -80,7 +80,7 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
           orderSummary: { total: 0, pending: 0, unresolved: 0 },
         },
       };
-      const batch = {
+      let batch = {
         id: "generation-batch-a",
         status: batchStatus,
         clientSources: [
@@ -97,23 +97,32 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
             templateId: "fixture-template",
             materialIds: [],
             researchQueryIds: [],
-            status: batchStatus === "completed" ? "succeeded" : "failed",
+            status: ["completed", "abandoned"].includes(batchStatus) ? "succeeded" : "failed",
             attempts: 1,
             error: null,
-            articleId: batchStatus === "completed" ? article.id : null,
-            articleTitle: batchStatus === "completed" ? article.title : undefined,
+            articleId: ["completed", "abandoned"].includes(batchStatus) ? article.id : null,
+            articleTitle: ["completed", "abandoned"].includes(batchStatus) ? article.title : undefined,
           },
         ],
         counts: {
           total: 1,
-          succeeded: batchStatus === "completed" ? 1 : 0,
-          failed: batchStatus === "completed" ? 0 : 1,
+          succeeded: ["completed", "abandoned"].includes(batchStatus) ? 1 : 0,
+          failed: ["completed", "abandoned"].includes(batchStatus) ? 0 : 1,
           pending: 0,
           interrupted: 0,
           cancelled: 0,
         },
       };
-      const state = { managementReads: 0, submissionMutations: 0, resumeCalls: 0, retryCalls: 0 };
+      if (endMixed) {
+        const task = batch.tasks[0];
+        batch.tasks = [
+          ...Array.from({length:3}, (_,i) => ({...task, id:'success-'+i, status:'succeeded',articleId:article.id,articleTitle:article.title})),
+          {...task,id:'failure'},
+          ...Array.from({length:7}, (_,i) => ({...task,id:'pending-'+i,status:'pending'})),
+        ];
+        batch.counts = {total:11,succeeded:3,failed:1,pending:7,interrupted:0,cancelled:0};
+      }
+      const state = { sequence:1, abandonCalls:0, managementReads: 0, submissionMutations: 0, resumeCalls: 0, retryCalls: 0 };
       const managementSnapshot = () => {
         state.managementReads += 1;
         return ok({
@@ -190,18 +199,27 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
         previewGenerationBatch: () => ok({}),
         createAndStartGenerationBatch: () => ok({ batch }),
         pauseGenerationBatch: () => ok({ batch }),
-        abandonGenerationBatch: () => ok({ batch }),
+        abandonGenerationBatch: () => {
+          state.abandonCalls += 1;
+          if (endMixed === 'error') return Promise.resolve({ok:false,error:{code:'GENERATION_BATCH_NOT_ENDABLE',category:'conflict',retryability:'never',userMessage:'合成结束失败提示'}});
+          batch = {...batch,status:'abandoned'}; state.sequence += 1;
+          return ok({batch});
+        },
         resumeGenerationBatch: () => { state.resumeCalls += 1; return ok({ batch }); },
         retryFailedGenerationBatch: () => { state.retryCalls += 1; return ok({ batch }); },
-        previewCancelPendingGenerationBatch: () => ok({ canCancel: false, pendingCount: 0, runningCount: 0 }),
-        cancelPendingGenerationBatch: () => ok({ batch }),
+        previewCancelPendingGenerationBatch: () => ok({ canCancel: !!endMixed, pendingCount: endMixed ? 7 : 0, runningCount: 0 }),
+        cancelPendingGenerationBatch: () => {
+          batch = {...batch,tasks:batch.tasks.map(task=>task.status==='pending'?{...task,status:'cancelled'}:task),counts:{...batch.counts,pending:0,cancelled:7}};
+          state.sequence += 1;
+          return ok({batch});
+        },
         getGenerationRuntimeSnapshot: () =>
           ok({
             runtimeId: "generation-runtime",
             sequence: 1,
             runtime: { status: "idle", state: "idle", batchId: null },
             batch,
-            capabilities: { canContinue: batchStatus !== "completed", canResume: batchStatus !== "completed", canRetry: batchStatus === "failed" },
+            capabilities: { canContinue: !["completed", "abandoned"].includes(batchStatus), canResume: !["completed", "abandoned"].includes(batchStatus), canRetry: batchStatus === "failed" },
           }),
         onGenerationBatchState: () => () => {},
       };
@@ -260,7 +278,7 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
         content,
       };
       window.__generationBatchNavigation = state;
-    }, batchStatus);
+    }, { batchStatus, endMixed });
     try {
       await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
       assert.deepEqual(
@@ -279,7 +297,32 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
       assert.equal(await page.locator("#nav-item-workbench").count(), 0);
       await page.locator("#nav-item-content-production").click();
       await page.getByRole("button", { name: "批量生成", exact: true }).click();
-      if (batchStatus !== "completed") {
+      if (endMixed) {
+        const detail = page.locator('.generation-batch-detail');
+        await detail.getByTitle('永久取消待处理任务',{exact:true}).click();
+        await page.getByRole('button',{name:'永久取消',exact:true}).click();
+        await detail.getByText('取消 7',{exact:true}).waitFor();
+        await detail.getByTitle('结束当前批次',{exact:true}).click();
+        await page.getByRole('button',{name:'结束批次',exact:true}).click();
+        if (endMixed === 'error') {
+          await page.getByRole('alert').filter({hasText:'合成结束失败提示'}).waitFor();
+          assert.equal(await page.getByRole('button',{name:'批量投稿',exact:true}).count(),0);
+          return;
+        }
+        await detail.getByRole('heading',{name:'批次结果',exact:true}).waitFor();
+        assert.equal(await detail.getByTitle('结束当前批次',{exact:true}).isDisabled(),true);
+        assert.equal(await detail.getByTitle('继续批量生成',{exact:true}).isDisabled(),true);
+        assert.equal(await detail.getByTitle('重试失败任务',{exact:true}).isDisabled(),true);
+        assert.match(await detail.innerText(), /成功 3/);
+        assert.match(await detail.innerText(), /失败 1/);
+        assert.match(await detail.innerText(), /取消 7/);
+        await detail.getByRole('button',{name:'批量投稿',exact:true}).click();
+        await page.getByRole('dialog',{name:'批量投稿本批次文章'}).waitFor();
+        assert.equal(await page.evaluate(()=>window.__generationBatchNavigation.abandonCalls),1);
+        assert.equal(await page.evaluate(()=>window.__generationBatchNavigation.submissionMutations),0);
+        return;
+      }
+      if (!["completed", "abandoned"].includes(batchStatus)) {
         const detail = page.locator(".generation-batch-detail");
         await detail.waitFor();
         assert.ok((await detail.textContent()).includes("状态 " + batchStatus));
@@ -321,4 +364,9 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
     await checkBatch("paused_configuration");
     await checkBatch("failed");
   });
+  it("ends a failed batch after cancelling pending tasks and opens successful articles for submission", async () => { await checkBatch('failed', true); });
+  it("shows an end-command failure in monitoring without exposing a false terminal result", async () => { await checkBatch('failed', 'error'); });
+
+  it("restores an ended batch with a submission entry after reopening", async () => { await checkBatch("abandoned"); });
+
 });

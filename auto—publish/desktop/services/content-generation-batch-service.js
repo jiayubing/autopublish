@@ -265,7 +265,7 @@ function createContentGenerationBatchService(options) {
 
   function currentState(persistedBatch) {
     const runnerState = runner && typeof runner.getState === "function" ? runner.getState() : {};
-    const status = activeStatus !== "idle" ? activeStatus : (runnerState.status || "idle");
+    let status = activeStatus !== "idle" ? activeStatus : (runnerState.status || "idle");
     let counts = null;
     let updatedAt = runnerState.updatedAt || now();
     const batchId = activeBatchId || runnerState.batchId || null;
@@ -274,6 +274,7 @@ function createContentGenerationBatchService(options) {
       if (!persistedBatch) throw generationError("GENERATION_BATCH_STATE_UNAVAILABLE");
     }
     if (persistedBatch) {
+      if (!activeRun && activeStatus === "idle") status = persistedBatch.status;
       counts = persistedBatch.counts || runnerState.counts || null;
       updatedAt = status === persistedBatch.status ? (persistedBatch.updatedAt || updatedAt) : updatedAt;
     }
@@ -293,7 +294,7 @@ function createContentGenerationBatchService(options) {
       const batches = batchStore.listBatches();
       const newest = batches[0] || null;
       batch = newest && newest.status === "abandoned"
-        ? null
+        ? newest
         : batches.find(function(item) { return canResume(item) || ["running", "pausing"].includes(item.status); }) || newest;
     }
     const runtime = currentState(batch && activeBatchIdForSnapshot === batch.id ? batch : undefined);

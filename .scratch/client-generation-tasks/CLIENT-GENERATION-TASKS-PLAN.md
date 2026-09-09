@@ -56,3 +56,12 @@
 - 保持 generation service 对正文、来源和启动的最终校验；未改 IPC 合同、后台调度、并发规则或持久化事实。
 - 回归覆盖：合格/缺资料/缺回答混选，全部不合格，延迟详情，详情读取失败后取消该客户，取消最后一份资料后重新勾选，以及非当前客户的冷启动读取；合格请求额外经真实 IPC request schema 验证。
 - 验证：4 项浏览器场景、1 项非当前客户读取测试、36 项来源/批次服务/IPC/并发测试通过；ESLint、renderer typecheck 和 renderer build 通过，保留已有 bundle-size 警告。最终 bounded review 修正了确认页“下一步”应保持原页的行为，并重跑浏览器场景。未发出真实 AI 请求、未 push/PR/合并。
+
+## 2026-09-09 失败批次结束与结果恢复
+
+- 同一批量生成修复分支上的独立修复。用户报告成功 3、失败 1、取消 7 时，首次结束界面闪回，第二次报通用安全错误。
+- 用真实 batch store/runner 和合成生成器复现相同计数：abandon 已持久化，但后续 runtime snapshot 仍读取 runner 残留的 failed，覆盖结束事件。无活动运行时改为读取该批次的持久状态，活动运行的状态所有权不变。
+- 取消待处理任务后组件原先长期保留一份本地批次快照；删除该重复快照，统一消费 generation feature 的结果。已结束批次禁用继续和再次结束，保留失败/取消证据以及成功文章的投稿入口。
+- 冷启动原先直接隐藏最近 abandoned 批次；现在恢复该批次结果，不恢复执行，便于用户在重启后继续处理已成功文章。
+- 回归：68 项批次服务、store、runner、event、feature、IPC 测试以及 5 项浏览器场景通过；覆盖取消后结束、结束错误提示、终态控制禁用、打开投稿对话框无投稿 mutation、重启恢复。ESLint、main/renderer typecheck、renderer build 和 diff check 通过；构建仅有原有 bundle-size 警告。
+- 本次未读写真实客户批次、未调用真实 AI、未发起投稿，未 push/PR/合并。修复直接调用链已进行 bounded review，不改变结束合同、文章生命周期、失败证据或后台重试策略。

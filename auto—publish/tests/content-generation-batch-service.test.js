@@ -35,7 +35,7 @@ function makeHarness(options) {
   let currentFingerprint = "fp-1";
   const runnerListeners = new Set();
 
-  const batchStore = {
+  const batchStore = settings.batchStore || {
     createBatch: function(input) {
       const id = "batch-" + nextBatch++;
       const tasks = input.clientSources.flatMap(function(source) {
@@ -560,4 +560,50 @@ describe("content generation batch service", function() {
     assert.equal(cancelled.counts.cancelled, 1);
     await service.dispose();
   });
+  it("ending a mixed failed batch keeps the runtime snapshot aligned with persisted results", async function() {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "generation-end-mixed-"));
+    const store = createGenerationBatchStore({ workspaceRoot: root });
+    let generated = 0;
+    let batchId;
+    const harness = makeHarness({
+      batchStore: store,
+      templateStore: { getCatalogTemplate: input => ({ id: input.templateId, platform: input.platformId, body: "write" }) },
+      runnerFactory: options => createGenerationBatchRunner(options),
+      articleGeneratorFactory: () => ({ generateArticle: async () => {
+        generated += 1;
+        if (generated === 4) {
+          await harness.service.cancelPending({ batchId, confirmed: true });
+          throw Object.assign(new Error("synthetic failure"), { code: "AI_NETWORK_ERROR", retryable: false });
+        }
+        return { id: "article-" + generated, clientId: "c1", title: "Synthetic title", content: "Synthetic body" };
+      } }),
+    });
+    try {
+      const batch = await harness.service.createBatch({ clientIds: ["c1"], templates: Array.from({length: 11}, (_, i) => ({platform: "ctrip", templateId: "template-" + i})), concurrency: 1 });
+      batchId = batch.id;
+      await harness.service.startBatch({ batchId });
+      const failed = await waitForBatch(harness.service, batchId, value => value.status === "failed");
+      assert.equal(failed.counts.succeeded, 3);
+      assert.equal(failed.counts.failed, 1);
+      assert.equal(failed.counts.cancelled, 7);
+      const ended = await harness.service.abandonBatch({ batchId, confirmed: true });
+      assert.equal(ended.status, "abandoned");
+      const snapshot = harness.service.getRuntimeSnapshot();
+      assert.equal(snapshot.runtime.status, "abandoned");
+      assert.equal(snapshot.batch.status, "abandoned");
+      assert.deepEqual(snapshot.batch.tasks, ended.tasks);
+      assert.equal(snapshot.capabilities.canResume, false);
+      assert.equal(snapshot.capabilities.canRetry, false);
+      const reopened = makeHarness({ batchStore: store });
+      try {
+        const restored = reopened.service.getRuntimeSnapshot();
+        assert.equal(restored.batch?.status, "abandoned");
+        assert.deepEqual(restored.batch.tasks, ended.tasks);
+      } finally { await reopened.service.dispose(); }
+    } finally {
+      await harness.service.dispose();
+      fs.rmSync(root, {recursive: true, force: true});
+    }
+  });
+
 });
