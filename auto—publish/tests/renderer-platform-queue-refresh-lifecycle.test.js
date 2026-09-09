@@ -254,10 +254,21 @@ function installDesktopFixture(page) {
       onDoubaoQueueState: () => () => {},
     };
     const media = {
-      scanArticles: () => response([]),
+      scanArticles: () => response({ items: [] }),
+      getDrafts: () => response({ items: [] }),
       getResourcePage: () =>
         response({ items: [], total: 0, page: 1, pageSize: 50 }),
-      getPool: () => response([]),
+      getPool: () =>
+        response({
+          items: [],
+          memberResourceIds: [],
+          total: 0,
+          page: 1,
+          pageSize: 50,
+          totalPages: 0,
+          hasPrev: false,
+          hasNext: false,
+        }),
       getBalance: () => response({ balance: "0" }),
     };
     const platformSettings = {
@@ -273,7 +284,7 @@ function installDesktopFixture(page) {
           lastTest: null,
         }),
     };
-    const orders = { getOrders: () => response([]) };
+    const orders = { getOrders: () => response({ items: [] }) };
     const aiProvider = {
       getStatus: () =>
         response({
