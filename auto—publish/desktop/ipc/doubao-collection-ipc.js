@@ -99,7 +99,10 @@ function registerDoubaoCollectionIpc(deps) {
     });
   });
   ipcMain.handle("content:delete-question", function(event, input) {
-    return safeWrap(function() { return { question: projectQuestion(service.deleteQuestion(questionInput(input, ["clientId", "questionId"], "Delete question input"))) }; });
+    return safeWrap(function() {
+      const result = service.deleteQuestion(questionInput(input, ["clientId", "questionId"], "Delete question input"));
+      return { question: projectQuestion(result.question) };
+    });
   });
   ipcMain.handle("content:get-doubao-login-state", function(event, input) {
     return safeWrap(async function() { noInput(input, "Login state"); assertPlaywrightAvailable(deps.runtimeDiagnosticsService); return { loginState: projectLogin(await service.getLoginState()) }; });
