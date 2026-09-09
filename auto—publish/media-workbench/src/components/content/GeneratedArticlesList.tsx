@@ -225,7 +225,7 @@ export default function GeneratedArticlesList({
                             {group.articleAnnotations?.[article.id]
                               ? `${group.articleAnnotations[article.id]} · `
                               : ""}
-                            {articleTime} · 投稿记录：{summaryLabel}
+                            阶段：{stageLabel} · {articleTime} · 投稿记录：{summaryLabel}
                           </span>
                         </button>
                       </div>
