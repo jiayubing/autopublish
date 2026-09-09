@@ -4,7 +4,6 @@ const domain = require("../domain");
 
 const REGULAR_OUTCOME_STATUSES = Object.freeze([
   "accepted",
-  "remote_pending",
   "article_rejected",
   "group_blocked",
   "uncertain",
@@ -26,7 +25,6 @@ const REGULAR_OUTCOME_OBSERVATION_ISSUES = Object.freeze({
   TIME_INVALID: "time_invalid",
   EVIDENCE_INVALID: "evidence_invalid",
   ACCEPTED_REMOTE_IDENTITY_REQUIRED: "accepted_remote_identity_required",
-  REMOTE_PENDING_REMOTE_ID_REQUIRED: "remote_pending_remote_id_required",
 });
 
 class RegularOutcomeObservationError extends Error {
@@ -106,10 +104,6 @@ function parseRegularOutcomeObservation(input, options) {
   )
     invalid(
       REGULAR_OUTCOME_OBSERVATION_ISSUES.ACCEPTED_REMOTE_IDENTITY_REQUIRED,
-    );
-  if (value.status === "remote_pending" && !normalized.remoteId)
-    invalid(
-      REGULAR_OUTCOME_OBSERVATION_ISSUES.REMOTE_PENDING_REMOTE_ID_REQUIRED,
     );
   return normalized;
 }

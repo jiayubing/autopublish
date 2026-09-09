@@ -868,11 +868,8 @@ test("order mutations invalidate orders, article management, and attention even 
     mediaOrderService: orderService,
     resourceStore: {},
     poolStore: {},
-    draftStore: { getAll: () => ({}), get: () => null },
-    mediaWorkbenchService: {
-      scanArticles: async () => [],
-      resolveSubmissionFile: (filename) => filename,
-    },
+
+
     invalidateData: (reason) => reasons.push(reason),
   });
 

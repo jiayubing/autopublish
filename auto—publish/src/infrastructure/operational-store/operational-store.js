@@ -142,6 +142,7 @@ function createOperationalStore(options) {
       context,
       publicationSuccess,
     );
+    regularOutcome.recoverHistoricalAcceptances();
     const reconcile = createOperationalStoreReconciliationAggregate(context);
     const facts = createOperationalStoreFactReader(context);
     const maintain = createMaintenanceAggregate(context);

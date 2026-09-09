@@ -36,12 +36,6 @@ function registerMediaIpc(deps) {
   ipcMain.handle("media:get-balance", () =>
     invoke(() => application.getBalance()),
   );
-  ipcMain.handle("media:get-drafts", () =>
-    invoke(() => application.getDrafts()),
-  );
-  ipcMain.handle("media:scan-articles", () =>
-    invoke(() => application.scanArticles()),
-  );
   ipcMain.handle("media:get-orders", () =>
     invoke(() => application.getOrders()),
   );

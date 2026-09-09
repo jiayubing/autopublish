@@ -9,7 +9,6 @@ const {
   parseOrderDetailsResponse,
   parseResourceResponse,
 } = require("../src/platforms/media/media-supplier-response");
-const { createMediaPublisher } = require("../desktop/services/media-publisher");
 const {
   createMediaOrderService,
 } = require("../desktop/services/media-order-service");
@@ -138,6 +137,18 @@ test("generic order parser protocol errors do not claim the media-list endpoint"
       error.code === "MEDIA_SUPPLIER_PROTOCOL_ERROR" &&
       (!error.diagnostics || error.diagnostics.endpointPath !== "/api/media/media_list"),
   );
+});
+
+test("createOrder rejects invalid content and missing submission identity before transport", async () => {
+  let calls = 0;
+  const adapter = createMediaSupplierAdapter({ client: { createOrder: async () => { calls += 1; } } });
+  const input = { mediaResourceId: "resource-1", title: "Title", htmlBody: "Body", systemSubmissionId: "system-1" };
+  for (const change of [{ htmlBody: "x".repeat(2_000_001) }, { systemSubmissionId: "" }, { title: "" }, { mediaResourceId: "" }]) {
+    const result = await adapter.createOrder({ ...input, ...change });
+    assert.equal(result.kind, "invalid_input");
+    assert.equal(result.error.code, "MEDIA_SUPPLIER_INPUT_INVALID");
+    assert.equal(calls, 0);
+  }
 });
 
 test("createOrder maps the canonical application input and returns an order only with explicit success and an order id", async () => {
@@ -419,144 +430,6 @@ test("cancelOrder distinguishes explicit success, remote rejection, and transpor
     },
   });
   assert.deepEqual(calls, ["order-1", "order-rejected", "order-unknown"]);
-});
-
-test("the application publisher can consume the supplier port without reading provider response fields", async () => {
-  let received;
-  const publisher = createMediaPublisher({
-    supplierProvider: () => ({
-      createOrder: async (input) => {
-        received = input;
-        return { kind: "order_created", orderId: "order-application-1" };
-      },
-    }),
-    systemSubmissionIdProvider: () => "system-submission-application-1",
-  });
-
-  const result = await publisher.publish({
-    articleId: "article-1",
-    attemptId: "attempt-1",
-    target: { kind: "media", mediaResourceId: "resource-1" },
-    title: "标题",
-    body: "<p>正文</p>",
-  });
-
-  assert.deepEqual(received, {
-    mediaResourceId: "resource-1",
-    title: "标题",
-    htmlBody: "<p>正文</p>",
-    systemSubmissionId: "system-submission-application-1",
-  });
-  assert.deepEqual(result, {
-    kind: "order_created",
-    orderId: "order-application-1",
-  });
-});
-
-test("the application publisher maps adapter input rejection to a definite validation failure", async () => {
-  let transportCalls = 0;
-  const supplier = createMediaSupplierAdapter({
-    client: {
-      createOrder: async () => {
-        transportCalls += 1;
-        return successful({ order_nid: "must-not-exist" });
-      },
-    },
-  });
-  const publisher = createMediaPublisher({
-    supplierProvider: () => supplier,
-    systemSubmissionIdProvider: () => "system-submission-invalid-input",
-  });
-
-  const result = await publisher.publish({
-    articleId: "article-1",
-    attemptId: "attempt-1",
-    target: { kind: "media", mediaResourceId: "resource-1" },
-    title: "标题",
-    body: "x".repeat(2_000_001),
-  });
-
-  assert.deepEqual(result, {
-    kind: "invalid_input",
-    error: {
-      code: "MEDIA_SUPPLIER_INPUT_INVALID",
-      category: "validation",
-      retryability: "never",
-      userMessage: "媒体投稿输入无效，未发起投稿请求",
-    },
-  });
-  assert.equal(transportCalls, 0);
-});
-
-test("the application publisher refuses a missing global submission id before supplier transport", async () => {
-  let providerCalls = 0;
-  const publisher = createMediaPublisher({
-    supplierProvider: () => {
-      providerCalls += 1;
-      return {
-        createOrder: async () => ({
-          kind: "order_created",
-          orderId: "must-not-exist",
-        }),
-      };
-    },
-  });
-
-  const result = await publisher.publish({
-    articleId: "article-1",
-    attemptId: "attempt-1",
-    target: { kind: "media", mediaResourceId: "resource-1" },
-    title: "标题",
-    body: "<p>正文</p>",
-  });
-
-  assert.deepEqual(result, {
-    kind: "order_rejected",
-    error: {
-      code: "MEDIA_SYSTEM_SUBMISSION_ID_REQUIRED",
-      category: "validation",
-      retryability: "never",
-      userMessage: "媒体投稿缺少全局系统投稿标识，已阻止下单",
-    },
-  });
-  assert.equal(providerCalls, 0);
-});
-
-test("the application publisher keeps supplier identity-provider failures definite", async () => {
-  let called = false;
-  const publisher = createMediaPublisher({
-    supplierProvider: () => {
-      called = true;
-      return {
-        createOrder: async () => ({
-          kind: "order_created",
-          orderId: "order-should-not-exist",
-        }),
-      };
-    },
-    systemSubmissionIdProvider: () => {
-      throw new Error("private configuration detail");
-    },
-  });
-
-  const result = await publisher.publish({
-    articleId: "article-1",
-    attemptId: "attempt-1",
-    target: { kind: "media", mediaResourceId: "resource-1" },
-    title: "标题",
-    body: "<p>正文</p>",
-  });
-
-  assert.deepEqual(result, {
-    kind: "configuration_error",
-    error: {
-      code: "MEDIA_CONFIG_INVALID",
-      category: "validation",
-      retryability: "never",
-      userMessage: "媒体服务配置无效，未发起投稿请求",
-    },
-  });
-  assert.equal(called, false);
 });
 
 test("the application order service consumes canonical order details from the supplier port", async () => {

@@ -6,7 +6,6 @@ const path = require("node:path");
 const rendererRoot = path.resolve(__dirname, "..", "media-workbench", "src");
 const rendererFiles = [
   "App.tsx",
-  "components/ArticleEditor.tsx",
   "components/ResourceLibrary.tsx",
   "components/OrdersView.tsx",
   "components/PlatformWorkbench.tsx",

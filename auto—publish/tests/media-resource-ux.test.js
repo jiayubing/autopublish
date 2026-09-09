@@ -25,10 +25,10 @@ test("media resource feature exposes normalized balance and bounded resource pag
     addToPool: async () => ({}),
     removeFromPool: async () => ({}),
     getBalance: async () => 12.5,
-    getDrafts: async () => [],
+
     getDraft: async () => null,
     setDraft: async () => ({}),
-    scanArticles: async () => [],
+
     previewArticle: async () => ({}),
     getOrders: async () => [],
     syncOrder: async () => ({}),

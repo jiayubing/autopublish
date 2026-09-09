@@ -12,7 +12,6 @@ function createReferenceStandardPlatformDefinition(options) {
     scanDir: PLATFORM_ID,
     capabilities: Object.freeze({
       regularSubmission: true,
-      legacyQueueImport: false,
       loginSession: true,
       accountInspection: true,
       imagePublishing: value.imagePublishing === true,
@@ -21,7 +20,6 @@ function createReferenceStandardPlatformDefinition(options) {
       settings: false,
       clientProfile: false,
       runtimeArtifacts: false,
-      remoteReview: false,
     }),
     externalHosts: Object.freeze([]),
   });

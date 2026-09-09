@@ -14,8 +14,6 @@ const {
   MEDIA_RESOURCE_TYPES,
   finiteMediaPrice,
   projectMediaResource,
-  projectMediaDraft,
-  projectMediaArticleSummary,
   projectMediaResourcePage,
   projectMediaPoolPage,
   projectMediaRefreshResult,
@@ -24,11 +22,6 @@ const {
 
 const safeText = (max, min = 0) =>
   stringField({ max, min, pattern: /^[^\x00-\x1f\x7f]*$/u });
-const filename = stringField({
-  max: 255,
-  min: 1,
-  pattern: /^[^\\/\x00-\x1f\x7f]+$/u,
-});
 const identifier = stringField({
   max: 256,
   min: 1,
@@ -432,26 +425,6 @@ const selectedResource = exactObject({
   type: optionalField(mediaResourceType),
 });
 
-const draft = exactObject({
-  filename,
-  title: safeText(1000),
-  remark: safeText(10000),
-  ignoreImages: "boolean",
-  selectedResources: arrayField(resource, { max: 100 }),
-  updatedAt: optionalField(safeText(64)),
-});
-
-const articleSummary = exactObject({
-  filename,
-  title: safeText(1000),
-  autoTitle: safeText(1000),
-  remark: safeText(10000),
-  hasImages: "boolean",
-  imageCount: integerField({ min: 0, max: 10000 }),
-  ignoreImages: "boolean",
-  selectedResources: arrayField(resource, { max: 100 }),
-});
-
 const orderAnomaly = exactObject({
   reason: enumField(["order-missing", "unknown-status", "unsettled-aftercare"]),
   openedAt: safeText(64),
@@ -729,24 +702,6 @@ const mediaContracts = [
     toArgs: (payload) => [payload.resourceId],
   }),
   contract({
-    capability: "media.getDrafts",
-    channel: "media:get-drafts",
-    kind: "query",
-    request: emptyRequest,
-    success: exactObject({ items: arrayField(draft, { max: 1000 }) }),
-    fromArgs: noArgs,
-    toArgs: noLegacyInput,
-  }),
-  contract({
-    capability: "media.scanArticles",
-    channel: "media:scan-articles",
-    kind: "query",
-    request: emptyRequest,
-    success: exactObject({ items: arrayField(articleSummary, { max: 1000 }) }),
-    fromArgs: noArgs,
-    toArgs: noLegacyInput,
-  }),
-  contract({
     capability: "media.getOrders",
     channel: "media:get-orders",
     kind: "query",
@@ -945,8 +900,6 @@ module.exports = {
   mediaContractErrors: COMMON_ERRORS,
   finiteMediaPrice,
   projectMediaResource,
-  projectMediaDraft,
-  projectMediaArticleSummary,
   projectMediaResourcePage,
   projectMediaPoolPage,
   projectMediaRefreshResult,

@@ -37,23 +37,20 @@ function readEnabledPlatformIds(options) {
 
 const PORT_SPECS = Object.freeze({
   regularSubmission: Object.freeze(["preparePlatformSubmission"]),
-  legacyQueue: Object.freeze(["scan", "parse", "publish", "close"]),
   loginSession: Object.freeze(["open", "check", "save", "close"]),
   accountInspection: Object.freeze(["prepare", "inspect"]),
   settingsContribution: Object.freeze(["createSettingsAdapter"]),
   clientProfileContribution: Object.freeze(["requirement", "createProfileReader"]),
   runtimeArtifactContribution: Object.freeze(["describe"]),
-  remoteReviewContribution: Object.freeze(["reconcile"]),
 });
 const DECLARATIONS = Object.freeze([
   ["capabilities", "regularSubmission", "regularSubmission"],
-  ["capabilities", "legacyQueueImport", "legacyQueue"],
+  ["capabilities", "legacyQueue"],
   ["capabilities", "loginSession", "loginSession"],
   ["capabilities", "accountInspection", "accountInspection"],
   ["contributions", "settings", "settingsContribution"],
   ["contributions", "clientProfile", "clientProfileContribution"],
   ["contributions", "runtimeArtifacts", "runtimeArtifactContribution"],
-  ["contributions", "remoteReview", "remoteReviewContribution"],
 ]);
 const PORT_NAMES = Object.freeze(Object.keys(PORT_SPECS));
 const BUILTIN_MODULE_LOAD_FAILED = Symbol("BUILTIN_MODULE_LOAD_FAILED");

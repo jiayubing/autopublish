@@ -6,15 +6,12 @@ import {
 export const DEFAULT_RESOURCE_PAGE_SIZE = 50;
 
 const QUERY_NAMES = [
-  "articles",
-  "drafts",
   "resources",
   "pool",
   "balance",
   "orders",
 ];
 const COMMAND_NAMES = [
-  "scanArticles",
   "refreshResources",
   "togglePool",
   "checkBalance",
@@ -125,8 +122,6 @@ export function createMediaFeature(adapters = {}) {
     "addToPool",
     "removeFromPool",
     "getBalance",
-    "getDrafts",
-    "scanArticles",
     "getOrders",
     "syncOrder",
     "syncAllOrders",
@@ -161,8 +156,6 @@ export function createMediaFeature(adapters = {}) {
   const listeners = new Set();
   let disposed = false;
   let scope = null;
-  let articles = { items: [], query: emptyQuery() };
-  let drafts = { items: [], query: emptyQuery() };
   let resources = { ...emptyPage(), search: "" };
   let pool = { ...emptyPage(), memberResourceIds: [] };
   let balance = { value: 0, query: emptyQuery() };
@@ -180,14 +173,6 @@ export function createMediaFeature(adapters = {}) {
   const publish = () => {
     snapshot = Object.freeze({
       scope,
-      articles: Object.freeze({
-        ...articles,
-        items: Object.freeze([...articles.items]),
-      }),
-      drafts: Object.freeze({
-        ...drafts,
-        items: Object.freeze([...drafts.items]),
-      }),
       resources: Object.freeze({
         ...resources,
         items: Object.freeze([...resources.items]),
@@ -227,69 +212,6 @@ export function createMediaFeature(adapters = {}) {
     update(Object.freeze({ loading: true, error: null, reason }));
     publish();
     return token;
-  }
-
-  async function loadArticles(reason = "manual") {
-    if (disposed || !scope) return;
-    const token = beginQuery("articles", reason, (query) => {
-      articles = { ...articles, query };
-    });
-    try {
-      const items = await adapters.scanArticles();
-      if (!queries.articles.isCurrent(token)) return;
-      const nextItems = Array.isArray(items) ? items : [];
-      articles = {
-        items: nextItems,
-        query: Object.freeze({ loading: false, error: null, reason }),
-      };
-      publish();
-    } catch (value) {
-      if (!queries.articles.isCurrent(token)) return;
-      articles = {
-        ...articles,
-        query: Object.freeze({
-          loading: false,
-          error: safeError(
-            value,
-            "MEDIA_ARTICLES_QUERY_FAILED",
-            "无法加载媒体稿件。",
-          ),
-          reason,
-        }),
-      };
-      publish();
-    }
-  }
-
-  async function loadDrafts(reason = "manual") {
-    if (disposed || !scope) return;
-    const token = beginQuery("drafts", reason, (query) => {
-      drafts = { ...drafts, query };
-    });
-    try {
-      const items = await adapters.getDrafts();
-      if (!queries.drafts.isCurrent(token)) return;
-      drafts = {
-        items: Array.isArray(items) ? items : [],
-        query: Object.freeze({ loading: false, error: null, reason }),
-      };
-      publish();
-    } catch (value) {
-      if (!queries.drafts.isCurrent(token)) return;
-      drafts = {
-        ...drafts,
-        query: Object.freeze({
-          loading: false,
-          error: safeError(
-            value,
-            "MEDIA_DRAFTS_QUERY_FAILED",
-            "无法加载媒体草稿。",
-          ),
-          reason,
-        }),
-      };
-      publish();
-    }
   }
 
   async function loadResourcePage(page = 1, reason = "manual") {
@@ -571,8 +493,6 @@ export function createMediaFeature(adapters = {}) {
       });
       for (const query of Object.values(queries)) query.setScope(scope);
       for (const owner of Object.values(owners)) owner.invalidate();
-      articles = { items: [], query: emptyQuery() };
-      drafts = { items: [], query: emptyQuery() };
       resources = { ...emptyPage(), search: "" };
       pool = { ...emptyPage(), memberResourceIds: [] };
       balance = { value: 0, query: emptyQuery() };
@@ -589,8 +509,6 @@ export function createMediaFeature(adapters = {}) {
     },
     async refresh(reason = "manual") {
       await Promise.all([
-        loadArticles(reason),
-        loadDrafts(reason),
         loadResourcePage(1, reason),
         refreshBalance(reason),
         refreshOrders(reason),
@@ -598,14 +516,10 @@ export function createMediaFeature(adapters = {}) {
     },
     async refreshWorkbench(reason = "manual") {
       await Promise.all([
-        loadArticles(reason),
-        loadDrafts(reason),
         loadResourcePage(1, reason),
         refreshBalance(reason),
       ]);
     },
-    loadArticles,
-    loadDrafts,
     loadResourcePage,
     loadPoolPage,
     refreshBalance,
@@ -625,14 +539,6 @@ export function createMediaFeature(adapters = {}) {
       publish();
       await loadResourcePage(1, "manual");
     },
-    scanArticles: () =>
-      runCommand(
-        "scanArticles",
-        () => adapters.scanArticles(),
-        "MEDIA_ARTICLE_SCAN_FAILED",
-        "扫描媒体稿件失败。",
-        async () => loadArticles("command-result"),
-      ),
     refreshResources() {
       return runCommand(
         "refreshResources",

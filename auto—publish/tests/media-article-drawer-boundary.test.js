@@ -34,10 +34,8 @@ async function createFeature() {
     addToPool: async () => ({}),
     removeFromPool: async () => ({}),
     getBalance: async () => 80,
-    getDrafts: async () => [],
-    scanArticles: async () => [
-      { filename: "article-1", title: "文章", selectedResources: [] },
-    ],
+
+
     getOrders: async () => [],
     syncOrder: async () => ({}),
     syncAllOrders: async () => ({}),
@@ -60,7 +58,7 @@ test("media feature omits the retired article editor workflow", async () => {
   await feature.refresh("initial");
   assert.equal(typeof feature.openArticle, "undefined");
   assert.equal(typeof feature.saveDraft, "undefined");
-  assert.equal("activeArticle" in feature.getSnapshot().articles, false);
+  assert.equal("articles" in feature.getSnapshot(), false);
   assert.equal("selectionRevision" in feature.getSnapshot(), false);
   feature.dispose();
 });

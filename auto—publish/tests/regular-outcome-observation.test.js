@@ -87,7 +87,7 @@ test("canonical regular observation owns timestamp and remote url evidence valid
   );
 });
 
-test("canonical regular observation owns accepted and remote-pending identity requirements", () => {
+test("canonical regular observation requires accepted identity and rejects retired outcomes", () => {
   const defaults = { defaultObservedAt: "2026-08-07T02:00:00.000Z" };
   assertIssue(
     REGULAR_OUTCOME_OBSERVATION_ISSUES.ACCEPTED_REMOTE_IDENTITY_REQUIRED,
@@ -98,7 +98,7 @@ test("canonical regular observation owns accepted and remote-pending identity re
       ),
   );
   assertIssue(
-    REGULAR_OUTCOME_OBSERVATION_ISSUES.REMOTE_PENDING_REMOTE_ID_REQUIRED,
+    REGULAR_OUTCOME_OBSERVATION_ISSUES.INVALID,
     () =>
       parseRegularOutcomeObservation(
         { status: "remote_pending", code: "REGULAR_REMOTE_PENDING" },

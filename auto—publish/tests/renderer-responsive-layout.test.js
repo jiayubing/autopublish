@@ -225,12 +225,9 @@ function installDesktopFixture(page) {
     };
     window.__mediaSubmissionState = mediaSubmissionState;
     const media = {
-      scanArticles: () => {
-        mediaSubmissionState.scanCalls += 1;
-        return result({ items: [mediaArticle, unselectedMediaArticle] });
-      },
+
       previewArticle: () => result({ article: mediaArticle }),
-      getDrafts: () => result({ items: [] }),
+
       getDraft: () => result({ draft: null }),
       setDraft: () => result({ completed: true }),
       refreshResources: () =>

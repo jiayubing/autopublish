@@ -4,12 +4,6 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 
 const {
-  assertOutcomeStatus,
-  assertStatus,
-  assertTransition,
-  PUBLICATION_STATUSES,
-} = require("../src/publication/publication-state");
-const {
   deriveArticleLifecycle,
 } = require("../src/content/article-lifecycle-projection");
 const {
@@ -33,24 +27,6 @@ function lifecycleFacts(overrides) {
     ...(overrides || {}),
   };
 }
-
-test("runtime publication state owns remote_started and typed outcomes only", () => {
-  assert.equal(PUBLICATION_STATUSES.includes("remote_started"), true);
-  assert.equal(PUBLICATION_STATUSES.includes("submitting"), false);
-  assert.equal(PUBLICATION_STATUSES.includes("submitted"), false);
-  assert.equal(PUBLICATION_STATUSES.includes("reviewing"), false);
-  assert.equal(assertTransition("queued", "remote_started"), "remote_started");
-  assert.equal(assertOutcomeStatus("accepted"), "accepted");
-  assert.equal(assertOutcomeStatus("uncertain"), "uncertain");
-  for (const legacy of ["submitting", "submitted", "reviewing"]) {
-    assert.throws(() => assertStatus(legacy), {
-      code: "PUBLICATION_STATE_INVALID",
-    });
-  }
-  assert.throws(() => assertOutcomeStatus("published"), {
-    code: "PUBLICATION_OUTCOME_INVALID",
-  });
-});
 
 test("regular accepted is the publication success fact and legacy submitted is unknown", () => {
   assert.equal(

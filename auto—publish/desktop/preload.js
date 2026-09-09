@@ -246,12 +246,6 @@ const api = {
     },
   },
   media: {
-    scanArticles: function () {
-      return ipcRenderer.invoke("media:scan-articles");
-    },
-    getDrafts: function () {
-      return ipcRenderer.invoke("media:get-drafts");
-    },
     refreshResources: function (opts) {
       return ipcRenderer.invoke("media:refresh-resources", opts || {});
     },

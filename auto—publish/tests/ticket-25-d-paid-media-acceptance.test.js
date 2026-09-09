@@ -11,7 +11,6 @@ const { createContentStore } = require("../src/content/content-store");
 const {
   createArticleManagementSnapshot,
 } = require("../desktop/services/article-management-snapshot");
-const { createMediaPublisher } = require("../desktop/services/media-publisher");
 const {
   createMediaWorkbenchApplication,
 } = require("../desktop/services/media-workbench-application");
@@ -145,25 +144,6 @@ function createFixture(options) {
       },
     };
 
-    const publisher = createMediaPublisher({
-      systemSubmissionIdProvider: () => "system-submission-d",
-      supplierProvider: () => supplier,
-    });
-    const orderCreationPort = Object.freeze({
-      createOrder(input) {
-        return publisher.publish({
-          articleId: "synthetic-article-d",
-          attemptId: input.orderCreationAttemptId || "synthetic-attempt-d",
-          target: {
-            kind: "media",
-            mediaResourceId: input.mediaResourceId,
-          },
-          title: input.title,
-          body: input.htmlBody,
-          remark: input.remark,
-        });
-      },
-    });
     const composition = createPaidMediaBatchComposition({
       paidExecutionTransitions: transitionPorts.paidExecutionTransitions,
       orderCreationResolutionTransitions:
@@ -171,7 +151,7 @@ function createFixture(options) {
       orderDetailsQueryPort: {
         getOrderDetails: (orderIds) => supplier.getOrderDetails(orderIds),
       },
-      orderCreationPort,
+      orderCreationPort: Object.freeze({ createOrder: (input) => supplier.createOrder(input) }),
     });
     const resourceService = {
       getFavoriteResource(resourceId) {
@@ -190,12 +170,8 @@ function createFixture(options) {
       mediaResourceService: resourceService,
       resourceStore: { getAll: () => ({ resources: [] }) },
       poolStore: { getAll: () => [], contains: () => true },
-      draftStore: { getAll: () => ({}), get: () => null, set: () => {} },
-      mediaWorkbenchService: {
-        resolveSubmissionFile: (filename) => filename,
-        scanArticles: async () => [],
-        previewArticle: async () => ({}),
-      },
+
+
       contentStore,
       paidAdmissionFacade: {
         admitPaidBatch: coordinator.admitPaidBatch,
@@ -301,7 +277,7 @@ test("media composition pauses persisted work without loading provider configura
     assert.equal(fixture.application.getPaidMediaBatches().items[0].runState, "paused");
     assert.equal(fixture.createCalls.length, 0);
     assert.deepEqual(composition.mediaApplication.listOrderAttention(), []);
-    assert.throws(() => composition.mediaApplication.getDrafts(), { code: "MEDIA_DRAFT_STORE_CORRUPT" });
+    assert.equal(composition.mediaApplication.getDrafts, undefined);
   } finally {
     fixture.close();
   }

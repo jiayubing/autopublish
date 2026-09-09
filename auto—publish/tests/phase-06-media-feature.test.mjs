@@ -37,11 +37,6 @@ describe("Phase 06 media feature", () => {
 
   it("owns the complete media workbench snapshot and named command lifecycles", async () => {
     const calls = [];
-    const article = {
-      filename: "article-1.docx",
-      title: "Article 1",
-      selectedResources: [],
-    };
     const resource = {
       resourceId: "resource-1",
       name: "Resource 1",
@@ -81,8 +76,8 @@ describe("Phase 06 media feature", () => {
         return { removed: true };
       },
       getBalance: async () => 80,
-      getDrafts: async () => [],
-      scanArticles: async () => [article],
+
+
       getOrders: async () => [],
       syncOrder: async () => ({}),
       syncAllOrders: async () => ({ items: [], succeeded: 0, failed: 0 }),
@@ -96,13 +91,12 @@ describe("Phase 06 media feature", () => {
     });
     feature.setScope({ workspaceRuntimeId: "workspace-media-owner" });
     await feature.refresh("initial");
-    assert.equal(feature.getSnapshot().articles.items.length, 1);
-    assert.equal(feature.getSnapshot().drafts.items.length, 0);
+    assert.equal("articles" in feature.getSnapshot(), false);
+    assert.equal("drafts" in feature.getSnapshot(), false);
     assert.equal(feature.getSnapshot().pool.pageSize, 50);
     assert.equal(feature.getSnapshot().balance.value, 80);
     assert.equal(typeof feature.openArticle, "undefined");
     assert.equal(typeof feature.saveDraft, "undefined");
-    assert.equal("activeArticle" in feature.getSnapshot().articles, false);
     assert.equal("selectionRevision" in feature.getSnapshot(), false);
 
     await feature.openPublishedUrl("order-1");
@@ -135,10 +129,10 @@ describe("Phase 06 media feature", () => {
       addToPool: async () => ({}),
       removeFromPool: async () => ({}),
       getBalance: async () => 0,
-      getDrafts: async () => [],
+
       getDraft: async () => null,
       setDraft: async () => ({}),
-      scanArticles: async () => [],
+
       previewArticle: async () => ({}),
       getOrders: async () => [],
       syncOrder: async () => ({}),
@@ -195,10 +189,10 @@ describe("Phase 06 media feature", () => {
       },
       removeFromPool: async () => ({}),
       getBalance: async () => 0,
-      getDrafts: async () => [],
+
       getDraft: async () => null,
       setDraft: async () => ({}),
-      scanArticles: async () => [],
+
       previewArticle: async () => ({}),
       getOrders: async () => [{ orderNid: "order-1" }],
       syncOrder: async () => {
@@ -281,10 +275,10 @@ describe("Phase 06 media feature", () => {
       addToPool: async () => ({}),
       removeFromPool: async () => ({}),
       getBalance: async () => 0,
-      getDrafts: async () => [],
+
       getDraft: async () => null,
       setDraft: async () => ({}),
-      scanArticles: async () => [],
+
       previewArticle: async () => ({}),
       getOrders: async () => {
         queryCalls += 1;
@@ -342,10 +336,10 @@ describe("Phase 06 media feature", () => {
       addToPool: async () => ({}),
       removeFromPool: async () => ({}),
       getBalance: async () => 0,
-      getDrafts: async () => [],
+
       getDraft: async () => null,
       setDraft: async () => ({}),
-      scanArticles: async () => [],
+
       previewArticle: async () => ({}),
       getOrders: async () => [
         {
@@ -424,10 +418,10 @@ describe("Phase 06 media feature", () => {
       addToPool: async () => ({}),
       removeFromPool: async () => ({}),
       getBalance: async () => 0,
-      getDrafts: async () => [],
+
       getDraft: async () => null,
       setDraft: async () => ({}),
-      scanArticles: async () => [],
+
       previewArticle: async () => ({}),
       getOrders: async () => [
         { orderNid: "order-1", statusCode: "0", anomaly: {} },
@@ -502,10 +496,10 @@ describe("Phase 06 media feature", () => {
       addToPool: async () => ({}),
       removeFromPool: async () => ({}),
       getBalance: async () => 0,
-      getDrafts: async () => [],
+
       getDraft: async () => null,
       setDraft: async () => ({}),
-      scanArticles: async () => [],
+
       previewArticle: async () => ({}),
       getOrders: async () => [
         { orderNid: "order-1", statusCode: "0", anomaly: {} },
@@ -567,8 +561,8 @@ describe("Phase 06 media feature", () => {
       addToPool: async () => ({}),
       removeFromPool: async () => ({}),
       getBalance: async () => 0,
-      getDrafts: async () => [],
-      scanArticles: async () => [],
+
+
       getOrders: async () => [],
       syncOrder: async () => ({}),
       syncAllOrders: async () => ({ items: [], succeeded: 0, failed: 0 }),

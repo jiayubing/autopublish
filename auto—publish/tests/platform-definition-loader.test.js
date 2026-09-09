@@ -29,7 +29,6 @@ function definition(id, overrides) {
     scanDir: id,
     capabilities: {
       regularSubmission: true,
-      legacyQueueImport: false,
       loginSession: false,
       accountInspection: false,
       imagePublishing: false,
@@ -38,7 +37,6 @@ function definition(id, overrides) {
       settings: false,
       clientProfile: false,
       runtimeArtifacts: false,
-      remoteReview: false,
     },
     externalHosts: [],
   };
@@ -65,15 +63,14 @@ test("PlatformDefinitionV1 parses only the exact immutable schema", () => {
 
 test("definition sets reject duplicates and invalid capability invariants", () => {
   assert.throws(() => parsePlatformDefinitionsV1([definition("fixture"), definition("fixture")]), { code: "PLATFORM_DEFINITION_ID_DUPLICATE" });
-  assert.throws(() => parsePlatformDefinitionV1(definition("fixture", { capabilities: { regularSubmission: false, legacyQueueImport: false, loginSession: false, accountInspection: false, imagePublishing: true } })), { code: "PLATFORM_DEFINITION_INVARIANT_VIOLATION" });
+  assert.throws(() => parsePlatformDefinitionV1(definition("fixture", { capabilities: { regularSubmission: false, loginSession: false, accountInspection: false, imagePublishing: true } })), { code: "PLATFORM_DEFINITION_INVARIANT_VIOLATION" });
   assert.throws(() => parsePlatformDefinitionV1(definition("resource-fixture", { publicationTargetKind: "resource" })), { code: "PLATFORM_DEFINITION_INVARIANT_VIOLATION" });
   assert.throws(
     () =>
       parsePlatformDefinitionV1(
-        definition("review-without-submission", {
+        definition("retired-contribution", {
           capabilities: {
             regularSubmission: false,
-            legacyQueueImport: false,
             loginSession: false,
             accountInspection: false,
             imagePublishing: false,
@@ -86,7 +83,7 @@ test("definition sets reject duplicates and invalid capability invariants", () =
           },
         }),
       ),
-    { code: "PLATFORM_DEFINITION_INVARIANT_VIOLATION" },
+    { code: "PLATFORM_DEFINITION_UNKNOWN_FIELD" },
   );
 });
 
@@ -113,8 +110,8 @@ test("missing, undeclared, and malformed ports fail closed without hiding a vali
     const loaded = loadPlatformModules({
       platformModules: [
         moduleFor(definition("missing"), () => ({})),
-        moduleFor(definition("undeclared", { capabilities: { regularSubmission: false, legacyQueueImport: false, loginSession: false, accountInspection: false, imagePublishing: false } })),
-        moduleFor(definition("undefined-port", { capabilities: { regularSubmission: false, legacyQueueImport: false, loginSession: false, accountInspection: false, imagePublishing: false } }), () => ({ regularSubmission: undefined })),
+        moduleFor(definition("undeclared", { capabilities: { regularSubmission: false, loginSession: false, accountInspection: false, imagePublishing: false } })),
+        moduleFor(definition("undefined-port", { capabilities: { regularSubmission: false, loginSession: false, accountInspection: false, imagePublishing: false } }), () => ({ regularSubmission: undefined })),
         moduleFor(definition("extra"), () => ({ regularSubmission: { preparePlatformSubmission: async () => ({}), extra: () => undefined } })),
         moduleFor(definition("valid")),
       ],
@@ -241,16 +238,14 @@ test("built-in projections and enabled filtering match the current three-platfor
     displayName: platform.definition.displayName,
     kind: platform.definition.publicationTargetKind,
     regular: Boolean(platform.regularSubmission),
-    legacy: Boolean(platform.legacyQueue),
     login: Boolean(platform.loginSession),
     inspect: Boolean(platform.accountInspection),
     image: platform.definition.capabilities.imagePublishing,
-    review: Boolean(platform.remoteReviewContribution),
   }]));
   assert.deepEqual(matrix, {
-    lieju: { displayName: "列举网", kind: "platform", regular: true, legacy: false, login: true, inspect: true, image: true, review: false },
-    hepan: { displayName: "蓝色河畔", kind: "platform", regular: true, legacy: false, login: false, inspect: true, image: false, review: true },
-    media: { displayName: "付费媒体", kind: "resource", regular: false, legacy: false, login: false, inspect: false, image: false, review: false },
+    lieju: { displayName: "列举网", kind: "platform", regular: true, login: true, inspect: true, image: true },
+    hepan: { displayName: "蓝色河畔", kind: "platform", regular: true, login: false, inspect: true, image: false },
+    media: { displayName: "付费媒体", kind: "resource", regular: false, login: false, inspect: false, image: false },
   });
   assert.deepEqual(loadPlatforms({ platformIds: ["lieju"] }).map((platform) => platform.definition.id), ["lieju"]);
   assert.deepEqual(createSubmissionTargetCatalog().list().map((platform) => platform.id), ["lieju", "hepan"]);
@@ -268,7 +263,6 @@ test("built-in optional contributions stay platform-owned and exact", async () =
   });
   const byId = Object.fromEntries(loaded.map((platform) => [platform.definition.id, platform]));
   assert.equal(byId.hepan.settingsContribution.createSettingsAdapter({}).id, "hepan");
-  assert.equal(typeof byId.hepan.remoteReviewContribution.reconcile, "function");
   assert.equal(byId.media.settingsContribution.createSettingsAdapter({}).id, "media");
   assert.equal(byId.media.regularSubmission, undefined);
 
@@ -294,8 +288,8 @@ test("built-in optional contributions stay platform-owned and exact", async () =
 test("settings contributions cannot impersonate another platform adapter", () => {
   const fixture = moduleFor(
     definition("settings-fixture", {
-      capabilities: { regularSubmission: false, legacyQueueImport: false, loginSession: false, accountInspection: false, imagePublishing: false },
-      contributions: { settings: true, clientProfile: false, runtimeArtifacts: false, remoteReview: false },
+      capabilities: { regularSubmission: false, loginSession: false, accountInspection: false, imagePublishing: false },
+      contributions: { settings: true, clientProfile: false, runtimeArtifacts: false },
     }),
     () => ({ settingsContribution: { createSettingsAdapter: () => ({ id: "media" }) } }),
   );
@@ -307,7 +301,6 @@ test("shared composition and worker boundaries contain no special-platform branc
   [
     "desktop/composition/workspace-runtime-composition.js",
     "desktop/services/desktop-task-service.js",
-    "desktop/worker/run-task.js",
   ].forEach(function (filename) {
     const source = fs.readFileSync(path.join(__dirname, "..", filename), "utf8");
     assert.equal(/(?:^|[^A-Za-z0-9_-])(hepan|lieju)(?:$|[^A-Za-z0-9_-])/iu.test(source), false, filename);

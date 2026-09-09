@@ -147,11 +147,6 @@ function createHepanGeoApiClient(options) {
         }),
       );
     },
-    async result(config, aid) {
-      if (!Number.isSafeInteger(aid) || aid < 1)
-        throw fail("HEPAN_REQUEST_INVALID");
-      return request("result", Object.assign({}, credentials(config), { aid }));
-    },
   });
 }
 

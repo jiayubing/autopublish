@@ -47,39 +47,6 @@ function mapPublishError(error) {
   });
 }
 
-function outcomeFromReviewData(data) {
-  const value = data || {};
-  if (!validAid(value.aid)) throw fail("HEPAN_GEO_API_PROTOCOL_ERROR");
-  const remoteId = String(value.aid);
-  const remoteUrl =
-    typeof value.url === "string" && value.url.trim()
-      ? value.url.trim()
-      : undefined;
-  if (value.review_status === "published")
-    return Object.freeze({
-      status: "accepted",
-      remoteId,
-      ...(remoteUrl ? { remoteUrl } : {}),
-    });
-  if (["pending", "draft"].includes(value.review_status))
-    return Object.freeze({
-      status: "remote_pending",
-      errorCode: "HEPAN_REMOTE_PENDING",
-      remoteId,
-    });
-  if (value.review_status === "rejected")
-    return Object.freeze({
-      status: "article_rejected",
-      errorCode: "HEPAN_CONTENT_REJECTED",
-    });
-  if (value.review_status === "deleted")
-    return Object.freeze({
-      status: "article_rejected",
-      errorCode: "HEPAN_REMOTE_DELETED",
-    });
-  throw fail("HEPAN_REVIEW_STATUS_UNKNOWN");
-}
-
 function createHepanAdapter(options) {
   const value = options || {};
   const getSettingsService = value.getPlatformSettingsService;
@@ -109,21 +76,13 @@ function createHepanAdapter(options) {
                 runtimeConfig(),
                 publishInput,
               );
-              return outcomeFromReviewData(response.data);
+              const data = response.data || {};
+              if (!validAid(data.aid)) throw fail("HEPAN_GEO_API_PROTOCOL_ERROR");
+              return Object.freeze({ status: "accepted", remoteId: String(data.aid),
+                ...(typeof data.url === "string" && data.url.trim() ? { remoteUrl: data.url.trim() } : {}) });
             } catch (error) { return mapPublishError(error); }
           },
         });
-      },
-    }),
-    remoteReview: Object.freeze({
-      async reconcile(input) {
-        const remoteId = String((input && input.remoteId) || "");
-        if (!/^\d+$/.test(remoteId)) throw fail("HEPAN_REQUEST_INVALID");
-        const aid = Number(remoteId);
-        if (!Number.isSafeInteger(aid) || aid < 1)
-          throw fail("HEPAN_REQUEST_INVALID");
-        const response = await apiClient.result(runtimeConfig(), aid);
-        return outcomeFromReviewData(response.data);
       },
     }),
     accountInspection: Object.freeze({
@@ -131,9 +90,10 @@ function createHepanAdapter(options) {
       async inspect() {
         const settingsService =
           typeof getSettingsService === "function" ? getSettingsService() : null;
-        if (!settingsService || typeof settingsService.test !== "function")
+        if (!settingsService || typeof settingsService.getAdapterForRuntime !== "function")
           throw fail("HEPAN_CONFIG_NOT_SET");
-        const result = await settingsService.test("hepan", {});
+        const { adapter, config } = settingsService.getAdapterForRuntime("hepan");
+        const result = await adapter.test(config);
         const account = result && result.ok === true ? result.account : null;
         const remoteAccountId =
           account && /^\d{1,20}$/.test(String(account.uid || ""))

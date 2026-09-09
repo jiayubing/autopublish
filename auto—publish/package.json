@@ -5,7 +5,6 @@
   "description": "Auto publish desktop console",
   "scripts": {
     "desktop": "scripts\\desktop.cmd",
-    "snapshot": "scripts\\snapshot.cmd",
     "test": "node scripts/run-tests.js --suite core",
     "test:all": "node scripts/run-tests.js --suite all",
     "test:integration": "node scripts/run-tests.js --suite integration",

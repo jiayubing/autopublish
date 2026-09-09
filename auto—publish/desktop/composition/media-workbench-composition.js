@@ -30,15 +30,11 @@ function createMediaWorkbenchComposition(options) {
     MediaPoolStore,
   } = require("../../src/platforms/media/media-pool-store");
   const {
-    MediaDraftStore,
-  } = require("../../src/platforms/media/media-draft-store");
-  const {
     createMediaResourceService,
     matchesPaidQuote,
   } = require("../services/media-resource-service");
   const mediaResourceStore = new MediaResourceStore({ paths });
   const mediaPoolStore = new MediaPoolStore({ paths });
-  const mediaDraftStore = new MediaDraftStore({ paths });
   const mediaSupplierProvider = function () {
     return paidOrderCreationSupplier;
   };
@@ -121,7 +117,6 @@ function createMediaWorkbenchComposition(options) {
         platformSettingsService,
         resourceStore: mediaResourceStore,
         poolStore: mediaPoolStore,
-        draftStore: mediaDraftStore,
         mediaResourceService,
         mediaSupplierProvider,
         orderObservationTransitions:

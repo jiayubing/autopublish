@@ -1,4 +1,4 @@
-import type { Article, Draft, MediaResource, RealOrder } from "../types/media";
+import type { MediaResource, RealOrder } from "../types/media";
 import type { IpcResponse } from "../types/ipc";
 import {
   ipcError,
@@ -19,10 +19,6 @@ type MediaRefreshResult = {
 };
 
 type MediaApi = {
-  scanArticles: () => Promise<
-    IpcResponse<{ items: Record<string, unknown>[] }>
-  >;
-  getDrafts: () => Promise<IpcResponse<{ items: Draft[] }>>;
   refreshResources: (
     input: Record<string, never>,
   ) => Promise<IpcResponse<MediaRefreshResult>>;
@@ -194,24 +190,6 @@ async function unwrap<T>(
   return result.data;
 }
 
-type ArticleSummary = Omit<
-  Article,
-  "content" | "words" | "tags" | "lastModified"
->;
-
-function normalizeArticleSummary(raw: Record<string, unknown>): ArticleSummary {
-  return {
-    filename: String(raw.filename || ""),
-    title: String(raw.title || ""),
-    selectedResources: normalizeResources(raw.selectedResources),
-    autoTitle: String(raw.autoTitle || ""),
-    remark: String(raw.remark || ""),
-    hasImages: Boolean(raw.hasImages),
-    imageCount: typeof raw.imageCount === "number" ? raw.imageCount : 0,
-    ignoreImages: Boolean(raw.ignoreImages),
-  };
-}
-
 function normalizeResource(raw: Record<string, unknown>): MediaResource {
   const type = ["image", "video", "audio", "document"].includes(
     String(raw.type),
@@ -232,15 +210,6 @@ function normalizeResource(raw: Record<string, unknown>): MediaResource {
     size: typeof raw.size === "string" ? raw.size : undefined,
     createdAt: String(raw.createdAt || ""),
   };
-}
-
-function normalizeResources(value: unknown): MediaResource[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter((item): item is Record<string, unknown> =>
-      Boolean(item && typeof item === "object"),
-    )
-    .map(normalizeResource);
 }
 
 function normalizeOrder(raw: Record<string, unknown>): RealOrder {
@@ -266,23 +235,6 @@ function normalizeOrder(raw: Record<string, unknown>): RealOrder {
   };
 }
 
-export async function scanArticles(): Promise<ArticleSummary[]> {
-  const api = mediaApi();
-  const data = await unwrap(
-    requireBridgeMethod(api.scanArticles)(),
-    "scanArticles failed",
-  );
-  return data.items.map(normalizeArticleSummary);
-}
-export async function getDrafts(): Promise<Draft[]> {
-  const api = mediaApi();
-  return (
-    await unwrap(requireBridgeMethod(api.getDrafts)(), "getDrafts failed")
-  ).items.map((draft) => ({
-    ...draft,
-    selectedResources: normalizeResources(draft.selectedResources),
-  }));
-}
 export async function refreshResources(): Promise<
   MediaRefreshResult | undefined
 > {

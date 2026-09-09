@@ -235,8 +235,8 @@ function installQuestionFixture(page, options = {}) {
       },
       content,
       media: {
-        scanArticles: () => result([]),
-        getDrafts: () => result([]),
+
+
         getResourcePage: () =>
           result({ items: [], total: 0, page: 1, pageSize: 10 }),
         getPool: () => result([]),

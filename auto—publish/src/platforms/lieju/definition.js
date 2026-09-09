@@ -5,7 +5,7 @@ module.exports = Object.freeze({
   displayName: "列举网",
   publicationTargetKind: "platform",
   scanDir: "lieju",
-  capabilities: Object.freeze({"regularSubmission":true,"legacyQueueImport":false,"loginSession":true,"accountInspection":true,"imagePublishing":true}),
-  contributions: Object.freeze({"settings":false,"clientProfile":true,"runtimeArtifacts":false,"remoteReview":false}),
+  capabilities: Object.freeze({"regularSubmission":true,"loginSession":true,"accountInspection":true,"imagePublishing":true}),
+  contributions: Object.freeze({"settings":false,"clientProfile":true,"runtimeArtifacts":false}),
   externalHosts: Object.freeze(["lieju.com"]),
 });

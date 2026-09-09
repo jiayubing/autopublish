@@ -11,7 +11,6 @@ const {
   productionIpcRegistry,
 } = require("../desktop/ipc/contracts/production-registry");
 const {
-  projectMediaDraft,
   projectMediaOrder,
   projectMediaResource,
 } = require("../desktop/ipc/contracts/media-contracts");
@@ -27,8 +26,6 @@ const MEDIA_CHANNELS = [
   "media:add-to-pool",
   "media:remove-from-pool",
   "media:get-balance",
-  "media:get-drafts",
-  "media:scan-articles",
   "media:get-orders",
   "media:sync-order",
   "media:sync-all-orders",
@@ -44,53 +41,10 @@ const MEDIA_CHANNELS = [
   "media:open-published-url",
 ];
 
-test("media application scans local articles without contacting a supplier", async (t) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "media-scan-"));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const inputDir = path.join(root, "input");
-  let draftReads = 0;
-  const application = createMediaWorkbenchApplication({
-    paths: { mediaInput: inputDir, data: path.join(root, "data") },
-    mediaClientProvider: () => assert.fail("local scanning must not create a remote client"),
-    mediaOrderService: { listOrderViews: () => [] },
-    draftStore: {
-      get: () => {
-        draftReads += 1;
-        return { title: "Saved title", remark: "Saved remark", ignoreImages: true };
-      },
-    },
-  });
-  assert.equal(draftReads, 0);
-  assert.equal(fs.existsSync(inputDir), false);
-  assert.deepEqual(await application.scanArticles(), { items: [] });
-  fs.mkdirSync(inputDir);
-  fs.writeFileSync(path.join(inputDir, "article.md"), "# Source title\n\nBody");
-  fs.writeFileSync(path.join(inputDir, "~$temporary.md"), "Temporary");
-  fs.writeFileSync(path.join(inputDir, "ignored.json"), "{}");
-  const result = await application.scanArticles();
-  assert.equal(draftReads, 1);
-  assert.equal(result.items.length, 1);
-  assert.equal(result.items[0].filename, "article.md");
-  assert.equal(result.items[0].title, "Saved title");
-  assert.equal(result.items[0].autoTitle, "Source title");
-  assert.equal(result.items[0].remark, "Saved remark");
-  assert.equal(result.items[0].ignoreImages, true);
-  assert.equal(fs.existsSync(path.join(root, "data")), false);
-});
-
-test("media projections and draft requests preserve all supported resource types", () => {
+test("media projections preserve all supported resource types", () => {
   const types = ["image", "video", "audio", "document"];
   assert.deepEqual(
     types.map((type) => projectMediaResource({ resourceId: type, type }).type),
-    types,
-  );
-  assert.deepEqual(
-    projectMediaDraft("article.md", {
-      title: "Fixture",
-      remark: "",
-      ignoreImages: false,
-      selectedResources: types.map((type) => ({ resourceId: type, type })),
-    }).selectedResources.map((resource) => resource.type),
     types,
   );
 });
@@ -114,11 +68,8 @@ test("paid-media confirmation establishes a paused batch without starting order 
     mediaOrderService: { listOrderViews: () => [] },
     resourceStore: { getAll: () => ({ resources: [] }) },
     poolStore: { getAll: () => [] },
-    draftStore: { get: () => null },
-    mediaWorkbenchService: {
-      scanArticles: async () => [],
-      resolveSubmissionFile: (filename) => filename,
-    },
+
+
     paidMediaPreflightService: {
       confirm: async () => ({
         batchId: "paid-batch-paused",
@@ -153,11 +104,8 @@ test("paid-media execution mutations invalidate the unified submission center", 
     mediaOrderService: { listOrderViews: () => [] },
     resourceStore: { getAll: () => ({ resources: [] }) },
     poolStore: { getAll: () => [] },
-    draftStore: { get: () => null },
-    mediaWorkbenchService: {
-      scanArticles: async () => [],
-      resolveSubmissionFile: (filename) => filename,
-    },
+
+
     paidMediaBatchOrchestrator: {
       startBatch: async ({ batchId }) => ({ batchId, status: "completed" }),
       pauseBatch: ({ batchId }) => ({ batchId, runState: "paused" }),
@@ -285,11 +233,13 @@ test("order query DTO exposes only the published-link fact and never raw evidenc
   assert.equal(order.hasPublishedUrl, true);
 });
 
-test("all 22 consumed media invokes have versioned exact contracts", () => {
+test("all 20 consumed media invokes have versioned exact contracts", () => {
   const media = productionIpcRegistry
     .list()
     .filter((contract) => contract.feature === "media");
-  assert.equal(media.length, 22);
+  assert.equal(media.length, 20);
+  assert.equal(productionIpcRegistry.byChannel("media:get-drafts"), null);
+  assert.equal(productionIpcRegistry.byChannel("media:scan-articles"), null);
   assert.deepEqual(
     media.map((contract) => contract.channel).sort(),
     [...MEDIA_CHANNELS].sort(),
@@ -415,27 +365,6 @@ test("media refresh and projections reject full resources, paths, and raw provid
     { code: "IPC_UNKNOWN_FIELD" },
   );
 
-  const articles = productionIpcRegistry.byChannel("media:scan-articles");
-  assert.throws(
-    () =>
-      productionIpcRegistry.success(articles, {
-        items: [
-          {
-            filename: "article.md",
-            title: "Article",
-            autoTitle: "Article",
-            remark: "",
-            hasImages: false,
-            imageCount: 0,
-            ignoreImages: false,
-            selectedResources: [],
-            filePath: "C:\\private\\article.md",
-          },
-        ],
-      }),
-    { code: "IPC_UNKNOWN_FIELD" },
-  );
-
   const orders = productionIpcRegistry.byChannel("media:get-orders");
   assert.throws(
     () => productionIpcRegistry.success(orders, { items: [{ raw: "secret" }] }),
@@ -443,7 +372,7 @@ test("media refresh and projections reject full resources, paths, and raw provid
   );
 });
 
-test("media registrar projects resources and articles without exposing retired editor commands", async (t) => {
+test("media registrar projects resources without exposing retired editor commands", async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase-06-media-ipc-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const data = path.join(root, "data");
@@ -534,17 +463,6 @@ test("media registrar projects resources and articles without exposing retired e
   assert.equal(page.schemaVersion, 1);
   assert.equal(page.data.items.length, 1);
   assert.equal("raw" in page.data.items[0], false);
-
-  const articleContract = productionIpcRegistry.byChannel(
-    "media:scan-articles",
-  );
-  const articles = await handlers.get(articleContract.channel)(
-    {},
-    productionIpcRegistry.encodeRequest(articleContract, {}),
-  );
-  assert.equal(articles.ok, true);
-  assert.equal(articles.data.items[0].filename, "article.md");
-  assert.equal("filePath" in articles.data.items[0], false);
 
   assert.equal(
     productionIpcRegistry.byChannel("media:build-confirmation"),

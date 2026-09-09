@@ -40,40 +40,6 @@ function projectMediaResource(value) {
   return result;
 }
 
-function projectMediaDraft(filename, value) {
-  const draft = value || {};
-  const result = {
-    filename: String(filename || draft.filename || ""),
-    title: String(draft.title || ""),
-    remark: String(draft.remark || ""),
-    ignoreImages: draft.ignoreImages === true,
-    selectedResources: Array.isArray(draft.selectedResources)
-      ? draft.selectedResources.map(projectMediaResource)
-      : [],
-  };
-  if (typeof draft.updatedAt === "string") result.updatedAt = draft.updatedAt;
-  return result;
-}
-
-function projectMediaArticleSummary(value) {
-  const article = value || {};
-  return {
-    filename: String(article.filename || ""),
-    title: String(article.title || ""),
-    autoTitle: String(article.autoTitle || article.title || ""),
-    remark: String(article.remark || ""),
-    hasImages: article.hasImages === true,
-    imageCount:
-      Number.isSafeInteger(article.imageCount) && article.imageCount >= 0
-        ? article.imageCount
-        : 0,
-    ignoreImages: article.ignoreImages === true,
-    selectedResources: Array.isArray(article.selectedResources)
-      ? article.selectedResources.map(projectMediaResource)
-      : [],
-  };
-}
-
 function projectMediaResourcePage(value) {
   const page = value || {};
   return {
@@ -181,8 +147,6 @@ module.exports = {
   MEDIA_RESOURCE_TYPES,
   finiteMediaPrice,
   projectMediaResource,
-  projectMediaDraft,
-  projectMediaArticleSummary,
   projectMediaResourcePage,
   projectMediaPoolPage,
   projectMediaRefreshResult,

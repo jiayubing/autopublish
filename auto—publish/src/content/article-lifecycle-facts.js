@@ -3,7 +3,6 @@ const ACTIVE_PUBLICATION_STATUSES = new Set([
   "queued",
   "remote_started",
   "paid_processing",
-  "remote_pending",
 ]);
 const ACTIVE_SUBMISSION_STATUSES = new Set([
   "queued",
@@ -18,7 +17,6 @@ const ACTIVE_TARGET_STATUSES = new Set([
   "reserving",
   "remote_started",
   "paid_processing",
-  "remote_pending",
   "uncertain",
   "unknown",
   "0",
@@ -30,7 +28,6 @@ const KNOWN_PUBLICATION_STATUSES = new Set([
   "remote_started",
   "published",
   "paid_processing",
-  "remote_pending",
   "uncertain",
   "failed",
   "cancelled",
@@ -42,7 +39,6 @@ const KNOWN_SUBMISSION_STATUSES = new Set([
   "published",
   "remote_started",
   "paid_processing",
-  "remote_pending",
   "uncertain",
   "failed",
   "cancelled",
@@ -54,7 +50,6 @@ const SUMMARY_LABELS = Object.freeze({
   paid_processing: "付费处理中",
   partial: "部分发布",
   published: "已发布",
-  remote_pending: "审核中",
   uncertain: "待确认",
   failed: "失败",
 });
@@ -187,7 +182,6 @@ function publicationSummary(records, orders, submissionItems) {
   if (published > 0 && published < values.length) return result("partial");
   if (published > 0) return result("published");
   if (values.some((status) => status === "0" || status === "1")) return result("paid_processing");
-  if (values.includes("remote_pending")) return result("remote_pending");
   if (values.every((status) => status === "failed" || status === "cancelled" || status === "4" || status === "9")) return result("failed");
   if (values.includes("remote_started")) return result("queued");
   if (values.includes("queued")) return result("queued");
@@ -245,8 +239,6 @@ function mergeTargetStatus(current, next) {
   if (current === "uncertain" || next === "uncertain") return "uncertain";
   if (current === "published" || next === "published") return "published";
   if (current === "2" || next === "2") return "2";
-  if (current === "remote_pending" || next === "remote_pending")
-    return "remote_pending";
   return next || current || "not_submitted";
 }
 
@@ -278,7 +270,7 @@ function targetFactsFor(records, submissionItems, orders) {
   }));
   Object.values(targetFacts).forEach((fact) => {
     if (
-      ["remote_pending", "uncertain", "published", "2", "4", "9"].includes(
+      ["uncertain", "published", "2", "4", "9"].includes(
         fact.status,
       )
     )

@@ -258,7 +258,7 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
             }),
         },
         media: {
-          scanArticles: () => ok([]),
+
           getResourcePage: () => ok({ items: [], total: 0, page: 1, pageSize: 1 }),
           getPool: () => ok([]),
           getBalance: () => ok({ balance: "0" }),

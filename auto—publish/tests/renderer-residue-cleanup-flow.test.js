@@ -190,7 +190,7 @@ function installDesktopFixture(page, scenario) {
           ok({ state: "ready", workspacePath: "fixture", envOverride: false }),
       };
       const media = {
-        scanArticles: () => ok({ items: [] }),
+
         previewArticle: () =>
           ok({
             article: {
@@ -200,7 +200,7 @@ function installDesktopFixture(page, scenario) {
               selectedResources: [],
             },
           }),
-        getDrafts: () => ok({ items: [] }),
+
         getDraft: () => ok({ draft: null }),
         setDraft: () => ok({ completed: true }),
         buildConfirmation: () =>

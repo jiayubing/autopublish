@@ -44,7 +44,7 @@ function claim(articleId = "article-hepan-api", title = "汕头企业数字化�
   };
 }
 
-test("Hepan GEO API client uses POST JSON for status, publish and result", async () => {
+test("Hepan GEO API client uses POST JSON for status and publish", async () => {
   const requests = [];
   const client = createHepanGeoApiClient({
     fetch: async (url, options) => {
@@ -74,16 +74,14 @@ test("Hepan GEO API client uses POST JSON for status, publish and result", async
     message: "正文",
     idempotencyKey: "same-key",
   });
-  await client.result(config, 98765);
-  assert.equal(requests.length, 3);
+  assert.equal(requests.length, 2);
   assert.equal(requests.every((entry) => entry.url === HEPAN_GEO_API_URL), true);
   assert.equal(requests.every((entry) => entry.options.method === "POST"), true);
   assert.deepEqual(
     requests.map((entry) => entry.body.action),
-    ["status", "publish", "result"],
+    ["status", "publish"],
   );
   assert.equal(requests[1].body.idempotency_key, "same-key");
-  assert.equal(requests[2].body.aid, 98765);
   assert.equal(JSON.stringify(requests).includes("password="), false);
 });
 
@@ -134,14 +132,16 @@ test("Hepan Markdown conversion emits supported Discuz BBCode only", () => {
   assert.equal(result.includes("<script>"), false);
 });
 
-test("Hepan publish maps published and pending without Python runtime", async () => {
+test("Hepan publish treats API acceptance as publication independently of review fields without Python runtime", async () => {
   for (const scenario of [
     {
       reviewStatus: "published",
       expectedStatus: "accepted",
       url: "https://www.hepan.com/portal.php?mod=view&aid=98765",
     },
-    { reviewStatus: "pending", expectedStatus: "remote_pending", url: null },
+    { reviewStatus: "pending", expectedStatus: "accepted", url: null },
+    { reviewStatus: "draft", expectedStatus: "accepted", url: null },
+    { reviewStatus: undefined, expectedStatus: "accepted", url: null },
   ]) {
     let publishedInput;
     const adapter = createHepanAdapter({
@@ -174,43 +174,6 @@ test("Hepan publish maps published and pending without Python runtime", async ()
       publishedInput.input.idempotencyKey,
       /^autopublish-[a-f0-9]{40}$/,
     );
-  }
-});
-
-test("Hepan result review maps every documented terminal state", async () => {
-  for (const scenario of [
-    ["pending", "remote_pending"],
-    ["draft", "remote_pending"],
-    ["published", "accepted"],
-    ["rejected", "article_rejected"],
-    ["deleted", "article_rejected"],
-  ]) {
-    const adapter = createHepanAdapter({
-      getPlatformSettingsService: settingsService,
-      createHepanGeoApiClient: () => ({
-        async publish() {
-          throw new Error("not used");
-        },
-        async result(config, aid) {
-          assert.equal(config.uid, 12345);
-          assert.equal(aid, 98765);
-          return {
-            data: {
-              aid,
-              review_status: scenario[0],
-              url:
-                scenario[0] === "published"
-                  ? "https://www.hepan.com/portal.php?mod=view&aid=98765"
-                  : null,
-            },
-          };
-        },
-      }),
-    });
-    const outcome = await adapter.remoteReview.reconcile({
-      remoteId: "98765",
-    });
-    assert.equal(outcome.status, scenario[1]);
   }
 });
 

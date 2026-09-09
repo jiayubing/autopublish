@@ -5,7 +5,7 @@ module.exports = Object.freeze({
   displayName: "蓝色河畔",
   publicationTargetKind: "platform",
   scanDir: "hepan",
-  capabilities: Object.freeze({"regularSubmission":true,"legacyQueueImport":false,"loginSession":false,"accountInspection":true,"imagePublishing":false}),
-  contributions: Object.freeze({"settings":true,"clientProfile":false,"runtimeArtifacts":false,"remoteReview":true}),
+  capabilities: Object.freeze({"regularSubmission":true,"loginSession":false,"accountInspection":true,"imagePublishing":false}),
+  contributions: Object.freeze({"settings":true,"clientProfile":false,"runtimeArtifacts":false}),
   externalHosts: Object.freeze(["www.hepan.com"]),
 });

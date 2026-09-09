@@ -67,7 +67,7 @@ async function rejectsResult(action) {
 
 test("all production bridge namespaces fail closed without Electron transport", async () => {
   delete global.window;
-  await rejectsCapability(() => bridges.media.scanArticles());
+  await rejectsCapability(() => bridges.media.getOrders());
   await rejectsCapability(() => bridges.platform.getPlatformQueue());
   await rejectsCapability(() => bridges.settings.getAiProviderStatus());
   await rejectsCapability(() => bridges.workspace.getWorkspaceBootstrapState());
@@ -108,7 +108,7 @@ test("missing query and command capabilities fail closed instead of resolving bu
     content: {},
   });
 
-  await rejectsCapability(() => bridges.media.getDrafts());
+  await rejectsCapability(() => bridges.media.getOrders());
   await rejectsCapability(() => bridges.media.syncOrder("order-1"));
   await rejectsCapability(() => bridges.platform.openPlatformLogin("toutiao"));
   await rejectsCapability(() => bridges.platform.getPlatformQueue());
@@ -129,9 +129,6 @@ test("missing event capability throws instead of returning a noop disposer", () 
 
 test("successful query envelopes without data fail closed", async () => {
   setDesktopConsole({
-    media: {
-      scanArticles: async () => ({ ok: true, data: null }),
-    },
     orders: {
       getOrders: async () => ({ ok: true }),
     },
@@ -159,7 +156,6 @@ test("successful query envelopes without data fail closed", async () => {
     },
   });
 
-  await rejectsResult(() => bridges.media.scanArticles());
   await rejectsResult(() => bridges.media.getOrders());
   await rejectsResult(() => bridges.platform.getPlatformQueue());
   await rejectsResult(() => bridges.platform.checkPlatformLogin("toutiao"));
@@ -173,8 +169,8 @@ test("successful query envelopes without data fail closed", async () => {
 
 test("missing envelopes and command data fail closed", async () => {
   setDesktopConsole({
-    media: {
-      scanArticles: async () => undefined,
+    orders: {
+      getOrders: async () => undefined,
     },
     platforms: {
       openLogin: async () => ({ ok: true }),
@@ -184,7 +180,7 @@ test("missing envelopes and command data fail closed", async () => {
     },
   });
 
-  await rejectsResult(() => bridges.media.scanArticles());
+  await rejectsResult(() => bridges.media.getOrders());
   await rejectsResult(() => bridges.platform.openPlatformLogin("toutiao"));
   await rejectsResult(() => bridges.workspace.openCurrentWorkspace());
 });
@@ -201,14 +197,15 @@ test("event subscriptions reject a missing disposer", () => {
 
 test("explicit mock adapters provide test data without production bridge fallbacks", async () => {
   const mockAdapter = {
-    scanArticles: async () => [{ filename: "fixture.md", title: "fixture" }],
+    getOrders: async () => [{ orderNid: "fixture-order", title: "fixture" }],
+
   };
-  assert.deepEqual(await mockAdapter.scanArticles(), [
-    { filename: "fixture.md", title: "fixture" },
+  assert.deepEqual(await mockAdapter.getOrders(), [
+    { orderNid: "fixture-order", title: "fixture" },
   ]);
 
   delete global.window;
-  await rejectsCapability(() => bridges.media.scanArticles());
+  await rejectsCapability(() => bridges.media.getOrders());
 });
 
 test("read-only contextBridge namespaces preserve their exact capability functions", async () => {

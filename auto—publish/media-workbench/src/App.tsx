@@ -88,8 +88,6 @@ function AppContent() {
   const orders = mediaSnapshot.orders.items;
   const balance = mediaSnapshot.balance.value;
   const readinessQueries = [
-    mediaSnapshot.articles.query,
-    mediaSnapshot.drafts.query,
     mediaSnapshot.resources.query,
     mediaSnapshot.pool.query,
     mediaSnapshot.balance.query,

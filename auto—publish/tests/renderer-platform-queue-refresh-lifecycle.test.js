@@ -257,8 +257,8 @@ function installDesktopFixture(page) {
       onDoubaoQueueState: () => () => {},
     };
     const media = {
-      scanArticles: () => response({ items: [] }),
-      getDrafts: () => response({ items: [] }),
+
+
       getResourcePage: () =>
         response({ items: [], total: 0, page: 1, pageSize: 50 }),
       getPool: () =>

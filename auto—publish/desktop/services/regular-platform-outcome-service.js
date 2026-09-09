@@ -10,13 +10,11 @@ const TRANSITION_METHODS = Object.freeze([
   "confirmRegularAccepted",
   "confirmRegularNotAccepted",
   "getRegularOutcomeSnapshot",
-  "listRegularRemotePending",
   "markOrphanedRegularAttemptUncertain",
   "prepareRegularUncertainResolution",
   "recordRegularAccepted",
   "recordRegularArticleRejected",
   "recordRegularGroupBlocked",
-  "recordRegularRemotePending",
   "recordRegularUncertain",
 ]);
 
@@ -58,11 +56,6 @@ function createRegularPlatformOutcomeService(options) {
       REGULAR_OUTCOME_OBSERVATION_ISSUES.ACCEPTED_REMOTE_IDENTITY_REQUIRED
     )
       return fail("REGULAR_ACCEPTED_REMOTE_IDENTITY_REQUIRED");
-    if (
-      error.issue ===
-      REGULAR_OUTCOME_OBSERVATION_ISSUES.REMOTE_PENDING_REMOTE_ID_REQUIRED
-    )
-      return fail("REGULAR_REMOTE_PENDING_REMOTE_ID_REQUIRED");
     return fail("REGULAR_ADAPTER_OUTCOME_INVALID");
   }
 
@@ -122,8 +115,6 @@ function createRegularPlatformOutcomeService(options) {
     const command = { regularPublicationAttemptId: attemptId, observation };
     if (observation.status === "accepted")
       return transitions.recordRegularAccepted(command);
-    if (observation.status === "remote_pending")
-      return transitions.recordRegularRemotePending(command);
     if (observation.status === "article_rejected")
       return transitions.recordRegularArticleRejected(command);
     if (observation.status === "group_blocked")
@@ -136,7 +127,6 @@ function createRegularPlatformOutcomeService(options) {
     confirmRegularAccepted: transitions.confirmRegularAccepted,
     confirmRegularNotAccepted: transitions.confirmRegularNotAccepted,
     getRegularOutcomeSnapshot: transitions.getRegularOutcomeSnapshot,
-    listRegularRemotePending: transitions.listRegularRemotePending,
     markOrphanedRegularAttemptUncertain:
       transitions.markOrphanedRegularAttemptUncertain,
     prepareRegularUncertainResolution:

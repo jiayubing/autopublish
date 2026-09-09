@@ -47,10 +47,10 @@ function mediaAdapters(overrides = {}) {
     addToPool: async () => ({}),
     removeFromPool: async () => ({}),
     getBalance: async () => 0,
-    getDrafts: async () => [],
+
     getDraft: async () => null,
     setDraft: async () => ({}),
-    scanArticles: async () => [],
+
     previewArticle: async () => ({}),
     buildConfirmation: async () => ({}),
     getOrders: async () => [],

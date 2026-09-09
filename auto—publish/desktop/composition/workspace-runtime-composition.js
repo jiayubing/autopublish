@@ -204,7 +204,6 @@ async function createWorkspaceRuntimeComposition(deps) {
       platformRuntimeComposition.regularDirectoryEntries;
     const regularSubmissionPorts =
       platformRuntimeComposition.regularSubmissionPorts;
-    const remoteReviewPorts = platformRuntimeComposition.remoteReviewPorts;
     const loginSessionPorts = platformRuntimeComposition.loginSessionPorts;
     const clientProfileReaders =
       platformRuntimeComposition.clientProfileReaders;
@@ -444,16 +443,6 @@ async function createWorkspaceRuntimeComposition(deps) {
           onDataInvalidated: invalidation.invalidate,
         },
       );
-    const regularRemoteReviewReconciler = ownService(
-      require("../services/regular-remote-review-reconciler").createRegularRemoteReviewReconciler(
-        {
-          remoteReviewPorts,
-          regularPlatformOutcomeService,
-          onDataInvalidated: invalidation.invalidate,
-        },
-      ),
-    );
-    regularRemoteReviewReconciler.start();
     const { paidMediaBatchComposition, mediaApplication } =
       require("./media-workbench-composition").createMediaWorkbenchComposition({
         paths,

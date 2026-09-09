@@ -27,7 +27,9 @@ async function createPlatformRuntimeComposition(options) {
         return platformSettingsService;
       },
     });
-    const loadedPlatforms = loadPlatforms({ runtimeContext: platformRuntimeContext });
+    const loadedPlatforms = loadPlatforms({
+      runtimeContext: platformRuntimeContext,
+    });
     const directoryEntries = Object.freeze(
       loadedPlatforms.map(function (platform) {
         return platform.submissionDirectoryEntry;
@@ -64,18 +66,6 @@ async function createPlatformRuntimeComposition(options) {
           return Object.freeze({
             id: platform.definition.id,
             port: platform.accountInspection,
-          });
-        }),
-    );
-    const remoteReviewPorts = Object.freeze(
-      loadedPlatforms
-        .filter(function (platform) {
-          return Boolean(platform.remoteReviewContribution);
-        })
-        .map(function (platform) {
-          return Object.freeze({
-            id: platform.definition.id,
-            port: platform.remoteReviewContribution,
           });
         }),
     );
@@ -195,7 +185,6 @@ async function createPlatformRuntimeComposition(options) {
       regularDirectoryEntries,
       regularSubmissionPorts,
       accountInspectionPorts,
-      remoteReviewPorts,
       loginSessionPorts,
       clientProfileReaders,
       submissionPlatformDirectory,

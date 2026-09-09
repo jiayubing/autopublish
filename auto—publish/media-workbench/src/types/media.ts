@@ -12,29 +12,6 @@ export interface MediaResource {
   createdAt: string;
 }
 
-export interface Article {
-  filename: string;
-  title: string;
-  content: string;
-  words: number;
-  tags: string[];
-  selectedResources: MediaResource[];
-  lastModified: string;
-  autoTitle: string;
-  remark: string;
-  hasImages: boolean;
-  imageCount: number;
-  ignoreImages: boolean;
-}
-
-export interface Draft {
-  filename: string;
-  title: string;
-  remark: string;
-  ignoreImages: boolean;
-  selectedResources: MediaResource[];
-}
-
 // RealOrder: matches the real order view shape from media-order-service.js
 export interface RealOrder {
   title: string;

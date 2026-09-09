@@ -1,4 +1,3 @@
-const path = require("path");
 const {
   MediaResourceStore,
 } = require("../../src/platforms/media/media-resource-store");
@@ -6,38 +5,23 @@ const {
   MediaPoolStore,
 } = require("../../src/platforms/media/media-pool-store");
 const {
-  MediaDraftStore,
-} = require("../../src/platforms/media/media-draft-store");
-const {
   createMediaSupplierAdapter,
 } = require("../../src/platforms/media/media-supplier-adapter");
 const { createMediaOrderService } = require("./media-order-service");
 const {
   createOrderCancellationService,
 } = require("./order-cancellation-service");
-const { createMediaWorkbenchService } = require("./media-workbench-service");
 const { createMediaResourceService } = require("./media-resource-service");
 const {
   createPaidMediaPreflightService,
 } = require("./paid-media-preflight-service");
 const {
   projectMediaResource,
-  projectMediaDraft,
-  projectMediaArticleSummary,
   projectMediaResourcePage,
   projectMediaPoolPage,
   projectMediaRefreshResult,
   projectMediaOrder,
 } = require("../application/read-models/media-read-model");
-
-function resolveMediaInputDir(values) {
-  if (values.paths && values.paths.mediaInput) return values.paths.mediaInput;
-  return path.join(
-    values.rootDir || path.resolve(__dirname, "..", ".."),
-    "input",
-    "media",
-  );
-}
 
 function createMediaClientProvider(values) {
   if (typeof values.mediaClientProvider === "function")
@@ -76,8 +60,6 @@ function createMediaWorkbenchApplication(options) {
     values.resourceStore || new MediaResourceStore({ paths: values.paths });
   const poolStore =
     values.poolStore || new MediaPoolStore({ paths: values.paths });
-  const draftStore =
-    values.draftStore || new MediaDraftStore({ paths: values.paths });
   const resourceService =
     values.mediaResourceService ||
     createMediaResourceService({
@@ -102,14 +84,6 @@ function createMediaWorkbenchApplication(options) {
           orderCancellationTransitions: values.orderCancellationTransitions,
         })
       : null);
-  const workbenchService =
-    values.mediaWorkbenchService ||
-    createMediaWorkbenchService({
-      inputDir: resolveMediaInputDir(values),
-      draftStore,
-      paths: values.paths,
-      clientProvider,
-    });
   const paidMediaPreflightService =
     values.paidMediaPreflightService ||
     (values.contentStore && values.paidAdmissionFacade
@@ -202,18 +176,6 @@ function createMediaWorkbenchApplication(options) {
       return { completed: true };
     },
     getBalance: () => resourceService.getBalance(),
-    getDrafts: () => {
-      const drafts = draftStore.getAll();
-      return {
-        items: Object.keys(drafts).map((filename) =>
-          projectMediaDraft(filename, drafts[filename]),
-        ),
-      };
-    },
-    scanArticles: () =>
-      Promise.resolve(workbenchService.scanArticles()).then((items) => ({
-        items: items.map(projectMediaArticleSummary),
-      })),
     preflightPaidMedia: async (input) => {
       if (
         !paidMediaPreflightService ||

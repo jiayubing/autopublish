@@ -13,7 +13,6 @@ const {
 const {
   createBrowserSessionLifecycle,
 } = require("../src/platforms/shared/browser-session-lifecycle");
-const { MediaDraftStore } = require("../src/platforms/media/media-draft-store");
 const {
   createPaidMediaPreflightService,
 } = require("../desktop/services/paid-media-preflight-service");
@@ -59,20 +58,6 @@ describe("M06-C remote/process/runtime outcomes", function () {
       lifecycle.ensureStarted();
     }, { code: "BROWSER_SESSION_PROBE_FAILED" });
     assert.equal(starts, 0);
-  });
-
-  it("surfaces corrupt local media state instead of treating it as absent", function () {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "m06-c-store-"));
-    const storePath = path.join(dir, "media-drafts.json");
-    try {
-      fs.writeFileSync(storePath, "[]", "utf8");
-      const store = new MediaDraftStore({ storePath: storePath });
-      assert.throws(function () {
-        store.getAll();
-      }, { code: "MEDIA_DRAFT_STORE_CORRUPT" });
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
   });
 
   it("keeps a paid preflight article read failure distinct from not-found", async function () {

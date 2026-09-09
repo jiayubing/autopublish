@@ -11,7 +11,6 @@ function createPlatform(runtimeContext) {
   return {
     regularSubmission: adapter.regularSubmission,
     accountInspection: adapter.accountInspection,
-    remoteReviewContribution: adapter.remoteReview,
     settingsContribution: {
       createSettingsAdapter(settingsContext) {
         return require("../../../desktop/services/platform-settings/hepan-settings-adapter").createHepanSettingsAdapter(settingsContext || {});

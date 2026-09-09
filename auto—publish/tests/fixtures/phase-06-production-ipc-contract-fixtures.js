@@ -651,24 +651,6 @@ const rawProductionIpcContractFixtures = [
     },
   },
   {
-    capability: "media.getDrafts",
-    channel: "media:get-drafts",
-    owner: "media",
-    request: {},
-    result: {
-      items: [],
-    },
-  },
-  {
-    capability: "media.scanArticles",
-    channel: "media:scan-articles",
-    owner: "media",
-    request: {},
-    result: {
-      items: [],
-    },
-  },
-  {
     capability: "media.getOrders",
     channel: "media:get-orders",
     owner: "media",
