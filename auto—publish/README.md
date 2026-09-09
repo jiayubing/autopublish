@@ -58,6 +58,14 @@ that require dry-run or explicit execution confirmation. Completed refactor
 branch plans and handoffs are historical Git evidence, not current operating
 instructions.
 
+## AI 接口地址
+
+AI 设置使用 OpenAI 兼容 Chat Completions 协议，支持 HTTP / HTTPS、域名或 IP、
+自定义端口和路径。可填写 Base URL 或完整 `/chat/completions` 地址；完整地址会规范化保存，
+请求时只追加一次 `/chat/completions`，不强制添加 `/v1`。根地址也可使用，例如
+`http://192.168.1.20:8000` 会请求该地址下的 `/chat/completions`。
+地址不接受内嵌账号密码、查询参数或片段；API Key 仍通过独立输入框配置。
+
 ## 批量生成与豆包采集
 
 批量生成向导在“检查生成来源”中提供 1–4 篇并发选择，新批次默认 4。

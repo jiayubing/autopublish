@@ -2,6 +2,7 @@ const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 
 const { createAiProviderService } = require("../desktop/services/ai-provider-service");
+const { createAiClient } = require("../src/content/ai-client");
 
 const config = {
   baseUrl: "https://provider.example/v1",
@@ -67,6 +68,31 @@ describe("AI provider service", function() {
     assert.equal(saved.configured, true);
     assert.equal(factoryCalls, 0);
     assert.equal(store.writes.length, 1);
+  });
+
+  it("saves and tests HTTP and full endpoint inputs through the same normalized client", async function() {
+    for (const [inputUrl, baseUrl] of [
+      ["http://192.168.1.20:8080", "http://192.168.1.20:8080"],
+      ["http://provider.example/custom/v3/chat/completions/", "http://provider.example/custom/v3"],
+    ]) {
+      const store = createStore();
+      const requested = [];
+      const service = createAiProviderService({
+        configStore: store,
+        env: {},
+        aiClientFactory: input => createAiClient({ ...input, fetch: async url => {
+          requested.push(url);
+          return { ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: "OK" } }] }) };
+        } }),
+      });
+      const saved = service.save({ ...config, baseUrl: inputUrl });
+      assert.equal(saved.baseUrl, baseUrl);
+      assert.equal(requested.length, 0);
+      assert.equal(store.read().baseUrl, baseUrl);
+      await service.testConnection({});
+      assert.deepEqual(requested, [baseUrl + "/chat/completions"]);
+      assert.equal(service.getStatus().lastTest.ok, true);
+    }
   });
 
   it("tests a draft with fixed messages and preserves the saved configuration on failure", async function() {

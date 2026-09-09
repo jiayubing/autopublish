@@ -38,21 +38,11 @@ export function validateAiProviderBaseUrl(value: string): string | null {
   } catch {
     return "Base URL 必须是完整 URL。";
   }
-  const hostname = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
-  const localHost =
-    hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
-  if (url.protocol !== "https:" && !(url.protocol === "http:" && localHost)) {
-    return "Base URL 只允许 HTTPS，或 localhost 的 HTTP。";
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    return "接口地址只支持 HTTP 或 HTTPS。";
   }
   if (url.username || url.password || url.search || url.hash) {
     return "Base URL 不应包含账号、密码、查询参数或片段。";
-  }
-  const pathname = url.pathname.replace(/\/+$/, "");
-  if (/\/chat\/completions$/i.test(pathname)) {
-    return "请填写 Base URL，不要包含 /chat/completions。";
-  }
-  if (!pathname) {
-    return "Base URL 必须包含服务路径，例如 /v1 或 /api/v3。";
   }
   return null;
 }
@@ -221,8 +211,8 @@ export default function AiProviderSettings() {
             aria-label="AI Base URL"
           />
           <span className="font-normal text-slate-500">
-            只允许 HTTPS 或 localhost HTTP，填写提供方的 Base URL（例如
-            /v1 或 /api/v3），不要填写 /chat/completions。
+            支持 HTTP / HTTPS、域名或 IP、端口及自定义路径。填写提供方的 Base URL
+            或完整 /chat/completions 地址；系统会补全接口路径，不强制添加 /v1。
           </span>
         </label>
 

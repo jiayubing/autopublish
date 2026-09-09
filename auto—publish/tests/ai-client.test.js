@@ -68,19 +68,36 @@ describe("ai client", function() {
     assert.equal(requestUrl, "https://ark.cn-beijing.volces.com/api/v3/chat/completions");
   });
 
-  it("validates required configuration and rejects a full completion endpoint", function() {
+  it("supports HTTP, root URLs, custom ports and full completion endpoints", async function() {
+    const cases = [
+      ["http://provider.example:8080/v1/", "http://provider.example:8080/v1/chat/completions"],
+      ["http://192.168.1.20:8000", "http://192.168.1.20:8000/chat/completions"],
+      ["http://[2001:db8::1]:8080/custom/api", "http://[2001:db8::1]:8080/custom/api/chat/completions"],
+      ["https://provider.example/", "https://provider.example/chat/completions"],
+      ["https://provider.example/custom/v3/chat/completions/", "https://provider.example/custom/v3/chat/completions"],
+      ["http://provider.example/chat/completions", "http://provider.example/chat/completions"],
+    ];
+    for (const [baseUrl, expected] of cases) {
+      let requested;
+      const client = createAiClient(config({ baseUrl, fetch: async url => {
+        requested = url;
+        return response(200, { choices: [{ message: { content: "synthetic result" } }] });
+      } }));
+      await client.complete([{ role: "user", content: "synthetic prompt" }]);
+      assert.equal(requested, expected);
+    }
+  });
+
+  it("validates required configuration and rejects unsupported URL forms", function() {
     ["apiKey", "baseUrl", "model"].forEach(function(field) {
       const value = config();
       value[field] = "";
       assert.throws(function() { createAiClient(value); }, function(error) { return error.code === "AI_CONFIG_INVALID"; });
     });
     assert.throws(function() {
-      createAiClient(config({ baseUrl: "https://provider.example/v1/chat/completions" }));
-    }, function(error) { return error.code === "AI_CONFIG_INVALID"; });
-    assert.throws(function() {
       createAiClient(config({ baseUrl: "https://provider.example/v1?target=chat" }));
     }, function(error) { return error.code === "AI_CONFIG_INVALID"; });
-    ["https://user:password@provider.example/v1", "http://provider.example/v1"].forEach(function(baseUrl) {
+    ["https://user:password@provider.example/v1", "https://provider.example/v1#fragment"].forEach(function(baseUrl) {
       assert.throws(function() {
         createAiClient(config({ baseUrl: baseUrl }));
       }, function(error) { return error.code === "AI_CONFIG_INVALID"; });

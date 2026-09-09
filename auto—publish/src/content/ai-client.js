@@ -27,10 +27,9 @@ function validateConfig(config) {
   } catch (error) {
     throw aiError("AI_CONFIG_INVALID", "AI client configuration is invalid");
   }
-  const isLoopback = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]";
-  const pathname = parsed.pathname.replace(/\/+$/, "");
-  if ((parsed.protocol !== "https:" && !(parsed.protocol === "http:" && isLoopback)) ||
-      !pathname || /\/chat\/completions$/i.test(pathname) || parsed.search || parsed.hash || parsed.username || parsed.password) {
+  const pathname = parsed.pathname.replace(/\/+$/, "").replace(/\/chat\/completions$/i, "");
+  if ((parsed.protocol !== "https:" && parsed.protocol !== "http:") ||
+      parsed.search || parsed.hash || parsed.username || parsed.password) {
     throw aiError("AI_CONFIG_INVALID", "AI client configuration is invalid");
   }
 

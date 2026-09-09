@@ -317,15 +317,22 @@ function installDesktopFixture(page) {
         }),
       openPublishedUrl: () => result({ completed: true }),
     };
+    let aiStatus = {
+      configured: false,
+      source: "application",
+      baseUrl: "",
+      model: "",
+      timeoutMs: 60000,
+      hasApiKey: false,
+      apiKeyMask: "",
+      lastTest: null,
+    };
     const aiProvider = {
-      getStatus: () =>
-        result({
-          configured: false,
-          source: "application",
-          apiKeyMask: "",
-          lastTest: null,
-        }),
-      save: () => result({}),
+      getStatus: () => result(aiStatus),
+      save: (input) => {
+        aiStatus = { ...aiStatus, configured: true, baseUrl: input.baseUrl, model: input.model, timeoutMs: input.timeoutMs, hasApiKey: true, apiKeyMask: "••••••••" };
+        return result(aiStatus);
+      },
       testConnection: () => result({}),
       clear: () => result({ cleared: true }),
     };
@@ -863,9 +870,13 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
       await page.getByLabel("AI API Key").fill("fixture-key");
       await page.getByLabel("AI model").fill("fixture-model");
       await page.getByRole("button", { name: "保存配置" }).click();
+      await page.getByText("AI 配置已保存，将供下一次生成使用。", { exact: true }).waitFor();
+      assert.equal(await page.getByLabel("AI Base URL").inputValue(), "http://provider.example/v1");
+      await page.getByLabel("AI Base URL").fill("ftp://provider.example/v1");
+      await page.getByRole("button", { name: "保存配置" }).click();
       await page
         .getByRole("alert")
-        .filter({ hasText: "Base URL 只允许 HTTPS" })
+        .filter({ hasText: "接口地址只支持 HTTP 或 HTTPS。" })
         .waitFor();
 
       await activateSettingsSection(page, "运行环境");
