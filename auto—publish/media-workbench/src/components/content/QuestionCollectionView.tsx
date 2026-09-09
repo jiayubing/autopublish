@@ -72,11 +72,11 @@ interface QuestionCollectionViewProps {
 }
 
 function loginTone(status: DoubaoLoginState["status"]) {
-  return status === "logged_in"
-    ? ("success" as const)
-    : status === "not_logged_in"
-      ? ("warning" as const)
-      : ("neutral" as const);
+  if (status === "authenticated") return "success" as const;
+  if (status === "login_required") return "warning" as const;
+  if (status === "session_error") return "danger" as const;
+  if (status === "checking") return "info" as const;
+  return "neutral" as const;
 }
 
 export default function QuestionCollectionView({
