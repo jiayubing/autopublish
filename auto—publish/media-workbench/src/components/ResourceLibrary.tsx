@@ -88,6 +88,10 @@ export default function ResourceLibrary({
   const paginatedResources = usesRemotePaging
     ? filteredResources
     : filteredResources.slice(startIndex, startIndex + itemsPerPage);
+  const emptyMessage =
+    usesRemotePaging && activeFilter !== "all"
+      ? "本页暂无符合该类型的资源，可切换页面或选择“全部”。"
+      : "暂无匹配的资源";
 
   function mediaIcon(type: MediaType) {
     switch (type) {
@@ -181,7 +185,13 @@ export default function ResourceLibrary({
               className="media-search ui-field h-9 pl-8"
             />
           </div>
-          <div className="flex flex-wrap gap-1">
+          <div
+            className="flex flex-wrap items-center gap-1"
+            aria-label={usesRemotePaging ? "本页资源类型筛选" : "资源类型筛选"}
+          >
+            <span className="mr-1 text-[10px] font-semibold text-slate-400">
+              {usesRemotePaging ? "本页类型" : "类型"}
+            </span>
             {FILTERS.map((filter) => {
               const active = activeFilter === filter.id;
               return (
@@ -204,13 +214,19 @@ export default function ResourceLibrary({
             })}
           </div>
         </div>
+        {usesRemotePaging && (
+          <p className="text-[10px] leading-4 text-slate-400">
+            类型筛选只作用于当前页
+            {usesRemoteSearch ? "；搜索会查询整个资源库。" : "。"}
+          </p>
+        )}
       </div>
 
       <div className="resource-list min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto">
         {paginatedResources.length === 0 ? (
           <div className="flex min-h-48 flex-col items-center justify-center gap-2 px-6 text-center text-xs text-slate-400">
             <HelpCircle className="h-5 w-5 text-slate-300" />
-            暂无匹配的资源
+            {emptyMessage}
           </div>
         ) : (
           paginatedResources.map((resource) => {
@@ -286,7 +302,9 @@ export default function ResourceLibrary({
       {totalPages > 1 && (
         <div className="pagination flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/50 px-4 py-2.5 text-[11px]">
           <span className="page-info text-slate-500">
-            第 <b>{visiblePage}</b> / <b>{totalPages}</b> 页 (共 {usesRemotePaging ? totalResources || 0 : filteredResources.length} 项)
+            第 <b>{visiblePage}</b> / <b>{totalPages}</b> 页 {usesRemotePaging
+              ? `(资源库共 ${totalResources || 0} 项)`
+              : `(共 ${filteredResources.length} 项)`}
           </span>
           <div className="flex items-center gap-1">
             <Button
