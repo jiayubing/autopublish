@@ -152,12 +152,16 @@ function hasLoginIndicator(runtime) {
     return Boolean(
       runtime.evaluate(
         [
-          "  var logout = page.locator(" +
-            JSON.stringify(LIEJU.selectors.loginIndicator) +
-            ").first();",
-          "  if (await logout.count() > 0) return true;",
           "  var current = new URL(page.url());",
           "  var host = current.hostname.toLowerCase();",
+          "  var allowedHosts = " + JSON.stringify(["lieju.com", "www.lieju.com", new URL(LIEJU.base).hostname]) + ";",
+          "  if ((current.protocol !== 'https:' && current.protocol !== 'http:') || !allowedHosts.includes(host)) return false;",
+          "  var logout = page.locator(" +
+            JSON.stringify(LIEJU.selectors.loginIndicator) +
+            ");",
+          "  for (var index = 0, count = await logout.count(); index < count; index += 1) {",
+          "    if (await logout.nth(index).isVisible()) return true;",
+          "  }",
           "  if ((host !== 'lieju.com' && host !== 'www.lieju.com') || !/^\\/member\\/upage\\.php$/i.test(current.pathname)) return false;",
           "  return await page.evaluate(function () {",
           "    var anchors = Array.from(document.querySelectorAll('a[href]'));",
@@ -191,23 +195,19 @@ function waitForLoginState(runtime, timeoutMs) {
 
 function checkLogin(runtime) {
   runtime.loginEvidenceReadFailed = false;
-  try {
-    runtime.invoke(["goto", LIEJU.accountUrl], { timeout: 20000 });
-    if (waitForLoginState(runtime, LOGIN_STATE_SETTLE_MS)) return true;
-
-    runtime.invoke(["goto", LIEJU.base], { timeout: 20000 });
-    const authenticated = waitForLoginState(runtime, LOGIN_STATE_SETTLE_MS);
-    if (!authenticated && runtime.loginEvidenceReadFailed)
-      diagnose(
-        "LIEJU_LOGIN_EVIDENCE_CHECK_FAILED",
-        "authentication",
-        "login-check",
-      );
-    return authenticated;
-  } catch (_) {
-    diagnose("LIEJU_LOGIN_CHECK_FAILED", "transport", "login-check");
-    return false;
+  for (const url of [LIEJU.accountUrl, LIEJU.base]) {
+    throwIfStopped();
+    try {
+      runtime.invoke(["goto", url], { timeout: 20000 });
+      if (waitForLoginState(runtime, LOGIN_STATE_SETTLE_MS)) return true;
+    } catch (error) {
+      if (error.code === "STOP_REQUESTED") throw error;
+      diagnose("LIEJU_LOGIN_CHECK_FAILED", "transport", "login-check");
+    }
   }
+  if (runtime.loginEvidenceReadFailed)
+    diagnose("LIEJU_LOGIN_EVIDENCE_CHECK_FAILED", "authentication", "login-check");
+  return false;
 }
 
 function openLogin(runtime) {
