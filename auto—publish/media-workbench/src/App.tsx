@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import type { ViewMode } from "./types/view";
 import Sidebar from "./components/Sidebar";
 import ContentWorkbench from "./components/ContentWorkbench";
@@ -9,7 +9,7 @@ import SettingsView from "./components/SettingsView";
 import { useWorkspaceRuntimeIdentity } from "./features/workspace/workspace-coordinator-context";
 import { PlatformFeatureProvider } from "./features/platform/platform-feature-context";
 import ConfirmationHost from "./components/ConfirmationHost";
-import { RefreshCw } from "lucide-react";
+import { AlertTriangle, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useMediaFeature } from "./features/media/use-media-feature";
 import { useContentWorkbenchFeature } from "./features/content/use-content-workbench-feature";
@@ -34,6 +34,8 @@ const VIEW_LABELS: Record<ViewMode, string> = {
   resources: "媒体资源",
   settings: "设置",
 };
+
+type MainNavigationGuard = (action: () => void) => void;
 
 function loadLastView(): ViewMode {
   if (typeof localStorage === "undefined") return "article-library";
@@ -78,24 +80,28 @@ function AppContent() {
   >("regular");
   const [articleLibraryIntent, setArticleLibraryIntent] =
     useState<ArticleLibraryNavigationIntent | null>(null);
+  const [articleLibraryNavigationGuard, setArticleLibraryNavigationGuard] =
+    useState<MainNavigationGuard | null>(null);
   const { snapshot: mediaSnapshot, feature: mediaFeature } = useMediaFeature();
   const content = useContentWorkbenchFeature();
   const submissionCenter = useSubmissionCenterFeature();
   const orders = mediaSnapshot.orders.items;
   const balance = mediaSnapshot.balance.value;
-  const dataLoaded =
-    Boolean(mediaSnapshot.scope) &&
-    [
-      mediaSnapshot.articles.query,
-      mediaSnapshot.drafts.query,
-      mediaSnapshot.resources.query,
-      mediaSnapshot.pool.query,
-      mediaSnapshot.balance.query,
-      mediaSnapshot.orders.query,
-    ].every((query) => !query.loading) &&
-    !content.snapshot.query.loading &&
-    !content.snapshot.managementQuery.loading &&
-    !submissionCenter.snapshot.query.loading;
+  const readinessQueries = [
+    mediaSnapshot.articles.query,
+    mediaSnapshot.drafts.query,
+    mediaSnapshot.resources.query,
+    mediaSnapshot.pool.query,
+    mediaSnapshot.balance.query,
+    mediaSnapshot.orders.query,
+    content.snapshot.query,
+    content.snapshot.managementQuery,
+    submissionCenter.snapshot.query,
+  ];
+  const dataLoading =
+    !mediaSnapshot.scope || readinessQueries.some((query) => query.loading);
+  const dataUnavailable =
+    !dataLoading && readinessQueries.some((query) => Boolean(query.error));
   const isCheckingBalance = mediaSnapshot.commands.checkBalance.busy;
   const navigationBadges = useMemo(() => {
     const lifecycleCount =
@@ -132,18 +138,42 @@ function AppContent() {
     rememberLastView(currentView);
   }, [currentView]);
 
+  const registerArticleLibraryNavigationGuard = useCallback(
+    (guard: MainNavigationGuard | null) => {
+      setArticleLibraryNavigationGuard(() => guard);
+    },
+    [],
+  );
+
+  function runMainNavigation(view: ViewMode, action: () => void) {
+    if (view === currentView) {
+      action();
+      return;
+    }
+    if (currentView === "article-library" && articleLibraryNavigationGuard) {
+      articleLibraryNavigationGuard(action);
+      return;
+    }
+    action();
+  }
+
   function openArticleLibrary(intent?: ArticleLibraryNavigationIntent) {
-    setArticleLibraryIntent(intent || null);
-    setCurrentView("article-library");
+    const action = () => {
+      setArticleLibraryIntent(intent || null);
+      setCurrentView("article-library");
+    };
+    runMainNavigation("article-library", action);
   }
 
   function changeView(view: ViewMode) {
-    setCurrentView(view);
+    runMainNavigation(view, () => setCurrentView(view));
   }
 
   function openAttention() {
-    setSubmissionCenterSection("attention");
-    setCurrentView("submission-center");
+    runMainNavigation("submission-center", () => {
+      setSubmissionCenterSection("attention");
+      setCurrentView("submission-center");
+    });
   }
 
   const consumeArticleLibraryIntent = () => setArticleLibraryIntent(null);
@@ -172,21 +202,29 @@ function AppContent() {
                 {VIEW_LABELS[currentView]}
               </p>
             </div>
-            {dataLoaded ? (
-              <div
-                role="status"
-                className="flex shrink-0 items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50/80 px-3 py-1.5 text-[11px] font-semibold text-emerald-700"
-              >
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                数据已就绪
-              </div>
-            ) : (
+            {dataLoading ? (
               <div
                 role="status"
                 className="flex shrink-0 items-center gap-2 rounded-full border border-amber-100 bg-amber-50/90 px-3 py-1.5 text-[11px] font-semibold text-amber-700"
               >
                 <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                 正在加载数据…
+              </div>
+            ) : dataUnavailable ? (
+              <div
+                role="status"
+                className="flex shrink-0 items-center gap-2 rounded-full border border-amber-200 bg-amber-50/90 px-3 py-1.5 text-[11px] font-semibold text-amber-800"
+              >
+                <AlertTriangle className="h-3.5 w-3.5" />
+                部分数据不可用
+              </div>
+            ) : (
+              <div
+                role="status"
+                className="flex shrink-0 items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50/80 px-3 py-1.5 text-[11px] font-semibold text-emerald-700"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                数据已就绪
               </div>
             )}
           </div>
@@ -208,7 +246,7 @@ function AppContent() {
                     content={content.production}
                     mode="production"
                     onOpenArticleLibrary={openArticleLibrary}
-                    onOpenOrders={() => setCurrentView("orders")}
+                    onOpenOrders={() => changeView("orders")}
                   />
                 </motion.div>
               )}
@@ -258,8 +296,11 @@ function AppContent() {
                     articleIntent={articleLibraryIntent}
                     onArticleIntentConsumed={consumeArticleLibraryIntent}
                     onOpenArticleLibrary={openArticleLibrary}
-                    onOpenOrders={() => setCurrentView("orders")}
+                    onOpenOrders={() => changeView("orders")}
                     onOpenAttention={openAttention}
+                    onMainNavigationGuardChange={
+                      registerArticleLibraryNavigationGuard
+                    }
                   />
                 </motion.div>
               )}
@@ -278,7 +319,7 @@ function AppContent() {
                     submissionCenter={submissionCenter}
                     initialSection={submissionCenterSection}
                     onOpenArticleLibrary={openArticleLibrary}
-                    onOpenOrders={() => setCurrentView("orders")}
+                    onOpenOrders={() => changeView("orders")}
                   />
                 </motion.div>
               )}
