@@ -245,7 +245,7 @@ describe("publication history renderer boundary", async function () {
     assert.match(presentation.resources, /刷新库/);
     assert.match(
       presentation.resources,
-      /第 <b>1<\/b> \/ <b>2<\/b> 页 \(共 51 项\)/,
+      /第 <b>1<\/b> \/ <b>2<\/b> 页 \(资源库共 51 项\)/,
     );
     assert.match(presentation.orders, /待核对订单/);
     assert.match(presentation.orders, /重新核对可用证据/);
