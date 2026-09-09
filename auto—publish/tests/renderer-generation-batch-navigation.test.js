@@ -312,7 +312,7 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
         await detail.getByRole('heading',{name:'批次结果',exact:true}).waitFor();
         assert.equal(await detail.getByTitle('结束当前批次',{exact:true}).isDisabled(),true);
         assert.equal(await detail.getByTitle('继续批量生成',{exact:true}).isDisabled(),true);
-        assert.equal(await detail.getByTitle('重试失败任务',{exact:true}).isDisabled(),true);
+        assert.equal(await detail.getByTitle('重试失败任务',{exact:true}).count(),0);
         assert.match(await detail.innerText(), /成功 3/);
         assert.match(await detail.innerText(), /失败 1/);
         assert.match(await detail.innerText(), /取消 7/);
@@ -327,19 +327,12 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
         await detail.waitFor();
         assert.ok((await detail.textContent()).includes("状态 " + batchStatus));
         const resume = detail.getByTitle("继续批量生成", { exact: true });
-        const retry = detail.getByTitle("重试失败任务", { exact: true });
+        assert.equal(await detail.getByTitle("重试失败任务", { exact: true }).count(), 0);
         assert.equal(await resume.isEnabled(), true);
         assert.equal(await detail.getByTitle("暂停批量生成", { exact: true }).isDisabled(), true);
-        assert.equal(await retry.isEnabled(), batchStatus === "failed");
-        if (batchStatus === "paused_configuration") {
-          await resume.click();
-          await page.waitForFunction(() => window.__generationBatchNavigation.resumeCalls === 1);
-          assert.equal(await page.evaluate(() => window.__generationBatchNavigation.retryCalls), 0);
-        } else {
-          await retry.click();
-          await page.waitForFunction(() => window.__generationBatchNavigation.retryCalls === 1);
-          assert.equal(await page.evaluate(() => window.__generationBatchNavigation.resumeCalls), 0);
-        }
+        await resume.click();
+        await page.waitForFunction(() => window.__generationBatchNavigation.resumeCalls === 1);
+        assert.equal(await page.evaluate(() => window.__generationBatchNavigation.retryCalls), 0);
         assert.equal(await page.evaluate(() => window.__generationBatchNavigation.submissionMutations), 0);
         return;
       }
@@ -360,7 +353,7 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
     await checkBatch("completed");
   });
 
-  it("uses continue for configuration pause and reserves failed-only retry for ordinary failure", async function () {
+  it("uses continue for both configuration pauses and failed batches", async function () {
     await checkBatch("paused_configuration");
     await checkBatch("failed");
   });

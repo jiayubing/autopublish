@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Ban, Pause, Play, RotateCcw } from 'lucide-react';
+import { Ban, Pause, Play } from 'lucide-react';
 import type { GenerationBatch, GenerationBatchState } from '../../types/generation';
 import { useConfirmation } from '../../confirmation';
 
@@ -10,13 +10,11 @@ interface GenerationBatchDetailProps {
     pause: boolean;
     resume: boolean;
     abandon: boolean;
-    retry: boolean;
   };
   clientNames?: Record<string, string>;
   onPause: () => void;
   onResume: () => void;
   onAbandon: () => void;
-  onRetry: () => void;
   onPreviewCancelPending: (input: { batchId: string }) => Promise<{ canCancel: boolean; pendingCount: number; runningCount: number }>;
   onCancelPending: (input: { batchId: string; confirmed: true }) => Promise<GenerationBatch>;
   onStartNew?: () => void;
@@ -41,7 +39,6 @@ export default function GenerationBatchDetail({
   onPause,
   onResume,
   onAbandon,
-  onRetry,
   onPreviewCancelPending,
   onCancelPending,
   onStartNew,
@@ -68,7 +65,6 @@ export default function GenerationBatchDetail({
   const running = effectiveStatus === 'running';
   const unfinished = counts.pending > 0 || counts.failed > 0 || counts.interrupted > 0;
   const showCostWarning = active || (['paused', 'abandoned'].includes(batch.status) && unfinished);
-  const failed = counts.failed > 0;
   const terminal = effectiveStatus === 'completed' || effectiveStatus === 'abandoned';
   const successfulTasks = displayedBatch.tasks.filter((task) => task.status === 'succeeded' && task.articleId);
   const anyCommandBusy = Object.values(busy).some(Boolean);
@@ -103,7 +99,6 @@ export default function GenerationBatchDetail({
         <button type="button" title="暂停批量生成" onClick={onPause} disabled={busy.pause || !running} className="task-icon-button"><Pause className="h-4 w-4" /></button>
         <button type="button" title="继续批量生成" onClick={onResume} disabled={busy.resume || active || terminal || !unfinished} className="task-icon-button"><Play className="h-4 w-4" /></button>
         <button type="button" title="结束当前批次" onClick={onAbandon} disabled={busy.abandon || anyCommandBusy || active || terminal || !unfinished} className="task-icon-button">结束</button>
-        <button type="button" title="重试失败任务" onClick={onRetry} disabled={busy.retry || effectiveStatus !== 'failed' || !failed} className="task-icon-button"><RotateCcw className="h-4 w-4" /></button>
         <button type="button" title="永久取消待处理任务" onClick={() => void cancelPending()} disabled={anyCommandBusy || cancelBusy || counts.pending < 1} className="task-icon-button"><Ban className="h-4 w-4" /></button>
       </div>
     </div>
