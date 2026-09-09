@@ -59,6 +59,26 @@ const COMMON_ERRORS = {
     retryability: "manual-check",
     userMessage: "该平台当前不支持浏览器登录检查。",
   },
+  LIEJU_LOGIN_CHECK_FAILED: {
+    category: "transport",
+    retryability: "manual-check",
+    userMessage: "暂时无法确认列举网登录状态，请保留登录窗口，检查网络后重试；仍失败时请查看诊断信息。",
+  },
+  LIEJU_LOGIN_STATE_LOAD_FAILED: {
+    category: "storage",
+    retryability: "manual-check",
+    userMessage: "列举网历史会话恢复失败，请点击打开登录页，在当前窗口重新登录后再检查。",
+  },
+  LIEJU_BROWSER_COMMAND_FAILED: {
+    category: "transport",
+    retryability: "manual-check",
+    userMessage: "列举网登录浏览器操作失败，请重试或查看诊断信息。",
+  },
+  BROWSER_SESSION_STATE_SAVE_FAILED: {
+    category: "storage",
+    retryability: "manual-check",
+    userMessage: "登录会话未能保存，请检查本机存储权限后重新登录并检查。",
+  },
   SUBMISSION_INPUT_INVALID: {
     category: "validation",
     retryability: "never",
@@ -324,7 +344,13 @@ const platformContracts = [
       fromArgs: (args) => ({ platformId: args[0] }),
       toArgs: (payload) => [payload],
     },
-    ["PLATFORM_LOGIN_INPUT_INVALID", "PLATFORM_LOGIN_UNAVAILABLE"],
+    [
+      "PLATFORM_LOGIN_INPUT_INVALID",
+      "PLATFORM_LOGIN_UNAVAILABLE",
+      "LIEJU_LOGIN_CHECK_FAILED",
+      "LIEJU_LOGIN_STATE_LOAD_FAILED",
+      "LIEJU_BROWSER_COMMAND_FAILED",
+    ],
   ),
   contract(
     {
@@ -339,7 +365,14 @@ const platformContracts = [
       fromArgs: (args) => ({ platformId: args[0] }),
       toArgs: (payload) => [payload],
     },
-    ["PLATFORM_LOGIN_INPUT_INVALID", "PLATFORM_LOGIN_UNAVAILABLE"],
+    [
+      "PLATFORM_LOGIN_INPUT_INVALID",
+      "PLATFORM_LOGIN_UNAVAILABLE",
+      "LIEJU_LOGIN_CHECK_FAILED",
+      "LIEJU_LOGIN_STATE_LOAD_FAILED",
+      "LIEJU_BROWSER_COMMAND_FAILED",
+      "BROWSER_SESSION_STATE_SAVE_FAILED",
+    ],
   ),
 ];
 

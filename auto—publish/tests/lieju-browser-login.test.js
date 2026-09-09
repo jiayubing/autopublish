@@ -103,7 +103,9 @@ test("CLI error text and unexpected results are never login evidence", () => {
     {},
     null,
   ]) {
-    assert.equal(check({ runtimeResult }, { runtimeResult }), false);
+    assert.throws(() => check({ runtimeResult }, { runtimeResult }), {
+      code: "LIEJU_LOGIN_CHECK_FAILED",
+    });
   }
 });
 
@@ -132,13 +134,17 @@ test("falls back to home when the account page cannot be opened", () => {
   assert.deepEqual(navigations, [LIEJU.accountUrl, LIEJU.base]);
 });
 
-test("returns unauthenticated when both pages or their evidence are unavailable", () => {
-  assert.equal(
-    check({ navigationError: true }, { navigationError: true }),
-    false,
+test("reports unavailable evidence separately from unauthenticated pages", () => {
+  assert.throws(
+    () => check({ navigationError: true }, { navigationError: true }),
+    { code: "LIEJU_LOGIN_CHECK_FAILED" },
   );
-  assert.equal(
-    check({ evaluationError: true }, { evaluationError: true }),
-    false,
+  assert.throws(
+    () => check({ evaluationError: true }, { evaluationError: true }),
+    { code: "LIEJU_LOGIN_CHECK_FAILED" },
   );
+  assert.throws(() => check({ navigationError: true }), {
+    code: "LIEJU_LOGIN_CHECK_FAILED",
+  });
+  assert.equal(check({ url: LIEJU.accountUrl, html: "" }), false);
 });

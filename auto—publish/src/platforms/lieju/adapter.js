@@ -82,10 +82,14 @@ function createLiejuRuntime(runtimeContext) {
     runtimeOptions.nodeExecPath = browserRuntime.nodeExecPath;
 
   function invoke(commandArgs, options) {
-    return pwInvokeSync(
+    const output = pwInvokeSync(
       commandArgs,
       Object.assign({}, runtimeOptions, options || {}, { session }),
     );
+    // The CLI can report a failed command with a successful process exit.
+    if (/(^|\r?\n)### Error(?:\r?\n|$)/.test(String(output)))
+      throw liejuPreparationError("LIEJU_BROWSER_COMMAND_FAILED");
+    return output;
   }
 
   function evaluate(jsCode, options) {
@@ -184,7 +188,7 @@ function hasLoginIndicator(runtime) {
         "  });",
       ].join("\n"),
     );
-    if (typeof result !== "boolean") runtime.loginEvidenceReadFailed = true;
+    runtime.loginEvidenceReadFailed = typeof result !== "boolean";
     return result === true;
   } catch (_) {
     runtime.loginEvidenceReadFailed = true;
@@ -201,31 +205,41 @@ function waitForLoginState(runtime, timeoutMs) {
 
 function checkLogin(runtime) {
   runtime.loginEvidenceReadFailed = false;
+  let checkFailed = false;
   for (const url of [LIEJU.accountUrl, LIEJU.base]) {
     throwIfStopped();
     try {
       runtime.invoke(["goto", url], { timeout: 20000 });
       if (waitForLoginState(runtime, LOGIN_STATE_SETTLE_MS)) return true;
+      if (runtime.loginEvidenceReadFailed) checkFailed = true;
     } catch (error) {
       if (error.code === "STOP_REQUESTED") throw error;
+      checkFailed = true;
       diagnose("LIEJU_LOGIN_CHECK_FAILED", "transport", "login-check");
     }
   }
   if (runtime.loginEvidenceReadFailed)
     diagnose("LIEJU_LOGIN_EVIDENCE_CHECK_FAILED", "authentication", "login-check");
+  if (checkFailed) throw liejuPreparationError("LIEJU_LOGIN_CHECK_FAILED");
   return false;
 }
 
-function openLogin(runtime) {
+function ensureSession(runtime) {
   const alreadyRunning = runtime.lifecycle.isAlive();
   runtime.lifecycle.ensureStarted();
-  if (!alreadyRunning) {
-    try {
-      runtime.lifecycle.loadSavedState();
-    } catch (_) {
-      diagnose("PLATFORM_LOGIN_STATE_LOAD_FAILED", "storage", "state-load");
-    }
+  // Never replace a live login/logout or an authenticated persistent profile.
+  // Only a readable logged-out cold session may recover from the saved state.
+  if (alreadyRunning || checkLogin(runtime)) return;
+  try {
+    runtime.lifecycle.loadSavedState();
+  } catch (_) {
+    diagnose("LIEJU_LOGIN_STATE_LOAD_FAILED", "storage", "state-load");
+    throw liejuPreparationError("LIEJU_LOGIN_STATE_LOAD_FAILED");
   }
+}
+
+function openLogin(runtime) {
+  ensureSession(runtime);
   runtime.invoke(["goto", LIEJU.loginUrl], { timeout: 15000 });
 }
 
@@ -505,7 +519,7 @@ function createLiejuAdapter(runtimeContext) {
   const runtime = createLiejuRuntime(runtimeContext);
   return Object.freeze({
     ensureSession() {
-      return runtime.lifecycle.ensureStarted();
+      return ensureSession(runtime);
     },
     openLogin() {
       return openLogin(runtime);

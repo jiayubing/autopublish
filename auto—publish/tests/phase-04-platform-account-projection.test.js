@@ -3,6 +3,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const { registerPlatformIpc } = require("../desktop/ipc/platform-ipc");
+const { productionIpcRegistry } = require("../desktop/ipc/contracts/production-registry");
 
 function register(overrides, dependencyOverrides) {
   const handlers = new Map();
@@ -119,4 +120,23 @@ test("platform login commands fail closed for platforms without browser login", 
 
   assert.equal(result.ok, false);
   assert.equal(result.error.code, "PLATFORM_LOGIN_UNAVAILABLE");
+});
+
+test("platform IPC exposes safe recovery errors instead of a false logged-out result", async () => {
+  for (const code of ["LIEJU_LOGIN_CHECK_FAILED", "LIEJU_LOGIN_STATE_LOAD_FAILED", "LIEJU_BROWSER_COMMAND_FAILED", "BROWSER_SESSION_STATE_SAVE_FAILED"]) {
+    const value = register({}, {
+      platformSessionService: {
+        supports: () => true,
+        checkLogin: async () => { throw Object.assign(new Error("synthetic-private-cookie"), { code }); },
+      },
+    });
+    const raw = await value.handlers.get("platforms:check-login")(null, { platformId: "lieju" });
+    const contract = productionIpcRegistry.byCapability("platform.checkLogin");
+    const result = productionIpcRegistry.failure(contract, raw.error);
+    assert.equal(result.ok, false);
+    assert.equal(result.error.code, code);
+    assert.ok(result.error.userMessage);
+    assert.equal(productionIpcRegistry.parseResult(contract, result).code, code);
+    assert.equal(JSON.stringify(result).includes("synthetic-private-cookie"), false);
+  }
 });
