@@ -149,37 +149,43 @@ function diagnose(code, category, action) {
 
 function hasLoginIndicator(runtime) {
   try {
-    return Boolean(
-      runtime.evaluate(
-        [
-          "  var current = new URL(page.url());",
-          "  var host = current.hostname.toLowerCase();",
-          "  var allowedHosts = " + JSON.stringify(["lieju.com", "www.lieju.com", new URL(LIEJU.base).hostname]) + ";",
-          "  if ((current.protocol !== 'https:' && current.protocol !== 'http:') || !allowedHosts.includes(host)) return false;",
-          "  var logout = page.locator(" +
-            JSON.stringify(LIEJU.selectors.loginIndicator) +
-            ");",
-          "  for (var index = 0, count = await logout.count(); index < count; index += 1) {",
-          "    if (await logout.nth(index).isVisible()) return true;",
-          "  }",
-          "  if ((host !== 'lieju.com' && host !== 'www.lieju.com') || !/^\\/member\\/upage\\.php$/i.test(current.pathname)) return false;",
-          "  return await page.evaluate(function () {",
-          "    var anchors = Array.from(document.querySelectorAll('a[href]'));",
-          "    for (var i = 0; i < anchors.length; i += 1) {",
-          "      var href = anchors[i].getAttribute('href');",
-          "      var text = String(anchors[i].textContent || '').trim();",
-          "      if (!href || !text) continue;",
-          "      try {",
-          "        var parsed = new URL(href, window.location.href);",
-          "        var parsedHost = parsed.hostname.toLowerCase();",
-          "        if ((parsedHost === 'lieju.com' || parsedHost === 'www.lieju.com') && /^\\/u[0-9]{1,20}$/i.test(parsed.pathname)) return true;",
-          "      } catch (_) {}",
-          "    }",
-          "    return false;",
-          "  });",
-        ].join("\n"),
-      ),
+    const result = runtime.evaluate(
+      [
+        "  var current = await page.evaluate(function () { return { hostname: window.location.hostname, protocol: window.location.protocol, pathname: window.location.pathname }; });",
+        "  var host = current.hostname.toLowerCase();",
+        "  var allowedHosts = " +
+          JSON.stringify([
+            "lieju.com",
+            "www.lieju.com",
+            new URL(LIEJU.base).hostname,
+          ]) +
+          ";",
+        "  if ((current.protocol !== 'https:' && current.protocol !== 'http:') || !allowedHosts.includes(host)) return false;",
+        "  var logout = page.locator(" +
+          JSON.stringify(LIEJU.selectors.loginIndicator) +
+          ");",
+        "  for (var index = 0, count = await logout.count(); index < count; index += 1) {",
+        "    if (await logout.nth(index).isVisible()) return true;",
+        "  }",
+        "  if ((host !== 'lieju.com' && host !== 'www.lieju.com') || !/^\\/member\\/upage\\.php$/i.test(current.pathname)) return false;",
+        "  return await page.evaluate(function () {",
+        "    var anchors = Array.from(document.querySelectorAll('a[href]'));",
+        "    for (var i = 0; i < anchors.length; i += 1) {",
+        "      var href = anchors[i].getAttribute('href');",
+        "      var text = String(anchors[i].textContent || '').trim();",
+        "      if (!href || !text) continue;",
+        "      try {",
+        "        var parsed = new URL(href, window.location.href);",
+        "        var parsedHost = parsed.hostname.toLowerCase();",
+        "        if ((parsedHost === 'lieju.com' || parsedHost === 'www.lieju.com') && /^\\/u[0-9]{1,20}$/i.test(parsed.pathname)) return true;",
+        "      } catch (_) {}",
+        "    }",
+        "    return false;",
+        "  });",
+      ].join("\n"),
     );
+    if (typeof result !== "boolean") runtime.loginEvidenceReadFailed = true;
+    return result === true;
   } catch (_) {
     runtime.loginEvidenceReadFailed = true;
     return false;
@@ -211,17 +217,25 @@ function checkLogin(runtime) {
 }
 
 function openLogin(runtime) {
+  const alreadyRunning = runtime.lifecycle.isAlive();
   runtime.lifecycle.ensureStarted();
-  try {
-    runtime.lifecycle.loadSavedState();
-  } catch (_) {
-    diagnose("PLATFORM_LOGIN_STATE_LOAD_FAILED", "storage", "state-load");
+  if (!alreadyRunning) {
+    try {
+      runtime.lifecycle.loadSavedState();
+    } catch (_) {
+      diagnose("PLATFORM_LOGIN_STATE_LOAD_FAILED", "storage", "state-load");
+    }
   }
   runtime.invoke(["goto", LIEJU.loginUrl], { timeout: 15000 });
 }
 
 function accountInspectionFromHtml(html, baseUrl) {
   const $ = load(html, { decodeEntities: true });
+  const accountName = $('.bodytop_r > a[href*="action=quit"]')
+    .prev("b")
+    .text()
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .trim();
   let fallback = null;
   for (const node of $("a[href]").toArray()) {
     const href = $(node).attr("href");
@@ -234,10 +248,13 @@ function accountInspectionFromHtml(html, baseUrl) {
     } catch (_) {
       match = null;
     }
-    const displayName = $(node)
+    const linkText = $(node)
       .text()
       .replace(/[\u0000-\u001f\u007f]/g, "")
       .trim();
+    const displayName = accountName || (
+      /^(?:前往)?(?:我的)?主页[»>…]*$/.test(linkText) ? "" : linkText
+    );
     if (!match || !displayName || displayName.length > 128) continue;
     const evidence = Object.freeze({
       verified: true,

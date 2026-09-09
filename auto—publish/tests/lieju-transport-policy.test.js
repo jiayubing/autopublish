@@ -83,8 +83,9 @@ function publicationForm() {
 function accountPage() {
   return [
     '<meta charset="utf-8">',
-    '<a href="https://www.lieju.com/u759917">主页</a>',
-    '<span class="m3"><a href="/u759917">合成账号</a></span>',
+    '<div class="bodytop_r"><b>合成账号</b><a href="/login/?action=quit">安全退出</a></div>',
+    '<a href="https://www.lieju.com/u759917">我的主页</a>',
+    '<div class="m3"><a href="/u759917">前往我的主页»</a></div>',
   ].join("");
 }
 
@@ -147,7 +148,7 @@ function loadAdapter(options) {
   const originalOperatorFlow = require.cache[operatorFlowModulePath];
   const originalAdapter = require.cache[adapterModulePath];
   const commands = [];
-  let alive = false;
+  let alive = value.browser ? value.browser.alive : false;
   const session = "lieju-http-policy";
 
   require.cache[playwrightModulePath] = {
@@ -163,6 +164,8 @@ function loadAdapter(options) {
       }),
       pwInvokeSync: (args) => {
         commands.push(args);
+        if (value.browser && args[0] === "state-load")
+          value.browser.account = JSON.parse(fs.readFileSync(args[1], "utf8")).syntheticAccount;
         if (args[0] === "list") return alive ? session : "";
         if (args[0] === "open") {
           alive = true;
@@ -174,7 +177,7 @@ function loadAdapter(options) {
         }
         return "";
       },
-      runCode: () => true,
+      runCode: () => value.browser ? Boolean(value.browser.account) : true,
     },
   };
 
@@ -265,6 +268,26 @@ test("Lieju account inspection and publication preparation stay HTTP-only", asyn
     assert.equal(prepared.preparedSubmissionEvidenceV1.body, "合成正文");
     assert.equal(loaded.commands.some((args) => args[0] === "open"), false);
     assert.equal(http.newContexts.length, 2);
+  } finally {
+    loaded.restore();
+    fs.rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("Lieju does not bind a homepage navigation label as an account name", async () => {
+  const fixture = stateFixture();
+  const http = createHttpRuntime({
+    getResponses: [response(), response({
+      body: '<meta charset="utf-8"><div class="m3"><a href="/u759917">前往我的主页»</a></div>',
+    })],
+  });
+  const loaded = loadAdapter({ runtimeContext: {
+    browserRuntime: { stateFile: fixture.stateFile }, httpRequest: http.request,
+  } });
+  try {
+    await assert.rejects(() => loaded.adapter.ensureAccountInspectionReady(), {
+      code: "LIEJU_ACCOUNT_INSPECTION_UNVERIFIED",
+    });
   } finally {
     loaded.restore();
     fs.rmSync(fixture.root, { recursive: true, force: true });
@@ -447,6 +470,49 @@ test("Lieju browser runtime is reserved for explicit login session actions", () 
       ),
       true,
     );
+  } finally {
+    loaded.restore();
+    fs.rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("reopening Lieju login preserves a live logout or account switch instead of restoring an old account", () => {
+  const fixture = stateFixture();
+  fs.writeFileSync(
+    fixture.stateFile,
+    JSON.stringify({ syntheticAccount: "saved-account-A" }),
+  );
+  const browser = { alive: true, account: "current-account-B" };
+  const loaded = loadAdapter({
+    browser,
+    runtimeContext: { browserRuntime: { stateFile: fixture.stateFile } },
+  });
+  try {
+    loaded.adapter.openLogin();
+    assert.equal(browser.account, "current-account-B");
+    browser.account = null; // The user explicitly logs out on the website.
+    loaded.adapter.openLogin();
+    assert.equal(browser.account, null);
+  } finally {
+    loaded.restore();
+    fs.rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("opening a new Lieju browser restores its saved login", () => {
+  const fixture = stateFixture();
+  fs.writeFileSync(
+    fixture.stateFile,
+    JSON.stringify({ syntheticAccount: "saved-account-A" }),
+  );
+  const browser = { alive: false, account: null };
+  const loaded = loadAdapter({
+    browser,
+    runtimeContext: { browserRuntime: { stateFile: fixture.stateFile } },
+  });
+  try {
+    loaded.adapter.openLogin();
+    assert.equal(browser.account, "saved-account-A");
   } finally {
     loaded.restore();
     fs.rmSync(fixture.root, { recursive: true, force: true });

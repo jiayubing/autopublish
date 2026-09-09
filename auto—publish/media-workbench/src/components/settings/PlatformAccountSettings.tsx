@@ -104,7 +104,7 @@ export default function PlatformAccountSettings() {
     if (!selected) return;
     const accepted = await confirm({
       title: "删除账号档案",
-      message: `将删除“${selected.displayName}”这个平台账号档案及本机账号绑定。已有发布、订单和审计记录不会删除；若该档案仍有投稿队列或活动发布目标，系统会拒绝删除。`,
+      message: `将删除“${selected.displayName}”这个平台账号档案及本机账号绑定，不会退出网站账号。已有发布、订单和审计记录不会删除；若该档案仍有投稿队列或活动发布目标，系统会拒绝删除。`,
       confirmLabel: "删除档案",
       tone: "danger",
     });
@@ -169,7 +169,7 @@ export default function PlatformAccountSettings() {
                 </p>
                 <p className="mt-1 text-xs leading-5 text-slate-500">
                   {target.loginAvailable
-                    ? "先在平台完成登录。检查登录成功后，系统会自动创建或校验该平台当前账号绑定。"
+                    ? "先在平台完成登录。检查登录成功后，系统会自动创建或校验该平台当前账号绑定。切换账号需先在网站退出旧账号；删除档案不会退出网站登录。"
                     : "该平台不使用浏览器登录；账号身份由对应服务配置验证。完成配置后点击创建并绑定，系统会读取远端真实账号身份。"}
                 </p>
               </div>
