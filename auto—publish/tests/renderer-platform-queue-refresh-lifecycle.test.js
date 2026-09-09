@@ -256,7 +256,7 @@ function installDesktopFixture(page) {
     const media = {
       scanArticles: () => response([]),
       getResourcePage: () =>
-        response({ items: [], total: 0, page: 1, pageSize: 99999 }),
+        response({ items: [], total: 0, page: 1, pageSize: 50 }),
       getPool: () => response([]),
       getBalance: () => response({ balance: "0" }),
     };
