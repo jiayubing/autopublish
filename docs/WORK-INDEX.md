@@ -4,7 +4,7 @@
 
 ## 当前执行入口
 
-- [代码库治理](../.scratch/codebase-governance/PLAN.md)：当前入口；历史代码、测试与文档清理，以及已确认的资源问题按该计划分批推进。
+- 当前没有进行中的治理计划；本轮代码库治理已完成。新增功能按对应业务 Owner 和最小阅读入口开展，修复结果见下方已完成计划。
 
 关联功能合同：[客户生成任务化与并发](../.scratch/client-generation-tasks/CLIENT-GENERATION-TASKS-PLAN.md)，只在涉及其行为时读取。
 
@@ -19,6 +19,8 @@
 - Ticket 19 的独立 HTTP multipart 带图验收：[Ticket 19 合同](../.scratch/article-lifecycle-and-submission/issues/19-lieju-image-publication-adapter.md)。
 
 ## 最近已完成的本地计划
+
+- [代码库治理](../.scratch/codebase-governance/PLAN.md)：2026-09-10 完成；[项目审查修复与最终证据](../.scratch/codebase-governance/REMEDIATION-2026-09-10.md)。
 
 已完成计划、handoff 和过程证据统一见[历史资料归档索引](../.scratch/ARCHIVE-INDEX.md)，不再在此逐条展开。
 

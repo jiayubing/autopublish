@@ -1,6 +1,6 @@
 # Codebase Governance Plan
 
-状态：IN_PROGRESS
+状态：COMPLETE（2026-09-10，本轮授权治理范围）
 范围：减少历史维护负担，收敛已确认的旧入口，并修复小范围内部使用下也会累积的运行时资源问题。
 
 ## 目标
@@ -31,6 +31,9 @@
 - 任何迁移、发布或外部账号行为不在本计划自动执行。
 
 ## Progress
+
+- 2026-09-10：完成本次项目审查的修复、有限退役和 bounded re-review，详见 [REMEDIATION-2026-09-10.md](REMEDIATION-2026-09-10.md)。R1–R3 关闭；河畔按用户决定接受即发布，审核跟踪退役，待处理旧回执沿唯一成功事务恢复；R4 千篇首次/刷新由约 6.6–7.1 秒降至约 3.0–3.4 秒，后续摘要分页由文章读模型 Owner 按容量需求推进。
+- 最终 core 566、integration 1052、maintenance 172、auth 64、packaging/IPC 59 全通过；lint、类型、Renderer/preload 构建、格式和 diff 检查通过；最终空白整理后另补跑 122 项。未进行 Git 提交或真实外部操作。本轮可进入新增功能，不再扩大清理。
 
 - 2026-09-08：完成批次 1。`verify.js` 的失效测试清单已收敛，删除无引用的
   `desktop/services/submission-boundary.js`，去掉重复 Renderer lint。
@@ -86,3 +89,13 @@
   输入 Prettier 均复现失败；留给对应文件 Owner 后续修改时处理，不扩成本轮格式化。
 - 未运行完整 all/release 套件、安装包或真实外部操作；本轮无 UI 行为、schema 或迁移变更。
 - Git：保留此前各轮未提交改动，本轮未 stage、commit 或 push。
+
+## 项目整体只读审查（2026-09-10）
+
+- 审查基准 `69b5fbd9a9b66f7d7eee42dc1914ad9bd164340a`，开始时工作树干净；本次没有实施生产代码修复。
+- 结论、finding、Owner、退役清单及验证范围见 [PROJECT-REVIEW-2026-09-10.md](PROJECT-REVIEW-2026-09-10.md)。这是新的 Primary Audit；R1–R3 尚未关闭，不能标记治理或稳定性验收完成。
+- 已用真实 composition/SQLite 与假 transport 复现：在途投稿未参与 dispose，数据库提前关闭；旧任务快照仍报告 idle，允许投稿期间修改配置。独立回环 HTTP 探针另复现鉴权非法 JSON 请求不返回。
+- 当前代码 core 571/571、integration 1076/1076、maintenance 172/172、auth 本机 63/63、6 文件 packaging/IPC 合同 59/59 通过；lint、main/bridge typecheck、Renderer typecheck/build、preload build 通过。format:check 仍为此前登记的三个文件失败。
+- 现有真实存储合成基准显示单客户 1000 篇时快照首次读取/刷新约 6.6–7.1 秒；为按规模安排读模型优化提供了当前证据，不能只以测试通过认定性能达标。
+- 剩余执行顺序：先修 R1–R3 与格式 gate，再做有限孤儿/旧媒体扫描链退役；Hepan remote_pending 与当前产品文档偏差需收敛；不扩大成新一轮全项目重构。修复后只做已知 finding 的 bounded re-review。
+- 未运行完整 release/all、安装包端到端、Linux Node 22/container 或任何真实账号/投稿/上传/付费/生产操作。日志位于 `auto—publish/build/evidence/project-review-20260910/`。
