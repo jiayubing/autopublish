@@ -350,7 +350,6 @@ function SettingsViewContent() {
   return (
     <div className="grid min-w-0 gap-4 pb-3">
       <PageHeader
-        eyebrow="Application Settings"
         title="设置"
         description="管理服务配置、普通投稿平台账号、工作区和运行环境。"
       />

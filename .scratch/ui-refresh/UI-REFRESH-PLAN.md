@@ -79,3 +79,14 @@ Gate: media renderer regressions + build.
 - Do not add backend endpoints, new durable states, new IPC contracts or a component-framework dependency.
 - Do not mechanically rewrite every component merely to use primitives.
 - If a visual improvement requires changing a business interaction contract, leave the interaction intact and document the limitation.
+
+## Follow-up — 2026-09-09 UI polish and Lieju login review
+
+- Branch: `codex/ui-polish-20260909`, based on `b07684bb`; local work only, no push or PR.
+- Fixed overlapping search icons in article library, orders and resources with explicit field padding; moved the native-control font reset into the base cascade layer so utility typography takes effect.
+- Removed decorative English page subtitles, reduced heading size, and joined article filters and bulk actions into one surface.
+- Added rendered geometry regression for the three search fields and behavioral coverage for cancel/discard on sidebar navigation with unsaved article edits.
+- Reviewed Lieju login separately from UI: verify the configured site before trusting visible logout links; inspect all matching logout links; keep the existing member-page profile fallback; try the home page if member-page navigation fails. No publication or account-binding semantics changed.
+- Synthetic login tests cover visible/hidden/foreign evidence, public profile links, navigation failure and unreadable pages. These tests execute the adapter's browser evaluation code against a fake page; they do not prove current live-site compatibility.
+- Validation: renderer build, ESLint, main/bridge type checks; 57 targeted tests across responsive layout, history editing, queue lifecycle, publication history and Lieju boundaries. Actual accounts and publishing were not used. Existing large-bundle warning remains.
+- Remaining: real Lieju login verification and representative large-workspace UX evaluation; this follow-up does not claim a complete product layout redesign.

@@ -139,7 +139,6 @@ export default function OrdersView({
   return (
     <div className="grid min-h-0 gap-3 pb-3">
       <PageHeader
-        eyebrow="Paid Media Orders"
         title="订单"
         description="只管理已经形成的真实付费订单、供应商状态同步和需要人工核对的订单异常。"
         actions={
@@ -202,7 +201,7 @@ export default function OrdersView({
             placeholder="搜索文章标题、订单编号…"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
-            className="ui-field h-9 pl-8"
+            className="ui-field ui-field-with-icon h-9"
           />
         </div>
       </div>

@@ -89,7 +89,6 @@ export function StatusBadge({
 type PageHeaderProps = {
   title: React.ReactNode;
   description?: React.ReactNode;
-  eyebrow?: React.ReactNode;
   actions?: React.ReactNode;
   className?: string;
 };
@@ -97,14 +96,12 @@ type PageHeaderProps = {
 export function PageHeader({
   title,
   description,
-  eyebrow,
   actions,
   className,
 }: PageHeaderProps) {
   return (
     <div className={classes("ui-page-header", className)}>
       <div className="min-w-0">
-        {eyebrow ? <div className="ui-page-eyebrow">{eyebrow}</div> : null}
         <h2 className="ui-page-title">{title}</h2>
         {description ? (
           <p className="ui-page-description">{description}</p>

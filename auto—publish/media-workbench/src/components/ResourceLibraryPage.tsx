@@ -30,7 +30,6 @@ export default function ResourceLibraryPage({
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3">
       <PageHeader
-        eyebrow="Media Library"
         title="媒体资源"
         description="浏览媒体服务商资源、维护资源池，并为后续付费媒体投稿提供可选资源。"
       />

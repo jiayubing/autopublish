@@ -182,7 +182,7 @@ export default function ResourceLibrary({
                   setCurrentPage(1);
                 }
               }}
-              className="media-search ui-field h-9 pl-8"
+              className="media-search ui-field ui-field-with-icon h-9"
             />
           </div>
           <div

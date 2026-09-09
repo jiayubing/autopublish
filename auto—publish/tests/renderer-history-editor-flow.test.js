@@ -703,6 +703,29 @@ describe("renderer history editor flow", { concurrency: false }, () => {
     }
   });
 
+  it("guards sidebar navigation while an article has unsaved edits", async () => {
+    const { page, fixture } = await openHistory();
+    try {
+      await page.getByRole("button", { name: /fixture-platform.*历史文章超长模板名称/ }).click();
+      await page.getByText(fixture.selectedArticle.title, { exact: true }).click();
+      const title = page.getByLabel("文章标题", { exact: true });
+      await title.fill("切换页面前未保存");
+      await page.locator("#nav-item-orders").click();
+      const confirmation = page.getByRole("dialog").filter({ hasText: "未保存" });
+      await confirmation.waitFor();
+      assert.equal(await page.locator("#nav-item-article-library").getAttribute("aria-current"), "page");
+      await confirmation.getByRole("button", { name: "取消", exact: true }).click();
+      assert.equal(await title.inputValue(), "切换页面前未保存");
+      await page.locator("#nav-item-orders").click();
+      await confirmation.getByRole("button", { name: "放弃修改", exact: true }).click();
+      await page.getByRole("heading", { name: "订单", exact: true }).waitFor();
+      assert.equal(await page.locator("#nav-item-orders").getAttribute("aria-current"), "page");
+      assert.equal(await page.evaluate(() => window.__historyEditorFlow.calls.saveArticle.length), 0);
+    } finally {
+      await page.close();
+    }
+  });
+
   it("updates an open editor to read-only after the management lifecycle changes", async () => {
     const { page, fixture } = await openHistory();
     try {

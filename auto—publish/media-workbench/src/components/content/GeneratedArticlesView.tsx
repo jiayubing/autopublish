@@ -435,7 +435,6 @@ export default function GeneratedArticlesView({
     <div className="relative h-full w-full min-w-0 overflow-x-hidden overflow-y-auto p-3 sm:p-4">
       <div className="mb-3 grid min-w-0 gap-3">
         <PageHeader
-          eyebrow="Article Library"
           title={<span aria-label="文章库">文章库</span>}
           description="按文章阶段、生成批次和关键词筛选；编辑、发起投稿、进度与发布档案均从这里进入。"
           actions={
@@ -464,7 +463,7 @@ export default function GeneratedArticlesView({
                 onChange={(event) => setFilter(event.target.value)}
                 placeholder="筛选标题、平台或模板"
                 aria-label="筛选文章库"
-                className="ui-field h-9 pl-8"
+                className="ui-field ui-field-with-icon h-9"
               />
             </div>
             <select
@@ -535,9 +534,7 @@ export default function GeneratedArticlesView({
               )}
             </div>
           )}
-        </Surface>
-
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-2 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5 border-t border-slate-100 bg-white px-2.5 py-2">
           <span className="mr-1 text-[11px] font-medium text-slate-400">
             已选 {selectedArticles.length}
           </span>
@@ -574,6 +571,7 @@ export default function GeneratedArticlesView({
             移入回收站 ({selectedTrashableArticles.length})
           </Button>
         </div>
+        </Surface>
 
         {intake.feedback && (
           <div

@@ -279,7 +279,6 @@ export default function PlatformWorkbench({
           <PageHeader
             title="投稿中心"
             description="执行普通平台队列、已确认付费批次，并集中处理需要人工核对的异常结果。"
-            eyebrow="Publication Operations"
           />
         </div>
 
