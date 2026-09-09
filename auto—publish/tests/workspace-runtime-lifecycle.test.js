@@ -373,7 +373,7 @@ it("workspace startup recovers stranded publication intents before becoming avai
   }
 });
 
-it("workspace runtime gives the Hepan task service its configured platform settings", async function() {
+it("workspace runtime derives task activity from the current execution owners", async function() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "workspace-runtime-hepan-"));
   const taskServicePath = desktopTaskServicePath;
   const originalTaskServiceModule = require.cache[taskServicePath];
@@ -404,10 +404,10 @@ it("workspace runtime gives the Hepan task service its configured platform setti
       sessionDataPath: path.join(root, "session-data")
     });
     await runtime.start({ workspacePath: path.join(root, "workspace") });
-    const hepanRuntime = taskServiceOptions.platformSettingsService.getAdapterForRuntime("hepan");
-    assert.ok(hepanRuntime.adapter);
-    assert.equal(hepanRuntime.config.uid, 12345);
-    assert.equal(hepanRuntime.config.password, "fixture-password");
+    assert.deepEqual(taskServiceOptions.getActivityStates(), [
+      { isRunning: false, isStopping: false },
+      { isRunning: false, isStopping: false },
+    ]);
     await runtime.dispose();
   } finally {
     if (originalTaskServiceModule) require.cache[taskServicePath] = originalTaskServiceModule;

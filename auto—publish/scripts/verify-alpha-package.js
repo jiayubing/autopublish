@@ -47,7 +47,6 @@ const ARCHIVE_FILES = [
   "desktop/ipc/media-ipc.js",
   "desktop/ipc/platform-ipc.js",
   "desktop/services/auth-service.js",
-  "desktop/services/platform-task-state-store.js",
   "desktop/services/runtime-diagnostics-service.js",
   "desktop/services/ai-provider-service.js",
   "desktop/services/content-generation-batch-service.js",

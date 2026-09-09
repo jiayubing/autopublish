@@ -1,20 +1,21 @@
-const path = require("node:path");
-const { createPlatformTaskStateStore } = require("./platform-task-state-store");
+"use strict";
 
-// The desktop bootstrap only needs the durable task snapshot. Platform
-// submission execution now belongs to the regular queue application.
+// Read-only activity projection; execution state stays with each orchestrator.
 function createDesktopTaskService(options) {
-  const values = options || {};
-  const paths = values.paths || {};
-  const store = createPlatformTaskStateStore({
-    persistedSnapshotPath: paths.localState
-      ? path.join(paths.localState, "platform-task-snapshot.json")
-      : null,
-  });
-
+  const readStates = options && options.getActivityStates;
+  if (typeof readStates !== "function") throw new Error("Task activity reader is required");
   return Object.freeze({
-    getState: store.getSnapshot,
-    dispose: function () {},
+    getState() {
+      const states = readStates();
+      const running = states.some((state) => state.isRunning);
+      const stopping = states.some((state) => state.isStopping);
+      return {
+        phase: stopping ? "stopping" : running ? "running" : "idle",
+        isPlatformRunning: running,
+        isBatchRunning: running,
+        isStopPending: stopping,
+      };
+    },
   });
 }
 

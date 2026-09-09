@@ -133,6 +133,8 @@ function createPaidMediaBatchOrchestrator(options) {
   const randomUUID = value.randomUUID || crypto.randomUUID;
   const active = new Map();
   let globalRun = null;
+  let disposed = false;
+  let disposePromise = null;
 
   function snapshot(input) {
     const request = input || {};
@@ -186,11 +188,11 @@ function createPaidMediaBatchOrchestrator(options) {
 
   async function executeClaim(claim) {
     const preflight = await callPreflight(claim);
-    if (preflight) {
+    if (preflight || disposed) {
       transitions.releasePaidOrderCreationClaim({
         orderCreationAttemptId: claim.orderCreationAttemptId,
         claimToken: claim.claimToken,
-        reasonCode: preflight.reasonCode,
+        reasonCode: preflight && preflight.reasonCode,
       });
       transitions.setPaidSubmissionBatchRunIntent({
         batchId: claim.batchId,
@@ -200,7 +202,7 @@ function createPaidMediaBatchOrchestrator(options) {
         status: "preflight_changed",
         batchId: claim.batchId,
         batchItemId: claim.batchItemId,
-        reasonCode: preflight.reasonCode || "PAID_ORDER_PRECHECK_FAILED",
+        reasonCode: preflight && preflight.reasonCode || "PAID_ORDER_PRECHECK_FAILED",
       });
     }
 
@@ -315,7 +317,7 @@ function createPaidMediaBatchOrchestrator(options) {
       );
     const operation = (async () => {
       let last = Object.freeze({ batchId, status: "idle" });
-      while (true) {
+      while (!disposed) {
         const claim = transitions.claimPaidSubmissionBatchItem({
           batchId,
           claimToken: `paid-claim-${randomUUID()}`,
@@ -333,6 +335,7 @@ function createPaidMediaBatchOrchestrator(options) {
         )
           return last;
       }
+      return last;
     })().finally(() => {
       active.delete(batchId);
       if (globalRun === operation) globalRun = null;
@@ -343,6 +346,7 @@ function createPaidMediaBatchOrchestrator(options) {
   }
 
   function startBatch(input) {
+    if (disposed) throw fail("PAID_EXECUTION_DISPOSED");
     const batchId = input && input.batchId;
     if (globalRun && !active.has(batchId))
       return Promise.resolve(
@@ -357,6 +361,7 @@ function createPaidMediaBatchOrchestrator(options) {
   }
 
   async function startAll(input) {
+    if (disposed) throw fail("PAID_EXECUTION_DISPOSED");
     const clientId = input && input.clientId;
     if (typeof clientId === "string" && clientId.trim()) {
       if (globalRun)
@@ -367,6 +372,7 @@ function createPaidMediaBatchOrchestrator(options) {
       const batches = snapshot({ clientId });
       const results = [];
       for (const batch of batches) {
+        if (disposed) break;
         if (batch.actions && batch.actions.canStart === true)
           results.push(await startBatch({ batchId: batch.batchId }));
       }
@@ -382,13 +388,23 @@ function createPaidMediaBatchOrchestrator(options) {
     const batches = snapshot({});
     const results = [];
     for (const batch of batches) {
+      if (disposed) break;
       if (batch.pauseIntent === "none")
         results.push(await runBatch(batch.batchId));
     }
     return Object.freeze({ results: Object.freeze(results) });
   }
 
+  function dispose() {
+    if (disposePromise) return disposePromise;
+    disposed = true;
+    disposePromise = Promise.allSettled([...active.values()]).then(() => undefined);
+    return disposePromise;
+  }
+
   return Object.freeze({
+    getState: () => ({ isRunning: active.size > 0, isStopping: disposed && active.size > 0 }),
+    dispose,
     initializePaused,
     pauseAll,
     pauseBatch,

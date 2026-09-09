@@ -157,12 +157,22 @@ function createRegularQueueGroupOrchestrator(options) {
   const randomUUID = value.randomUUID || crypto.randomUUID;
   const setTimer = value.setInterval || setInterval;
   const clearTimer = value.clearInterval || clearInterval;
+  const shutdown = new AbortController();
+  let disposePromise = null;
+  const stopped = new Promise((resolve) => shutdown.signal.addEventListener("abort", resolve, { once: true }));
   const wait =
     typeof value.wait === "function"
       ? value.wait
       : function (intervalMs) {
           return new Promise(function (resolve) {
-            const timer = setTimeout(resolve, intervalMs);
+            const finish = function () {
+              clearTimeout(timer);
+              shutdown.signal.removeEventListener("abort", finish);
+              resolve();
+            };
+            const timer = setTimeout(finish, intervalMs);
+            shutdown.signal.addEventListener("abort", finish, { once: true });
+            if (shutdown.signal.aborted) finish();
             if (timer && typeof timer.unref === "function") timer.unref();
           });
         };
@@ -197,7 +207,7 @@ function createRegularQueueGroupOrchestrator(options) {
 
   function waitForSubmissionInterval(intervalMs) {
     if (intervalMs <= 0) return Promise.resolve();
-    return Promise.resolve(wait(intervalMs));
+    return Promise.race([Promise.resolve(wait(intervalMs)), stopped]);
   }
 
   function recoverOutcomeCommitFailure(claim, error) {
@@ -311,6 +321,7 @@ function createRegularQueueGroupOrchestrator(options) {
     }
     let evidence;
     try {
+      if (shutdown.signal.aborted) throw fail("REGULAR_PREPARATION_FAILED");
       if (renewalError) throw fail("REGULAR_CLAIM_RENEWAL_FAILED");
       evidence = prepared.preparedSubmissionEvidenceV1;
       if (
@@ -357,17 +368,22 @@ function createRegularQueueGroupOrchestrator(options) {
     );
     if (!group) return Promise.reject(fail("REGULAR_QUEUE_GROUP_NOT_FOUND"));
     const previousPlatformOperation = activePlatforms.get(group.platformId);
+    let beganRun = false;
     const operation = Promise.resolve(previousPlatformOperation)
       .catch(() => {
         diagnose("REGULAR_PREVIOUS_OPERATION_FAILED", "previous-operation");
         return undefined;
       })
       .then(async function () {
-        if (executor && typeof executor.beginQueueRun === "function") executor.beginQueueRun("queue-run-" + queueGroupId);
+        if (shutdown.signal.aborted) return Object.freeze({ queueGroupId, status: "idle" });
+        if (executor && typeof executor.beginQueueRun === "function") {
+          executor.beginQueueRun("queue-run-" + queueGroupId);
+          beganRun = true;
+        }
         const intervalMs = submissionIntervalMs(group);
         const completed = [];
         while (true) {
-          const claim = transitions.claimRegularQueueGroupHead({
+          const claim = shutdown.signal.aborted ? null : transitions.claimRegularQueueGroupHead({
             queueGroupId,
             claimToken: `regular-claim-${randomUUID()}`,
             leaseMs: 30000,
@@ -411,12 +427,12 @@ function createRegularQueueGroupOrchestrator(options) {
           const latest = snapshot().find(
             (candidate) => candidate.queueGroupId === queueGroupId,
           );
-          if (latest && latest.remaining.length > 0)
+          if (!shutdown.signal.aborted && latest && latest.remaining.length > 0)
             await waitForSubmissionInterval(intervalMs);
         }
       })
       .finally(function () {
-        if (executor && typeof executor.endQueueRun === "function") executor.endQueueRun();
+        if (beganRun && typeof executor.endQueueRun === "function") executor.endQueueRun();
         activeGroups.delete(queueGroupId);
         if (activePlatforms.get(group.platformId) === operation)
           activePlatforms.delete(group.platformId);
@@ -427,6 +443,7 @@ function createRegularQueueGroupOrchestrator(options) {
   }
 
   async function startGroup(input) {
+    if (shutdown.signal.aborted) throw fail("REGULAR_QUEUE_DISPOSED");
     const group = transitions.setRegularQueueGroupRunIntent({
       queueGroupId: input && input.queueGroupId,
       running: true,
@@ -436,6 +453,7 @@ function createRegularQueueGroupOrchestrator(options) {
   }
 
   function kickGroup(input) {
+    if (shutdown.signal.aborted) throw fail("REGULAR_QUEUE_DISPOSED");
     const group = transitions.setRegularQueueGroupRunIntent({
       queueGroupId: input && input.queueGroupId,
       running: true,
@@ -453,6 +471,7 @@ function createRegularQueueGroupOrchestrator(options) {
     if (existing) {
       void existing
         .finally(function () {
+          if (shutdown.signal.aborted) return;
           const latest = snapshot().find(
             (candidate) => candidate.queueGroupId === group.queueGroupId,
           );
@@ -488,6 +507,7 @@ function createRegularQueueGroupOrchestrator(options) {
   }
 
   async function startAll() {
+    if (shutdown.signal.aborted) throw fail("REGULAR_QUEUE_DISPOSED");
     const started = transitions.startAllRegularQueueGroups();
     if (started.changedCount > 0)
       notifyDataInvalidated("REGULAR_QUEUE_GROUP_RUN_INTENT_CHANGED");
@@ -523,7 +543,18 @@ function createRegularQueueGroupOrchestrator(options) {
     return transitions.pauseRegularQueueGroupsOnStartup();
   }
 
+  function dispose() {
+    if (disposePromise) return disposePromise;
+    shutdown.abort();
+    // Existing transport deadlines bound in-flight requests; never abort a write
+    // and discard an accepted observation merely because the window is closing.
+    disposePromise = Promise.allSettled([...activeGroups.values()]).then(() => undefined);
+    return disposePromise;
+  }
+
   return Object.freeze({
+    getState: () => ({ isRunning: activeGroups.size > 0, isStopping: shutdown.signal.aborted && activeGroups.size > 0 }),
+    dispose,
     initializePaused,
     pauseAll,
     pauseGroup,

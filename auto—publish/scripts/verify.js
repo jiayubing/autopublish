@@ -27,7 +27,6 @@ const focusedPlanTests = [
 ];
 
 const focusedAuthTests = [
-  "tests/platform-task-progress.test.js",
   "tests/renderer-platform-task-store.test.js",
   "tests/renderer-platform-cross-page-progress.test.js",
   "tests/auth-service.test.js",

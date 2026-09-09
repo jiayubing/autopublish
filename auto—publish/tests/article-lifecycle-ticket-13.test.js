@@ -592,6 +592,48 @@ test("paid execution creates orders one at a time and completes the confirmed ba
   }
 });
 
+for (const phase of ["preflight", "remote"]) test(`paid shutdown drains ${phase} without starting another order`, async () => {
+  const value = fixture();
+  let release, started;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const entered = new Promise((resolve) => { started = resolve; });
+  let calls = 0, orchestrator, run;
+  try {
+    const admitted = await admit(value);
+    orchestrator = createPaidMediaBatchOrchestrator({
+      paidExecutionTransitions: value.transitions,
+      recheckPaidOrder: async () => {
+        if (phase === "preflight") { started(); await gate; }
+        return null;
+      },
+      orderCreationPort: Object.freeze({ async createOrder() {
+        calls += 1;
+        started(); await gate;
+        return { kind: "order_created", orderId: "shutdown-order" };
+      } }),
+    });
+    run = orchestrator.startBatch({ batchId: admitted.batchId });
+    await entered;
+    assert.equal(orchestrator.getState().isRunning, true);
+    const disposal = orchestrator.dispose();
+    assert.equal(orchestrator.getState().isStopping, true);
+    assert.equal(orchestrator.dispose(), disposal);
+    release();
+    await run; await disposal;
+    assert.equal(calls, phase === "remote" ? 1 : 0);
+    assert.equal(value.store.listRemoteOrders().length, phase === "remote" ? 1 : 0);
+    const items = value.transitions.listPaidSubmissionBatchSnapshots({ batchId: admitted.batchId })[0].items;
+    assert.equal(items[0].status, phase === "remote" ? "completed" : "queued");
+    assert.equal(items[1].status, "queued");
+    assert.throws(() => orchestrator.startBatch({ batchId: admitted.batchId }), { code: "PAID_EXECUTION_DISPOSED" });
+  } finally {
+    release();
+    if (run) await Promise.allSettled([run]);
+    if (orchestrator) await orchestrator.dispose();
+    value.close();
+  }
+});
+
 test("a paid order recheck freezes the batch before remote submission when the snapshot is stale", async () => {
   const value = fixture();
   try {

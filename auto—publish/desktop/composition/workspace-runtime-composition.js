@@ -54,7 +54,7 @@ async function createWorkspaceRuntimeComposition(deps) {
   let disposers = [];
   let disposerSet = new Set();
   let ownedServices = [];
-  let disposed = false;
+  let disposePromise = null;
 
   function ownService(service) {
     if (
@@ -98,33 +98,44 @@ async function createWorkspaceRuntimeComposition(deps) {
     return service && service.getState ? service.getState() : null;
   }
 
-  async function dispose() {
-    if (disposed) return;
-    disposed = true;
-    const pending = disposers.splice(0).reverse();
-    disposerSet.clear();
-    for (const release of pending) {
-      try {
-        await release();
-      } catch (_) {
-        reportCompositionDiagnostic("WORKSPACE_DISPOSER_FAILED", "disposer");
+  function dispose() {
+    if (disposePromise) return disposePromise;
+    disposePromise = (async function () {
+      // Stop both execution owners before releasing any shared content, session or database resources.
+      await Promise.allSettled(
+        [
+          current("regularQueueGroupOrchestrator"),
+          current("paidMediaBatchOrchestrator"),
+        ]
+          .filter(Boolean)
+          .map((service) => service.dispose()),
+      );
+      const pending = disposers.splice(0).reverse();
+      disposerSet.clear();
+      for (const release of pending) {
+        try {
+          await release();
+        } catch (_) {
+          reportCompositionDiagnostic("WORKSPACE_DISPOSER_FAILED", "disposer");
+        }
       }
-    }
-    const services = ownedServices.splice(0).reverse();
-    for (const service of services) {
-      try {
-        await service.dispose();
-      } catch (_) {
-        reportCompositionDiagnostic(
-          "WORKSPACE_SERVICE_DISPOSE_FAILED",
-          "service-dispose",
-        );
+      const services = ownedServices.splice(0).reverse();
+      for (const service of services) {
+        try {
+          await service.dispose();
+        } catch (_) {
+          reportCompositionDiagnostic(
+            "WORKSPACE_SERVICE_DISPOSE_FAILED",
+            "service-dispose",
+          );
+        }
       }
-    }
-    modules = null;
-    articleLifecycleOwner = null;
-    ipcDeps = null;
-    runtime = null;
+      modules = null;
+      articleLifecycleOwner = null;
+      ipcDeps = null;
+      runtime = null;
+    })();
+    return disposePromise;
   }
 
   try {
@@ -273,12 +284,14 @@ async function createWorkspaceRuntimeComposition(deps) {
       require("../services/desktop-task-service").createDesktopTaskService;
     const taskService = ownService(
       createDesktopTaskService({
-        cwd: workspaceRoot,
-        paths: injectedPaths,
-        invalidateData: invalidation.invalidate,
-        workspaceRuntimeId: invalidation.getWorkspaceRuntimeId(),
-        platformSettingsService,
-        loginSessionPorts,
+        getActivityStates: function () {
+          return [
+            current("regularQueueGroupOrchestrator"),
+            current("paidMediaBatchOrchestrator"),
+          ]
+            .filter(Boolean)
+            .map((service) => service.getState());
+        },
       }),
     );
     const autoTrashArticle = async function (selection) {
