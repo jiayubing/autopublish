@@ -133,7 +133,7 @@ export default function ResourceLibrary({
                   isRefreshingResources ? "animate-spin" : ""
                 }`}
               />
-              {isRefreshingResources ? "拉取中…" : "刷新资源"}
+              {isRefreshingResources ? "拉取中…" : "刷新库"}
             </Button>
           )}
         </div>
