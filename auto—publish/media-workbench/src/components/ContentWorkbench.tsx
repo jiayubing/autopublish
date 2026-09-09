@@ -19,6 +19,7 @@ import type { ArticleLibraryNavigationIntent } from "../article-library-navigati
 type RefreshState = "idle" | "refreshing" | "error";
 type ProductionTab = "questions" | "client" | "batch";
 type WorkbenchTab = ProductionTab | "history";
+type MainNavigationGuard = (action: () => void) => void;
 
 const REFRESH_CONFIRMATION_MS = 3000;
 const PRODUCTION_TAB_KEY = "auto-publish:content-production-tab";
@@ -74,6 +75,7 @@ interface ContentWorkbenchProps {
   onFavoriteMediaPageChange?: (page: number) => void;
   onOpenOrders?: () => void;
   onOpenAttention?: () => void;
+  onMainNavigationGuardChange?: (guard: MainNavigationGuard | null) => void;
 }
 
 export default function ContentWorkbench({
@@ -86,6 +88,7 @@ export default function ContentWorkbench({
   onFavoriteMediaPageChange,
   onOpenOrders,
   onOpenAttention,
+  onMainNavigationGuardChange,
 }: ContentWorkbenchProps) {
   const { confirm } = useConfirmation();
   const {
@@ -226,6 +229,15 @@ export default function ContentWorkbench({
     },
     [confirm, historyEditingArticle],
   );
+
+  useEffect(() => {
+    if (mode !== "library" || !onMainNavigationGuardChange) return;
+    const guard: MainNavigationGuard = (action) => {
+      void requestHistoryLeave(action);
+    };
+    onMainNavigationGuardChange(guard);
+    return () => onMainNavigationGuardChange(null);
+  }, [mode, onMainNavigationGuardChange, requestHistoryLeave]);
 
   function closeHistoryEditor(skipGuard = false) {
     if (!skipGuard && historyDirtyRef.current) {
