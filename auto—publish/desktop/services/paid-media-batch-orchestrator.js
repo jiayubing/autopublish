@@ -126,6 +126,30 @@ const SUCCESS_CONFLICT_CODES = new Set([
   "PAID_ORDER_SUCCESS_WINS",
 ]);
 
+function batchClientIds(batch) {
+  const items = Array.isArray(batch && batch.items) ? batch.items : [];
+  return new Set(
+    items
+      .map(function (item) {
+        return (
+          item &&
+          item.articleIdentityV1 &&
+          item.articleIdentityV1.clientId
+        );
+      })
+      .filter(Boolean),
+  );
+}
+
+function batchMatchesClient(batch, clientId) {
+  return batchClientIds(batch).has(clientId);
+}
+
+function batchBelongsOnlyToClient(batch, clientId) {
+  const clients = batchClientIds(batch);
+  return clients.size === 1 && clients.has(clientId);
+}
+
 function createPaidMediaBatchOrchestrator(options) {
   const value = options || {};
   const transitions = validateTransitions(value.paidExecutionTransitions);
@@ -144,16 +168,7 @@ function createPaidMediaBatchOrchestrator(options) {
     if (typeof request.clientId !== "string" || !request.clientId)
       return batches;
     return batches.filter(function (batch) {
-      const items = Array.isArray(batch && batch.items) ? batch.items : [];
-      const clients = new Set(items.map(function (item) {
-        return (
-          item &&
-          item.articleIdentityV1 &&
-          item.articleIdentityV1.clientId
-        );
-      }).filter(Boolean));
-      if (clients.size > 1) throw fail("PAID_EXECUTION_BATCH_IDENTITY_INVALID");
-      return clients.has(request.clientId);
+      return batchMatchesClient(batch, request.clientId);
     });
   }
 
@@ -202,7 +217,8 @@ function createPaidMediaBatchOrchestrator(options) {
         status: "preflight_changed",
         batchId: claim.batchId,
         batchItemId: claim.batchItemId,
-        reasonCode: preflight && preflight.reasonCode || "PAID_ORDER_PRECHECK_FAILED",
+        reasonCode:
+          (preflight && preflight.reasonCode) || "PAID_ORDER_PRECHECK_FAILED",
       });
     }
 
@@ -369,7 +385,9 @@ function createPaidMediaBatchOrchestrator(options) {
           status: "paid_execution_busy",
           results: Object.freeze([]),
         });
-      const batches = snapshot({ clientId });
+      const batches = snapshot({ clientId }).filter(function (batch) {
+        return batchBelongsOnlyToClient(batch, clientId);
+      });
       const results = [];
       for (const batch of batches) {
         if (disposed) break;
@@ -398,12 +416,17 @@ function createPaidMediaBatchOrchestrator(options) {
   function dispose() {
     if (disposePromise) return disposePromise;
     disposed = true;
-    disposePromise = Promise.allSettled([...active.values()]).then(() => undefined);
+    disposePromise = Promise.allSettled([...active.values()]).then(
+      () => undefined,
+    );
     return disposePromise;
   }
 
   return Object.freeze({
-    getState: () => ({ isRunning: active.size > 0, isStopping: disposed && active.size > 0 }),
+    getState: () => ({
+      isRunning: active.size > 0,
+      isStopping: disposed && active.size > 0,
+    }),
     dispose,
     initializePaused,
     pauseAll,
