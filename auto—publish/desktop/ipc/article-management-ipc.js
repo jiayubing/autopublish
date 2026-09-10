@@ -33,15 +33,19 @@ function registerArticleManagementIpc(deps) {
     publishedArchiveQueries: values.publishedArchiveQueries,
     articleAttentionQuery: values.articleAttentionQuery
   });
-  const regularSubmissionPermissions =
-    values.regularSubmissionPermissionQuery ||
-    createRegularSubmissionPermissionQuery({
-      contentStore: values.contentStore,
-      operationalStore: values.operationalStore,
-      aiContentService: values.aiContentService,
-      articleAttentionQuery: values.articleAttentionQuery,
-      getRevision: values.getWorkspaceDataRevision,
-    });
+  let regularSubmissionPermissions = values.regularSubmissionPermissionQuery || null;
+  function getRegularSubmissionPermissions() {
+    if (!regularSubmissionPermissions) {
+      regularSubmissionPermissions = createRegularSubmissionPermissionQuery({
+        contentStore: values.contentStore,
+        operationalStore: values.operationalStore,
+        aiContentService: values.aiContentService,
+        articleAttentionQuery: values.articleAttentionQuery,
+        getRevision: values.getWorkspaceDataRevision,
+      });
+    }
+    return regularSubmissionPermissions;
+  }
   const publicationLinks = values.publicationLinkService || createPublicationLinkService({
     operationalStore: values.operationalStore,
     openExternal: values.openExternal,
@@ -52,7 +56,7 @@ function registerArticleManagementIpc(deps) {
   values.ipcMain.handle("content:list-regular-submission-permissions", function(event, input) {
     return wrap(async function() {
       return projectRegularSubmissionPermissions(
-        await regularSubmissionPermissions.list(input || {}),
+        await getRegularSubmissionPermissions().list(input || {}),
       );
     });
   });
