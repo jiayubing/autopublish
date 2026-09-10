@@ -9,9 +9,7 @@ import SettingsView from "./components/SettingsView";
 import { useWorkspaceRuntimeIdentity } from "./features/workspace/workspace-coordinator-context";
 import { PlatformFeatureProvider } from "./features/platform/platform-feature-context";
 import ConfirmationHost from "./components/ConfirmationHost";
-import {
-  RefreshCw,
-} from "lucide-react";
+import { CheckCircle2, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useMediaFeature } from "./features/media/use-media-feature";
 import { useContentWorkbenchFeature } from "./features/content/use-content-workbench-feature";
@@ -28,6 +26,15 @@ const VIEW_MODES: ViewMode[] = [
   "resources",
   "settings",
 ];
+
+const VIEW_LABELS: Record<ViewMode, string> = {
+  "content-production": "内容生产",
+  "article-library": "文章库",
+  "submission-center": "投稿中心",
+  orders: "订单",
+  resources: "媒体资源",
+  settings: "设置",
+};
 
 function loadLastView(): ViewMode {
   if (typeof localStorage === "undefined") return "article-library";
@@ -143,8 +150,7 @@ function AppContent() {
   const consumeArticleLibraryIntent = () => setArticleLibraryIntent(null);
 
   return (
-    <div className="flex h-full w-full overflow-hidden bg-slate-50">
-      {/* 1. Fixed Left Sidebar */}
+    <div className="app-shell flex h-full w-full overflow-hidden bg-slate-100">
       <Sidebar
         currentView={currentView}
         onViewChange={changeView}
@@ -156,145 +162,156 @@ function AppContent() {
         badges={navigationBadges}
       />
 
-      {/* 2. Main Content Viewport */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-        {/* Top Toolbar / Header bar */}
-        <header className="h-14 border-b border-slate-200 bg-white flex items-center px-6 shadow-sm z-10 shrink-0">
-          <div className="flex items-center justify-between w-full">
-            <div className="flex items-center space-x-3">
-              {dataLoaded ? (
-                <div className="flex items-center space-x-2 text-xs text-slate-500 font-medium">
-                  <div className="w-2 h-2 rounded-full bg-emerald-400"></div>
-                  <span>数据已就绪</span>
-                </div>
-              ) : (
-                <div className="flex items-center space-x-2 text-xs text-amber-500 font-medium">
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  <span>正在加载数据...</span>
-                </div>
-              )}
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <header className="app-topbar z-10 flex h-14 shrink-0 items-center border-b border-slate-200/80 bg-white/95 px-4 backdrop-blur sm:px-6">
+          <div className="flex w-full min-w-0 items-center justify-between gap-4">
+            <div className="flex min-w-0 items-center gap-2 text-sm">
+              <span className="hidden font-medium text-slate-400 sm:inline">
+                AutoPublish
+              </span>
+              <span className="hidden text-slate-300 sm:inline">/</span>
+              <span className="truncate font-semibold text-slate-800">
+                {VIEW_LABELS[currentView]}
+              </span>
             </div>
+            {dataLoaded ? (
+              <div
+                role="status"
+                className="inline-flex items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                数据已就绪
+              </div>
+            ) : (
+              <div
+                role="status"
+                className="inline-flex items-center gap-1.5 rounded-full border border-amber-100 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700"
+              >
+                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                正在加载数据
+              </div>
+            )}
           </div>
         </header>
-        {/* Scrollable Main Viewport */}
-        <main className="flex-1 overflow-y-auto p-3 sm:p-6 min-h-0 relative select-none">
+
+        <main
+          data-app-view={currentView}
+          className="app-main relative min-h-0 flex-1 overflow-y-auto p-3 select-none sm:p-5"
+        >
           <AnimatePresence mode="sync">
-              {currentView === "content-production" && (
-                <motion.div
-                  key="content-production-view"
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -5 }}
-                  transition={{ duration: 0.15 }}
-                  className="h-full"
-                >
-                  <ContentWorkbench
-                    content={content.production}
-                    mode="production"
-                    onOpenArticleLibrary={openArticleLibrary}
-                    onOpenOrders={() => setCurrentView("orders")}
-                  />
-                </motion.div>
-              )}
+            {currentView === "content-production" && (
+              <motion.div
+                key="content-production-view"
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -5 }}
+                transition={{ duration: 0.15 }}
+                className="app-view app-view--content-production h-full"
+              >
+                <ContentWorkbench
+                  content={content.production}
+                  mode="production"
+                  onOpenArticleLibrary={openArticleLibrary}
+                  onOpenOrders={() => setCurrentView("orders")}
+                />
+              </motion.div>
+            )}
 
-              {/* View 2: Full Resources Management View */}
-              {currentView === "resources" && (
-                <motion.div
-                  key="resources-view"
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -5 }}
-                  transition={{ duration: 0.15 }}
-                  className="max-w-4xl mx-auto h-full"
-                >
-                  <ResourceLibraryPage
-                    snapshot={mediaSnapshot}
-                    feature={mediaFeature}
-                  />
-                </motion.div>
-              )}
+            {currentView === "resources" && (
+              <motion.div
+                key="resources-view"
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -5 }}
+                transition={{ duration: 0.15 }}
+                className="app-view app-view--resources mx-auto h-full w-full max-w-5xl"
+              >
+                <ResourceLibraryPage
+                  snapshot={mediaSnapshot}
+                  feature={mediaFeature}
+                />
+              </motion.div>
+            )}
 
-              {currentView === "article-library" && (
-                <motion.div
-                  key="article-library-view"
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -5 }}
-                  transition={{ duration: 0.15 }}
-                  className="h-full"
-                >
-                  <ContentWorkbench
-                    content={content.library}
-                    mode="library"
-                    favoriteMediaPage={{
-                      items: mediaSnapshot.pool.items,
-                      total: mediaSnapshot.pool.total,
-                      page: mediaSnapshot.pool.page,
-                      totalPages: mediaSnapshot.pool.totalPages,
-                      hasPrev: mediaSnapshot.pool.hasPrev,
-                      hasNext: mediaSnapshot.pool.hasNext,
-                      loading: mediaSnapshot.pool.query.loading,
-                      errorMessage:
-                        mediaSnapshot.pool.query.error?.userMessage,
-                    }}
-                    onFavoriteMediaPageChange={(page) => {
-                      void mediaFeature.loadPoolPage(page, "manual");
-                    }}
-                    articleIntent={articleLibraryIntent}
-                    onArticleIntentConsumed={consumeArticleLibraryIntent}
-                    onOpenArticleLibrary={openArticleLibrary}
-                    onOpenOrders={() => setCurrentView("orders")}
-                    onOpenAttention={openAttention}
-                  />
-                </motion.div>
-              )}
+            {currentView === "article-library" && (
+              <motion.div
+                key="article-library-view"
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -5 }}
+                transition={{ duration: 0.15 }}
+                className="app-view app-view--article-library h-full"
+              >
+                <ContentWorkbench
+                  content={content.library}
+                  mode="library"
+                  favoriteMediaPage={{
+                    items: mediaSnapshot.pool.items,
+                    total: mediaSnapshot.pool.total,
+                    page: mediaSnapshot.pool.page,
+                    totalPages: mediaSnapshot.pool.totalPages,
+                    hasPrev: mediaSnapshot.pool.hasPrev,
+                    hasNext: mediaSnapshot.pool.hasNext,
+                    loading: mediaSnapshot.pool.query.loading,
+                    errorMessage:
+                      mediaSnapshot.pool.query.error?.userMessage,
+                  }}
+                  onFavoriteMediaPageChange={(page) => {
+                    void mediaFeature.loadPoolPage(page, "manual");
+                  }}
+                  articleIntent={articleLibraryIntent}
+                  onArticleIntentConsumed={consumeArticleLibraryIntent}
+                  onOpenArticleLibrary={openArticleLibrary}
+                  onOpenOrders={() => setCurrentView("orders")}
+                  onOpenAttention={openAttention}
+                />
+              </motion.div>
+            )}
 
-              {currentView === "submission-center" && (
-                <motion.div
-                  key="submission-center-view"
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -5 }}
-                  transition={{ duration: 0.15 }}
-                  className="h-full"
-                >
-                  <PlatformWorkbench
-                    content={content}
-                    submissionCenter={submissionCenter}
-                    initialSection={submissionCenterSection}
-                    onOpenArticleLibrary={openArticleLibrary}
-                    onOpenOrders={() => setCurrentView("orders")}
-                  />
-                </motion.div>
-              )}
+            {currentView === "submission-center" && (
+              <motion.div
+                key="submission-center-view"
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -5 }}
+                transition={{ duration: 0.15 }}
+                className="app-view app-view--submission-center h-full"
+              >
+                <PlatformWorkbench
+                  content={content}
+                  submissionCenter={submissionCenter}
+                  initialSection={submissionCenterSection}
+                  onOpenArticleLibrary={openArticleLibrary}
+                  onOpenOrders={() => setCurrentView("orders")}
+                />
+              </motion.div>
+            )}
 
-              {/* View 3: Orders Record list view */}
-              {currentView === "orders" && (
-                <motion.div
-                  key="orders-view"
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -5 }}
-                  transition={{ duration: 0.15 }}
-                    className="max-w-5xl mx-auto h-full"
-                >
-                  <OrdersPage snapshot={mediaSnapshot} feature={mediaFeature} />
-                </motion.div>
-              )}
+            {currentView === "orders" && (
+              <motion.div
+                key="orders-view"
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -5 }}
+                transition={{ duration: 0.15 }}
+                className="app-view app-view--orders mx-auto h-full w-full max-w-6xl"
+              >
+                <OrdersPage snapshot={mediaSnapshot} feature={mediaFeature} />
+              </motion.div>
+            )}
 
-              {/* View 4: System settings configure view */}
-              {currentView === "settings" && (
-                <motion.div
-                  key="settings-view"
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -5 }}
-                  transition={{ duration: 0.15 }}
-                  className="max-w-6xl mx-auto h-full w-full"
-                >
-                  <SettingsView />
-                </motion.div>
-              )}
+            {currentView === "settings" && (
+              <motion.div
+                key="settings-view"
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -5 }}
+                transition={{ duration: 0.15 }}
+                className="app-view app-view--settings mx-auto h-full w-full max-w-6xl"
+              >
+                <SettingsView />
+              </motion.div>
+            )}
           </AnimatePresence>
         </main>
       </div>
