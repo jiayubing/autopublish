@@ -70,8 +70,8 @@ function regularResultIssueText(result: RegularQueueAdmissionResult): string {
   if (notProcessedCount) parts.push(`未处理 ${notProcessedCount} 项`);
   return `${parts.join("，")}。${
     uncertainCount
-      ? "不确定结果不会自动重试；请先核验投稿中心中的当前事实。"
-      : "仅明确失败的文章保留为可重新检查项。"
+      ? "不确定结果不会自动重试；请先核验投稿中心中的当前事实。明确失败和未处理文章仍可重新检查。"
+      : "明确失败和未处理文章保留为可重新检查项。"
   }`;
 }
 
@@ -143,7 +143,9 @@ export default function BatchRegularSubmissionDialog({
     if (hasRegularIssues(result)) {
       const retryableKeys = new Set(
         result.items
-          .filter((item) => item.status === "failed")
+          .filter(
+            (item) => item.status === "failed" || item.status === "not_processed",
+          )
           .map((item) => articleRefKey(item.articleRef)),
       );
       setSelectedTaskIds(
