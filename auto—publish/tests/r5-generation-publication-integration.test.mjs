@@ -4,10 +4,6 @@ import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
 import test from "node:test";
-import {
-  admitBatchRegularSubmission,
-  previewBatchRegularSubmission,
-} from "../media-workbench/src/features/submission/batch-regular-submission-coordinator.js";
 
 const require = createRequire(import.meta.url);
 const domain = require("../src/domain");
@@ -23,6 +19,7 @@ const { createArticleMutationCoordinator } = require("../src/content/article-mut
 const { createContentGenerationBatchService } = require("../desktop/services/content-generation-batch-service");
 const { createArticleManagementSnapshot } = require("../desktop/services/article-management-snapshot");
 const { createRegularQueueApplication } = require("../desktop/services/regular-queue-application");
+const { createCrossClientRegularQueueApplication } = require("../desktop/services/cross-client-regular-queue-application");
 const { createRegularPlatformOutcomeService } = require("../desktop/services/regular-platform-outcome-service");
 const { createRegularQueueGroupComposition } = require("../desktop/composition/regular-queue-group-composition");
 const { createOperationalStore } = require("../src/infrastructure/operational-store/operational-store");
@@ -108,6 +105,9 @@ test("R5 generated articles cross ordinary submission and partial admission surv
         platforms: [{ id: "hepan", displayName: "Synthetic platform", publicationTargetKind: "platform", imagePublishing: false }],
         onDataInvalidated: invalidate,
       });
+      const crossClientApplication = createCrossClientRegularQueueApplication({
+        regularQueueApplication: application,
+      });
       const outcomeService = createRegularPlatformOutcomeService({
         regularOutcomeTransitions: ports.regularOutcomeTransitions,
         clock: () => new Date(NOW),
@@ -154,7 +154,7 @@ test("R5 generated articles cross ordinary submission and partial admission surv
         publishedArchiveQueries: ports.publishedArchiveQueries,
       });
       return {
-        store, contentStore, application, queue, generation, snapshot,
+        store, contentStore, application, crossClientApplication, queue, generation, snapshot,
         async finishGeneration() { await run; await turn(); },
         async close() { try { await generation.dispose(); } finally { store.close(); } },
       };
@@ -216,19 +216,31 @@ test("R5 generated articles cross ordinary submission and partial admission surv
   assert.equal(publishedArchive.publicationEvidence.firstPublishedAtSource, "provider_event_time");
 
   // Keep the next admitted article queued by explicit operator intent, not by
-  // disabling the production auto-start policy. The final client fails before admission.
+  // disabling the production auto-start policy. The final client fails its
+  // last precheck, so that failure is definite and safe to retry after reopen.
   runtime.queue.pauseGroup({ queueGroupId: groupId });
-  const partial = await admitBatchRegularSubmission({ ...target, articleRefs: articleRefs.slice(1) }, {
-    async admitRegularQueueItems(input) {
-      if (input.articleRefs[0].clientId === CLIENTS[2]) {
-        throw Object.assign(new Error("Synthetic intake unavailable"), { code: "SYNTHETIC_INTAKE_UNAVAILABLE" });
-      }
-      return runtime.application.admitRegularQueueItems(input);
+  const partialApplication = createCrossClientRegularQueueApplication({
+    regularQueueApplication: {
+      previewRegularQueueAdmission(input) {
+        if (input.articleRefs[0].clientId === CLIENTS[2]) {
+          throw Object.assign(new Error("Synthetic intake unavailable"), {
+            code: "SYNTHETIC_INTAKE_UNAVAILABLE",
+          });
+        }
+        return runtime.application.previewRegularQueueAdmission(input);
+      },
+      admitRegularQueueItems(input) {
+        return runtime.application.admitRegularQueueItems(input);
+      },
     },
   });
+  const partial = partialApplication.admitRegularQueueItems({
+    ...target,
+    articleRefs: articleRefs.slice(1),
+  });
   assert.equal(partial.admittedCount, 1);
-  assert.deepEqual(partial.succeededClientIds, [CLIENTS[1]]);
-  assert.deepEqual(partial.failedClientIds, [CLIENTS[2]]);
+  assert.deepEqual(partial.items.map((item) => item.status), ["queued", "failed"]);
+  assert.equal(partial.items[1].reasonCode, "SYNTHETIC_INTAKE_UNAVAILABLE");
   assert.equal(runtime.queue.kickGroup({ queueGroupId: groupId }).started, false);
   assert.equal(remoteCalls.length, 1);
   const queuedBefore = runtime.store.listSubmissionQueueItems();
@@ -244,18 +256,34 @@ test("R5 generated articles cross ordinary submission and partial admission surv
   assert.equal(remoteCalls.length, 1);
   assert.equal(runtime.generation.getBatch(started.id).status, "completed");
   assert.deepEqual(runtime.store.listSubmissionQueueItems(), queuedBefore);
-  const again = await previewBatchRegularSubmission({ ...target, articleRefs }, {
-    previewRegularQueueAdmission: (input) => runtime.application.previewRegularQueueAdmission(input),
+  const again = runtime.crossClientApplication.previewRegularQueueAdmission({
+    ...target,
+    articleRefs,
   });
-  assert.deepEqual(again.queueableArticleRefs, [articleRefs[2]]);
-  assert.deepEqual(again.idempotentArticleRefs, [articleRefs[1]]);
+  const againQueueableArticleRefs = again.items
+    .filter((item) => item.status === "queueable")
+    .map((item) => item.articleRef);
+  const againIdempotentArticleRefs = again.items
+    .filter((item) => item.status === "idempotent")
+    .map((item) => item.articleRef);
+  assert.deepEqual(againQueueableArticleRefs, [articleRefs[2]]);
+  assert.deepEqual(againIdempotentArticleRefs, [articleRefs[1]]);
   assert.equal(again.conflictCount, 1);
   const resumedInputs = [];
-  const resumed = await admitBatchRegularSubmission({ ...target, articleRefs: again.queueableArticleRefs }, {
-    admitRegularQueueItems(input) {
-      resumedInputs.push(input.articleRefs);
-      return runtime.application.admitRegularQueueItems(input);
+  const resumedApplication = createCrossClientRegularQueueApplication({
+    regularQueueApplication: {
+      previewRegularQueueAdmission(input) {
+        return runtime.application.previewRegularQueueAdmission(input);
+      },
+      admitRegularQueueItems(input) {
+        resumedInputs.push(input.articleRefs);
+        return runtime.application.admitRegularQueueItems(input);
+      },
     },
+  });
+  const resumed = resumedApplication.admitRegularQueueItems({
+    ...target,
+    articleRefs: againQueueableArticleRefs,
   });
   assert.equal(resumed.admittedCount, 1);
   assert.deepEqual(resumedInputs, [[articleRefs[2]]]);

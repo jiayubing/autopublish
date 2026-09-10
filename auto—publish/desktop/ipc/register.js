@@ -135,6 +135,12 @@ function registerIpc(deps) {
     }
   });
   const guarded = Object.assign({}, values, { ipcMain: guardedIpcMain });
+  if (guarded.regularQueueApplication) {
+    guarded.regularQueueApplication =
+      require("../services/cross-client-regular-queue-application").createCrossClientRegularQueueApplication({
+        regularQueueApplication: guarded.regularQueueApplication,
+      });
+  }
   const modules = {};
   async function disposeModules() {
     const moduleList = Object.keys(modules).map(function(name) { return modules[name]; }).reverse();

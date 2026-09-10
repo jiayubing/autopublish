@@ -96,7 +96,9 @@ export type SubmissionIntakeSessionOptions = SubmissionIntakeCommands & {
   availableArticleRefs: ReadonlyArray<ArticleSelection>;
   commandStates: Record<string, { busy: boolean }>;
   confirm: (options: ConfirmationOptions) => Promise<boolean>;
-  onCommitted: () => void;
+  onCommitted: (
+    result: RegularQueueAdmissionResult | PaidMediaAdmissionResult,
+  ) => void;
 };
 
 type RegularTargetPreference = {
@@ -171,6 +173,46 @@ function keyOf(articleRefs: ReadonlyArray<ArticleSelection>): string {
 
 function errorMessage(value: unknown, fallback: string): string {
   return value instanceof Error ? value.message : fallback;
+}
+
+function regularResultFeedback(
+  result: RegularQueueAdmissionResult,
+): SubmissionIntakeFeedback {
+  const statuses = result.items || [];
+  const failedCount = statuses.filter((item) => item.status === "failed").length;
+  const uncertainCount = statuses.filter(
+    (item) => item.status === "uncertain",
+  ).length;
+  const notProcessedCount = statuses.filter(
+    (item) => item.status === "not_processed",
+  ).length;
+  const hasIssues = Boolean(
+    result.missingCount ||
+      result.conflictCount ||
+      failedCount ||
+      uncertainCount ||
+      notProcessedCount,
+  );
+  const parts = [
+    `新增 ${result.admittedCount || 0} 项`,
+    `已存在 ${result.idempotentCount || 0} 项`,
+  ];
+  if (result.missingCount) parts.push(`缺失 ${result.missingCount} 项`);
+  if (result.conflictCount) parts.push(`冲突 ${result.conflictCount} 项`);
+  if (failedCount) parts.push(`明确失败 ${failedCount} 项`);
+  if (uncertainCount) parts.push(`结果不确定 ${uncertainCount} 项`);
+  if (notProcessedCount) parts.push(`未处理 ${notProcessedCount} 项`);
+  const lead = hasIssues
+    ? "普通平台投稿处理完成："
+    : `已发起 ${result.admittedCount || 0} 项普通平台投稿。处理结果：`;
+  return {
+    kind: hasIssues ? "error" : "status",
+    text: `${lead}${parts.join("，")}。${
+      uncertainCount
+        ? "结果不确定的文章不会自动重试，请先核验当前投稿事实。"
+        : "队列已请求自动开始执行。"
+    }`,
+  };
 }
 
 export function useSubmissionIntakeSession({
@@ -294,10 +336,7 @@ export function useSubmissionIntakeSession({
     (platformId: string) => {
       if (mutationPending()) return;
       invalidateAsync();
-      saveRegularTargetPreference({
-        platformId,
-        accountProfileId: "",
-      });
+      saveRegularTargetPreference({ platformId, accountProfileId: "" });
       setState((current) => ({
         ...current,
         platformId,
@@ -362,21 +401,14 @@ export function useSubmissionIntakeSession({
       !state.platformId ||
       !state.accountProfileId ||
       pendingRef.current !== null ||
-      commandBusy(
-        "previewRegularQueueAdmission",
-        "admitRegularQueueItems",
-      )
+      commandBusy("previewRegularQueueAdmission", "admitRegularQueueItems")
     )
       return;
     const requestedScope = scopeKey;
     const epoch = requestEpochRef.current + 1;
     requestEpochRef.current = epoch;
     pendingRef.current = "regular_preview";
-    setState((current) => ({
-      ...current,
-      error: "",
-      pending: "regular_preview",
-    }));
+    setState((current) => ({ ...current, error: "", pending: "regular_preview" }));
     const input: RegularQueueAdmissionInput = {
       articleRefs: state.articleRefs,
       platformId: state.platformId,
@@ -395,7 +427,7 @@ export function useSubmissionIntakeSession({
         throw new Error("没有符合普通平台队列规则的文章");
       const accepted = await confirm({
         title: "确认发起普通平台投稿",
-        message: `将新增 ${preview.queueableCount} 项普通平台投稿，已存在跳过 ${preview.idempotentCount} 项，缺失 ${preview.missingCount} 项，冲突 ${preview.conflictCount} 项。确认后队列会自动开始；你手动暂停的已有队列不会被恢复。`,
+        message: `将新增 ${preview.queueableCount} 项普通平台投稿，已存在跳过 ${preview.idempotentCount} 项，缺失 ${preview.missingCount} 项，冲突 ${preview.conflictCount} 项。确认后会再次核验当前投稿事实，并按客户分别入队；你手动暂停的已有队列不会被恢复。`,
         confirmLabel: "确认发起投稿",
       });
       if (!isCurrent(requestedScope, epoch)) return;
@@ -414,13 +446,8 @@ export function useSubmissionIntakeSession({
         return;
       }
       pendingRef.current = null;
-      setState(
-        initialState({
-          kind: "status",
-          text: `已发起 ${result.admittedCount || 0} 项普通平台投稿，并已请求自动开始执行。`,
-        }),
-      );
-      onCommitted();
+      setState(initialState(regularResultFeedback(result)));
+      onCommitted(result);
     } catch (value) {
       if (!isCurrent(requestedScope, epoch)) return;
       pendingRef.current = null;
@@ -445,11 +472,7 @@ export function useSubmissionIntakeSession({
     const epoch = requestEpochRef.current + 1;
     requestEpochRef.current = epoch;
     pendingRef.current = "paid_preview";
-    setState((current) => ({
-      ...current,
-      error: "",
-      pending: "paid_preview",
-    }));
+    setState((current) => ({ ...current, error: "", pending: "paid_preview" }));
     try {
       const result = await previewPaidMediaPreflight({
         articleRefs: state.articleRefs,
@@ -462,11 +485,7 @@ export function useSubmissionIntakeSession({
         return;
       }
       pendingRef.current = null;
-      setState((current) => ({
-        ...current,
-        paidPreflight: result,
-        pending: null,
-      }));
+      setState((current) => ({ ...current, paidPreflight: result, pending: null }));
     } catch (value) {
       if (!isCurrent(requestedScope, epoch)) return;
       pendingRef.current = null;
@@ -491,11 +510,7 @@ export function useSubmissionIntakeSession({
     requestEpochRef.current = epoch;
     pendingRef.current = "paid_confirm";
     const articleCount = state.articleRefs.length;
-    setState((current) => ({
-      ...current,
-      error: "",
-      pending: "paid_confirm",
-    }));
+    setState((current) => ({ ...current, error: "", pending: "paid_confirm" }));
     try {
       const result = await confirmPaidMediaBatch({ confirmationToken });
       if (!isCurrent(requestedScope, epoch)) return;
@@ -511,7 +526,7 @@ export function useSubmissionIntakeSession({
           text: `已确认 ${result.articleCount || articleCount} 篇文章进入付费投稿批次。`,
         }),
       );
-      onCommitted();
+      onCommitted(result);
     } catch (value) {
       if (!isCurrent(requestedScope, epoch)) return;
       pendingRef.current = null;
@@ -530,10 +545,7 @@ export function useSubmissionIntakeSession({
       regularBusy:
         state.pending === "regular_preview" ||
         state.pending === "regular_admit" ||
-        commandBusy(
-          "previewRegularQueueAdmission",
-          "admitRegularQueueItems",
-        ),
+        commandBusy("previewRegularQueueAdmission", "admitRegularQueueItems"),
       paidPreviewBusy:
         state.pending === "paid_preview" ||
         commandBusy("previewPaidMediaPreflight"),

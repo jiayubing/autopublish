@@ -70,7 +70,7 @@ const regularAdmissionPreview = exactObject({
   conflictCount: count,
 });
 const regularAdmissionResult = exactObject({
-  batchId: id,
+  batchId: optionalField(id),
   target: regularQueueTarget,
   articleRefs: arrayField(articleRef, { min: 1, max: 1000 }),
   items: arrayField(regularQueueItem, { max: 1000 }),
@@ -294,7 +294,7 @@ function projectRegularAdmission(value, kind) {
     output.totalCount = input.totalCount;
     output.queueableCount = input.queueableCount;
   } else {
-    output.batchId = input.batchId;
+    include(output, input, "batchId");
     output.admittedCount = input.admittedCount;
   }
   return output;
