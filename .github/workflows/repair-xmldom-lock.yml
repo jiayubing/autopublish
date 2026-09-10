@@ -1,0 +1,37 @@
+name: Repair xmldom lock
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/repair-xmldom-lock.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: auto—publish/package-lock.json
+      - name: Refresh patched xmldom transitive dependency
+        run: npm update @xmldom/xmldom --package-lock-only --ignore-scripts
+        working-directory: auto—publish
+      - name: Verify production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+        working-directory: auto—publish
+      - name: Commit repaired lockfile and remove one-off workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add auto—publish/package-lock.json
+          git rm .github/workflows/repair-xmldom-lock.yml
+          git commit -m "fix: refresh patched xmldom dependency"
+          git push origin HEAD:master
