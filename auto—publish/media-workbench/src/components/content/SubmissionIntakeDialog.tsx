@@ -7,6 +7,7 @@ import type { FavoriteMediaPage } from "./GeneratedArticlesView.types";
 import PaidMediaPreflightDialog from "./PaidMediaPreflightDialog";
 import type {
   SubmissionIntakeIntents,
+  SubmissionIntakeMode,
   SubmissionIntakeSnapshot,
 } from "./use-submission-intake-session";
 
@@ -16,6 +17,7 @@ export type SubmissionIntakeDialogProps = {
   submissionPlatforms: ContentSubmissionPlatform[];
   favoriteMediaPage: FavoriteMediaPage;
   onFavoriteMediaPageChange?: (page: number) => void;
+  availableModes?: SubmissionIntakeMode[];
 };
 
 export default function SubmissionIntakeDialog({
@@ -24,16 +26,25 @@ export default function SubmissionIntakeDialog({
   submissionPlatforms,
   favoriteMediaPage,
   onFavoriteMediaPageChange,
+  availableModes = ["regular", "paid"],
 }: SubmissionIntakeDialogProps) {
   const [favoriteSelectorOpen, setFavoriteSelectorOpen] = useState(false);
   const [selectedFavoriteMedia, setSelectedFavoriteMedia] =
     useState<MediaResource | null>(null);
+  const regularAvailable = availableModes.includes("regular");
+  const paidAvailable = availableModes.includes("paid");
 
   useEffect(() => {
     if (snapshot.open) return;
     setFavoriteSelectorOpen(false);
     setSelectedFavoriteMedia(null);
   }, [snapshot.open]);
+
+  useEffect(() => {
+    if (!snapshot.open || snapshot.mutationBusy) return;
+    if (!availableModes.includes(snapshot.mode) && availableModes[0])
+      intents.setMode(availableModes[0]);
+  }, [availableModes, intents, snapshot.mode, snapshot.mutationBusy, snapshot.open]);
 
   useEffect(() => {
     if (
@@ -100,29 +111,35 @@ export default function SubmissionIntakeDialog({
               ×
             </button>
           </div>
-          <div className="mt-4 flex gap-2" role="tablist" aria-label="投稿类型">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={snapshot.mode === "regular"}
-              onClick={() => intents.setMode("regular")}
-              disabled={snapshot.mutationBusy}
-              className={`rounded px-3 py-2 text-xs font-semibold ${snapshot.mode === "regular" ? "bg-slate-900 text-white" : "border border-slate-300 text-slate-600"}`}
-            >
-              普通平台
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={snapshot.mode === "paid"}
-              onClick={() => intents.setMode("paid")}
-              disabled={snapshot.mutationBusy}
-              className={`rounded px-3 py-2 text-xs font-semibold ${snapshot.mode === "paid" ? "bg-slate-900 text-white" : "border border-slate-300 text-slate-600"}`}
-            >
-              付费媒体
-            </button>
-          </div>
-          {snapshot.mode === "regular" ? (
+          {availableModes.length > 1 && (
+            <div className="mt-4 flex gap-2" role="tablist" aria-label="投稿类型">
+              {regularAvailable && (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={snapshot.mode === "regular"}
+                  onClick={() => intents.setMode("regular")}
+                  disabled={snapshot.mutationBusy}
+                  className={`rounded px-3 py-2 text-xs font-semibold ${snapshot.mode === "regular" ? "bg-slate-900 text-white" : "border border-slate-300 text-slate-600"}`}
+                >
+                  普通平台
+                </button>
+              )}
+              {paidAvailable && (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={snapshot.mode === "paid"}
+                  onClick={() => intents.setMode("paid")}
+                  disabled={snapshot.mutationBusy}
+                  className={`rounded px-3 py-2 text-xs font-semibold ${snapshot.mode === "paid" ? "bg-slate-900 text-white" : "border border-slate-300 text-slate-600"}`}
+                >
+                  付费媒体
+                </button>
+              )}
+            </div>
+          )}
+          {snapshot.mode === "regular" && regularAvailable ? (
             <div className="mt-4 grid gap-3">
               <label className="grid gap-1 text-xs text-slate-600">
                 普通平台投稿目标
@@ -166,7 +183,7 @@ export default function SubmissionIntakeDialog({
                 {snapshot.regularBusy ? "检查中…" : "检查投稿"}
               </button>
             </div>
-          ) : (
+          ) : paidAvailable ? (
             <div className="mt-4 grid gap-3">
               <div className="rounded border border-slate-200 bg-slate-50 p-3">
                 {selectedFavoriteMedia && snapshot.mediaResourceId ? (
@@ -221,7 +238,7 @@ export default function SubmissionIntakeDialog({
                 </button>
               )}
             </div>
-          )}
+          ) : null}
           {snapshot.error && (
             <p role="alert" className="mt-3 rounded border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">
               {snapshot.error}
@@ -229,7 +246,7 @@ export default function SubmissionIntakeDialog({
           )}
         </div>
       </div>
-      {snapshot.paidPreflight && (
+      {paidAvailable && snapshot.paidPreflight && (
         <PaidMediaPreflightDialog
           model={snapshot.paidPreflight}
           busy={snapshot.paidConfirmBusy}
@@ -238,7 +255,7 @@ export default function SubmissionIntakeDialog({
           onConfirm={intents.confirmPaid}
         />
       )}
-      {favoriteSelectorOpen && (
+      {paidAvailable && favoriteSelectorOpen && (
         <FavoriteMediaSelectorDialog
           page={favoriteMediaPage}
           onPageChange={(page) => onFavoriteMediaPageChange?.(page)}
@@ -249,4 +266,3 @@ export default function SubmissionIntakeDialog({
     </>
   );
 }
-
