@@ -202,9 +202,12 @@ function regularResultFeedback(
   if (failedCount) parts.push(`明确失败 ${failedCount} 项`);
   if (uncertainCount) parts.push(`结果不确定 ${uncertainCount} 项`);
   if (notProcessedCount) parts.push(`未处理 ${notProcessedCount} 项`);
+  const lead = hasIssues
+    ? "普通平台投稿处理完成："
+    : `已发起 ${result.admittedCount || 0} 项普通平台投稿。处理结果：`;
   return {
     kind: hasIssues ? "error" : "status",
-    text: `普通平台投稿处理完成：${parts.join("，")}。${
+    text: `${lead}${parts.join("，")}。${
       uncertainCount
         ? "结果不确定的文章不会自动重试，请先核验当前投稿事实。"
         : "队列已请求自动开始执行。"
