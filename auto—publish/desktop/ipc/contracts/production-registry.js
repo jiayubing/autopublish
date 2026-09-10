@@ -16,6 +16,9 @@ const {
   articleRemovalEventContracts,
 } = require("./article-removal-contracts");
 const { articleManagementContracts } = require("./article-management-contracts");
+const {
+  regularSubmissionPermissionContracts,
+} = require("./regular-submission-permission-contracts");
 const { articleAttentionContracts } = require("./article-attention-contracts");
 const { generationContracts, generationEventContracts } = require("./generation-contracts");
 const { clientGenerationContracts, clientGenerationEventContracts } = require("./client-generation-contracts");
@@ -32,6 +35,7 @@ const contracts = [
   ...articleEditorContracts,
   ...articleRemovalContracts,
   ...articleManagementContracts,
+  ...regularSubmissionPermissionContracts,
   ...articleAttentionContracts,
   ...articleRemovalEventContracts,
   ...generationContracts,
