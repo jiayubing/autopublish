@@ -168,6 +168,11 @@ function createGenerationBatchStore(options) {
       });
       if (changed) {
         if (batch.status !== "paused_configuration") batch.status = "interrupted";
+      } else if (batch.status === "paused" && batch.tasks.length > 0 && batch.tasks.every(function (task) { return task.status === "succeeded" || task.status === "cancelled"; })) {
+        batch.status = "completed";
+        changed = true;
+      }
+      if (changed) {
         recovered.push(writeBatch(batch));
       }
     });

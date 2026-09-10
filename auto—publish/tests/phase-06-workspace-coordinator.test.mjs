@@ -10,6 +10,90 @@ import {
 } from "../media-workbench/src/features/workspace/workspace-coordinator.js";
 
 const require = createRequire(import.meta.url);
+
+const settleRefreshes = () => new Promise(setImmediate);
+function deferredRefresh() {
+  let resolve, reject;
+  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
+
+test("coalesces an in-flight invalidation burst per scope and retains its newest revision", async () => {
+  let consume;
+  const calls = [], pending = [];
+  const coordinator = createWorkspaceCoordinator({ subscribe(listener) { consume = listener; return () => {}; } });
+  coordinator.register("platformQueue", (input) => {
+    if (!input.workspaceRuntimeId) return;
+    calls.push(input);
+    const work = deferredRefresh(); pending.push(work); return work.promise;
+  });
+  coordinator.start();
+  for (let revision = 1; revision <= 50; revision++) consume(event({ revision, scopes: ["platformQueue"] }));
+  assert.equal(calls.length, 1);
+  assert.equal(coordinator.getSnapshot().lastRevision, 50);
+  pending[0].resolve(); await settleRefreshes();
+  assert.deepEqual(calls.map((item) => item.revision), [1, 50]);
+  consume(event({ revision: 51, scopes: ["platformQueue"] }));
+  pending[1].resolve(); await settleRefreshes();
+  assert.deepEqual(calls.map((item) => item.revision), [1, 50, 51]);
+  pending[2].resolve(); await settleRefreshes();
+  coordinator.dispose();
+});
+
+test("runtime switch immediately refreshes and old completion cannot replay pending work", async () => {
+  let consume;
+  const calls = [], pending = [];
+  const coordinator = createWorkspaceCoordinator({ subscribe(listener) { consume = listener; return () => {}; } });
+  coordinator.register("articleManagement", (input) => {
+    if (!input.workspaceRuntimeId) return;
+    calls.push(input); const work = deferredRefresh(); pending.push(work); return work.promise;
+  });
+  coordinator.start();
+  consume(event({ scopes: ["articleManagement"] }));
+  consume(event({ revision: 2, scopes: ["articleManagement"] }));
+  consume(event({ workspaceRuntimeId: "runtime-b", scopes: ["articleManagement"] }));
+  assert.deepEqual(calls.map((item) => item.workspaceRuntimeId), ["runtime-a", "runtime-b"]);
+  pending[0].resolve(); await settleRefreshes();
+  assert.equal(calls.length, 2);
+  pending[1].resolve(); await settleRefreshes();
+  coordinator.dispose();
+});
+
+test("failed refresh retains pending changes without retrying on its own or losing mixed reasons", async () => {
+  let consume;
+  const calls = [], pending = [], diagnostics = [];
+  const coordinator = createWorkspaceCoordinator({ subscribe(listener) { consume = listener; return () => {}; }, diagnose: (item) => diagnostics.push(item.code) });
+  coordinator.register("articleManagement", (input) => {
+    if (!input.workspaceRuntimeId) return;
+    calls.push(input); const work = deferredRefresh(); pending.push(work); return work.promise;
+  });
+  coordinator.start();
+  consume(event({ scopes: ["articleManagement"] }));
+  consume(event({ revision: 2, scopes: ["articleManagement"], reasonCode: "ARTICLE_SAVED" }));
+  consume(event({ revision: 4, scopes: ["articleManagement"], reasonCode: "ARTICLE_REMOVAL_TRANSACTION_CHANGED" }));
+  pending[0].reject(new Error("synthetic")); await settleRefreshes();
+  assert.equal(calls[1].revision, 4);
+  assert.equal(calls[1].reasonCode, "WORKSPACE_DATA_CHANGED");
+  assert.equal(calls[1].kind, "revision-gap");
+  pending[1].reject(new Error("synthetic")); await settleRefreshes();
+  assert.equal(calls.length, 2);
+  assert.equal(diagnostics.filter((code) => code === "WORKSPACE_SCOPE_REFRESH_FAILED").length, 2);
+  coordinator.dispose();
+});
+
+for (const ending of ["stop", "unregister", "dispose"]) test(`${ending} discards queued refreshes`, async () => {
+  let consume, count = 0;
+  const pending = deferredRefresh();
+  const coordinator = createWorkspaceCoordinator({ subscribe(listener) { consume = listener; return () => {}; } });
+  const unregister = coordinator.register("submissionCenter", (input) => { if (input.workspaceRuntimeId) { count++; return pending.promise; } });
+  coordinator.start();
+  consume(event({ scopes: ["submissionCenter"] }));
+  consume(event({ revision: 2, scopes: ["submissionCenter"] }));
+  if (ending === "unregister") unregister(); else coordinator[ending]();
+  pending.resolve(); await settleRefreshes();
+  assert.equal(count, 1);
+  coordinator.dispose();
+});
 const {
   productionIpcRegistry,
 } = require("../desktop/ipc/contracts/production-registry");

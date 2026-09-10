@@ -226,6 +226,10 @@ function createGenerationBatchRunner(options) {
 
   function finishStatus(batchId, interrupted) {
     const batch = deps.batchStore.getBatch(batchId);
+    if (batch.tasks.length > 0 && batch.tasks.every(function(task) { return task.status === "succeeded" || task.status === "cancelled"; })) {
+      if (batch.status !== "completed") deps.batchStore.updateBatchStatus(batchId, "completed");
+      return deps.batchStore.getBatch(batchId);
+    }
     if (interrupted) {
       if (batch.status !== "paused_configuration") deps.batchStore.updateBatchStatus(batchId, "interrupted");
       return deps.batchStore.getBatch(batchId);

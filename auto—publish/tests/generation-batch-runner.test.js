@@ -95,6 +95,32 @@ function taskError(code, status) {
 }
 
 describe("generation batch runner", function() {
+  for (const cancelled of [false, true]) {
+    it("completes when pause drains the last active task, cancelled=" + cancelled, async function() {
+      const batch = makeBatch(cancelled ? [{}, { status: "cancelled" }] : [{}, {}]);
+      const store = fakeStore(batch);
+      const releases = [];
+      const runner = createGenerationBatchRunner({
+        batchStore: store,
+        concurrency: 2,
+        executeTask: function(task) {
+          return new Promise(function(resolve) { releases.push(function() { resolve({ id: "article-" + task.id }); }); });
+        }
+      });
+      const events = [];
+      runner.subscribe(function(event) { events.push(event); });
+      const work = runner.run(batch.id);
+      while (releases.length < (cancelled ? 1 : 2)) await new Promise(setImmediate);
+      const paused = runner.pause();
+      releases.forEach(function(release) { release(); });
+      assert.equal((await work).status, "completed");
+      assert.equal((await paused).status, "completed");
+      assert.equal(store.getBatch().status, "completed");
+      assert.equal(runner.getState().status, "completed");
+      assert.equal(events.at(-1).status, "completed");
+      await runner.dispose();
+    });
+  }
   it("passes the complete task to article lookup before generating a pending task", async function() {
     const batch = makeBatch([{}]);
     const store = fakeStore(batch);

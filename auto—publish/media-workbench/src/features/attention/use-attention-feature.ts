@@ -42,7 +42,7 @@ export function useAttentionFeature(clientId?: string, source?: ScopedAttentionS
     if ((sourceRef.current?.clientId || undefined) === clientIdRef.current)
       feature.replaceSnapshot(sourceRef.current, event.kind);
     else if (!sourceRef.current)
-      void feature.refresh(event.kind);
+      return feature.refresh(event.kind);
   });
 
   useEffect(() => () => feature.dispose(), [feature]);

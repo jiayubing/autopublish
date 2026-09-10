@@ -33,6 +33,27 @@ describe("generation batch store", function() {
     fs.rmSync(workspaceRoot, { recursive: true, force: true });
   });
 
+  for (const remaining of ["succeeded", "cancelled", "pending", "failed", "interrupted"]) {
+    it("recovers a saved paused batch without losing task outcomes: " + remaining, function() {
+      const store = createGenerationBatchStore({ workspaceRoot });
+      const batch = store.createBatch({ clientSources: [source("c1", "q1")], templates: templates(), aiConfigFingerprint: "fingerprint" });
+      batch.status = "paused";
+      batch.tasks[0].status = "succeeded";
+      batch.tasks[0].articleId = "article-1";
+      batch.tasks[1].status = remaining;
+      if (remaining === "succeeded") batch.tasks[1].articleId = "article-2";
+      const filename = path.join(createWorkspacePaths(workspaceRoot).generationBatches, "batch-" + batch.id + ".json");
+      fs.writeFileSync(filename, JSON.stringify(batch));
+      const reopened = createGenerationBatchStore({ workspaceRoot });
+      const expected = ["succeeded", "cancelled"].includes(remaining) ? "completed" : "paused";
+      assert.equal(reopened.getBatch(batch.id).status, expected);
+      assert.equal(reopened.listBatches()[0].status, expected);
+      assert.equal(JSON.parse(fs.readFileSync(filename, "utf8")).status, expected);
+      assert.deepEqual(reopened.getBatch(batch.id).tasks, batch.tasks);
+      assert.deepEqual(reopened.recoverInterrupted(), []);
+    });
+  }
+
   it("builds one stable task per client and template and preserves source ids", function() {
     const store = createGenerationBatchStore({ workspaceRoot: workspaceRoot, createId: function() { return "batch-1"; } });
     const batch = store.createBatch({

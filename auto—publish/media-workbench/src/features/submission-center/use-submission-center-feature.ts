@@ -28,7 +28,7 @@ export function useSubmissionCenterFeature(clientId?: string) {
     if (!event.workspaceRuntimeId) return;
     workspaceRuntimeIdRef.current = event.workspaceRuntimeId;
     feature.setScope({ workspaceRuntimeId: event.workspaceRuntimeId, clientId: clientIdRef.current || undefined });
-    void feature.refresh(event.kind);
+    return feature.refresh(event.kind);
   });
 
   useEffect(() => () => feature.dispose(), [feature]);

@@ -340,6 +340,36 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
       await bulkSubmit.waitFor();
       await bulkSubmit.click();
       await page.getByRole("dialog", { name: "批量投稿本批次文章" }).waitFor();
+      const dialog = page.getByRole("dialog", { name: "批量投稿本批次文章" });
+      await dialog.getByRole("checkbox").waitFor();
+      assert.equal(await dialog.getByRole("checkbox").isChecked(), true);
+      await dialog.getByRole("button", { name: "关闭批量投稿" }).click();
+      await page.evaluate(() => {
+        const original = window.desktopConsole.content.getArticleManagementSnapshot;
+        window.desktopConsole.content.getArticleManagementSnapshot = async (input) => {
+          const response = await original(input);
+          response.data.workflowItems.forEach((item) => { item.workflow.operations.submit.allowed = false; });
+          return response;
+        };
+      });
+      await bulkSubmit.click();
+      await dialog.getByText("本批次暂无可投稿文章，已入队或已发布的文章可在投稿中心查看。", { exact: true }).waitFor();
+      assert.equal(await dialog.getByRole("checkbox").count(), 0);
+      assert.equal(await dialog.getByRole("button", { name: "下一步：选择投稿目标" }).isDisabled(), true);
+      await dialog.getByRole("button", { name: "关闭批量投稿" }).click();
+      await page.evaluate(() => {
+        const original = window.desktopConsole.content.getArticleManagementSnapshot;
+        window.desktopConsole.content.getArticleManagementSnapshot = () => {
+          window.desktopConsole.content.getArticleManagementSnapshot = original;
+          return Promise.resolve({ ok: false, error: { code: "READ_FAILED", userMessage: "fixture read failure" } });
+        };
+      });
+      await bulkSubmit.click();
+      await dialog.getByRole("alert").filter({ hasText: "无法读取文章投稿状态" }).waitFor();
+      assert.equal(await dialog.getByRole("checkbox").count(), 0);
+      assert.equal(await dialog.getByRole("button", { name: "下一步：选择投稿目标" }).isDisabled(), true);
+      await dialog.getByRole("button", { name: "重试", exact: true }).click();
+      await dialog.getByText("本批次暂无可投稿文章，已入队或已发布的文章可在投稿中心查看。", { exact: true }).waitFor();
       assert.equal(
         await page.evaluate(() => window.__generationBatchNavigation.submissionMutations),
         0,
