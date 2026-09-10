@@ -223,13 +223,13 @@ export default function BatchRegularSubmissionDialog({
           <div
             role="dialog"
             aria-modal="true"
-            aria-label="选择本批次投稿文章"
+            aria-label="批量投稿本批次文章"
             className="flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-white shadow-xl"
           >
             <div className="flex items-start justify-between gap-3 border-b border-slate-200 p-5">
               <div>
                 <h3 className="text-base font-semibold text-slate-800">
-                  选择本批次投稿文章
+                  批量投稿本批次文章
                 </h3>
                 <p className="mt-1 text-xs leading-5 text-slate-500">
                   成功生成的文章默认全选。下一步统一进入现有投稿会话，由后台按客户分别复核并入队。
