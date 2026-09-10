@@ -102,7 +102,7 @@ function createCrossClientRegularQueueApplication(options) {
   function admitRegularQueueItems(input) {
     const refs = refsFrom(input);
     const groups = groupRefs(refs);
-    // Validate the common target/account/config before any mutation.  The same
+    // Validate the common target/account/config before any mutation. The same
     // preview is also the final recheck for the first client.
     const firstPreview = regular.previewRegularQueueAdmission(
       groupInput(input, groups[0].refs),
@@ -187,7 +187,7 @@ function createCrossClientRegularQueueApplication(options) {
       missingCount: countStatus(items, "missing"),
       conflictCount: countStatus(items, "conflict"),
     };
-    if (batchIds.length) result.batchId = batchIds[0];
+    if (batchIds.length === 1) result.batchId = batchIds[0];
     return Object.freeze(result);
   }
 
