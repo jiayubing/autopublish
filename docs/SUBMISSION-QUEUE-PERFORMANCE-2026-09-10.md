@@ -2,6 +2,8 @@
 
 ## 修复进展（2026-09-10）
 
+### Finding 1：队列标题不再读取文章文件
+
 本轮按用户要求修复 Finding 1：队列标题现在从 `submission_items.payload_json.publicationSnapshot.title` 的已有冻结快照读取。SQLite 只投影标题到队列运行快照，应用服务继续产出原有 `articleSummary`。移除了队列查询对 ContentStore 的依赖和全客户文章读取路径，不新增 schema、缓存或 writer。
 
 以下为最终源码的同一测量脚本复测（ms）：
@@ -26,9 +28,21 @@
 - 新增行为回归证明：文章读取不可用时仍显示待处理/已 claim 文章的冻结标题；客户过滤正确；重启后标题仍可读取；对外不包含正文。
 - Primary Review / bounded closure：已检查标题真源、运行与待处理分支、直接队列消费者、客户隔离、持久恢复和正文安全边界；Finding 1 关闭，无本轮新增 blocking finding。没有改变 admission/claim/remote outcome writer 和事务合同。
 
-本轮修改三个生产文件：`regular-queue-application.js`、`regular-queue-group-query.js`、`operational-store-regular-queue-runtime.js`；同步更新定向回归、手动 benchmark、README 和本报告。未 commit/push，未打包或替换正在运行的程序，保留此前未提交改动。
+### Finding 2：同一 scope 的重叠刷新合并
 
-Finding 2（刷新合并）和 Finding 3（候选权限轻量读取）仍归下方原 owner，留待后续任务；本轮未扩大为所有性能项治理。以下原检查内容保留为修复前证据。
+接管时刷新合并代码已经基本写入工作树，本轮按当前源码和测试完成范围复审。`workspace-coordinator` 现在为每个 workspace scope 只保留一个在途刷新；同一 runtime 的后续 invalidation/revision-gap 不再并发启动相同 scope 的读取，而是只保留最新 revision 的一次待补刷。当前刷新结束后再执行该补刷；补刷执行期间如果继续收到通知，仍只保留最新一次。
+
+为让协调器准确知道读取何时结束，当前高频队列相关消费者把实际 Promise 返回给协调器：`platformQueue` 等待平台队列、账号档案和普通队列分组三项读取完成，`submissionCenter`、`articleManagement`、无共享 snapshot 时的 `articleAttention` 返回各自读取 Promise。原有 query identity 的 stale response 防护继续保留。
+
+边界语义保持不变：workspace runtime 切换立即建立新 runtime 的刷新，旧 runtime 的完成回调不能回放其 pending；页面注销、stop、dispose 会丢弃对应 pending；读取失败本身不会自动重试，但失败期间如果确实发生了新的 revision，仍会执行那一次最新补刷。不同 reasonCode 在同一 pending 窗口内合并时使用保守的 `WORKSPACE_DATA_CHANGED`，避免 reason-specific skip 吞掉另一类变更。
+
+合成测量对 50 个连续、重叠的 `platformQueue + submissionCenter` invalidation：修复前平台目录、账号、普通队列分组、投稿中心各触发 50 次；当前实现各触发 2 次（首个在途读取 + 最新 revision 的一次补刷），且投稿中心最终 revision 为 50。该测量只验证 renderer 本地刷新调度，不代表 IPC/磁盘/真实网络耗时。
+
+新增 `phase-06-workspace-coordinator.test.mjs` 回归覆盖：50 次连续通知保留最新 revision、补刷期间继续到来的 revision、刷新失败时不自重试但不丢 pending、runtime switch 使旧完成失效、stop/unregister/dispose 不回放 pending。手动 benchmark 中还直接组合了 platform/submission-center feature 验证请求数从 50 轮收敛到 2 轮。
+
+本项只处理“同一 scope 的在途刷新合并 + 一次最新补刷”，没有新增缓存、revision writer 或跨 scope 共享状态，也没有改变入队、claim、投稿结果写入和不确定结果语义。报告原建议中“两个不同队列消费者复用同 revision 的同一只读结果”不属于这次最小收口，若后续实测仍有必要再单独评估；不把它与本轮同-scope 合并混为一项。
+
+当前 WIP 已通过代码范围复审并进入 PR CI；CI 最终结果以 PR #50 的最新 head 为准。Finding 3（候选权限轻量读取）仍留待独立任务，不在本轮扩大实施范围。
 
 ## 范围与证据
 
@@ -72,7 +86,7 @@ Owner：`desktop/services/regular-queue-group-query.js:41`，`articleFor` 调用
 
 因此开销随相关客户的全部文章数增长，而不是只随本批次剩余文章数增长。这是当前测量中最主要的 CPU、文件调用及临时对象分配来源。同步文件读取发生在主进程调用链上，有造成响应停顿的风险。
 
-建议下一任务首先让队列摘要查询只读取所需文章的轻量摘要，优先复用现有冻结快照或已有摘要 owner；如果需要缓存，必须明确 revision/失效合同。不能建立新的业务事实 writer。
+状态：**已修复**。队列摘要现在直接使用入队冻结快照中的标题，队列读取不再访问文章文件；修复后测量见本文开头。
 
 ### 2. P2 / CROSS_COMPONENT_INTERACTION：跨客户通知与多个全量消费者叠加
 
@@ -82,7 +96,7 @@ Owner：`cross-client-regular-queue-application.js:102`、`regular-queue-applica
 
 每篇远端结果确认后，`regular-queue-group-orchestrator.js:195` 广播 `PUBLICATION_RECONCILED`，同样触发这些消费者。普通平台目录查询当前仅为目录且无实体队列，成本较小，不应把它与实际队列分组全量读取混淆。
 
-建议合并同轮失效刷新、对同 scope 的在途查询做有后续补刷的合并；为两个队列消费者复用同 revision 只读结果。保留最终 revision、workspace 切换、stale input 和错误重试语义，不影响真实远端结果落库。
+状态：**本轮目标已修复**。同一 scope 的在途刷新现在合并为“当前一次 + 最新 revision 的一次补刷”，50 个重叠周期的合成测量从每个消费者 50 次降到 2 次，并保留最终 revision。跨不同 scope/消费者复用同一 revision 只读结果未在本轮实现，保持为有实测需要时再评估的独立优化，避免为了理论去重引入新的缓存/失效合同。
 
 ### 3. P2 / CROSS_COMPONENT_INTERACTION：候选过滤借用了完整文章管理 snapshot
 
@@ -94,10 +108,8 @@ Owner：`BatchRegularSubmissionDialog.tsx:205`、`article-management-snapshot.js
 
 ## 结论与边界
 
-50–100 篇的正式入队本身可控，后台实测约 0.7–1.5 秒；每篇本地结果事务很轻。明显资源放大来自全量列表读取及重复刷新，历史文章越多越突出。两次独立运行结论一致。
+50–100 篇的正式入队本身可控，后台实测约 0.7–1.5 秒；每篇本地结果事务很轻。队列标题全量文章读取已经消除；高频同-scope 失效刷新也已经合并为单个在途读取加最新一次补刷。当前仍明确保留的性能项是候选弹窗借用完整文章管理 snapshot，以及未来只有在实测仍有价值时才考虑的跨消费者同 revision 只读结果复用。
 
 不能据此声称没有内存泄漏，或给出真实浏览器峰值 RAM；这些需要在获授权的目标平台运行中采样。现有 preparation port 按队列运行缓存初次账号检查，实际提交前仍做身份复核；图片选择有独立扫描缓存。它们未计入本次数值，不能以本地 3ms 代表真实投稿耗时。
 
-本次是检查与测量任务：以上性能项交给后续定向优化，未擅自改变入队事务、权限复核、投稿间隔、结果不确定处理或通知协议。检查范围已收敛，无需扩大到付费媒体/鉴权服务。
-
-Git：前两轮 7 个文件的未提交改动保留；本次仅新增手动运行的测量脚本和本报告，不增加默认 integration suite 耗时，未 commit/push。没有执行真实外部验收；没有声称通过全项目测试。
+本轮没有改变入队事务、权限复核、投稿间隔、结果不确定处理或通知协议，也没有执行真实账号登录、真实发布、付费或远端验收。性能修复使用现有冻结快照和 workspace invalidation owner 收敛，不新增业务事实 writer、缓存 schema 或第二状态机。
