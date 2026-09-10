@@ -84,6 +84,7 @@ export function createWorkspaceCoordinator(options = {}) {
   if (typeof transportSubscribe !== "function")
     throw new TypeError("Workspace invalidation transport is required");
   const registrations = new Map();
+  const refreshes = new Map();
   const snapshotListeners = new Set();
   let unsubscribe = null;
   let started = false;
@@ -108,15 +109,43 @@ export function createWorkspaceCoordinator(options = {}) {
   const notify = (scope, kind, event) => {
     const listener = registrations.get(scope);
     if (!listener) return;
-    listener(
-      Object.freeze({
+    const input = Object.freeze({
         kind,
         workspaceRuntimeId: event?.workspaceRuntimeId || workspaceRuntimeId,
         revision: event?.revision || lastRevision,
         reasonCode: event?.reasonCode || "WORKSPACE_INITIAL_LOAD",
         scope,
-      }),
-    );
+      });
+    const current = refreshes.get(scope);
+    if (current && current.runtimeId === input.workspaceRuntimeId &&
+        !["initial", "identity", "runtime-switch"].includes(kind)) {
+      const previous = current.pending;
+      // A reason-specific skip must not hide another pending domain change.
+      current.pending = previous && previous.reasonCode !== input.reasonCode
+        ? Object.freeze({ ...input, reasonCode: "WORKSPACE_DATA_CHANGED" })
+        : input;
+      return;
+    }
+    const run = { runtimeId: input.workspaceRuntimeId, pending: null };
+    refreshes.set(scope, run);
+    const finish = () => {
+      if (refreshes.get(scope) !== run) return;
+      refreshes.delete(scope);
+      if (!disposed && registrations.get(scope) === listener && run.pending)
+        notify(scope, run.pending.kind, run.pending);
+    };
+    try {
+      const result = listener(input);
+      if (result && typeof result.then === "function") {
+        Promise.resolve(result).then(finish, () => {
+          diagnose(safeDiagnostic("WORKSPACE_SCOPE_REFRESH_FAILED"));
+          finish();
+        });
+      } else finish();
+    } catch (_) {
+      diagnose(safeDiagnostic("WORKSPACE_SCOPE_REFRESH_FAILED"));
+      finish();
+    }
   };
 
   const refreshAll = (kind, event) => {
@@ -170,6 +199,7 @@ export function createWorkspaceCoordinator(options = {}) {
     if (typeof unsubscribe === "function") unsubscribe();
     unsubscribe = null;
     started = false;
+    refreshes.clear();
   };
 
   return Object.freeze({
@@ -196,6 +226,7 @@ export function createWorkspaceCoordinator(options = {}) {
       return () => {
         if (registrations.get(scope) === listener) {
           registrations.delete(scope);
+          refreshes.delete(scope);
           publishSnapshot();
         }
       };

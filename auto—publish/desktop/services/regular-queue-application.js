@@ -231,7 +231,6 @@ function createRegularQueueApplication(options) {
 
   const listRegularQueueGroups =
     createRegularQueueGroupQuery({
-      contentStore,
       groupTransitions,
       clientSnapshotResolver,
       groupImagePublishingSupported,

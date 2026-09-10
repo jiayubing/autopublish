@@ -167,7 +167,7 @@ export function useContentWorkbenchFeature() {
       !["initial", "identity", "runtime-switch"].includes(event.kind) &&
       event.reasonCode !== "ARTICLE_REMOVAL_TRANSACTION_CHANGED"
     )
-      void feature.refreshManagement(event.kind);
+      return feature.refreshManagement(event.kind);
   });
   useEffect(() => () => feature.dispose(), [feature]);
   const snapshot = useSyncExternalStore(

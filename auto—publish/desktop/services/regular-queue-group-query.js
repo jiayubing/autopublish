@@ -26,7 +26,6 @@ function safeDisplayText(value, fallback, maxLength) {
 
 function createRegularQueueGroupQuery(options) {
   const value = options || {};
-  const contentStore = value.contentStore;
   const groupTransitions = value.groupTransitions || null;
   const clientSnapshotResolver = typeof value.clientSnapshotResolver === "function"
     ? value.clientSnapshotResolver
@@ -49,74 +48,7 @@ function createRegularQueueGroupQuery(options) {
       : null;
     const groups = groupTransitions.listRegularQueueGroupSnapshots({}) || [];
     if (!Array.isArray(groups)) throw fail("REGULAR_QUEUE_GROUP_QUERY_INVALID");
-    const articlesByClient = new Map();
-    const listedClients = new Set();
     const clientsById = new Map();
-
-    function articleFor(clientId, articleId) {
-      let articles = articlesByClient.get(clientId);
-      if (!articles) {
-        articles = new Map();
-        articlesByClient.set(clientId, articles);
-      }
-      if (typeof contentStore.listArticles === "function") {
-        if (!listedClients.has(clientId)) {
-          try {
-            const listed = contentStore.listArticles(clientId);
-            if (Array.isArray(listed))
-              listed.forEach((candidate) => {
-                if (candidate && typeof candidate.id === "string")
-                  articles.set(candidate.id, candidate);
-              });
-          } catch (error) {
-            if (!error || error.code !== "ARTICLE_NOT_FOUND") {
-              reportDiagnostic({
-                code: "REGULAR_QUEUE_ARTICLE_SUMMARY_READ_FAILED",
-                module: "regular-queue-application",
-                category: "storage",
-                operationId: "regular-queue-group-query",
-                metadata: {
-                  operation: "article-summary",
-                  phase: "list",
-                  outcome: "fallback",
-                  errorCode:
-                    error && /^[A-Z][A-Z0-9_]{1,127}$/.test(error.code || "")
-                      ? error.code
-                      : "ARTICLE_LIST_FAILED",
-                },
-              });
-            }
-          }
-          listedClients.add(clientId);
-        }
-        return articles.get(articleId) || null;
-      }
-      if (articles.has(articleId)) return articles.get(articleId);
-      let article;
-      try {
-        article = contentStore.getArticle(clientId, articleId);
-      } catch (error) {
-        if (!error || error.code !== "ARTICLE_NOT_FOUND") {
-          reportDiagnostic({
-            code: "REGULAR_QUEUE_ARTICLE_SUMMARY_READ_FAILED",
-            module: "regular-queue-application",
-            category: "storage",
-            operationId: "regular-queue-group-query",
-            metadata: {
-              operation: "article-summary",
-              phase: "read",
-              outcome: "fallback",
-              errorCode:
-                error && /^[A-Z][A-Z0-9_]{1,127}$/.test(error.code || "")
-                  ? error.code
-                  : "ARTICLE_READ_FAILED",
-            },
-          });
-        }
-      }
-      articles.set(articleId, article || null);
-      return article;
-    }
 
     function clientFor(clientId) {
       if (clientsById.has(clientId)) return clientsById.get(clientId);
@@ -156,7 +88,6 @@ function createRegularQueueGroupQuery(options) {
       } catch (_) {
         throw fail("REGULAR_QUEUE_ARTICLE_IDENTITY_UNAVAILABLE");
       }
-      const article = articleFor(articleRef.clientId, articleRef.articleId);
       const client = clientFor(articleRef.clientId);
       return Object.freeze({
         itemId: raw.itemId,
@@ -164,7 +95,7 @@ function createRegularQueueGroupQuery(options) {
         articleId: articleRef.articleId,
         articleRef,
         articleSummary: Object.freeze({
-          title: safeDisplayText(article && article.title, "标题不可用", 512),
+          title: safeDisplayText(raw.articleTitle, "标题不可用", 512),
           customerName: safeDisplayText(
             client && client.displayName,
             "客户信息不可用",

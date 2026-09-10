@@ -674,6 +674,44 @@ test("posting-center read model exposes safe article summaries and queue actions
   }
 });
 
+test("queue summaries use persisted admission titles without reading client articles", () => {
+  const fixture = makeFixture();
+  try {
+    fixture.add(article("article-a"));
+    fixture.add(article("article-b", "client-b"));
+    const first = fixture.application.admitRegularQueueItems(admissionInput(fixture, [ref("article-a")]));
+    fixture.application.admitRegularQueueItems(admissionInput(fixture, [ref("article-b", "client-b")]));
+    let articleReads = 0;
+    fixture.contentStore.getArticle = fixture.contentStore.listArticles = () => {
+      articleReads += 1;
+      throw new Error("Article storage must not be needed for queue summaries");
+    };
+    const restored = fixture.application.listRegularQueueGroups()[0];
+    assert.deepEqual(restored.remaining.map((item) => item.articleSummary.title), ["Title article-a", "Title article-b"]);
+    const groupId = first.items[0].queueGroupId;
+    fixture.transitionPorts.regularQueueGroupTransitions.setRegularQueueGroupRunIntent({ queueGroupId: groupId, running: true });
+    fixture.transitionPorts.regularQueueGroupTransitions.claimRegularQueueGroupHead({ queueGroupId: groupId, claimToken: "summary-claim", leaseMs: 30000 });
+    const claimed = fixture.application.listRegularQueueGroups()[0];
+    assert.equal(claimed.current.articleSummary.title, "Title article-a");
+    assert.equal(claimed.remaining[0].articleSummary.title, "Title article-b");
+    const scoped = fixture.application.listRegularQueueGroups({ clientId: "client-b" })[0];
+    assert.equal(scoped.current, null);
+    assert.deepEqual(scoped.remaining.map((item) => item.articleRef), [ref("article-b", "client-b")]);
+    assert.equal(JSON.stringify(claimed).includes("Body article-"), false);
+    assert.equal(articleReads, 0);
+    fixture.store.close();
+    const ports = {};
+    const reopened = createOperationalStore({ workspaceRoot: fixture.root, transitionPorts: ports });
+    try {
+      const { createRegularQueueGroupQuery } = require("../desktop/services/regular-queue-group-query");
+      const query = createRegularQueueGroupQuery({ groupTransitions: ports.regularQueueGroupTransitions });
+      const afterRestart = query.listRegularQueueGroups()[0];
+      assert.equal(afterRestart.current.articleSummary.title, "Title article-a");
+      assert.equal(afterRestart.remaining[0].articleSummary.title, "Title article-b");
+    } finally { reopened.close(); }
+  } finally { fixture.close(); }
+});
+
 test("pending removal restores editing, removes all linked facts, and repeated removal is idempotent", () => {
   const fixture = makeFixture();
   try {

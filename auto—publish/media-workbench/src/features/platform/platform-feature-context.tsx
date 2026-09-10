@@ -59,15 +59,13 @@ export function PlatformFeatureProvider({ children }: { children: ReactNode }) {
   useWorkspaceScope('platformQueue', (event) => {
     if (!event.workspaceRuntimeId) return;
     feature.setScope({ workspaceRuntimeId: event.workspaceRuntimeId });
-    void feature.refreshQueue(event.kind).catch(() => {
+    return Promise.all([feature.refreshQueue(event.kind).catch(() => {
       reportRuntimeDiagnostic('PLATFORM_QUEUE_REFRESH_FAILED', 'platform-event');
-    });
-    void feature.refreshAccountProfiles(event.kind).catch(() => {
+    }), feature.refreshAccountProfiles(event.kind).catch(() => {
       reportRuntimeDiagnostic('PLATFORM_ACCOUNT_PROFILE_REFRESH_FAILED', 'platform-event');
-    });
-    void feature.refreshRegularQueueGroups(event.kind).catch(() => {
+    }), feature.refreshRegularQueueGroups(event.kind).catch(() => {
       reportRuntimeDiagnostic('PLATFORM_REGULAR_GROUP_REFRESH_FAILED', 'platform-event');
-    });
+    })]);
   });
 
   return <PlatformFeatureContext.Provider value={feature}>{children}</PlatformFeatureContext.Provider>;

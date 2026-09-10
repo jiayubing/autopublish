@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { ContentClient } from "../../types/content";
 import type {
   GenerationBatch,
@@ -12,6 +12,7 @@ import type {
 import {
   admitRegularQueueItems,
   confirmPaidMediaBatch,
+  getArticleManagementSnapshot,
   previewPaidMediaPreflight,
   previewRegularQueueAdmission,
 } from "../../bridge/content";
@@ -94,7 +95,7 @@ export default function BatchRegularSubmissionDialog({
 }: BatchRegularSubmissionDialogProps) {
   const { confirm } = useConfirmation();
   const { snapshot, feature } = usePlatformFeature();
-  const candidates = useMemo(
+  const generatedCandidates = useMemo(
     () =>
       batch.tasks.filter(
         (task): task is BatchCandidate =>
@@ -104,6 +105,16 @@ export default function BatchRegularSubmissionDialog({
       ),
     [batch.tasks],
   );
+  const [candidateState, setCandidateState] = useState<{
+    source: typeof generatedCandidates | null;
+    items: BatchCandidate[];
+    loading: boolean;
+    error: string;
+  }>({ source: null, items: [], loading: true, error: "" });
+  const [candidateRevision, setCandidateRevision] = useState(0);
+  const preserveSelection = useRef(false);
+  const candidates = candidateState.source === generatedCandidates ? candidateState.items : [];
+  const candidatesLoading = candidateState.loading || candidateState.source !== generatedCandidates;
   const clientNames = useMemo(
     () => new Map(clients.map((client) => [client.id, client.name])),
     [clients],
@@ -163,6 +174,8 @@ export default function BatchRegularSubmissionDialog({
         ),
       );
       setIssueFeedback(regularResultIssueText(result));
+      preserveSelection.current = true;
+      setCandidateRevision((current) => current + 1);
       return;
     }
     onCommitted?.({
@@ -186,14 +199,37 @@ export default function BatchRegularSubmissionDialog({
   });
 
   useEffect(() => {
+    let cancelled = false;
+    setCandidateState({ source: generatedCandidates, items: [], loading: true, error: "" });
     if (!open) return;
-    setSelectedTaskIds(new Set(candidates.map((task) => task.id)));
+    void Promise.all(
+      [...new Set<string>(generatedCandidates.map((task) => task.clientId))].map(async (clientId) =>
+        [clientId, await getArticleManagementSnapshot(clientId)] as const,
+      ),
+    ).then((entries) => {
+      if (cancelled) return;
+      const snapshots = new Map(entries);
+      const items = generatedCandidates.filter((task) => {
+        const workflow = snapshots.get(task.clientId)?.workflowByArticle[task.articleId];
+        return workflow?.operations?.submit?.allowed === true;
+      });
+      setCandidateState({ source: generatedCandidates, items, loading: false, error: "" });
+      setSelectedTaskIds((current) => new Set(items.filter((task) => !preserveSelection.current || current.has(task.id)).map((task) => task.id)));
+    }).catch(() => {
+      if (!cancelled) setCandidateState({ source: generatedCandidates, items: [], loading: false, error: "无法读取文章投稿状态，请重试。" });
+    });
+    return () => { cancelled = true; };
+  }, [generatedCandidates, open, candidateRevision]);
+
+  useEffect(() => {
+    preserveSelection.current = false;
+    if (!open) return;
     setIssueFeedback("");
     void feature.refreshQueue("batch-submission-open").catch(() => undefined);
     void feature
       .refreshAccountProfiles("batch-submission-open")
       .catch(() => undefined);
-  }, [batch.id, candidates, feature, open]);
+  }, [batch.id, feature, open]);
 
   useEffect(() => {
     if (open || !session.snapshot.open) return;
@@ -232,7 +268,7 @@ export default function BatchRegularSubmissionDialog({
                   批量投稿本批次文章
                 </h3>
                 <p className="mt-1 text-xs leading-5 text-slate-500">
-                  成功生成的文章默认全选。下一步统一进入现有投稿会话，由后台按客户分别复核并入队。
+                  仅显示当前可投稿的文章，默认全选；已入队、已发布等不可投稿文章自动隐藏。下一步选择投稿目标。
                 </p>
               </div>
               <button
@@ -245,6 +281,10 @@ export default function BatchRegularSubmissionDialog({
               </button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-5">
+              {candidateState.error && <div role="alert" className="mb-3 text-xs text-rose-700">
+                {candidateState.error}
+                <button type="button" onClick={() => setCandidateRevision((current) => current + 1)} className="ml-2 underline">重试</button>
+              </div>}
               {issueFeedback && (
                 <div
                   role="alert"
@@ -318,7 +358,7 @@ export default function BatchRegularSubmissionDialog({
                 })}
                 {!candidates.length && (
                   <p className="p-3 text-xs text-slate-500">
-                    本批次还没有成功生成且可进入投稿选择的文章。
+                    {candidatesLoading ? "正在检查文章投稿状态…" : candidateState.error ? "文章投稿状态尚未确认。" : "本批次暂无可投稿文章，已入队或已发布的文章可在投稿中心查看。"}
                   </p>
                 )}
               </div>

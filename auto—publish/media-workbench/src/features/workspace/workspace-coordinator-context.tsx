@@ -23,7 +23,7 @@ type ScopeRefresh = (input: {
   revision: number;
   reasonCode: string;
   scope: string;
-}) => void;
+}) => void | Promise<unknown>;
 type Coordinator = ReturnType<typeof createWorkspaceCoordinator>;
 
 const WorkspaceCoordinatorContext = createContext<Coordinator | null>(null);
