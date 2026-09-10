@@ -10,7 +10,7 @@ function fail(code, message) {
   return error;
 }
 
-function normalizeClientId(value) {
+function normalizeId(value) {
   if (
     typeof value !== "string" ||
     !value.trim() ||
@@ -27,14 +27,7 @@ function normalizeArticleIds(value) {
   const ids = [];
   const seen = new Set();
   value.forEach(function (articleId) {
-    if (
-      typeof articleId !== "string" ||
-      !articleId.trim() ||
-      articleId.length > 200 ||
-      !/^[A-Za-z0-9_.:-]+$/u.test(articleId)
-    )
-      throw fail("REGULAR_SUBMISSION_PERMISSION_INPUT_INVALID");
-    const normalized = articleId.trim();
+    const normalized = normalizeId(articleId);
     if (seen.has(normalized)) return;
     seen.add(normalized);
     ids.push(normalized);
@@ -48,12 +41,12 @@ function createRegularSubmissionPermissionQuery(options) {
   const contentStore = opts.contentStore;
   const operationalStore = opts.operationalStore;
   if (!contentStore || typeof contentStore.getArticle !== "function")
-    throw fail("REGULAR_SUBMISSION_PERMISSION_QUERY_UNAVAILABLE");
+    throw fail("IPC_INTERNAL");
   if (
     !operationalStore ||
     typeof operationalStore.listArticleLifecycleFacts !== "function"
   )
-    throw fail("REGULAR_SUBMISSION_PERMISSION_QUERY_UNAVAILABLE");
+    throw fail("IPC_INTERNAL");
   const getRevision =
     typeof opts.getRevision === "function"
       ? opts.getRevision
@@ -65,7 +58,7 @@ function createRegularSubmissionPermissionQuery(options) {
 
   async function read(input, retried) {
     const request = input || {};
-    const clientId = normalizeClientId(request.clientId);
+    const clientId = normalizeId(request.clientId);
     const articleIds = normalizeArticleIds(request.articleIds);
     const revision = Number(getRevision()) || 0;
     const articles = [];
@@ -119,7 +112,10 @@ function createRegularSubmissionPermissionQuery(options) {
       attentionItems,
       removalTransactions: Array.isArray(removalTransactions)
         ? removalTransactions.filter(
-            (item) => item && (!item.clientId || item.clientId === clientId),
+            (item) =>
+              item &&
+              requestedIds.has(item.articleId) &&
+              (!item.clientId || item.clientId === clientId),
           )
         : [],
     });
