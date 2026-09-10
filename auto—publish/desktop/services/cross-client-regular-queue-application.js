@@ -191,16 +191,12 @@ function createCrossClientRegularQueueApplication(options) {
     return Object.freeze(result);
   }
 
-  return Object.freeze({
-    previewRegularQueueAdmission,
-    admitRegularQueueItems,
-    removePendingQueueItems: regular.removePendingQueueItems.bind(regular),
-    listRegularQueueGroups: regular.listRegularQueueGroups.bind(regular),
-    updateRegularQueueGroupImageCount:
-      regular.updateRegularQueueGroupImageCount.bind(regular),
-    updateRegularQueueGroupSubmissionInterval:
-      regular.updateRegularQueueGroupSubmissionInterval.bind(regular),
-  });
+  return Object.freeze(
+    Object.assign({}, regular, {
+      previewRegularQueueAdmission,
+      admitRegularQueueItems,
+    }),
+  );
 }
 
 module.exports = { createCrossClientRegularQueueApplication };
