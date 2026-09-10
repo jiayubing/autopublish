@@ -12,10 +12,10 @@ import type {
 import {
   admitRegularQueueItems,
   confirmPaidMediaBatch,
-  getArticleManagementSnapshot,
   previewPaidMediaPreflight,
   previewRegularQueueAdmission,
 } from "../../bridge/content";
+import { listRegularSubmissionPermissions } from "../../bridge/regular-submission-permissions";
 import { useConfirmation } from "../../confirmation";
 import { usePlatformFeature } from "../../features/platform/platform-feature-context";
 import SubmissionIntakeDialog from "./SubmissionIntakeDialog";
@@ -202,17 +202,34 @@ export default function BatchRegularSubmissionDialog({
     let cancelled = false;
     setCandidateState({ source: generatedCandidates, items: [], loading: true, error: "" });
     if (!open) return;
+    const articleIdsByClient = new Map<string, string[]>();
+    generatedCandidates.forEach((task) => {
+      const articleIds = articleIdsByClient.get(task.clientId) || [];
+      articleIds.push(task.articleId);
+      articleIdsByClient.set(task.clientId, articleIds);
+    });
     void Promise.all(
-      [...new Set<string>(generatedCandidates.map((task) => task.clientId))].map(async (clientId) =>
-        [clientId, await getArticleManagementSnapshot(clientId)] as const,
+      [...articleIdsByClient.entries()].map(async ([clientId, articleIds]) =>
+        [
+          clientId,
+          await listRegularSubmissionPermissions({ clientId, articleIds }),
+        ] as const,
       ),
     ).then((entries) => {
       if (cancelled) return;
-      const snapshots = new Map(entries);
-      const items = generatedCandidates.filter((task) => {
-        const workflow = snapshots.get(task.clientId)?.workflowByArticle[task.articleId];
-        return workflow?.operations?.submit?.allowed === true;
-      });
+      const allowedByClient = new Map(
+        entries.map(([clientId, permissionSnapshot]) => [
+          clientId,
+          new Set(
+            permissionSnapshot.items
+              .filter((item) => item.allowed)
+              .map((item) => item.articleId),
+          ),
+        ]),
+      );
+      const items = generatedCandidates.filter((task) =>
+        allowedByClient.get(task.clientId)?.has(task.articleId),
+      );
       setCandidateState({ source: generatedCandidates, items, loading: false, error: "" });
       setSelectedTaskIds((current) => new Set(items.filter((task) => !preserveSelection.current || current.has(task.id)).map((task) => task.id)));
     }).catch(() => {
