@@ -350,10 +350,10 @@ function createRegularQueueApplication(options) {
       accountLabel: account.displayName,
     });
     const customerSnapshotsV1 = Object.freeze(Object.fromEntries(
-      refs.map(function (ref) {
+      [...new Set(refs.map(function (ref) { return ref.clientId; }))].map(function (clientId) {
         return [
-          ref.clientId,
-          domain.parseCustomerSnapshotV1(clientSnapshotResolver(ref.clientId)),
+          clientId,
+          domain.parseCustomerSnapshotV1(clientSnapshotResolver(clientId)),
         ];
       }),
     ));
@@ -407,11 +407,10 @@ function createRegularQueueApplication(options) {
     )
       throw fail("REGULAR_QUEUE_GROUP_IMAGE_COUNT_UNAVAILABLE");
     const request = imageCountUpdateFrom(input);
-    const group = groupTransitions
-      .listRegularQueueGroupSnapshots({})
-      .find(function (candidate) {
-        return candidate && candidate.queueGroupId === request.queueGroupId;
-      });
+    const groups = groupTransitions.listRegularQueueGroupSnapshots({
+      queueGroupId: request.queueGroupId,
+    });
+    const group = Array.isArray(groups) ? groups[0] : null;
     if (
       group &&
       !groupImagePublishingSupported(group.platformId) &&
