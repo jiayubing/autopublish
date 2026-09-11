@@ -147,23 +147,25 @@ function createRegularPlatformPreparationPort(options) {
       const prepared = domain.createPreparedSubmission(
         await adapter.preparePlatformSubmission(adapterInput, imagePlan),
       );
-      let finalInspection;
-      try {
-        finalInspection = await inspector.inspect(
-          Object.assign({}, inspectionTask, {
-            preserveCurrentPage: true,
-          }),
-        );
-      } catch (_) {
-        finalInspection = null;
+      if (input.platformId !== "hepan" || !queueRunToken) {
+        let finalInspection;
+        try {
+          finalInspection = await inspector.inspect(
+            Object.assign({}, inspectionTask, {
+              preserveCurrentPage: true,
+            }),
+          );
+        } catch (_) {
+          finalInspection = null;
+        }
+        if (
+          !finalInspection ||
+          finalInspection.verified !== true ||
+          finalInspection.accountProfileId !== input.accountProfileId ||
+          finalInspection.remoteFingerprint !== inspection.remoteFingerprint
+        )
+          throw accountInspectionFailure(finalInspection);
       }
-      if (
-        !finalInspection ||
-        finalInspection.verified !== true ||
-        finalInspection.accountProfileId !== input.accountProfileId ||
-        finalInspection.remoteFingerprint !== inspection.remoteFingerprint
-      )
-        throw accountInspectionFailure(finalInspection);
       return domain.createPreparedSubmission({
         preparedSubmissionEvidenceV1: prepared.preparedSubmissionEvidenceV1,
         submitPreparedPublication: prepared.submitPreparedPublication,
