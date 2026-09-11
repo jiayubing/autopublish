@@ -1,3 +1,4 @@
+const { admitFixtureItem } = require("./fixtures/regular-queue-admission");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -143,7 +144,7 @@ function admitWithQueueConfig(
     },
   };
   if (queueConfig !== undefined) input.queueConfig = queueConfig;
-  return transitionPorts.regularQueueTransitions.admitRegularQueueItem(input);
+  return admitFixtureItem(transitionPorts.regularQueueTransitions, input);
 }
 
 function admit(transitionPorts, profile, articleId, imageCount) {

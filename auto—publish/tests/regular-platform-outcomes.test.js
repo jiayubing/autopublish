@@ -1,4 +1,6 @@
 "use strict";
+const { admitFixtureItem } = require("./fixtures/regular-queue-admission");
+
 
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -51,7 +53,7 @@ function fixture(options) {
     const title = `标题 ${articleId}`;
     const body = `正文 ${articleId}`;
     const admitted =
-      transitionPorts.regularQueueTransitions.admitRegularQueueItem({
+      admitFixtureItem(transitionPorts.regularQueueTransitions, {
         clientId: "client-1",
         articleId,
         batchId: `batch-${articleId}`,
@@ -111,7 +113,7 @@ function admitQueued(fixtureValue, articleId, submissionIntervalSeconds) {
     platformId: "hepan",
     accountProfileId: fixtureValue.profile.accountProfileId,
   };
-  return fixtureValue.queueTransitions.admitRegularQueueItem({
+  return admitFixtureItem(fixtureValue.queueTransitions, {
     clientId: "client-1",
     articleId,
     batchId: `batch-${articleId}`,
@@ -458,7 +460,7 @@ function accepted(attemptId) {
 
 function admitForOrchestrator(f, articleId) {
   const accountProfileId = f.store.listAccountProfiles()[0].accountProfileId;
-  return f.queueTransitions.admitRegularQueueItem({
+  return admitFixtureItem(f.queueTransitions, {
     clientId: "client-1",
     articleId,
     batchId: `batch-${articleId}`,
@@ -1019,7 +1021,7 @@ test("late accepted success atomically supersedes a newly queued target", () => 
       platformId: "toutiao",
       displayName: "头条账号",
     });
-    const next = f.queueTransitions.admitRegularQueueItem({
+    const next = admitFixtureItem(f.queueTransitions, {
       clientId: "client-1",
       articleId: "article-retarget-race",
       batchId: "batch-retarget-race",
@@ -1283,7 +1285,7 @@ test("prepared attempts cannot be mislabeled uncertain before the submission bou
       platformId: "hepan",
       accountProfileId,
     };
-    const admitted = f.queueTransitions.admitRegularQueueItem({
+    const admitted = admitFixtureItem(f.queueTransitions, {
       clientId: "client-1",
       articleId: "article-prepared",
       batchId: "batch-prepared",
@@ -1328,7 +1330,7 @@ test("explicit pre-submit article rejection closes, while recoverable group bloc
   for (const status of ["article_rejected", "group_blocked"]) {
     const f = fixture();
     try {
-      const item = f.queueTransitions.admitRegularQueueItem({
+      const item = admitFixtureItem(f.queueTransitions, {
         clientId: "client-1",
         articleId: `article-pre-${status}-fresh`,
         batchId: `batch-pre-${status}`,

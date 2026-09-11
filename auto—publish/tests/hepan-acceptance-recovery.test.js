@@ -1,4 +1,6 @@
 "use strict";
+const { admitFixtureItem } = require("./fixtures/regular-queue-admission");
+
 
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -34,7 +36,7 @@ function fixture() {
     accountProfileId: profile.accountProfileId,
   };
   const admitted =
-    transitionPorts.regularQueueTransitions.admitRegularQueueItem({
+    admitFixtureItem(transitionPorts.regularQueueTransitions, {
       clientId: "client-1",
       articleId: "article-pending",
       batchId: "batch-pending",

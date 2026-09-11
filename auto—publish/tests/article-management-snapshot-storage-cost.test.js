@@ -1,3 +1,4 @@
+const { admitFixtureItem } = require("./fixtures/regular-queue-admission");
 const { it } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -61,7 +62,7 @@ function fixture(articleCount) {
         // Leave one editable article in every client for a legal save/refresh.
         if (clientId === "none" || index === articleCount - 1) continue;
         stamp += 120000;
-        const admitted = ports.regularQueueTransitions.admitRegularQueueItem({
+        const admitted = admitFixtureItem(ports.regularQueueTransitions, {
           clientId, articleId, batchId: `batch-${articleId}`, itemId: `item-${articleId}`,
           publicationId: `publication-${articleId}`, attemptId: `attempt-${articleId}`,
           target: { kind: "platform", platformId: "hepan", accountProfileId: profile.accountProfileId },

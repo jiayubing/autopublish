@@ -110,11 +110,11 @@ function createRegularQueueApplication(options) {
       throw fail("REGULAR_QUEUE_TARGET_INVALID");
     }
     try {
-      accountProfileResolver({
+      const account = accountProfileResolver({
         accountProfileId: target.accountProfileId,
         platformId: target.platformId,
       });
-      return target;
+      return { target, account };
     } catch (error) {
       throw fail(error && error.code ? error.code : "REGULAR_QUEUE_TARGET_INVALID");
     }
@@ -283,11 +283,12 @@ function createRegularQueueApplication(options) {
   }
 
   function previewRegularQueueAdmission(input) {
-    const target = targetFrom(input);
+    const { target } = targetFrom(input);
     const refs = refsFrom(input);
     queueConfigForTarget(input, target);
     const facts = factsFor(refs);
     const key = targetKey(target);
+    const groupReasons = new Map();
     const items = refs.map(function (ref) {
       let article;
       try {
@@ -315,7 +316,9 @@ function createRegularQueueApplication(options) {
         submissionItems: facts.submissionItems,
       });
       if (admission.status !== "idempotent") return admission;
-      const reasonCode = queueGroupReasonCode(admission.queueGroupId);
+      if (!groupReasons.has(admission.queueGroupId))
+        groupReasons.set(admission.queueGroupId, queueGroupReasonCode(admission.queueGroupId));
+      const reasonCode = groupReasons.get(admission.queueGroupId);
       return reasonCode
         ? Object.freeze(Object.assign({}, admission, { reasonCode }))
         : admission;
@@ -333,14 +336,10 @@ function createRegularQueueApplication(options) {
   }
 
   function admitRegularQueueItems(input) {
-    const target = targetFrom(input);
+    const { target, account } = targetFrom(input);
     const refs = refsFrom(input);
     const queueConfig = queueConfigForTarget(input, target);
     const platform = platformList().find(function (candidate) { return candidate.id === target.platformId; });
-    const account = accountProfileResolver({
-      accountProfileId: target.accountProfileId,
-      platformId: target.platformId,
-    });
     const targetSnapshotV1 = domain.parseTargetSnapshotV1({
       version: 1,
       kind: "platform",

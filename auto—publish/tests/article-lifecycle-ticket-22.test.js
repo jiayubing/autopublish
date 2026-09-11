@@ -1,4 +1,6 @@
 "use strict";
+const { admitFixtureItem } = require("./fixtures/regular-queue-admission");
+
 
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -266,7 +268,7 @@ function regularPublishedFixture(articleId = "article-22-regular") {
   };
   const title = `实际标题 ${articleId}`;
   const body = `实际正文 ${articleId}`;
-  const admitted = transitionPorts.regularQueueTransitions.admitRegularQueueItem({
+  const admitted = admitFixtureItem(transitionPorts.regularQueueTransitions, {
     clientId: "client-22",
     articleId,
     batchId: `batch-${articleId}`,

@@ -154,7 +154,7 @@ function createArticleMutationAdmission(kernel) {
   function admitRegularQueueItems(input) {
     if (
       !regularQueueTransitions ||
-      typeof regularQueueTransitions.admitRegularQueueItem !== "function"
+      typeof regularQueueTransitions.admitRegularQueueItems !== "function"
     ) {
       throw kernel.mutationError("REGULAR_QUEUE_TRANSITION_UNAVAILABLE");
     }
@@ -174,6 +174,7 @@ function createArticleMutationAdmission(kernel) {
     const batchId = `regular-batch-${crypto.randomUUID()}`;
     return kernel.withArticleSet(ordered, function (session, markSideEffect) {
       const facts = kernel.regularFactsFor(ordered);
+      const prepared = [];
       const items = ordered.map(function (ref) {
         let article;
         try {
@@ -208,7 +209,7 @@ function createArticleMutationAdmission(kernel) {
             throw kernel.mutationError(admission.reasonCode);
           }
           const fingerprint = fingerprintArticle(article);
-          const result = regularQueueTransitions.admitRegularQueueItem({
+          prepared.push({
             clientId: ref.clientId,
             articleRef: ref,
             articleId: ref.articleId,
@@ -239,13 +240,7 @@ function createArticleMutationAdmission(kernel) {
             queueConfig: request.queueConfig,
             payload: { clientId: ref.clientId },
           });
-          if (!result.idempotent) markSideEffect();
-          return Object.freeze(
-            Object.assign({}, result, {
-              articleRef: ref,
-              status: result.idempotent ? "idempotent" : "queued",
-            }),
-          );
+          return null;
         } catch (error) {
           const code = regularErrorCode(error);
           if (code === "ARTICLE_MUTATION_RESULT_UNCERTAIN") throw error;
@@ -258,6 +253,44 @@ function createArticleMutationAdmission(kernel) {
           });
         }
       });
+      if (prepared.length) {
+        let outcomes;
+        try {
+          outcomes = regularQueueTransitions.admitRegularQueueItems(prepared);
+        } catch (error) {
+          if (
+            error &&
+            error.cleanupCode === "OPERATIONAL_TRANSACTION_ROLLBACK_FAILED"
+          )
+            throw kernel.uncertainError(error);
+          throw error;
+        }
+        let next = 0;
+        for (let index = 0; index < items.length; index += 1) {
+          if (items[index]) continue;
+          const outcome = outcomes[next];
+          const ref = prepared[next++].articleRef;
+          if (outcome.error) {
+            const code = regularErrorCode(outcome.error);
+            items[index] = Object.freeze({
+              articleRef: ref,
+              articleId: ref.articleId,
+              status: "conflict",
+              reasonCode: code,
+              reasonCodes: Object.freeze([code]),
+            });
+          } else {
+            const result = outcome.result;
+            if (!result.idempotent) markSideEffect();
+            items[index] = Object.freeze(
+              Object.assign({}, result, {
+                articleRef: ref,
+                status: result.idempotent ? "idempotent" : "queued",
+              }),
+            );
+          }
+        }
+      }
       return Object.freeze({
         batchId,
         target,

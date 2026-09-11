@@ -177,7 +177,7 @@ test("outcome service rejects extra persistence capabilities", () => {
   const invalid = Object.assign(
     {},
     Object.fromEntries(methods.map((method) => [method, () => ({})])),
-    { admitRegularQueueItem() {} },
+    { admitRegularQueueItems() {} },
   );
   assert.throws(
     () =>

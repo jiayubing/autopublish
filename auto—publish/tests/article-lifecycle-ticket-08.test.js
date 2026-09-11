@@ -1,4 +1,6 @@
 "use strict";
+const { admitFixtureItem } = require("./fixtures/regular-queue-admission");
+
 
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -94,7 +96,7 @@ function admit(fixtureValue, input) {
   };
   if (value.imageCount !== undefined)
     admission.queueConfig = { imageCount: value.imageCount };
-  return fixtureValue.admission.admitRegularQueueItem(admission);
+  return admitFixtureItem(fixtureValue.admission, admission);
 }
 
 function evidence(claim, overrides) {

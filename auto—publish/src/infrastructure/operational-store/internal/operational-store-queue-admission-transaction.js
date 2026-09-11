@@ -715,187 +715,218 @@ function createQueueAdmissionTransaction(context) {
     return null;
   }
 
-  function admitRegularQueueItem(input) {
+  function admitRegularQueueItems(inputs) {
     open();
-    const item = regularItemRow(input);
+    if (!Array.isArray(inputs) || inputs.length === 0)
+      throw fail("REGULAR_QUEUE_ARTICLES_REQUIRED");
+    const prepared = inputs.map((input) => {
+      try {
+        return { item: regularItemRow(input) };
+      } catch (error) {
+        return { error };
+      }
+    });
+    return transaction(() =>
+      prepared.map((entry) => {
+        if (entry.error) return { error: entry.error };
+        // Preserve per-article conflicts without committing each article separately.
+        db.exec("SAVEPOINT regular_queue_item");
+        let result;
+        try {
+          result = writeRegularQueueItem(entry.item);
+        } catch (error) {
+          try {
+            db.exec("ROLLBACK TO regular_queue_item");
+            db.exec("RELEASE regular_queue_item");
+          } catch (_) {
+            // Abort the outer transaction if item isolation could not be restored.
+            throw error;
+          }
+          return { error };
+        }
+        db.exec("RELEASE regular_queue_item");
+        return { result };
+      }),
+    );
+  }
+
+  function writeRegularQueueItem(item) {
     const targetKey = domain.publicationTargetKey(item.target);
     const stamp = iso(clock);
-    return transaction(() => {
-      const existing = existingRegularAdmission(
-        db,
-        item.articleId,
-        targetKey,
-        item.snapshot,
-      );
-      if (existing) return existing;
-      try {
-        db.prepare("INSERT INTO submission_batches VALUES(?,?,?,?,?)").run(
-          item.batchId,
-          "queued",
-          1,
-          stamp,
-          stamp,
-        );
-      } catch (error) {
-        const code = String((error && error.code) || "");
-        const message = String((error && error.message) || "");
-        if (
-          !code.startsWith("SQLITE_CONSTRAINT") &&
-          !message.includes(
-            "UNIQUE constraint failed: submission_batches.batch_id",
-          )
-        )
-          throw error;
-        const existingBatch = db
-          .prepare("SELECT status FROM submission_batches WHERE batch_id=?")
-          .get(item.batchId);
-        if (!existingBatch || existingBatch.status === "cancelled")
-          throw fail("REGULAR_QUEUE_BATCH_CONFLICT");
-      }
-      const group = regularGroup(item, item.target, stamp);
-      const oldPublication = db
-        .prepare(
-          "SELECT p.publication_id,p.status,a.attempt_id,a.finished_at,i.payload_json AS intent_payload FROM publication_records p LEFT JOIN publication_attempts a ON a.attempt_id=(SELECT latest.attempt_id FROM publication_attempts latest WHERE latest.publication_id=p.publication_id ORDER BY latest.rowid DESC LIMIT 1) LEFT JOIN recovery_intents i ON i.attempt_id=a.attempt_id WHERE p.article_id=? AND p.target_key=?",
-        )
-        .get(item.articleId, targetKey);
-      const cancelledPublication =
-        oldPublication &&
-        oldPublication.status === "queued" &&
-        oldPublication.attempt_id &&
-        oldPublication.finished_at &&
-        cancellationResolutionFromIntent(oldPublication.intent_payload);
-      const failedPublication =
-        oldPublication &&
-        oldPublication.status === "failed" &&
-        oldPublication.attempt_id &&
-        oldPublication.finished_at;
-      if (oldPublication && !cancelledPublication && !failedPublication)
-        throw fail(
-          oldPublication.status === "uncertain"
-            ? "PUBLICATION_UNCERTAIN"
-            : "PUBLICATION_DUPLICATE",
-        );
-      const publicationId = oldPublication
-        ? oldPublication.publication_id
-        : item.publicationId;
-      const profile = db
-        .prepare(
-          "SELECT display_name FROM account_profiles WHERE account_profile_id=?",
-        )
-        .get(item.target.accountProfileId);
-      const payload = Object.assign({}, item.payload || {}, {
-        clientId: item.clientId,
-        sourcePlatformId: item.target.platformId,
-        targetPlatformId: item.target.platformId,
-        accountProfileId: item.target.accountProfileId,
-        publicationSnapshot: item.snapshot,
-        publicationId,
-        attemptId: item.attemptId,
-        customerSnapshotV1:
-          item.customerSnapshotV1 ||
-          domain.parseCustomerSnapshotV1({
-            version: 1,
-            clientId: item.clientId,
-            displayName: item.clientId,
-          }),
-        targetSnapshotV1:
-          item.targetSnapshotV1 ||
-          domain.parseTargetSnapshotV1({
-            version: 1,
-            kind: "platform",
-            platformId: item.target.platformId,
-            platformName: item.target.platformId,
-            accountProfileId: item.target.accountProfileId,
-            accountLabel:
-              (profile && profile.display_name) || item.target.accountProfileId,
-          }),
-      });
-      rejectSensitive(payload);
-      const batchItem = db
-        .prepare("SELECT item_id FROM submission_items WHERE item_id=?")
-        .get(item.itemId);
-      if (batchItem) throw fail("REGULAR_QUEUE_ITEM_CONFLICT");
-      if (!oldPublication)
-        db.prepare("INSERT INTO publication_records VALUES(?,?,?,?,?,?,?)").run(
-          publicationId,
-          item.articleId,
-          targetKey,
-          text(item.target),
-          "queued",
-          stamp,
-          stamp,
-        );
-      else
-        db.prepare(
-          "UPDATE publication_records SET status='queued',target_json=?,updated_at=? WHERE publication_id=?",
-        ).run(text(item.target), stamp, publicationId);
-      db.prepare("INSERT INTO publication_attempts VALUES(?,?,?,?,?)").run(
-        item.attemptId,
-        publicationId,
-        "queued",
-        stamp,
-        null,
-      );
-      db.prepare("INSERT INTO recovery_intents VALUES(?,?,?,?,?,?)").run(
-        randomUUID(),
-        item.attemptId,
-        "resolved",
-        text({
-          submission: {
-            batchItemId: item.itemId,
-            postProcessingPayload: { articleRef: item.articleRef || null },
-          },
-          detail: { phase: "admitted" },
-        }),
-        stamp,
-        stamp,
-      );
-      db.prepare("INSERT INTO submission_items VALUES(?,?,?,?,?,?,?,?,?)").run(
-        item.itemId,
+    const existing = existingRegularAdmission(
+      db,
+      item.articleId,
+      targetKey,
+      item.snapshot,
+    );
+    if (existing) return existing;
+    try {
+      db.prepare("INSERT INTO submission_batches VALUES(?,?,?,?,?)").run(
         item.batchId,
+        "queued",
+        1,
+        stamp,
+        stamp,
+      );
+    } catch (error) {
+      const code = String((error && error.code) || "");
+      const message = String((error && error.message) || "");
+      if (
+        !code.startsWith("SQLITE_CONSTRAINT") &&
+        !message.includes(
+          "UNIQUE constraint failed: submission_batches.batch_id",
+        )
+      )
+        throw error;
+      const existingBatch = db
+        .prepare("SELECT status FROM submission_batches WHERE batch_id=?")
+        .get(item.batchId);
+      if (!existingBatch || existingBatch.status === "cancelled")
+        throw fail("REGULAR_QUEUE_BATCH_CONFLICT");
+    }
+    const group = regularGroup(item, item.target, stamp);
+    const oldPublication = db
+      .prepare(
+        "SELECT p.publication_id,p.status,a.attempt_id,a.finished_at,i.payload_json AS intent_payload FROM publication_records p LEFT JOIN publication_attempts a ON a.attempt_id=(SELECT latest.attempt_id FROM publication_attempts latest WHERE latest.publication_id=p.publication_id ORDER BY latest.rowid DESC LIMIT 1) LEFT JOIN recovery_intents i ON i.attempt_id=a.attempt_id WHERE p.article_id=? AND p.target_key=?",
+      )
+      .get(item.articleId, targetKey);
+    const cancelledPublication =
+      oldPublication &&
+      oldPublication.status === "queued" &&
+      oldPublication.attempt_id &&
+      oldPublication.finished_at &&
+      cancellationResolutionFromIntent(oldPublication.intent_payload);
+    const failedPublication =
+      oldPublication &&
+      oldPublication.status === "failed" &&
+      oldPublication.attempt_id &&
+      oldPublication.finished_at;
+    if (oldPublication && !cancelledPublication && !failedPublication)
+      throw fail(
+        oldPublication.status === "uncertain"
+          ? "PUBLICATION_UNCERTAIN"
+          : "PUBLICATION_DUPLICATE",
+      );
+    const publicationId = oldPublication
+      ? oldPublication.publication_id
+      : item.publicationId;
+    const profile = db
+      .prepare(
+        "SELECT display_name FROM account_profiles WHERE account_profile_id=?",
+      )
+      .get(item.target.accountProfileId);
+    const payload = Object.assign({}, item.payload || {}, {
+      clientId: item.clientId,
+      sourcePlatformId: item.target.platformId,
+      targetPlatformId: item.target.platformId,
+      accountProfileId: item.target.accountProfileId,
+      publicationSnapshot: item.snapshot,
+      publicationId,
+      attemptId: item.attemptId,
+      customerSnapshotV1:
+        item.customerSnapshotV1 ||
+        domain.parseCustomerSnapshotV1({
+          version: 1,
+          clientId: item.clientId,
+          displayName: item.clientId,
+        }),
+      targetSnapshotV1:
+        item.targetSnapshotV1 ||
+        domain.parseTargetSnapshotV1({
+          version: 1,
+          kind: "platform",
+          platformId: item.target.platformId,
+          platformName: item.target.platformId,
+          accountProfileId: item.target.accountProfileId,
+          accountLabel:
+            (profile && profile.display_name) || item.target.accountProfileId,
+        }),
+    });
+    rejectSensitive(payload);
+    const batchItem = db
+      .prepare("SELECT item_id FROM submission_items WHERE item_id=?")
+      .get(item.itemId);
+    if (batchItem) throw fail("REGULAR_QUEUE_ITEM_CONFLICT");
+    if (!oldPublication)
+      db.prepare("INSERT INTO publication_records VALUES(?,?,?,?,?,?,?)").run(
+        publicationId,
         item.articleId,
         targetKey,
-        1,
+        text(item.target),
         "queued",
-        null,
-        null,
-        text(payload),
+        stamp,
+        stamp,
       );
-      const position = db
-        .prepare(
-          "SELECT COALESCE(MAX(position),0)+1 position FROM submission_queue_items WHERE queue_group_id=?",
-        )
-        .get(group.queue_group_id).position;
+    else
       db.prepare(
-        "INSERT INTO submission_queue_items(item_id,queue_group_id,position,created_at) VALUES(?,?,?,?)",
-      ).run(item.itemId, group.queue_group_id, position, stamp);
-      const active = db
-        .prepare(
-          "INSERT INTO article_active_targets(article_id,publication_id,attempt_id,target_key,target_json,state,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
-        )
-        .run(
-          item.articleId,
-          publicationId,
-          item.attemptId,
-          targetKey,
-          text(item.target),
-          "queued",
-          stamp,
-          stamp,
-        );
-      if (!active) throw fail("REGULAR_QUEUE_ADMISSION_FAILED");
-      return Object.freeze({
-        itemId: item.itemId,
-        batchId: item.batchId,
-        articleId: item.articleId,
+        "UPDATE publication_records SET status='queued',target_json=?,updated_at=? WHERE publication_id=?",
+      ).run(text(item.target), stamp, publicationId);
+    db.prepare("INSERT INTO publication_attempts VALUES(?,?,?,?,?)").run(
+      item.attemptId,
+      publicationId,
+      "queued",
+      stamp,
+      null,
+    );
+    db.prepare("INSERT INTO recovery_intents VALUES(?,?,?,?,?,?)").run(
+      randomUUID(),
+      item.attemptId,
+      "resolved",
+      text({
+        submission: {
+          batchItemId: item.itemId,
+          postProcessingPayload: { articleRef: item.articleRef || null },
+        },
+        detail: { phase: "admitted" },
+      }),
+      stamp,
+      stamp,
+    );
+    db.prepare("INSERT INTO submission_items VALUES(?,?,?,?,?,?,?,?,?)").run(
+      item.itemId,
+      item.batchId,
+      item.articleId,
+      targetKey,
+      1,
+      "queued",
+      null,
+      null,
+      text(payload),
+    );
+    const position = db
+      .prepare(
+        "SELECT COALESCE(MAX(position),0)+1 position FROM submission_queue_items WHERE queue_group_id=?",
+      )
+      .get(group.queue_group_id).position;
+    db.prepare(
+      "INSERT INTO submission_queue_items(item_id,queue_group_id,position,created_at) VALUES(?,?,?,?)",
+    ).run(item.itemId, group.queue_group_id, position, stamp);
+    const active = db
+      .prepare(
+        "INSERT INTO article_active_targets(article_id,publication_id,attempt_id,target_key,target_json,state,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
+      )
+      .run(
+        item.articleId,
         publicationId,
-        attemptId: item.attemptId,
+        item.attemptId,
         targetKey,
-        queueGroupId: group.queue_group_id,
-        position,
-        status: "queued",
-        idempotent: false,
-      });
+        text(item.target),
+        "queued",
+        stamp,
+        stamp,
+      );
+    if (!active) throw fail("REGULAR_QUEUE_ADMISSION_FAILED");
+    return Object.freeze({
+      itemId: item.itemId,
+      batchId: item.batchId,
+      articleId: item.articleId,
+      publicationId,
+      attemptId: item.attemptId,
+      targetKey,
+      queueGroupId: group.queue_group_id,
+      position,
+      status: "queued",
+      idempotent: false,
     });
   }
 
@@ -1221,7 +1252,7 @@ function createQueueAdmissionTransaction(context) {
   }
 
   return Object.freeze({
-    admitRegularQueueItem,
+    admitRegularQueueItems,
     removePendingQueueItem,
     admitPaidBatch,
     createPaidSubmissionBatch,

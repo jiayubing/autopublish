@@ -4,7 +4,7 @@ const crypto = require("node:crypto");
 const { fingerprintArticle } = require("../content-store");
 const {
   deriveArticleLifecycle,
-  removalTransactionMatchesArticle,
+  createRemovalTransactionMatcher,
 } = require("../article-lifecycle-projection");
 const {
   articleRefOf,
@@ -184,18 +184,13 @@ function createArticleMutationKernel(options) {
   }
 
   function factsFor(refs, sourcePort) {
+    const matchesRemoval = createRemovalTransactionMatcher(refs);
     const allRemovalTransactions =
       removalTransactionStore &&
       typeof removalTransactionStore.list === "function"
         ? removalTransactionStore.list()
         : [];
-    const removalTransactions = allRemovalTransactions.filter(
-      function (transaction) {
-        return refs.some(function (ref) {
-          return removalTransactionMatchesArticle(transaction, ref);
-        });
-      },
-    );
+    const removalTransactions = allRemovalTransactions.filter(matchesRemoval);
     const facts = factsFrom(sourcePort || lifecycleFacts, refs);
     const operationalRemovalTransactions = Array.isArray(
       facts.removalTransactions,
@@ -204,11 +199,7 @@ function createArticleMutationKernel(options) {
       : [];
     return Object.assign({}, facts, {
       removalTransactions: operationalRemovalTransactions
-        .filter(function (transaction) {
-          return refs.some(function (ref) {
-            return removalTransactionMatchesArticle(transaction, ref);
-          });
-        })
+        .filter(matchesRemoval)
         .concat(removalTransactions),
     });
   }
@@ -222,11 +213,7 @@ function createArticleMutationKernel(options) {
         : [];
     return Object.assign({}, facts, {
       removalTransactions: allRemovalTransactions.filter(
-        function (transaction) {
-          return refs.some(function (ref) {
-            return removalTransactionMatchesArticle(transaction, ref);
-          });
-        },
+        createRemovalTransactionMatcher(refs),
       ),
     });
   }
@@ -309,6 +296,7 @@ function createArticleMutationKernel(options) {
   return Object.freeze({
     mutationError,
     safeErrorCode,
+    uncertainError,
     nowIso,
     withArticleSet,
     factsFor,

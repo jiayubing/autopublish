@@ -83,25 +83,33 @@ function articleRefKey(value) {
   }
 }
 
-function removalTransactionMatchesArticle(transaction, article) {
-  const articleId = articleIdOf(article);
-  if (!articleId) return false;
-  const targetKey = articleRefKey(article);
-  const references = [transaction]
-    .concat(array(transaction && transaction.selections))
-    .concat(array(transaction && transaction.articles));
-  return references.some((reference) => {
-    if (articleIdOf(reference) !== articleId) return false;
-    const referenceKey = articleRefKey(reference);
-    if (targetKey && referenceKey) return targetKey === referenceKey;
-    return !text(reference && reference.clientId) || !text(article && article.clientId);
-  });
+function createRemovalTransactionMatcher(articles) {
+  const byArticleId = new Map();
+  for (const article of articles) {
+    const id = articleIdOf(article);
+    if (!id) continue;
+    let keys = byArticleId.get(id);
+    if (!keys) byArticleId.set(id, keys = new Set());
+    const key = articleRefKey(article);
+    if (!text(article && article.clientId)) keys.add(null);
+    else if (key) keys.add(key);
+  }
+  return function matches(transaction) {
+    const references = [transaction]
+      .concat(array(transaction && transaction.selections))
+      .concat(array(transaction && transaction.articles));
+    return references.some((reference) => {
+      const keys = byArticleId.get(articleIdOf(reference));
+      if (!keys) return false;
+      if (!text(reference && reference.clientId) || keys.has(null)) return true;
+      const key = articleRefKey(reference);
+      return key !== null && keys.has(key);
+    });
+  };
 }
 
 function removalTransactionsForArticle(transactions, article) {
-  return array(transactions).filter((transaction) =>
-    removalTransactionMatchesArticle(transaction, article),
-  );
+  return array(transactions).filter(createRemovalTransactionMatcher([article]));
 }
 
 function lifecycleStatusIsFrozen(status) {
@@ -532,7 +540,7 @@ module.exports = {
   STAGE_LABELS,
   deriveArticleLifecycle,
   projectArticleLifecycle,
-  removalTransactionMatchesArticle,
+  createRemovalTransactionMatcher,
   removalTransactionsForArticle,
   trashedArticleMutationBlockReason,
   targetKeyOf,

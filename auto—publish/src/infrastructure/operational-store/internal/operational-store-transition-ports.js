@@ -20,7 +20,7 @@ function exposeOperationalStoreTransitionPorts(options, dependencies) {
   });
   holder.regularQueueTransitions = Object.freeze({
     listArticleLifecycleFacts: facts.listArticleLifecycleFacts,
-    admitRegularQueueItem: queue.admitRegularQueueItem,
+    admitRegularQueueItems: queue.admitRegularQueueItems,
     removePendingQueueItem: queue.removePendingQueueItem,
   });
   holder.regularQueueGroupTransitions = Object.freeze({

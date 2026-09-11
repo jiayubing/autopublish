@@ -415,17 +415,17 @@ test("regular admission canonicalizes duplicates and maps active or explicit con
     listArticleLifecycleFacts() {
       return facts;
     },
-    admitRegularQueueItem(input) {
+    admitRegularQueueItems(inputs) {
       transitionCalls += 1;
-      if (transitionFailure) throw transitionFailure;
-      return {
+      if (transitionFailure) return inputs.map(() => ({ error: transitionFailure }));
+      return inputs.map(input => ({ result: {
         articleId: input.articleId,
         itemId: input.itemId,
         batchId: input.batchId,
         targetKey: "platform:toutiao",
         status: "queued",
         idempotent: false,
-      };
+      } }));
     },
   };
   const fixture = makeFixture({ regularQueueTransitions: transitions });
@@ -931,4 +931,27 @@ test("restore and permanent-delete use coordinator mutation sessions for file wr
   } finally {
     fixture.close();
   }
+});
+
+
+test("batch admission reports manual-check uncertainty if rollback cannot be confirmed", () => {
+  const fixture = makeFixture({ regularQueueTransitions: {
+    listArticleLifecycleFacts: emptyFacts,
+    admitRegularQueueItems() {
+      throw Object.assign(new Error("synthetic rollback failure"), {
+        code: "TEST_COMMIT_FAILED", cleanupCode: "OPERATIONAL_TRANSACTION_ROLLBACK_FAILED",
+      });
+    },
+  } });
+  try {
+    fixture.add(article("rollback-uncertain"));
+    assert.throws(() => fixture.coordinator.admitRegularQueueItems({
+      articleRefs: [{ clientId: "client-a", articleId: "rollback-uncertain" }],
+      target: { kind: "platform", platformId: "toutiao", accountProfileId: "account-a" },
+    }), error => {
+      assert.equal(error.code, "ARTICLE_MUTATION_RESULT_UNCERTAIN");
+      assert.equal(error.retryability, "manual-check");
+      return true;
+    });
+  } finally { fixture.close(); }
 });

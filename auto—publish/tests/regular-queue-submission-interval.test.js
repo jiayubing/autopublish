@@ -1,4 +1,6 @@
 "use strict";
+const { admitFixtureItem } = require("./fixtures/regular-queue-admission");
+
 
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -27,7 +29,7 @@ function openStore(workspaceRoot, options) {
 }
 
 function admit(transitionPorts, profile, articleId, submissionIntervalSeconds) {
-  return transitionPorts.regularQueueTransitions.admitRegularQueueItem({
+  return admitFixtureItem(transitionPorts.regularQueueTransitions, {
     clientId: "client-interval",
     articleId,
     publicationId: `publication-${articleId}`,

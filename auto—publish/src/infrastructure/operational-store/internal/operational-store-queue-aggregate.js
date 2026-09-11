@@ -25,7 +25,7 @@ function createOperationalStoreQueueAggregate(context) {
     claimRegularQueueGroupHead: runtime.claimRegularQueueGroupHead,
     renewRegularQueueGroupClaim: runtime.renewRegularQueueGroupClaim,
     beginRegularRemoteSubmission: runtime.beginRegularRemoteSubmission,
-    admitRegularQueueItem: admission.admitRegularQueueItem,
+    admitRegularQueueItems: admission.admitRegularQueueItems,
     removePendingQueueItem: admission.removePendingQueueItem,
     admitPaidBatch: admission.admitPaidBatch,
     createPaidSubmissionBatch: admission.createPaidSubmissionBatch,

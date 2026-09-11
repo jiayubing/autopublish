@@ -1,4 +1,6 @@
 "use strict";
+const { admitFixtureItem } = require("./fixtures/regular-queue-admission");
+
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -94,7 +96,7 @@ for (const phase of ["remote", "preparation", "interval"])
       });
       let group;
       for (const articleId of ["first", "second"]) {
-        group = ports.regularQueueTransitions.admitRegularQueueItem({
+        group = admitFixtureItem(ports.regularQueueTransitions, {
           clientId: "synthetic-client",
           articleId,
           publicationId: `publication-${articleId}`,

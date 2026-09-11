@@ -60,6 +60,7 @@ function makeFixture(options) {
       workspaceRoot: root,
       clock: () => new Date("2026-08-07T00:00:00.000Z"),
       transitionPorts,
+      internalBeforeCommit: value.beforeCommit,
     });
     const articleStore = createArticleStore(root, {
       internalArticleLockFault(point, detail) {
@@ -93,6 +94,7 @@ function makeFixture(options) {
       contentStore,
       regularQueueTransitions: transitionPorts.regularQueueTransitions,
       lifecycleFacts: transitionPorts.regularQueueTransitions,
+      removalTransactionStore: value.removalTransactionStore,
       clock: () => new Date("2026-08-07T00:00:00.000Z"),
     });
     const application = createRegularQueueApplication({
@@ -1182,7 +1184,7 @@ test("regular queue capabilities stay isolated from the full operational store a
     assert.deepEqual(
       Object.keys(fixture.transitionPorts.regularQueueTransitions).sort(),
       [
-        "admitRegularQueueItem",
+        "admitRegularQueueItems",
         "listArticleLifecycleFacts",
         "removePendingQueueItem",
       ],
@@ -1246,4 +1248,112 @@ test("automatic queue start preserves a manual pause while explicit start can re
   } finally {
     fixture.close();
   }
+});
+
+
+test("batch admission commits 500 prepared articles once and replay preserves FIFO identities", () => {
+  let commits = 0;
+  const fixture = makeFixture({ beforeCommit() { commits += 1; } });
+  try {
+    const inputs = Array.from({ length: 500 }, (_, index) => ({
+      articleId: `bulk-${index}`, clientId: "client-a",
+      batchId: "batch-bulk", itemId: `item-bulk-${index}`,
+      publicationId: `publication-bulk-${index}`, attemptId: `attempt-bulk-${index}`,
+      target: { kind: "platform", platformId: "toutiao", accountProfileId: fixture.profiles.toutiao.accountProfileId },
+      publicationSnapshot: { articleId: `bulk-${index}`, title: `Article ${index}`, body: "Synthetic body", fingerprint: "a".repeat(64) },
+    }));
+    commits = 0;
+    const outcomes = fixture.transitionPorts.regularQueueTransitions.admitRegularQueueItems(inputs);
+    assert.equal(commits, 1);
+    assert.equal(outcomes.length, 500);
+    outcomes.forEach((outcome, index) => {
+      assert.equal(outcome.error, undefined);
+      assert.equal(outcome.result.position, index + 1);
+      assert.equal(outcome.result.idempotent, false);
+    });
+    const replay = fixture.transitionPorts.regularQueueTransitions.admitRegularQueueItems(inputs);
+    assert.equal(commits, 2);
+    replay.forEach((outcome, index) => {
+      assert.equal(outcome.result.idempotent, true);
+      assert.equal(outcome.result.itemId, outcomes[index].result.itemId);
+    });
+    assert.equal(fixture.store.listPublicationRecords({ articleIds: inputs.map(item => item.articleId) }).length, 500);
+  } finally { fixture.close(); }
+});
+
+test("a failed middle item rolls back its partial facts while adjacent admissions commit", () => {
+  const fixture = makeFixture();
+  try {
+    const inputs = ["a", "b", "c"].map(id => ({
+      articleId: `savepoint-${id}`, clientId: "client-a", batchId: `batch-${id}`,
+      itemId: `item-${id}`, publicationId: `publication-${id}`,
+      attemptId: id === "b" ? "attempt-a" : `attempt-${id}`,
+      target: { kind: "platform", platformId: "toutiao", accountProfileId: fixture.profiles.toutiao.accountProfileId },
+      publicationSnapshot: { articleId: `savepoint-${id}`, title: id, body: "Synthetic body", fingerprint: "a".repeat(64) },
+    }));
+    const outcomes = fixture.transitionPorts.regularQueueTransitions.admitRegularQueueItems(inputs);
+    assert.ok(outcomes[0].result);
+    assert.ok(outcomes[1].error);
+    assert.ok(outcomes[2].result);
+    assert.equal(outcomes[2].result.position, 2);
+    assert.deepEqual(fixture.store.listPublicationRecords({ articleIds: inputs.map(item => item.articleId) }).map(row => row.articleId).sort(), ["savepoint-a", "savepoint-c"]);
+    assert.deepEqual(fixture.store.listSubmissionBatches({}).map(row => row.batchId).sort(), ["batch-a", "batch-c"]);
+    inputs[1].attemptId = "attempt-b";
+    assert.ok(fixture.transitionPorts.regularQueueTransitions.admitRegularQueueItems([inputs[1]])[0].result);
+  } finally { fixture.close(); }
+});
+
+test("public admission prepares the whole selection then commits once; commit failure leaves no durable success", () => {
+  let commits = 0;
+  let failCommit = false;
+  const fixture = makeFixture({ beforeCommit() {
+    commits += 1;
+    if (failCommit) throw Object.assign(new Error("synthetic commit failure"), { code: "TEST_COMMIT_FAILED" });
+  } });
+  try {
+    for (const id of ["batch-a", "batch-b", "batch-c"]) fixture.add(article(id));
+    const input = admissionInput(fixture, [ref("batch-a"), ref("batch-b"), ref("batch-c")]);
+    commits = 0;
+    failCommit = true;
+    assert.throws(() => fixture.application.admitRegularQueueItems(input), { code: "TEST_COMMIT_FAILED" });
+    assert.equal(commits, 1);
+    assert.equal(fixture.store.listPublicationRecords({ articleIds: input.articleRefs.map(ref => ref.articleId) }).length, 0);
+    assert.equal(fixture.store.listSubmissionBatches({}).length, 0);
+    assert.deepEqual(fixture.invalidationReasons, []);
+    failCommit = false;
+    const result = fixture.application.admitRegularQueueItems(input);
+    assert.equal(commits, 2);
+    assert.equal(result.admittedCount, 3);
+    assert.equal(fixture.invalidationReasons.length, 1);
+    const reopenedPorts = {};
+    fixture.store.close();
+    const reopened = createOperationalStore({ workspaceRoot: fixture.root, transitionPorts: reopenedPorts });
+    try {
+      const facts = reopenedPorts.regularQueueTransitions.listArticleLifecycleFacts({ articleIds: input.articleRefs.map(r => r.articleId) });
+      assert.equal(facts.publications.length, 3);
+      assert.equal(facts.submissionItems.length, 3);
+    } finally { reopened.close(); }
+  } finally { fixture.close(); }
+});
+
+
+test("batch admission matches removal history by client and preserves unscoped legacy repair blocks", () => {
+  const history = Array.from({ length: 10000 }, (_, index) => ({
+    articleId: `historical-${index}`, clientId: "client-a", status: "needs_repair",
+  }));
+  history.push(
+    { selections: [{ clientId: "client-b", articleId: "available" }], status: "needs_repair" },
+    { articles: [{ clientId: "client-a", articleId: "blocked" }], status: "needs_repair" },
+    { id: "legacy", status: "needs_repair" },
+  );
+  let reads = 0;
+  const fixture = makeFixture({ removalTransactionStore: { list() { reads += 1; return history; } } });
+  try {
+    for (const id of ["available", "blocked", "legacy"]) fixture.add(article(id));
+    const result = fixture.application.admitRegularQueueItems(admissionInput(fixture, [ref("available"), ref("blocked"), ref("legacy")]));
+    assert.equal(reads, 1);
+    assert.deepEqual(result.items.map(item => [item.articleId, item.status]), [["available", "queued"], ["blocked", "conflict"], ["legacy", "conflict"]]);
+    assert.equal(result.items[1].reasonCode, "REMOVAL_REPAIR_REQUIRED");
+    assert.equal(result.items[2].reasonCode, "REMOVAL_REPAIR_REQUIRED");
+  } finally { fixture.close(); }
 });
