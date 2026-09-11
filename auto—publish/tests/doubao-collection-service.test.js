@@ -230,7 +230,7 @@ describe("Doubao collection service", function() {
     assert.equal(saved.question, "如何选择适合家庭使用的空气净化器？");
     assert.equal(saved.collectionMethod, "automatic");
     assert.equal(saved.answerText, "这是一个长度足够的自动采集回答。");
-    assert.deepEqual(context.calls, ["getQuestion", "getResearch", "collect", "saveResearch"]);
+    assert.deepEqual(context.calls, ["getQuestion", "getResearch", "collect", "getQuestion", "getResearch", "saveResearch"]);
   });
 
   it("does not replace a successful record when recollection fails", async function() {
@@ -393,3 +393,25 @@ describe("Doubao recollect preparation read budget", function() {
     assert.deepEqual(context.calls, ["listQuestions", "listQuestions"]);
   });
 });
+
+for (const change of ["edit", "disable", "delete", "manual", "deleteResearch"]) {
+  it("preserves concurrent " + change + " while a forced collection is waiting", async function() {
+    const context = createContext({ researchRecords: [Object.assign({ clientId: "client-1" }, oldRecord())] });
+    let finish;
+    context.browserAdapter.collect = function() {
+      return new Promise(function(resolve) { finish = resolve; });
+    };
+    const collecting = context.service.collectOne({ clientId: "client-1", questionId: "question-1", force: true });
+    const key = "client-1:question-1";
+    if (change === "edit") context.questions.get(key).text = "A different question";
+    if (change === "disable") context.questions.get(key).enabled = false;
+    if (change === "delete") context.service.deleteQuestionAndResearch({ clientId: "client-1", questionId: "question-1" });
+    if (change === "deleteResearch") context.researchStore.deleteResearch("client-1", "question-1");
+    if (change === "manual") context.service.saveManual({ clientId: "client-1", questionId: "question-1", answerText: "New manually saved answer" });
+    const expected = copy(Array.from(context.research.entries()));
+    finish({ answerText: "Old automatic answer returned late", references: [] });
+    await assert.rejects(collecting, { code: change === "delete" ? "QUESTION_NOT_FOUND" :
+      change === "manual" || change === "deleteResearch" ? "DOUBAO_RESEARCH_CHANGED" : "DOUBAO_QUESTION_CHANGED" });
+    assert.deepEqual(Array.from(context.research.entries()), expected);
+  });
+}

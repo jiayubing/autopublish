@@ -1,3 +1,5 @@
+const { isDeepStrictEqual } = require("node:util");
+
 function serviceError(code, message) {
   const error = new Error(message);
   error.code = code;
@@ -220,7 +222,9 @@ function createDoubaoCollectionService(deps) {
     if (input.force !== undefined && typeof input.force !== "boolean") {
       throw serviceError("DOUBAO_FORCE_INVALID", "Force flag is invalid");
     }
-    if (input.force !== true && getCurrentResearch(input.clientId, question)) {
+    const existingResearch = getExistingResearch(input.clientId, question.id);
+    if (input.force !== true && existingResearch &&
+        normalizeQuestionText(existingResearch.question) === normalizeQuestionText(question.text)) {
       throw serviceError("DOUBAO_RESEARCH_EXISTS", "Research already exists; force is required to recollect");
     }
 
@@ -233,6 +237,14 @@ function createDoubaoCollectionService(deps) {
     }
     validateAnswer(result.answerText);
     validateReferences(result.references === undefined ? [] : result.references);
+    // No await between these checks and the synchronous store write.
+    const currentQuestion = getQuestion(input);
+    if (currentQuestion.enabled !== true || currentQuestion.text !== question.text) {
+      throw serviceError("DOUBAO_QUESTION_CHANGED", "Question changed during collection; result was not saved");
+    }
+    if (!isDeepStrictEqual(existingResearch, getExistingResearch(input.clientId, question.id))) {
+      throw serviceError("DOUBAO_RESEARCH_CHANGED", "Research changed during collection; existing result was preserved");
+    }
     const timestamp = now();
     const record = {
       id: question.id,
