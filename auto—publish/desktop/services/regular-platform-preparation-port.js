@@ -147,7 +147,7 @@ function createRegularPlatformPreparationPort(options) {
       const prepared = domain.createPreparedSubmission(
         await adapter.preparePlatformSubmission(adapterInput, imagePlan),
       );
-      if (input.platformId !== "hepan") {
+      if (input.platformId !== "hepan" || !queueRunToken) {
         let finalInspection;
         try {
           finalInspection = await inspector.inspect(
