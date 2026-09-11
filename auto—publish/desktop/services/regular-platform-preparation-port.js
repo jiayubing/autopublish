@@ -176,4 +176,3 @@ function createRegularPlatformPreparationPort(options) {
 }
 
 module.exports = { createRegularPlatformPreparationPort };
-}
