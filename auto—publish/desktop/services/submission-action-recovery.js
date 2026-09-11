@@ -46,7 +46,7 @@ function createSubmissionActionRecovery(options) {
       value.onDataInvalidated(reasonCode);
   }
 
-  function resumeItemAction(action, item, operation) {
+  function resumeItemAction(action, item, operation, fingerprints) {
     const desired =
       action.action === "cancel" ? "cancelled" : cleanupStorageStatus(item);
     if (!desired) throw fail("SUBMISSION_ACTION_INVALID");
@@ -111,7 +111,7 @@ function createSubmissionActionRecovery(options) {
         domainHandled: true,
       };
     }
-    const stagedResult = staging.stageOperation(item, operation);
+    const stagedResult = staging.stageOperation(item, operation, fingerprints);
     operation = stagedResult.operation;
     let result;
     if (action.action === "cancel")
@@ -161,6 +161,8 @@ function createSubmissionActionRecovery(options) {
         "SUBMISSION_QUEUE_ITEM_NOT_FOUND",
         "Submission queue item was not found",
       );
+    // Fresh for each attempt, including recovery in the same process. Never persisted.
+    const fingerprints = new Map();
     const stableOperationId = operationIdFor(action);
     let operation = files.operationRecord(stableOperationId);
     if (!operation) {
@@ -170,7 +172,7 @@ function createSubmissionActionRecovery(options) {
           checked.reasonCode || "SUBMISSION_QUEUE_CHANGED",
           "Submission item action is no longer valid",
         );
-      const before = files.pairManifest(item);
+      const before = files.pairManifest(item, fingerprints);
       operation = value.operationalStore.prepareSubmissionItemAction({
         operationId: stableOperationId,
         batchId: item.batchId,
@@ -192,6 +194,7 @@ function createSubmissionActionRecovery(options) {
       Object.assign({}, action, { operationId: stableOperationId }),
       item,
       operation,
+      fingerprints,
     );
   }
 

@@ -24,10 +24,10 @@ function createSubmissionOperationStaging(options) {
     return !actual.exists || actual.hash === expected.hash;
   }
 
-  function stageFile(source, target, expected, staged) {
+  function stageFile(source, target, expected, staged, fingerprints) {
     files.assertOperationStageRoot(staged, true);
-    const sourceState = files.fileState(source);
-    const targetState = files.fileState(target);
+    const sourceState = files.fileState(source, fingerprints);
+    const targetState = files.fileState(target, fingerprints);
     if (
       targetState.kind === "unsafe" ||
       targetState.kind === "unknown" ||
@@ -60,7 +60,13 @@ function createSubmissionOperationStaging(options) {
     }
   }
 
-  function assertOperationTopology(item, operation, staged, before) {
+  function assertOperationTopology(
+    item,
+    operation,
+    staged,
+    before,
+    fingerprints,
+  ) {
     if (files.assertOperationStageRoot(staged, true)) {
       const entries = fs.readdirSync(staged.directory);
       if (
@@ -72,10 +78,10 @@ function createSubmissionOperationStaging(options) {
           "Submission operation staging contains an unexpected entry",
         );
     }
-    const sourceMain = files.fileState(item.filePath);
-    const sourceSidecar = files.fileState(item.sidecarPath);
-    const stagedMain = files.fileState(staged.main);
-    const stagedSidecar = files.fileState(staged.sidecar);
+    const sourceMain = files.fileState(item.filePath, fingerprints);
+    const sourceSidecar = files.fileState(item.sidecarPath, fingerprints);
+    const stagedMain = files.fileState(staged.main, fingerprints);
+    const stagedSidecar = files.fileState(staged.sidecar, fingerprints);
     const sourcePair =
       sameFileState(sourceMain, before.main) &&
       sameFileState(sourceSidecar, before.sidecar) &&
@@ -124,7 +130,7 @@ function createSubmissionOperationStaging(options) {
       );
   }
 
-  function stageOperation(item, operation) {
+  function stageOperation(item, operation, fingerprints = new Map()) {
     const before = operation && operation.payload && operation.payload.before;
     if (!before)
       files.operationConflict("Submission operation checkpoint is incomplete");
@@ -138,7 +144,7 @@ function createSubmissionOperationStaging(options) {
       files.operationConflict(
         "Submission queue pair was not complete at operation prepare",
       );
-    assertOperationTopology(item, operation, staged, before);
+    assertOperationTopology(item, operation, staged, before, fingerprints);
     if (
       ![
         "main_staged",
@@ -148,7 +154,7 @@ function createSubmissionOperationStaging(options) {
         "complete",
       ].includes(operation.state)
     ) {
-      stageFile(item.filePath, staged.main, before.main, staged);
+      stageFile(item.filePath, staged.main, before.main, staged, fingerprints);
       operation = files.checkpointOperation(
         operation.operationId,
         "main_staged",
@@ -160,7 +166,13 @@ function createSubmissionOperationStaging(options) {
         operation.state,
       )
     ) {
-      stageFile(item.sidecarPath, staged.sidecar, before.sidecar, staged);
+      stageFile(
+        item.sidecarPath,
+        staged.sidecar,
+        before.sidecar,
+        staged,
+        fingerprints,
+      );
       operation = files.checkpointOperation(
         operation.operationId,
         "sidecar_staged",
@@ -174,14 +186,14 @@ function createSubmissionOperationStaging(options) {
         Object.assign({}, operation.payload, { stage: "staged" }),
       );
     const currentStage = {
-      main: files.fileState(staged.main),
-      sidecar: files.fileState(staged.sidecar),
+      main: files.fileState(staged.main, fingerprints),
+      sidecar: files.fileState(staged.sidecar, fingerprints),
     };
     if (
       !sameFileState(currentStage.main, before.main) ||
       !sameFileState(currentStage.sidecar, before.sidecar) ||
-      files.fileState(item.filePath).exists ||
-      files.fileState(item.sidecarPath).exists
+      files.fileState(item.filePath, fingerprints).exists ||
+      files.fileState(item.sidecarPath, fingerprints).exists
     )
       files.operationConflict(
         "Submission operation staging postcondition is not proven",

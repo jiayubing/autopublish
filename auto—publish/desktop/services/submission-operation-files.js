@@ -17,12 +17,26 @@ function createSubmissionOperationFiles(options) {
     value.inputRoot || path.join(process.cwd(), "input"),
   );
 
-  function fileState(filename) {
+  function fileState(filename, fingerprints) {
     try {
-      const stat = fs.lstatSync(filename);
+      const stat = fs.lstatSync(filename, { bigint: true });
       if (!stat.isFile() || stat.isSymbolicLink())
         return { exists: true, kind: "unsafe" };
-      return {
+      const fingerprint = [
+        stat.dev,
+        stat.ino,
+        stat.size,
+        stat.mtimeNs,
+        stat.ctimeNs,
+      ];
+      const cached = fingerprints && fingerprints.get(filename);
+      if (
+        cached &&
+        fingerprint.every((part, index) => part === cached.fingerprint[index])
+      )
+        return { exists: true, kind: "file", hash: cached.hash };
+      if (fingerprints) fingerprints.delete(filename);
+      const state = {
         exists: true,
         kind: "file",
         hash: crypto
@@ -30,7 +44,25 @@ function createSubmissionOperationFiles(options) {
           .update(fs.readFileSync(filename))
           .digest("hex"),
       };
+      if (fingerprints) {
+        const after = fs.lstatSync(filename, { bigint: true });
+        if (
+          after.isFile() &&
+          !after.isSymbolicLink() &&
+          [
+            after.dev,
+            after.ino,
+            after.size,
+            after.mtimeNs,
+            after.ctimeNs,
+          ].every((part, index) => part === fingerprint[index])
+        )
+          fingerprints.set(filename, { fingerprint, hash: state.hash });
+        else return { exists: true, kind: "unknown" };
+      }
+      return state;
     } catch (error) {
+      if (fingerprints) fingerprints.delete(filename);
       if (error && error.code === "ENOENT")
         return { exists: false, kind: "absent" };
       return {
@@ -41,10 +73,10 @@ function createSubmissionOperationFiles(options) {
     }
   }
 
-  function pairManifest(item) {
+  function pairManifest(item, fingerprints) {
     return {
-      main: fileState(item.filePath),
-      sidecar: fileState(item.sidecarPath),
+      main: fileState(item.filePath, fingerprints),
+      sidecar: fileState(item.sidecarPath, fingerprints),
     };
   }
 
