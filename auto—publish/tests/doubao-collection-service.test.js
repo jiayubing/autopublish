@@ -382,3 +382,14 @@ describe("Doubao collection service", function() {
     assert.equal(context.calls.includes("deleteQuestion"), false);
   });
 });
+
+
+describe("Doubao recollect preparation read budget", function() {
+  it("does not read research bodies for preview or preparation in recollect mode", function() {
+    const context = createContext();
+    const input = { clientIds: ["client-1"], mode: "recollect" };
+    assert.equal(context.service.previewBatch(input).taskCount, 1);
+    assert.equal(context.service.prepareBatch(input).length, 1);
+    assert.deepEqual(context.calls, ["listQuestions", "listQuestions"]);
+  });
+});

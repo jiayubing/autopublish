@@ -31,22 +31,25 @@ it("missing composer is unknown, not proof of logout or authentication", () => {
 
 it("new and saved client conversations wait for their composer without manual resume", async (t) => {
   let elapsed = 0; let polls = 0; let sent = false;
+  let currentUrl = "https://www.doubao.com/chat/"; let nextId = 100; let savedUrl;
   const actions = []; const urls = new Map();
   const adapter = createDoubaoBrowserAdapter({
     session: SESSION, diagnosticsDir: temporary(t), timeoutMs: 100, intervalMs: 1,
     clock: () => elapsed, sleep: async (ms) => { elapsed += ms; },
-    conversationStore: { get: (clientId) => urls.get(clientId), set: (clientId, url) => urls.set(clientId, url) },
+    conversationStore: { get: (clientId) => (savedUrl = urls.get(clientId)), set: (clientId, url) => urls.set(clientId, url) },
     runtime: { open: async () => {}, evaluate: async (input) => {
       if (["new-conversation", "switch-conversation"].includes(input.action)) {
-        actions.push(input.action); polls = 0; sent = false; return {};
+        currentUrl = input.action === "switch-conversation" ? savedUrl : "https://www.doubao.com/chat/";
+        actions.push(input.action); polls = 0; sent = false; return { url: currentUrl };
       }
       if (input.action === "send-question") {
         assert.ok(polls >= 3, "must wait for the current page, not reuse cached login state");
         actions.push("send"); sent = true;
-        return { ok: true, questionMessageId: "user-current" };
+        if (currentUrl.endsWith("/chat/")) currentUrl += nextId++;
+        return { ok: true, questionMessageId: "user-current", url: currentUrl };
       }
       polls += 1;
-      return { ...(sent ? answered() : polls < 3 ? loading() : ready()), url: "https://www.doubao.com/chat/fixture" };
+      return { ...(sent ? answered() : polls < 3 ? loading() : ready()), url: currentUrl };
     } }
   });
   for (const clientId of ["client-a", "client-b", "client-a"])
@@ -111,11 +114,11 @@ it("Chromium: DOMContentLoaded before composer hydration does not require login 
   t.after(() => browser.close());
   const page = await browser.newPage();
   // Navigation is supplied by an inert document; all external requests are blocked.
-  await page.route("**/*", (route) => route.abort());
+  await page.route("**/*", (route) => route.fulfill({ contentType: "text/html", body: "<!doctype html><html><body><main>Loading conversation</main></body></html>" }));
   const runScript = (script) => new Function("page", `return (async () => {${script}})();`)(page);
   let elapsed = 0; let polls = 0; let sends = 0; let hydrated = false;
   const adapter = createDoubaoBrowserAdapter({
-    session: SESSION, diagnosticsDir: temporary(t), timeoutMs: 100, intervalMs: 1,
+    session: SESSION, diagnosticsDir: temporary(t), timeoutMs: 2000, intervalMs: 1,
     clock: () => elapsed,
     sleep: async (ms) => {
       elapsed += ms;
@@ -126,6 +129,7 @@ it("Chromium: DOMContentLoaded before composer hydration does not require login 
           input.addEventListener("keydown", (event) => {
             if (event.key !== "Enter") return;
             event.preventDefault();
+            history.replaceState(null, "", "/chat/1000");
             for (const [id, role, text] of [["user-current", "user", input.value], ["answer-current", "assistant", answer]]) {
               const node = document.createElement("div");
               node.setAttribute("data-message-id", id);
@@ -142,7 +146,7 @@ it("Chromium: DOMContentLoaded before composer hydration does not require login 
       open: async () => {},
       evaluate: async (input) => {
         if (input.action === "new-conversation") {
-          await page.setContent("<!doctype html><html><body><main>Loading conversation</main></body></html>", { waitUntil: "domcontentloaded" });
+          await page.goto("https://www.doubao.com/chat/", { waitUntil: "domcontentloaded" });
           return {};
         }
         if (input.action === "send-question") { sends += 1; assert.equal(hydrated, true); }

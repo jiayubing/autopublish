@@ -159,8 +159,7 @@ function createDoubaoCollectionService(deps) {
           disabledQuestions += 1;
           return;
         }
-        const existing = getCurrentResearch(clientId, question);
-        if (input.mode === "missing" && existing) {
+        if (input.mode === "missing" && getCurrentResearch(clientId, question)) {
           skippedExisting += 1;
           return;
         }

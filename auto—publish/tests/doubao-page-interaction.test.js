@@ -100,3 +100,40 @@ it("Enter without a new message does not count as a confirmed send", async (t) =
   assert.equal(diagnostic.sendConfirmed, false);
   assert.equal(await page.locator('[data-message-id]').count(), 1);
 });
+
+for (const boundary of ["navigation", "deadline"]) {
+it(`the send command refuses ${boundary} changes between readiness and Enter`, async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "doubao-send-fence-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const browser = await chromium.launch({ headless: true });
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  await page.route("**/*", route => route.fulfill({ contentType: "text/html", body: "<textarea></textarea>" }));
+  await page.goto("https://www.doubao.com/chat/100");
+  let fills = 0;
+  const wrappedPage = {
+    url: () => page.url(),
+    evaluate: (...args) => page.evaluate(...args),
+    locator: selector => ({ first: () => ({
+      waitFor: async options => {
+        await page.locator(selector).first().waitFor(options);
+        if (boundary === "navigation") await page.goto("https://www.doubao.com/chat/200");
+        else await new Promise(resolve => setTimeout(resolve, 30));
+      },
+      fill: async () => { fills += 1; },
+      press: async () => assert.fail("must not submit in the changed conversation"),
+    }) }),
+  };
+  const stored = new Map([["client-a", "https://www.doubao.com/chat/100"]]);
+  const adapter = createDoubaoBrowserAdapter({
+    session: { session: "synthetic" }, diagnosticsDir: root,
+    timeoutMs: boundary === "deadline" ? 20 : 2000, clock: () => 0,
+    conversationStore: { get: id => stored.get(id), set: (id, url) => stored.set(id, url) },
+    runtime: { open: async () => {}, evaluate: input => new Function("page", `return (async () => {${input.script}})();`)(input.action === "send-question" ? wrappedPage : page) },
+  });
+  await assert.rejects(adapter.collect({ clientId: "client-a", question: "Synthetic private question" }), boundary === "navigation" ? /DOUBAO_CONVERSATION_CHANGED/ : /DOUBAO_SEND_DEADLINE_EXPIRED/);
+  assert.equal(fills, 0);
+  assert.equal(stored.get("client-a"), "https://www.doubao.com/chat/100");
+});
+
+}

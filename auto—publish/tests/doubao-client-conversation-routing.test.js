@@ -82,7 +82,7 @@ describe("doubao client conversation routing", function() {
             text: "这是针对“" + question + "”生成的完整回答。",
           });
           histories.set(currentUrl, messages.map((item) => ({ ...item })));
-          return { ok: true };
+          return { ok: true, questionMessageId: messages[messages.length - 2].id, url: currentUrl };
         }
         if (input.action === "inspect-page") {
           return snapshot(currentUrl, messages);

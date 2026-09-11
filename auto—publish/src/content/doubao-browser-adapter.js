@@ -2,6 +2,8 @@ const fs = require("fs");
 const path = require("path");
 const { reportDiagnostic } = require("../diagnostics/diagnostic-producer");
 
+const { validConversationUrl } = require("./doubao-conversation-store");
+
 const { DIRS, PW } = require("../../scripts/config");
 const { createPlaywrightRuntime, pwSessionConfig } = require("../core/playwright");
 const {
@@ -91,8 +93,8 @@ function inspectPageScript() {
     "    var label = (node.getAttribute('aria-label') || node.innerText || node.textContent || '').trim();",
     "    return visible(node) && stopPattern.test(label);",
     "  });",
-    "  var allMessageNodes = Array.from(document.querySelectorAll('[data-message-id]'));",
-    "  var messageNodes = allMessageNodes.slice(Math.max(0, allMessageNodes.length - 80));",
+    "  var allMessageNodes = document.querySelectorAll('[data-message-id]');",
+    "  var messageNodes = Array.prototype.slice.call(allMessageNodes, Math.max(0, allMessageNodes.length - 80));",
     "  var messageCandidates = messageNodes.map(function(node) {",
     "    var ancestorClassNames = [];",
     "    var ancestor = node.parentElement;",
@@ -159,13 +161,22 @@ function inspectPageScript() {
   ].join("\n");
 }
 
-function sendQuestionScript(questionJson) {
+function sendQuestionScript(questionJson, expectedUrl, deadline) {
   return [
     "var question = " + questionJson + ";",
+    "var expectedUrl = " + JSON.stringify(expectedUrl || null) + ";",
+    "var deadline = " + JSON.stringify(deadline) + ";",
+    "var assertSendAllowed = function() {",
+    "  if (Date.now() >= deadline) throw new Error('DOUBAO_SEND_DEADLINE_EXPIRED');",
+    "  if (expectedUrl && (new URL(page.url()).origin !== new URL(expectedUrl).origin || new URL(page.url()).pathname.replace(/\\/$/, '') !== new URL(expectedUrl).pathname.replace(/\\/$/, ''))) throw new Error('DOUBAO_CONVERSATION_CHANGED');",
+    "};",
+    "assertSendAllowed();",
     "var knownIds = await page.evaluate(function() { return Array.from(document.querySelectorAll('[data-message-id]')).map(function(node) { return node.getAttribute('data-message-id'); }); });",
     "var input = page.locator('textarea:visible, input[type=\"text\"]:visible, [contenteditable=\"true\"]:visible').first();",
     "await input.waitFor({ state: 'visible', timeout: 15000 });",
+    "assertSendAllowed();",
     "await input.fill(question);",
+    "assertSendAllowed();",
     "await input.press('Enter');",
     "var acknowledgement = await page.waitForFunction(function(value) {",
     "  var normalize = function(text) { return String(text || '').trim().replace(/\\s+/g, ' '); };",
@@ -181,11 +192,11 @@ function sendQuestionScript(questionJson) {
     "        if ((parent.getAttribute('class') || '').split(/\\s+/).indexOf('justify-end') !== -1) { user = true; break; }",
     "      }",
     "    }",
-    "    if (user) return id;",
+    "    if (user) return { questionMessageId: id, url: location.href };",
     "  }",
     "  return false;",
     "}, { question: question, knownIds: knownIds }, { timeout: 15000 });",
-    "try { return { ok: true, questionMessageId: await acknowledgement.jsonValue() }; }",
+    "try { return Object.assign({ ok: true }, await acknowledgement.jsonValue()); }",
     "finally { await acknowledgement.dispose(); }"
   ].join("\n");
 }
@@ -257,8 +268,10 @@ function createDoubaoBrowserAdapter(options) {
   let diagnosticSequence = 0;
   let sessionReady = false;
   let openingPromise = null;
+  let closingPromise = null;
   let sessionGeneration = 0;
-  let activeClientId = null;
+  let pendingAnswer = null;
+  let sessionResetRequired = false;
   const conversationStore = opts.conversationStore || {
     get: function() { return null; },
     set: function() { return false; },
@@ -280,6 +293,8 @@ function createDoubaoBrowserAdapter(options) {
   }
 
   async function ensureSession(input) {
+    if (closingPromise) await closingPromise;
+    if (sessionResetRequired) await close();
     if (sessionReady) return;
     if (!openingPromise) {
       const generation = sessionGeneration;
@@ -302,7 +317,7 @@ function createDoubaoBrowserAdapter(options) {
     } catch (error) {
       if (error && error.code === "PLAYWRIGHT_SESSION_NOT_OPEN") {
         sessionReady = false;
-        activeClientId = null;
+        pendingAnswer = null;
       }
       throw error;
     }
@@ -357,32 +372,26 @@ function createDoubaoBrowserAdapter(options) {
     return getLoginState();
   }
 
-  async function ensureClientConversation(clientId, evaluateWithDeadline) {
-    if (!clientId || activeClientId === clientId) return;
-    const savedUrl = conversationStore.get(clientId);
+  async function ensureClientConversation(clientId, evaluateWithDeadline, snapshot, expectedUrl) {
+    if (!clientId) return null;
+    const savedUrl = expectedUrl || conversationStore.get(clientId);
     if (savedUrl) {
-      try {
-        await evaluateWithDeadline({
-          action: "switch-conversation",
-          script: navigateConversationScript(JSON.stringify(savedUrl))
-        });
-        activeClientId = clientId;
-        return;
-      } catch (error) {
-        if (error && ["DOUBAO_TIMEOUT", "PLAYWRIGHT_TIMEOUT", "ETIMEDOUT"].includes(error.code)) throw error;
-        conversationStore.remove(clientId);
-      }
+      if (conversationPath(snapshot.url) === conversationPath(savedUrl))
+        return { url: savedUrl, snapshot };
+      await evaluateWithDeadline({ action: "switch-conversation", script: navigateConversationScript(JSON.stringify(savedUrl)) });
+      return { url: savedUrl };
     }
-    await evaluateWithDeadline({
-      action: "new-conversation",
-      script: newConversationScript()
-    });
-    activeClientId = clientId;
+    const created = await evaluateWithDeadline({ action: "new-conversation", script: newConversationScript() });
+    return { url: validConversationUrl(created && created.url) || DOUBAO_CHAT_URL };
   }
 
-  function rememberClientConversation(clientId, snapshot) {
-    if (!clientId || !snapshot || typeof snapshot.url !== "string") return;
-    conversationStore.set(clientId, snapshot.url);
+  function conversationPath(url) {
+    if (typeof url !== "string") return null;
+    try {
+      const parsed = new URL(url);
+      if (parsed.origin !== "https://www.doubao.com") return null;
+      return parsed.pathname.replace(/\/$/, "");
+    } catch (_) { return null; }
   }
 
   async function collect(input) {
@@ -401,8 +410,15 @@ function createDoubaoBrowserAdapter(options) {
     const deadline = startedAt + timeoutMs;
     let phase = "open";
     let lastSnapshot = null;
-    let questionMessageId;
-    let sendConfirmed = false;
+    let initialSnapshot;
+    const resumed = pendingAnswer;
+    pendingAnswer = null;
+    if (resumed && (resumed.clientId !== clientId || resumed.question !== requestedQuestion))
+      throw codedError("DOUBAO_RESUME_MISMATCH", "暂停期间问题已变化，请核对原会话后重试。");
+    let sendConfirmed = Boolean(resumed);
+    let expectedUrl = resumed && resumed.url;
+    let baselineAnswer = resumed && resumed.baselineAnswer;
+    let questionMessageId = resumed && resumed.questionMessageId;
     const timedOut = function() { return timeoutError(phase, clock() - startedAt); };
     const evaluateWithDeadline = async function(input) {
       const remaining = deadline - clock();
@@ -417,8 +433,18 @@ function createDoubaoBrowserAdapter(options) {
     };
     const readPage = async function() {
       lastSnapshot = await evaluateWithDeadline({ action: "inspect-page", script: inspectPageScript() });
-      const pageState = await assertPageCollectable(lastSnapshot);
-      if (pageState.status === "authenticated") rememberClientConversation(clientId, lastSnapshot);
+      await assertPageCollectable(lastSnapshot);
+      // A new conversation can acquire its URL after the send acknowledgement.
+      // Bind that transition only when the acknowledged user message is present.
+      if (clientId && sendConfirmed && conversationPath(expectedUrl) === "/chat" &&
+          validConversationUrl(lastSnapshot.url) && lastSnapshot.messages.some(message =>
+            message.role === "user" && message.messageId === questionMessageId)) {
+        expectedUrl = validConversationUrl(lastSnapshot.url);
+        conversationStore.set(clientId, expectedUrl);
+      }
+      if (expectedUrl &&
+          conversationPath(lastSnapshot.url) !== conversationPath(expectedUrl))
+        throw codedError("DOUBAO_CONVERSATION_CHANGED", "豆包会话已变化，已停止本题采集，请核对客户会话。");
       return lastSnapshot;
     };
     const waitForPoll = async function() {
@@ -431,33 +457,52 @@ function createDoubaoBrowserAdapter(options) {
       await ensureSession({ timeoutMs: timeoutMs });
       if (clock() >= deadline) throw timedOut();
       phase = "conversation";
-      await ensureClientConversation(clientId, evaluateWithDeadline);
+      if (clientId) {
+        const current = await evaluateWithDeadline({ action: "inspect-page", script: inspectPageScript() });
+        await assertPageCollectable(current);
+        const conversation = await ensureClientConversation(clientId, evaluateWithDeadline, current, expectedUrl);
+        expectedUrl = conversation.url;
+        initialSnapshot = conversation.snapshot;
+      }
       phase = "ready";
-      let initialSnapshot = await readPage();
-      while (classifyPage(initialSnapshot).status === "unknown" || initialSnapshot.generating) {
-        await waitForPoll();
-        initialSnapshot = await readPage();
+      if (!resumed) {
+        initialSnapshot = initialSnapshot || await readPage();
+        while (classifyPage(initialSnapshot).status === "unknown" || initialSnapshot.generating) {
+          await waitForPoll();
+          initialSnapshot = await readPage();
+        }
+        baselineAnswer = getAnswerIdentity(initialSnapshot, requestedQuestion);
+        phase = "send";
+        const questionJson = JSON.stringify(requestedQuestion);
+        const sendResult = await evaluateWithDeadline({
+          action: "send-question",
+          questionJson: questionJson,
+          script: sendQuestionScript(questionJson, expectedUrl, Date.now() + Math.max(0, deadline - clock()))
+        });
+        if (!sendResult || sendResult.ok !== true) {
+          throw codedError("DOUBAO_SEND_FAILED", "豆包未确认问题已发送，请检查页面后重试。");
+        }
+        sendConfirmed = true;
+        questionMessageId = sendResult.questionMessageId;
+        if (clientId) {
+          const sentUrl = validConversationUrl(sendResult.url);
+          if (!questionMessageId ||
+              (!sentUrl && !(conversationPath(expectedUrl) === "/chat" && conversationPath(sendResult.url) === "/chat")) ||
+              (conversationPath(expectedUrl) !== "/chat" && conversationPath(expectedUrl) !== conversationPath(sentUrl)))
+            throw codedError("DOUBAO_SEND_UNCERTAIN", "无法确认问题所在会话，请核对后手动重试。");
+          if (sentUrl) {
+            expectedUrl = sentUrl;
+            conversationStore.set(clientId, sentUrl);
+          }
+        }
       }
-      const baselineAnswer = getAnswerIdentity(initialSnapshot, requestedQuestion);
-      phase = "send";
-      const questionJson = JSON.stringify(requestedQuestion);
-      const sendResult = await evaluateWithDeadline({
-        action: "send-question",
-        questionJson: questionJson,
-        script: sendQuestionScript(questionJson)
-      });
-      if (!sendResult || sendResult.ok !== true) {
-        throw codedError("DOUBAO_SEND_FAILED", "豆包未确认问题已发送，请检查页面后重试。");
-      }
-      sendConfirmed = true;
-      questionMessageId = sendResult.questionMessageId;
       phase = "answer";
       let previousText = null;
       let stableCount = 0;
       while (true) {
         const snapshot = await readPage();
         const answerIdentity = getAnswerIdentity(snapshot, requestedQuestion, questionMessageId);
-        if (isFreshAnswer(answerIdentity, baselineAnswer) && isAnswerComplete(snapshot, requestedQuestion, questionMessageId)) {
+        if ((!clientId || validConversationUrl(expectedUrl)) && isFreshAnswer(answerIdentity, baselineAnswer) && isAnswerComplete(snapshot, requestedQuestion, questionMessageId)) {
           const answer = selectAnswerForQuestion(snapshot, requestedQuestion, questionMessageId);
           if (answer.answerText === previousText) stableCount += 1;
           else { previousText = answer.answerText; stableCount = 1; }
@@ -473,6 +518,21 @@ function createDoubaoBrowserAdapter(options) {
     } catch (cause) {
       const error = (cause && ["DOUBAO_TIMEOUT", "PLAYWRIGHT_TIMEOUT", "ETIMEDOUT"].includes(cause.code)) || clock() >= deadline
         ? timedOut() : cause;
+      if (error && ["DOUBAO_LOGIN_REQUIRED", "DOUBAO_CHALLENGE"].includes(error.code) && sendConfirmed) {
+        if (questionMessageId && (!clientId || validConversationUrl(expectedUrl)))
+          pendingAnswer = { clientId, question: requestedQuestion, questionMessageId, url: expectedUrl, baselineAnswer };
+        else error.code = "DOUBAO_SEND_UNCERTAIN";
+      }
+      if (cause && ["PLAYWRIGHT_TIMEOUT", "ETIMEDOUT"].includes(cause.code)) {
+        sessionResetRequired = true;
+        try { await close(); }
+        catch (_) {
+          reportDiagnostic({
+            code: "DOUBAO_SESSION_CLOSE_FAILED", module: "doubao-browser-adapter", category: "transport",
+            operationId: "doubao-timeout-reset", metadata: { phase, outcome: "session-reuse-blocked" }
+          });
+        }
+      }
       const identity = getAnswerIdentity(lastSnapshot, requestedQuestion, questionMessageId);
       try {
         await captureDiagnostic(error.code || "DOUBAO_COLLECTION_FAILED", lastSnapshot, error, {
@@ -491,12 +551,19 @@ function createDoubaoBrowserAdapter(options) {
   }
 
   async function close() {
+    if (closingPromise) return closingPromise;
     sessionGeneration += 1;
     sessionReady = false;
     openingPromise = null;
-    activeClientId = null;
-    if (runtime.close) return runtime.close({ session: session });
-    return undefined;
+    pendingAnswer = null;
+    if (sessionResetRequired && !runtime.close)
+      throw codedError("DOUBAO_SESSION_RESET_REQUIRED", "浏览器任务尚未确认结束，请关闭豆包浏览器后重试。");
+    if (!runtime.close) return;
+    sessionResetRequired = true;
+    closingPromise = Promise.resolve().then(() => runtime.close({ session, timeoutMs: 10000 }))
+      .then(() => { sessionResetRequired = false; })
+      .finally(() => { closingPromise = null; });
+    return closingPromise;
   }
 
   return { mode: mode, openLogin: openLogin, getLoginState: getLoginState, collect: collect, close: close };

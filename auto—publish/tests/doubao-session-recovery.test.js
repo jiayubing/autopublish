@@ -132,7 +132,7 @@ it("answer matching binds the acknowledged message and only normalizes whitespac
   assert.throws(() => selectAnswerForQuestion(snapshot, QUESTION, "user-missing"), { code: "DOUBAO_QUESTION_NOT_FOUND" });
 });
 
-for (const code of ["DOUBAO_TIMEOUT", "DOUBAO_PAGE_ERROR", "DOUBAO_SEND_FAILED", "PLAYWRIGHT_SESSION_NOT_OPEN", "PLAYWRIGHT_EXEC_FAILED"]) {
+for (const code of ["DOUBAO_TIMEOUT", "DOUBAO_PAGE_ERROR", "DOUBAO_SEND_FAILED", "DOUBAO_CONVERSATION_CHANGED", "DOUBAO_SEND_UNCERTAIN", "DOUBAO_RESUME_MISMATCH", "DOUBAO_SESSION_RESET_REQUIRED", "PLAYWRIGHT_SESSION_NOT_OPEN", "PLAYWRIGHT_EXEC_FAILED"]) {
   it(`${code} pauses remaining tasks; resume does not replay the failed question`, async (t) => {
     const calls = []; let fail = true; let observedFailure;
     const failed = new Promise((resolve) => { observedFailure = resolve; });
