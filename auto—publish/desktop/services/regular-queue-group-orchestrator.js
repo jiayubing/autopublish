@@ -264,6 +264,11 @@ function createRegularQueueGroupOrchestrator(options) {
     return transitions.listRegularQueueGroupSnapshots({});
   }
 
+  function snapshotGroup(queueGroupId) {
+    const groups = transitions.listRegularQueueGroupSnapshots({ queueGroupId });
+    return Array.isArray(groups) ? groups[0] || null : null;
+  }
+
   async function executeClaim(claim) {
     let renewalError = null;
     let renewalReported = false;
@@ -363,9 +368,7 @@ function createRegularQueueGroupOrchestrator(options) {
 
   function runGroup(queueGroupId) {
     if (activeGroups.has(queueGroupId)) return activeGroups.get(queueGroupId);
-    const group = snapshot().find(
-      (candidate) => candidate.queueGroupId === queueGroupId,
-    );
+    const group = snapshotGroup(queueGroupId);
     if (!group) return Promise.reject(fail("REGULAR_QUEUE_GROUP_NOT_FOUND"));
     const previousPlatformOperation = activePlatforms.get(group.platformId);
     let beganRun = false;
@@ -424,9 +427,7 @@ function createRegularQueueGroupOrchestrator(options) {
               observation,
               processed: Object.freeze(completed),
             });
-          const latest = snapshot().find(
-            (candidate) => candidate.queueGroupId === queueGroupId,
-          );
+          const latest = snapshotGroup(queueGroupId);
           if (!shutdown.signal.aborted && latest && latest.remaining.length > 0)
             await waitForSubmissionInterval(intervalMs);
         }
@@ -472,9 +473,7 @@ function createRegularQueueGroupOrchestrator(options) {
       void existing
         .finally(function () {
           if (shutdown.signal.aborted) return;
-          const latest = snapshot().find(
-            (candidate) => candidate.queueGroupId === group.queueGroupId,
-          );
+          const latest = snapshotGroup(group.queueGroupId);
           if (
             latest &&
             latest.pauseIntent === "none" &&

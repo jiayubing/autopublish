@@ -348,6 +348,12 @@ const api = {
         input,
       );
     },
+    listRegularSubmissionPermissions: function (input) {
+      return ipcRenderer.invoke(
+        "content:list-regular-submission-permissions",
+        input,
+      );
+    },
     openPublicationUrl: function (input) {
       return ipcRenderer.invoke("content:open-publication-url", input);
     },

@@ -170,6 +170,16 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
             diagnostics: [],
           }),
         getArticleManagementSnapshot: managementSnapshot,
+        listRegularSubmissionPermissions: ({ clientId, articleIds }) =>
+          ok({
+            clientId,
+            revision: 1,
+            items: articleIds.map((articleId) => ({
+              articleId,
+              allowed: true,
+              reasonCodes: [],
+            })),
+          }),
         getArticleEditor: () =>
           ok({ article, editFingerprint: "article-fingerprint" }),
         getDoubaoLoginState: () => ok({ loginState: { status: "unknown" } }),
@@ -345,10 +355,10 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
       assert.equal(await dialog.getByRole("checkbox").isChecked(), true);
       await dialog.getByRole("button", { name: "关闭批量投稿" }).click();
       await page.evaluate(() => {
-        const original = window.desktopConsole.content.getArticleManagementSnapshot;
-        window.desktopConsole.content.getArticleManagementSnapshot = async (input) => {
+        const original = window.desktopConsole.content.listRegularSubmissionPermissions;
+        window.desktopConsole.content.listRegularSubmissionPermissions = async (input) => {
           const response = await original(input);
-          response.data.workflowItems.forEach((item) => { item.workflow.operations.submit.allowed = false; });
+          response.data.items.forEach((item) => { item.allowed = false; });
           return response;
         };
       });
@@ -358,9 +368,9 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
       assert.equal(await dialog.getByRole("button", { name: "下一步：选择投稿目标" }).isDisabled(), true);
       await dialog.getByRole("button", { name: "关闭批量投稿" }).click();
       await page.evaluate(() => {
-        const original = window.desktopConsole.content.getArticleManagementSnapshot;
-        window.desktopConsole.content.getArticleManagementSnapshot = () => {
-          window.desktopConsole.content.getArticleManagementSnapshot = original;
+        const original = window.desktopConsole.content.listRegularSubmissionPermissions;
+        window.desktopConsole.content.listRegularSubmissionPermissions = () => {
+          window.desktopConsole.content.listRegularSubmissionPermissions = original;
           return Promise.resolve({ ok: false, error: { code: "READ_FAILED", userMessage: "fixture read failure" } });
         };
       });

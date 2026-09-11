@@ -12,11 +12,15 @@ const {
 const {
   clientGenerationIpcContractFixtures,
 } = require("./fixtures/client-generation-ipc-contract-fixtures");
+const {
+  regularSubmissionPermissionIpcContractFixtures,
+} = require("./fixtures/regular-submission-permission-ipc-contract-fixtures");
 const { loadPreloadHarness } = require("./helpers/preload-harness");
 
 const productionIpcContractFixtures = Object.freeze([
   ...baseProductionIpcContractFixtures,
   ...clientGenerationIpcContractFixtures,
+  ...regularSubmissionPermissionIpcContractFixtures,
 ]);
 const FEATURE_OWNERS = new Set([
   "workspace",
