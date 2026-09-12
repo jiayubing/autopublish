@@ -31,13 +31,14 @@ function fixture(prefix) {
     clientKnowledge: {}, materialStore: {}, researchStore: {}, templateStore: {},
     aiProviderService: { getFingerprint: () => "fp" },
     contentStore: {
-      saveArticle: (article) => article, findByGenerationTaskId: () => null,
-      getArticle(clientId, articleId) {
+      saveArticle: (article) => article,
+      findByGenerationTaskId: () => null,
+      getGenerationTaskArticleTitle(taskId) {
         reads += 1;
-        assert.equal(articleId, "same-article");
+        const clientId = taskId.endsWith("-0") ? "client-a" : "client-b";
         const article = articles.get(clientId);
         if (article instanceof Error) throw article;
-        return article;
+        return article && article.title;
       },
     },
     runnerFactory: () => ({
