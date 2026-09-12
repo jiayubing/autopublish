@@ -26,18 +26,14 @@ function createService(articleTitle, counters) {
     },
     contentStore: {
       saveArticle: function(article) { return article; },
-      findByGenerationTaskId: function(taskId) {
-        counters.identityLookups += 1;
+      findByGenerationTaskId: function() {
+        counters.identityRecoveryLookups += 1;
+        return null;
+      },
+      getGenerationTaskArticleTitle: function(taskId) {
+        counters.titleLookups += 1;
         assert.equal(taskId, "task-1");
-        return {
-          kind: "one",
-          article: {
-            id: "article-1",
-            clientId: "client-1",
-            generationTaskId: "task-1",
-            title: articleTitle.value,
-          },
-        };
+        return articleTitle.value;
       },
       getArticle: function() {
         counters.fullArticleReads += 1;
@@ -67,9 +63,9 @@ function createService(articleTitle, counters) {
 }
 
 describe("generation title projection", function() {
-  it("uses the content identity read model instead of reopening complete article files", function() {
+  it("uses the dedicated content title read model instead of reopening complete article files", function() {
     const articleTitle = { value: "Generated title" };
-    const counters = { identityLookups: 0, fullArticleReads: 0 };
+    const counters = { titleLookups: 0, identityRecoveryLookups: 0, fullArticleReads: 0 };
     const service = createService(articleTitle, counters);
 
     const first = service.getBatch("batch-1");
@@ -79,11 +75,12 @@ describe("generation title projection", function() {
     const second = service.getBatch("batch-1");
     assert.equal(second.tasks[0].articleTitle, "Edited title");
 
-    assert.equal(counters.identityLookups, 2);
+    assert.equal(counters.titleLookups, 2);
+    assert.equal(counters.identityRecoveryLookups, 0);
     assert.equal(counters.fullArticleReads, 0);
   });
 
-  it("keeps identity conflicts out of optional title display data", function() {
+  it("keeps optional title lookup failures out of task state", function() {
     const batch = {
       id: "batch-1",
       status: "completed",
@@ -94,7 +91,8 @@ describe("generation title projection", function() {
       batchStore: { getBatch: function() { return batch; }, listBatches: function() { return [batch]; } },
       contentStore: {
         saveArticle: function(article) { return article; },
-        findByGenerationTaskId: function() { return { kind: "many", matches: [] }; },
+        findByGenerationTaskId: function() { return null; },
+        getGenerationTaskArticleTitle: function() { throw new Error("private title read detail"); },
       },
       clientKnowledge: { listClients: function() { return []; }, getClient: function() { return null; } },
       materialStore: { listMaterials: async function() { return []; }, getSelectedMaterials: async function() { return []; } },
@@ -102,6 +100,9 @@ describe("generation title projection", function() {
       templateStore: { listTemplates: function() { return []; }, getCatalogTemplate: function() { return null; } },
     });
 
-    assert.equal(Object.hasOwn(service.getBatch("batch-1").tasks[0], "articleTitle"), false);
+    const result = service.getBatch("batch-1");
+    assert.equal(Object.hasOwn(result.tasks[0], "articleTitle"), false);
+    assert.equal(result.tasks[0].status, "succeeded");
+    assert.doesNotMatch(JSON.stringify(result), /private title read detail/);
   });
 });
