@@ -187,7 +187,7 @@ it("preserves safe AI configuration failures without retrying or persisting arti
   assert.equal(contentStore.articles.length, 0);
 });
 
-it("disposal aborts an active request and prevents queued work from starting", async (t) => {
+it("disposal interrupts active work and leaves queued work recoverable", async (t) => {
   const contentStore = createMemoryContentStore();
   let signal;
   let providerCalls = 0;
@@ -206,8 +206,8 @@ it("disposal aborts an active request and prevents queued work from starting", a
   await service.dispose();
   const result = await pending;
   assert.equal(signal.aborted, true);
-  assert.deepEqual(result.failures, [{ index: 0, code: "AI_ABORTED" }, { index: 1, code: "AI_ABORTED" }]);
-  assert.equal(providerCalls, 1);
+  assert.deepEqual(result.failures, [{ index: 0, code: "CONTENT_GENERATION_INTERRUPTED" }]);
+  assert.equal(providerCalls, 1, "queued work must not start during shutdown");
   assert.equal(contentStore.articles.length, 0);
   assert.throws(() => service.start(baseInput("client-a", "after-dispose", 1, 1)), { code: "CONTENT_RUNTIME_DISPOSED" });
 });
