@@ -54,6 +54,7 @@ const domainTypeSymbols = {
     "GenerationBatch",
     "ResearchSnapshot",
     "GeneratedContentArticle",
+    "ArticleSummary",
   ],
   "types/ipc.ts": ["IpcError", "IpcResponse"],
   "types/media.ts": ["MediaType", "MediaResource", "RealOrder"],

@@ -194,7 +194,9 @@ function createContentGenerationBatchService(options) {
         title = cache.get(key);
       } else {
         try {
-          title = projectedArticleTitle(contentStore.getGenerationTaskArticleTitle(task.id));
+          title = projectedArticleTitle(contentStore.getGenerationTaskArticleTitle(task.id, {
+            clientId: task.clientId, articleId: task.articleId,
+          }));
         } catch (_) {
           // Titles are optional display data; an explicit refresh retries them.
         }

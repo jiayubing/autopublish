@@ -1,10 +1,11 @@
 const { it } = require("node:test");
 const assert = require("node:assert/strict");
+const { projectArticleSummary } = require("../src/content/article-summary");
 const { createContentStore } = require("../src/content/content-store");
 
 it("returns closed 0/1/many GenerationTaskId results without selecting a candidate", function() {
   const rows = { c1: [{ id: "a1", clientId: "c1", generationTaskId: "one" }, { id: "a2", clientId: "c1", generationTaskId: "many" }], c2: [{ id: "a3", clientId: "c2", generationTaskId: "many" }] };
-  const store = createContentStore({ listClientIds: () => ["c1", "c2"], articleStore: { listArticles: (id) => rows[id] || [] } });
+  const store = createContentStore({ listClientIds: () => ["c1", "c2"], articleStore: { listArticles: (id) => rows[id] || [], listArticleSummaries: id => (rows[id] || []).map(projectArticleSummary), getArticle: (client, id) => rows[client].find(row => row.id === id) } });
   assert.deepEqual(store.findByGenerationTaskId("missing"), { kind: "none" });
   assert.equal(store.findByGenerationTaskId("one").kind, "one");
   assert.equal(store.findByArticleId("a1").kind, "one");
@@ -13,14 +14,14 @@ it("returns closed 0/1/many GenerationTaskId results without selecting a candida
 
 it("returns closed operation identity results across clients", function() {
   const rows = { c1: [{ id: "a1", clientId: "c1", generationOperationId: "operation-1" }], c2: [{ id: "a2", clientId: "c2", generationOperationId: "operation-1" }] };
-  const store = createContentStore({ listClientIds: () => ["c1", "c2"], articleStore: { listArticles: (id) => rows[id] || [] } });
+  const store = createContentStore({ listClientIds: () => ["c1", "c2"], articleStore: { listArticles: (id) => rows[id] || [], listArticleSummaries: id => (rows[id] || []).map(projectArticleSummary), getArticle: (client, id) => rows[client].find(row => row.id === id) } });
   assert.equal(store.findByGenerationOperationId("missing").kind, "none");
   assert.deepEqual(store.findByGenerationOperationId("operation-1"), { kind: "many", matches: [{ clientId: "c1", articleId: "a1" }, { clientId: "c2", articleId: "a2" }] });
 });
 
 it("indexes 5000 articles through one client pass", function() {
   let reads = 0; const rows = Array.from({ length: 5000 }, (_, index) => ({ id: `a-${index}`, clientId: "c", generationTaskId: `t-${index}` }));
-  const store = createContentStore({ listClientIds: () => ["c"], articleStore: { listArticles: () => { reads += 1; return rows; } } });
+  const store = createContentStore({ listClientIds: () => ["c"], articleStore: { listArticles: () => rows, listArticleSummaries: () => { reads += 1; return rows.map(projectArticleSummary); }, getArticle: (_client, id) => rows.find(row => row.id === id) } });
   assert.equal(store.findByGenerationTaskId("t-4999").article.id, "a-4999");
   assert.equal(reads, 1);
 });
@@ -37,6 +38,8 @@ function readAmplificationFixture(articleCount) {
       articleReads += rows.length;
       return rows.map(function(article) { return Object.assign({}, article); });
     },
+    listArticleSummaries: function() { return this.listArticles().map(projectArticleSummary); },
+    getArticle: function(_client, id) { return Object.assign({}, rows.find(row => row.id === id)); },
     createArticle: function(article) {
       rows.push(Object.assign({}, article));
       return Object.assign({}, article);
@@ -88,8 +91,8 @@ it("updates generation identity after a legitimate save without rebuilding the l
 });
 
 it("keeps identity indexes scoped to each ContentStore instance", function() {
-  const first = createContentStore({ listClientIds: () => ["c"], articleStore: { listArticles: () => [{ id: "a", clientId: "c", generationTaskId: "first" }] } });
-  const second = createContentStore({ listClientIds: () => ["c"], articleStore: { listArticles: () => [{ id: "b", clientId: "c", generationTaskId: "second" }] } });
+  const first = createContentStore({ listClientIds: () => ["c"], articleStore: { listArticles: () => [{ id: "a", clientId: "c", generationTaskId: "first" }], listArticleSummaries: () => [projectArticleSummary({ id: "a", clientId: "c", generationTaskId: "first" })], getArticle: () => ({ id: "a", clientId: "c", generationTaskId: "first" }) } });
+  const second = createContentStore({ listClientIds: () => ["c"], articleStore: { listArticles: () => [{ id: "b", clientId: "c", generationTaskId: "second" }], listArticleSummaries: () => [projectArticleSummary({ id: "b", clientId: "c", generationTaskId: "second" })], getArticle: () => ({ id: "b", clientId: "c", generationTaskId: "second" }) } });
   assert.equal(first.findByGenerationTaskId("first").article.id, "a");
   assert.equal(first.findByGenerationTaskId("second").kind, "none");
   assert.equal(second.findByGenerationTaskId("first").kind, "none");
@@ -102,6 +105,8 @@ it("keeps mutation-session writes in the same live identity view", function() {
   let trashed = null;
   const articleStore = {
     listArticles: function() { return active ? [Object.assign({}, active)] : []; },
+    listArticleSummaries: function() { return this.listArticles().map(projectArticleSummary); },
+    getArticle: function() { return Object.assign({}, active); },
     openMutationSession: function() {
       return {
         refs: [ref],

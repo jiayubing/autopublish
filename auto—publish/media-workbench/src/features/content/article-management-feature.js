@@ -473,6 +473,14 @@ export function createArticleManagementFeature(adapters = {}) {
   // Keep command names explicit at the feature boundary so composed callers
   // retain stable TypeChecker symbols for each management capability.
   const commands = Object.freeze({
+    searchArticles: async (input) => {
+      if (disposed || !scope || input?.clientId !== scope.clientId)
+        throw new Error("Content search scope is invalid");
+      const requestedScope = scope;
+      const result = await adapters.searchArticles(input);
+      if (disposed || scope !== requestedScope) return staleContentCommandResult();
+      return result;
+    },
     getArticleEditor: (input) => runCommand("getArticleEditor", input),
     openPublicationUrl: (input) => runCommand("openPublicationUrl", input),
     saveArticle: (input) => runCommand("saveArticle", input),

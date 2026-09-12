@@ -11,12 +11,12 @@ const {
 } = require("./contracts/regular-submission-permission-contracts");
 
 function validateInput(input) {
-  if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some(function(key) { return key !== "clientId"; }) || typeof input.clientId !== "string" || !input.clientId.trim()) {
+  if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some(function(key) { return !["clientId", "search"].includes(key); }) || typeof input.clientId !== "string" || !input.clientId.trim() || (input.search !== undefined && (typeof input.search !== "string" || input.search.length > 1000))) {
     const error = new Error("Article management client is invalid");
     error.code = "ARTICLE_MANAGEMENT_CLIENT_INVALID";
     throw error;
   }
-  return { clientId: input.clientId.trim() };
+  return { clientId: input.clientId.trim(), ...(input.search === undefined ? {} : { search: input.search }) };
 }
 
 function registerArticleManagementIpc(deps) {
@@ -25,7 +25,10 @@ function registerArticleManagementIpc(deps) {
     workspaceRoot: values.rootDir,
     workspaceIdentity: values.paths && (values.paths.contentLibrary || values.paths.workspaceRoot) || values.rootDir,
     getRevision: values.getWorkspaceDataRevision,
+    getCacheRevision: values.getArticleReadRevision,
     aiContentService: values.aiContentService,
+    listArticles: values.contentStore && values.contentStore.listArticleSummaries,
+    searchArticleIds: values.contentStore && values.contentStore.searchArticleIds,
     submissionPlatformDirectory: values.submissionPlatformDirectory || createSubmissionTargetCatalog({
       directoryEntries: values.directoryEntries,
     }),

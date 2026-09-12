@@ -269,9 +269,8 @@ suite("production preload sandbox boundary", { concurrency: false }, () => {
           const result = await window.desktopConsole?.content?.getArticleManagementSnapshot({ clientId: "畅途" });
           return {
             ok: result?.ok,
-            length:
-              result?.data?.articles?.[0]?.researchSnapshots?.[0]
-                ?.references?.[0]?.snippet?.length,
+            hasResearchBody: Object.hasOwn(result?.data?.articles?.[0] || {}, "researchSnapshots"),
+            hasContent: result?.data?.articles?.[0]?.hasContent,
             errorCode: result?.error?.code || null,
           };
         })(),
@@ -396,7 +395,7 @@ suite("production preload sandbox boundary", { concurrency: false }, () => {
             userMessage: "生成请求无效，请刷新页面后重试。",
           },
         },
-        managementReference: { ok: true, length: 10000, errorCode: null },
+        managementReference: { ok: true, hasResearchBody: false, hasContent: true, errorCode: null },
         managementPublished: {
           ok: true,
           errorCode: null,

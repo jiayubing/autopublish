@@ -194,7 +194,7 @@ function installDesktopFixture(page, fixture) {
       listClients: () => ok({ clients: [client, otherClient] }),
       getClientDetails: (clientId) => ok({ client: clientId === otherClient.id ? otherClient : client, research: [] }),
       listGeneratedArticles: () => ok({ articles: state.articles }),
-      getArticleManagementSnapshot: () => {
+      getArticleManagementSnapshot: ({ search } = {}) => {
         const workflowItems = state.articles.reduce((items, article) => { const workflow = workflowFor(article); if (workflow) items.push({ articleId: article.id, workflow }); return items; }, []);
         state.trash.forEach((entry) => workflowItems.push({ articleId: entry.articleId, workflow: workflowForTrash(entry) }));
         const lifecycleCounts = workflowItems.reduce((counts, item) => {
@@ -202,7 +202,7 @@ function installDesktopFixture(page, fixture) {
           counts.total += 1;
           return counts;
         }, { pending_submission: 0, needs_completion: 0, in_submission: 0, published: 0, trash: 0, total: 0 });
-        return ok({ clientId: client.id, revision: state.revision, articles: state.articles, trash: state.trash, publicationRecords: state.publicationRecords, submissionPlatforms: [{ id: "fixture-platform", displayName: "测试投稿平台", contentQueueImport: true }], workflowItems, lifecycleCounts });
+        return ok({ clientId: client.id, revision: state.revision, articles: state.articles.map(({ content, materialSnapshots, researchSnapshots, templateSnapshot, ...article }) => ({ ...article, summaryVersion: 1, hasContent: Boolean(content.trim()), ...(templateSnapshot ? { templateSnapshot: { platform: templateSnapshot.platform, id: templateSnapshot.id, name: templateSnapshot.name, scenario: templateSnapshot.scenario } } : {}) })), ...(search ? { matchingArticleIds: state.articles.filter(article => `${article.title} ${article.content} ${article.platform} ${article.templateId} ${article.templateSnapshot?.name || ""} ${article.templateSnapshot?.scenario || ""} ${article.templateSnapshot?.body || ""}`.toLowerCase().includes(search.toLowerCase())).map(article => article.id) } : {}), trash: state.trash, publicationRecords: state.publicationRecords, submissionPlatforms: [{ id: "fixture-platform", displayName: "测试投稿平台", contentQueueImport: true }], workflowItems, lifecycleCounts });
       },
       listSubmissionBatches: () => ok({ batches: [] }),
       listArticleTrash: () => ok({ trash: state.trash }),
@@ -393,6 +393,42 @@ function historyPane(page) {
 }
 
 describe("renderer history editor flow", { concurrency: false }, () => {
+  it("searches body text from summaries, reports failures and ignores a late prior search", async () => {
+    const { page } = await openHistory();
+    try {
+      const search = page.getByRole("textbox", { name: "筛选文章库" });
+      await page.evaluate(() => {
+        const content = window.desktopConsole.content;
+        const original = content.getArticleManagementSnapshot;
+        window.searchRequests = [];
+        content.getArticleManagementSnapshot = input => {
+          if (input.search) window.searchRequests.push(input.search);
+          if (input.search === "old-request") return new Promise(resolve => {
+            window.finishOldSearch = () => original({ ...input, search: "missing-article-token" }).then(resolve);
+          });
+          if (input.search === "error-request") return Promise.reject(new Error("fixture search failed"));
+          return original(input);
+        };
+      });
+      await search.fill("old-request");
+      await page.waitForFunction(() => typeof window.finishOldSearch === "function");
+      await page.getByText("正在搜索文章…").waitFor();
+      await search.fill("用于验证历史文章编辑器");
+      const group = page.getByRole("button", { name: /fixture-platform.*历史文章超长模板名称/ });
+      await group.waitFor();
+      await page.evaluate(() => window.finishOldSearch());
+      assert.equal(await group.isVisible(), true);
+      await search.fill("error-request");
+      await page.getByRole("alert").filter({ hasText: "文章搜索失败" }).waitFor();
+      await page.getByRole("button", { name: "重试搜索" }).click();
+      await page.waitForFunction(() => window.searchRequests.filter(query => query === "error-request").length === 2);
+      await search.fill("missing-article-token");
+      await page.getByText("正在搜索文章…").waitFor({ state: "hidden" });
+      assert.equal(await group.count(), 0);
+      await search.fill("");
+      await group.waitFor();
+    } finally { await page.close(); }
+  });
   before(async () => {
     ({ browser } = await startRenderer({ port: 4174 }));
   });

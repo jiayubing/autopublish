@@ -1,6 +1,7 @@
 const crypto = require("node:crypto");
 const { clone, canonical } = require("./content-identity");
 const { createContentIdentityIndex } = require("./content-identity-index");
+const { projectArticleSummary } = require("./article-summary");
 
 // Application-facing content seam. It exposes logical identities and closed
 // cardinality results, never a path, journal, or directory ordering.
@@ -33,9 +34,13 @@ function createContentStore(options) {
   function createIdentityIndex() {
     return createContentIdentityIndex({
       listClientIds: value.listClientIds,
-      listArticles: function (clientId) { return articleStore.listArticles(clientId); },
-      snapshot: snapshotArticle,
-      resultFor: closedCardinalityResult,
+      listArticles: function (clientId) { return articleStore.listArticleSummaries(clientId); },
+      snapshot: projectArticleSummary,
+      resultFor: function(matches) {
+        const result = closedCardinalityResult(matches);
+        if (result.kind === "one") result.article = articleStore.getArticle(result.article.clientId, result.article.id);
+        return result;
+      },
     });
   }
 
@@ -60,10 +65,12 @@ function createContentStore(options) {
   function findByGenerationTaskId(id) { return getIdentityIndex().findByGenerationTaskId(id); }
   function findByGenerationOperationId(id) { return getIdentityIndex().findByGenerationOperationId(id); }
   function findByArticleId(id) { return getIdentityIndex().findByArticleId(id); }
-  function getGenerationTaskArticleTitle(id) {
-    const result = findByGenerationTaskId(id);
-    if (!result || result.kind !== "one" || !result.article) return null;
-    return typeof result.article.title === "string" ? result.article.title : null;
+  function getGenerationTaskArticleTitle(id, ref) {
+    if (ref && ref.clientId && ref.articleId) {
+      const article = articleStore.getArticleSummary(ref.clientId, ref.articleId);
+      return article.generationTaskId === id ? article.title : null;
+    }
+    return getIdentityIndex().getGenerationTaskArticleTitle(id);
   }
 
   const api = {
@@ -78,7 +85,7 @@ function createContentStore(options) {
     supportsIdempotentRemovalOperation: articleStore.supportsIdempotentRemovalOperation === true,
   };
 
-  const readOnlyDelegated = ["getArticle", "listArticles", "listTrashedArticles", "getTrashedTombstone", "isArticleTrashed", "isArticleRemoved"];
+  const readOnlyDelegated = ["getArticle", "listArticles", "getArticleSummary", "listArticleSummaries", "searchArticleIds", "listTrashedArticles", "getTrashedTombstone", "isArticleTrashed", "isArticleRemoved"];
   readOnlyDelegated.forEach(function(name) {
     if (typeof articleStore[name] === "function") api[name] = articleStore[name].bind(articleStore);
   });

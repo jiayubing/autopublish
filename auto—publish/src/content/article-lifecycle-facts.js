@@ -1,3 +1,4 @@
+const { articleHasContent } = require("./article-summary");
 const UNKNOWN_FACT_STATUS = "unknown";
 const ACTIVE_PUBLICATION_STATUSES = new Set([
   "queued",
@@ -123,7 +124,7 @@ function isMediaTarget(value) {
 }
 
 function isCompleteArticle(article) {
-  return Boolean(article && text(article.title).trim() && text(article.content).trim());
+  return Boolean(article && text(article.title).trim() && articleHasContent(article));
 }
 
 function publicationLifecycleStatus(value) {

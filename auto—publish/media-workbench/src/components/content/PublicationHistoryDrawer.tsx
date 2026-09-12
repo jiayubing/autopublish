@@ -8,7 +8,7 @@ import type {
   PublicationHistoryRecord,
   PublicationHistorySummary,
 } from "../../types/publication";
-import type { GeneratedContentArticle } from "../../types/generation";
+import type { ArticleSummary } from "../../types/generation";
 import {
   latestPublicationAttempt,
   publicationRecordStatusLabel,
@@ -16,7 +16,7 @@ import {
 } from "../../publication-status";
 
 interface PublicationHistoryDrawerProps {
-  article: GeneratedContentArticle | null;
+  article: ArticleSummary | null;
   records: PublicationHistoryRecord[];
   archives?: PublicationArchiveEntry[];
   summary?: PublicationHistorySummary;

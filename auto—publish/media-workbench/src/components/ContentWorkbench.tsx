@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { LoaderCircle, RefreshCw } from "lucide-react";
 import type { ContentClient, ContentTemplateCatalog, LiejuPublicationProfile } from "../types/content";
-import type { GeneratedContentArticle } from "../types/generation";
+import type { ArticleSummary, GeneratedContentArticle } from "../types/generation";
 import type { ArticleEditorSnapshot } from "../bridge/content";
 import ArticleGenerationView from "./content/ArticleGenerationView";
 import GeneratedArticleEditorPanel from "./content/GeneratedArticleEditorPanel";
@@ -115,6 +115,7 @@ export default function ContentWorkbench({
   );
   const [historyEditingArticle, setHistoryEditingArticle] =
     useState<GeneratedContentArticle | null>(null);
+  const [historyEditorLoading, setHistoryEditorLoading] = useState(false);
   const [historyEditingPublished, setHistoryEditingPublished] = useState(false);
   const [historyEditingEditable, setHistoryEditingEditable] = useState(true);
   const [historyEditingFingerprint, setHistoryEditingFingerprint] = useState<
@@ -249,6 +250,7 @@ export default function ContentWorkbench({
     historyDirtyRef.current = false;
     setHistoryDirtyArticleId(null);
     setHistoryEditingArticle(null);
+    setHistoryEditorLoading(false);
     setHistoryEditingFingerprint(null);
     setHistoryEditingEditable(true);
     historyEditorRequestRef.current += 1;
@@ -259,7 +261,7 @@ export default function ContentWorkbench({
   const historyEditorRequestRef = useRef(0);
 
   function openHistoryEditor(
-    nextArticle: GeneratedContentArticle,
+    nextArticle: ArticleSummary,
     source?: HTMLElement | null,
     published = false,
   ) {
@@ -274,20 +276,27 @@ export default function ContentWorkbench({
       setHistoryEditingPublished(published);
       setHistoryEditingEditable(editable);
       setHistoryEditingFingerprint(null);
-      setHistoryEditingArticle(nextArticle);
+      setHistoryEditingArticle(null);
+      setHistoryEditorLoading(true);
+      setError("");
       const loadEditor = content.commands.getArticleEditor;
-      if (typeof loadEditor !== "function") return;
+      if (typeof loadEditor !== "function") {
+        setHistoryEditorLoading(false);
+        setError("文章加载失败，请重新打开文章。");
+        return;
+      }
       void loadEditor({ clientId, articleId: nextArticle.id })
         .then((result: unknown) => {
-          if (
-            requestId !== historyEditorRequestRef.current ||
-            !isArticleEditorSnapshot(result)
-          )
-            return;
+          if (requestId !== historyEditorRequestRef.current) return;
+          if (!isArticleEditorSnapshot(result)) throw new Error("ARTICLE_EDITOR_UNAVAILABLE");
+          setHistoryEditorLoading(false);
           setHistoryEditingArticle(result.article);
           setHistoryEditingFingerprint(result.editFingerprint);
         })
         .catch(() => {
+          if (requestId !== historyEditorRequestRef.current) return;
+          setHistoryEditorLoading(false);
+          setError("文章加载失败，请重新打开文章。");
           reportRuntimeDiagnostic(
             "ARTICLE_HISTORY_EDITOR_QUERY_UNAVAILABLE",
             "workspace-invalidation",
@@ -516,6 +525,7 @@ export default function ContentWorkbench({
                   onOpenAttention={onOpenAttention}
                 />
               </div>
+              {historyEditorLoading && <div role="status" className="absolute inset-x-0 top-0 flex items-center gap-2 bg-white p-3 text-sm"><LoaderCircle className="h-4 w-4 animate-spin" />正在加载文章…</div>}
               {historyEditingArticle && (
                 <GeneratedArticleEditorPanel
                   article={historyEditingArticle}

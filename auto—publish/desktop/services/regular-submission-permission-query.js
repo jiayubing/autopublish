@@ -40,7 +40,7 @@ function createRegularSubmissionPermissionQuery(options) {
   const opts = options || {};
   const contentStore = opts.contentStore;
   const operationalStore = opts.operationalStore;
-  if (!contentStore || typeof contentStore.getArticle !== "function")
+  if (!contentStore || typeof contentStore.getArticleSummary !== "function")
     throw fail("IPC_INTERNAL");
   if (
     !operationalStore ||
@@ -68,7 +68,7 @@ function createRegularSubmissionPermissionQuery(options) {
     for (const articleId of articleIds) {
       try {
         const article = await Promise.resolve(
-          contentStore.getArticle(clientId, articleId),
+          contentStore.getArticleSummary(clientId, articleId),
         );
         articles.push(article);
       } catch (error) {

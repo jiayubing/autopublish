@@ -12,8 +12,7 @@ export type RegularSubmissionPermissionSnapshot = {
 };
 
 type ContentIpcResponse<T> =
-  | { ok: true; data?: T }
-  | { ok: false; error?: Partial<IpcError> };
+  { ok: true; data?: T } | { ok: false; error?: Partial<IpcError> };
 
 type PermissionContentApi = {
   listRegularSubmissionPermissions: (input: {
@@ -27,7 +26,9 @@ export async function listRegularSubmissionPermissions(input: {
   articleIds: string[];
 }): Promise<RegularSubmissionPermissionSnapshot> {
   const api = requireContentApi<PermissionContentApi>();
-  const result = await requireBridgeMethod(api.listRegularSubmissionPermissions)(input);
+  const result = await requireBridgeMethod(
+    api.listRegularSubmissionPermissions,
+  )(input);
   if (result.ok === false)
     throw ipcError(result.error, "无法读取文章投稿状态，请重试。");
   if (result.data === undefined || result.data === null)

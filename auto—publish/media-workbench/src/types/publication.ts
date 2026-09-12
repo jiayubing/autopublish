@@ -1,4 +1,4 @@
-import type { GeneratedContentArticle } from "./generation";
+import type { ArticleSummary } from "./generation";
 import type { ArticleOperation } from "../article-workflow";
 import type { ArticleOrderSummary } from "../article-workflow";
 
@@ -709,7 +709,8 @@ export interface ArticleTrashRecord {
 export interface ArticleManagementSnapshot {
   clientId: string;
   revision: number;
-  articles: GeneratedContentArticle[];
+  articles: ArticleSummary[];
+  matchingArticleIds?: string[];
   trash: ArticleTrashRecord[];
   publicationRecords: PublicationHistoryRecord[];
   publishedArchives?: PublicationArchiveEntry[];

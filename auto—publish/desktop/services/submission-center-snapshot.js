@@ -329,14 +329,16 @@ function createSubmissionCenterSnapshot(options) {
       throw fail("SUBMISSION_CENTER_QUERY_FAILED");
     }
     const revision = Number(opts.getRevision());
-    const key = `${opts.getWorkspaceRuntimeId()}\u0000${clientId || "*"}\u0000${query.page}\u0000${query.pageSize}\u0000${revision}`;
-    if (cache.has(key)) return frozenClone(cache.get(key));
+    const cacheRevision = typeof opts.getCacheRevision === "function" ? opts.getCacheRevision() : revision;
+    const key = `${opts.getWorkspaceRuntimeId()}\u0000${clientId || "*"}\u0000${query.page}\u0000${query.pageSize}\u0000${cacheRevision}`;
+    if (cache.has(key)) return frozenClone({ ...cache.get(key), revision });
     try {
       let result = await attempt(clientId, revision, query);
       if (result.revisionBefore !== result.revisionAfter) result = await attempt(clientId, undefined, query);
       if (result.revisionBefore !== result.revisionAfter)
         throw fail("SUBMISSION_CENTER_SNAPSHOT_STALE");
-      const finalKey = `${opts.getWorkspaceRuntimeId()}\u0000${clientId || "*"}\u0000${query.page}\u0000${query.pageSize}\u0000${result.revisionBefore}`;
+      const finalCacheRevision = typeof opts.getCacheRevision === "function" ? opts.getCacheRevision() : result.revisionBefore;
+      const finalKey = `${opts.getWorkspaceRuntimeId()}\u0000${clientId || "*"}\u0000${query.page}\u0000${query.pageSize}\u0000${finalCacheRevision}`;
       cache.clear();
       cache.set(finalKey, frozenClone(result.snapshot));
       return frozenClone(result.snapshot);

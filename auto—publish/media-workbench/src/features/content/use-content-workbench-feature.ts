@@ -83,6 +83,11 @@ export function useContentWorkbenchFeature() {
       getClientDetails: getContentClientDetails,
       listResearchMetadata: listContentResearchMetadata,
       loadManagement: getArticleManagementSnapshot,
+      searchArticles: async (input: { clientId: string; search: string }) => {
+        const result = await getArticleManagementSnapshot(input.clientId, input.search);
+        if (!Array.isArray(result.matchingArticleIds)) throw new Error("文章搜索结果不可用，请重试。");
+        return { articleIds: result.matchingArticleIds };
+      },
       openPublicationUrl,
       createQuestion: createContentQuestion,
       updateQuestion: updateContentQuestion,

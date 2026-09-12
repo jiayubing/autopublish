@@ -1,4 +1,6 @@
 const fs = require("node:fs");
+const { randomUUID } = require("node:crypto");
+const { projectArticleSummary } = require("./article-summary");
 const { reportDiagnostic } = require("../diagnostics/diagnostic-producer");
 
 const { fingerprintArticle } = require("./content-store");
@@ -29,6 +31,7 @@ function createArticleStore(workspaceRoot, options) {
   const opts = options || {};
   const policy = opts.pathPolicy || createContentPathPolicy(workspaceRoot, { paths: opts.paths });
   const fsApi = opts.fs || fs;
+  const summaries = new Map();
   const articleLock = createArticleLock({
     fs: fsApi,
     fault: opts.internalArticleLockFault,
@@ -90,6 +93,11 @@ function createArticleStore(workspaceRoot, options) {
       JSON.stringify(articleForPersistence(normalized), null, 2) + "\n",
       markdownFor(normalized),
     );
+    try { rememberSummary(files, projectArticleSummary(normalized), readVersion(files, true)); }
+    catch (error) {
+      reportDiagnostic({ code: "ARTICLE_SUMMARY_CACHE_WRITE_FAILED", module: "article-store",
+        category: "storage", operationId: "article-summary", metadata: { outcome: "uncached" } });
+    }
     return normalized;
   }
 
@@ -122,13 +130,17 @@ function createArticleStore(workspaceRoot, options) {
     });
   }
 
-  function listArticles(clientId) {
+  function listArticleIds(clientId) {
     const files = articlePaths(clientId, "list-probe", false);
     if (!exists(files.directory)) return [];
     const names = [...new Set(fsApi.readdirSync(files.directory, { withFileTypes: true })
       .filter(function (entry) { return entry.isFile() && !entry.isSymbolicLink() && (entry.name.toLowerCase().endsWith(".json") || (entry.name.endsWith(".journal") && !entry.name.endsWith(".trash.journal"))); })
       .map(function (entry) { return entry.name.slice(0, entry.name.endsWith(".journal") ? -8 : -5); }))];
-    return names.map(function (articleId) {
+    return names;
+  }
+
+  function listArticles(clientId) {
+    return listArticleIds(clientId).map(function (articleId) {
       const itemFiles = articlePaths(clientId, articleId, false);
       // A stable pair can be read without creating a write lock. Any concurrent
       // replacement or recovery marker falls back to the existing locked read.
@@ -152,21 +164,99 @@ function createArticleStore(workspaceRoot, options) {
     });
   }
 
-  function readVersion(files) {
+  function readVersion(files, locked = false) {
     const stem = files.json.slice(0, -5);
-    if (exists(stem + ".article-lock") || exists(stem + ".journal")) return null;
+    if ((!locked && exists(stem + ".article-lock")) || exists(stem + ".journal")) return null;
     try {
       const version = [files.json, files.markdown].map(function (filename) {
         const stat = fsApi.lstatSync(filename, { bigint: true });
         if (!stat.isFile() || stat.isSymbolicLink() || typeof stat.mtimeNs !== "bigint") return null;
         return [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(":");
       });
-      if (version.includes(null) || exists(stem + ".article-lock") || exists(stem + ".journal")) return null;
+      if (version.includes(null) || (!locked && exists(stem + ".article-lock")) || exists(stem + ".journal")) return null;
       return version.join("|");
     } catch (error) {
       if (error && error.code === "ENOENT") return null;
       throw error;
     }
+  }
+
+  function getArticleSummary(clientId, articleId) {
+    const files = articlePaths(clientId, articleId, false);
+    const version = readVersion(files);
+    const cacheFile = files.json.slice(0, -5) + ".summary";
+    if (version === null) {
+      summaries.delete(cacheFile);
+      return projectArticleSummary(getArticle(clientId, articleId));
+    }
+    let cached = summaries.get(cacheFile);
+    if (!cached || cached.version !== version) {
+      cached = null;
+      try {
+        if (policy.assertRegularFile(cacheFile, { boundary: files.directory,
+          allowMissing: true, code: "ARTICLE_PATH_OUT_OF_BOUNDS", label: "Article summary" })) {
+          cached = JSON.parse(fsApi.readFileSync(cacheFile, "utf8"));
+          const value = cached && cached.summary;
+          if (!value || value.summaryVersion !== 1 || typeof value.hasContent !== "boolean" ||
+            value.id !== articleId || value.clientId !== clientId || typeof value.title !== "string" ||
+            JSON.stringify(projectArticleSummary(value)) !== JSON.stringify(value)) cached = null;
+        }
+      } catch (error) {
+        // A missing, damaged or unreadable derived cache never hides source errors.
+        reportDiagnostic({ code: "ARTICLE_SUMMARY_CACHE_READ_FAILED", module: "article-store",
+          category: "storage", operationId: "article-summary", metadata: { outcome: "rebuild" } });
+        cached = null;
+      }
+    }
+    if (cached && cached.version === version && readVersion(files) === version) {
+      summaries.set(cacheFile, cached);
+      return projectArticleSummary(cached.summary);
+    }
+    let article;
+    try { article = readArticle(clientId, articleId, files); }
+    catch (error) {
+      if (readVersion(files) === version) throw error;
+      return projectArticleSummary(getArticle(clientId, articleId));
+    }
+    const summary = projectArticleSummary(article);
+    if (readVersion(files) !== version) return projectArticleSummary(getArticle(clientId, articleId));
+    rememberSummary(files, summary, version);
+    return projectArticleSummary(summary);
+  }
+
+  function rememberSummary(files, summary, version) {
+    if (version === null) return;
+    const cacheFile = files.json.slice(0, -5) + ".summary";
+    const cached = { version, summary };
+    summaries.set(cacheFile, cached);
+    const temporary = cacheFile + "." + randomUUID() + ".tmp";
+    try {
+      fsApi.writeFileSync(temporary, JSON.stringify(cached), { encoding: "utf8", flag: "wx" });
+      fsApi.renameSync(temporary, cacheFile);
+    } catch (error) {
+      reportDiagnostic({ code: "ARTICLE_SUMMARY_CACHE_WRITE_FAILED", module: "article-store",
+        category: "storage", operationId: "article-summary", metadata: { outcome: "uncached" } });
+    } finally {
+      try { fsApi.unlinkSync(temporary); }
+      catch (error) {
+        if (!error || error.code !== "ENOENT") reportDiagnostic({ code: "ARTICLE_SUMMARY_CACHE_CLEANUP_FAILED",
+          module: "article-store", category: "storage", operationId: "article-summary", metadata: { outcome: "best-effort" } });
+      }
+    }
+  }
+
+  function listArticleSummaries(clientId) {
+    return listArticleIds(clientId).map(id => getArticleSummary(clientId, id)).sort(function(left, right) {
+      return Date.parse(right.createdAt) - Date.parse(left.createdAt) || String(left.id).localeCompare(String(right.id));
+    });
+  }
+
+  function searchArticleIds(clientId, query) {
+    const term = String(query || "").trim().toLowerCase();
+    if (!term) return listArticleIds(clientId);
+    return listArticles(clientId).filter(article =>
+      `${article.title} ${article.content} ${article.platform} ${article.templateId} ${article.templateSnapshot?.name || ""} ${article.templateSnapshot?.scenario || ""} ${article.templateSnapshot?.body || ""}`
+        .toLowerCase().includes(term)).map(article => article.id);
   }
 
   function getTrashedPaths(clientId, articleId, create) {
@@ -421,6 +511,13 @@ function createArticleStore(workspaceRoot, options) {
     const trashed = readTrashedArticleUnlocked(clientId, articleId);
     const terminal = assertTombstone(Object.assign({}, tombstone, { permanentlyDeleted: true, purgedAt: purgedAt || new Date().toISOString() }), clientId, articleId);
     transactions.permanentlyDelete(trashed.files, JSON.stringify(terminal, null, 2) + "\n");
+    const cacheFile = sourcePaths(clientId, articleId, false).json.slice(0, -5) + ".summary";
+    summaries.delete(cacheFile);
+    try { fsApi.unlinkSync(cacheFile); }
+    catch (error) {
+      if (!error || error.code !== "ENOENT") reportDiagnostic({ code: "ARTICLE_SUMMARY_CACHE_CLEANUP_FAILED",
+        module: "article-store", category: "storage", operationId: "article-summary", metadata: { outcome: "best-effort" } });
+    }
     return terminal;
   }
 
@@ -447,6 +544,9 @@ function createArticleStore(workspaceRoot, options) {
     openMutationSession,
     getArticle,
     listArticles,
+    getArticleSummary,
+    listArticleSummaries,
+    searchArticleIds,
     moveArticleToTrash,
     restoreTrashedArticle,
     listTrashedArticles,

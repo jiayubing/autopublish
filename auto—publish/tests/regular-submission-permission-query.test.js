@@ -22,7 +22,7 @@ test("regular submission permission query reads only requested articles and reus
   ]);
   const query = createRegularSubmissionPermissionQuery({
     contentStore: {
-      getArticle(clientId, articleId) {
+      getArticleSummary(clientId, articleId) {
         articleReads.push([clientId, articleId]);
         if (articles.has(articleId)) return articles.get(articleId);
         const error = new Error("missing");

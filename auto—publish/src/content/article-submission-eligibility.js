@@ -1,3 +1,4 @@
+const { articleHasContent } = require("./article-summary");
 const REASON_CODES = Object.freeze({
   ARTICLE_IDENTITY_INVALID: "ARTICLE_IDENTITY_INVALID",
   ARTICLE_TITLE_EMPTY: "ARTICLE_TITLE_EMPTY",
@@ -22,7 +23,7 @@ function evaluateArticleSubmissionEligibility(article, options) {
   const reasonCodes = [];
   if (!hasText(value.id) || !hasText(value.clientId)) reasonCodes.push(REASON_CODES.ARTICLE_IDENTITY_INVALID);
   if (!hasText(value.title)) reasonCodes.push(REASON_CODES.ARTICLE_TITLE_EMPTY);
-  if (!hasText(value.content)) reasonCodes.push(REASON_CODES.ARTICLE_CONTENT_EMPTY);
+  if (!articleHasContent(value)) reasonCodes.push(REASON_CODES.ARTICLE_CONTENT_EMPTY);
   if (opts.targetPlatform && opts.targetPlatform.contentQueueImport !== true) reasonCodes.push(REASON_CODES.ARTICLE_TARGET_UNSUPPORTED);
   return {
     eligible: reasonCodes.length === 0,

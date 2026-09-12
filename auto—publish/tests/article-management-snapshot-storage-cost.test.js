@@ -114,9 +114,10 @@ function fixture(articleCount) {
   }
   function openSnapshot() {
     const invalidation = createWorkspaceDataInvalidation({ workspaceRuntimeId: "snapshot-cost" });
+    const readContent = createContentStore({ articleStore: createArticleStore(root, { fs: articleFs }), listClientIds: () => CLIENTS });
     const service = createArticleManagementSnapshot({
       workspaceRoot: root, getRevision: invalidation.getRevision,
-      listArticles: (clientId) => query("articles", () => content.listArticles(clientId)),
+      listArticles: (clientId) => query("articles", () => readContent.listArticleSummaries(clientId)),
       listTrash: (clientId) => query("trash", () => content.listTrashedArticles(clientId)),
       operationalStore: { listArticleLifecycleFacts: (input) => query("facts", () => store.listArticleLifecycleFacts(input)) },
       publishedArchiveQueries: { listPublishedArchives: (input) => query("archives", () => ports.publishedArchiveQueries.listPublishedArchives(input)) },
@@ -179,7 +180,7 @@ for (const articleCount of [100, 1000]) {
             const result = await f.measure(() => service.get({ clientId: scope }), repeat === 0);
             assert.equal(result.snapshot.clientId, scope);
             assert.equal(result.snapshot.articles.length, articleCount);
-            assert.ok(result.snapshot.articles.every((article) => article.clientId === scope && article.content === BODY));
+            assert.ok(result.snapshot.articles.every((article) => article.clientId === scope && article.hasContent === true && !("content" in article)));
             const historyCount = scope === "none" ? 0 : articleCount - 1;
             assert.equal(result.snapshot.publicationRecords.length, historyCount);
             assert.equal(result.snapshot.publishedArchives.length, scope === "published" ? articleCount - 1 : 0);
@@ -197,8 +198,8 @@ for (const articleCount of [100, 1000]) {
           await read("switch", nextClient);
           assert.deepEqual(await read("switchBack", clientId), refreshed);
         }
-        // Stable list reads validate JSON + Markdown without a write lock.
-        assert.equal(costs.first.articleFileReads, articleCount * 2);
+        // First reads load persisted summaries; a legal save refreshes only its changed summary.
+        assert.equal(costs.first.articleFileReads, articleCount);
         assert.equal(costs.first.lockFileReads, 0);
         assert.equal(costs.first.fileReads, costs.first.articleFileReads + costs.first.lockFileReads);
         assert.ok(costs.first.sqlReads > 0);
@@ -206,7 +207,8 @@ for (const articleCount of [100, 1000]) {
         assert.equal(costs.hit.sqlReads, 0);
         assert.deepEqual(costs.hit.queries, { articles: 0, trash: 0, facts: 0, archives: 0 });
         assert.deepEqual(costs.refresh.queries, costs.first.queries);
-        assert.equal(costs.refresh.articleFileBytes, costs.first.articleFileBytes);
+        assert.ok(costs.refresh.articleFileReads <= 1);
+        assert.ok(costs.refresh.articleFileBytes < costs.first.articleFileBytes);
         const timing = Object.fromEntries(Object.entries(times).map(([phase, samples]) => {
           const sorted = [...samples].sort((a, b) => a - b);
           return [phase, { samples, medianMs: sorted[1], minMs: sorted[0], maxMs: sorted[2] }];

@@ -767,7 +767,7 @@ test("article management preserves a saved article when a legacy publication lac
   assert.equal("targetKey" in response.data.publicationRecords[0], false);
 });
 
-test("article management safely bounds a generated article reference accepted by the research producer", function () {
+test("article management excludes research bodies and references from its summary contract", function () {
   const registry = createContractRegistry(contentCoreContracts);
   const contract = registry.byChannel("content:get-article-management-snapshot");
   const projected = contentCore.projectManagementSnapshot({
@@ -810,11 +810,10 @@ test("article management safely bounds a generated article reference accepted by
   });
 
   const response = registry.success(contract, projected);
-  const reference = response.data.articles[0].researchSnapshots[0].references[0];
   assert.equal(response.ok, true);
-  assert.equal(reference.title, "超长引用摘要");
-  assert.equal(reference.url, "https://example.com/reference");
-  assert.equal(reference.snippet.length, 10000);
+  assert.equal("researchSnapshots" in response.data.articles[0], false);
+  assert.equal("content" in response.data.articles[0], false);
+  assert.equal(response.data.articles[0].hasContent, true);
 });
 
 test("generated articles normalize legacy research provenance at the production IPC seam", async function () {

@@ -266,91 +266,6 @@ function createArticleAttentionQuery(options) {
     };
   }
 
-  function batchArticleLookup(clientId) {
-    const listArticles = reader("listArticles", null);
-    const listTrashedArticles = reader("listTrashedArticles", null);
-    if (!clientId || (!listArticles && !listTrashedArticles)) return null;
-    const active = new Map();
-    const trashed = new Map();
-    let unavailable = false;
-
-    function readBatch(source, target, operation, fallbackCode) {
-      if (!source) return;
-      try {
-        const items = source(clientId);
-        if (!Array.isArray(items)) throw Object.assign(new Error("Invalid article batch"), { code: fallbackCode });
-        items.forEach(function (item) {
-          if (!item || typeof item !== "object") return;
-          const value = item.tombstone && typeof item.tombstone === "object"
-            ? item.tombstone
-            : item;
-          const articleId = safeText(value.articleId || value.id, 200);
-          if (articleId) target.set(articleId, value);
-        });
-      } catch (error) {
-        unavailable = true;
-        reportDiagnostic({
-          code: "ARTICLE_ATTENTION_LOOKUP_FAILED",
-          module: "article-attention-query",
-          category: "storage",
-          operationId: `article-attention-${operation}`,
-          metadata: {
-            operation,
-            phase: "read",
-            outcome: "unavailable",
-            errorCode: diagnosticErrorCode(error, fallbackCode),
-          },
-        });
-      }
-    }
-
-    readBatch(listArticles, active, "article-batch-read", "ARTICLE_BATCH_READ_FAILED");
-    readBatch(
-      listTrashedArticles,
-      trashed,
-      "trashed-article-batch-read",
-      "ARTICLE_TRASH_BATCH_READ_FAILED",
-    );
-
-    return function resolve(item) {
-      const value = item || {};
-      const articleId = safeText(value.articleId, 200);
-      if (unavailable)
-        return {
-          exists: null,
-          status: value.articleStatus || null,
-          title: null,
-          lookupStatus: "unavailable",
-        };
-      if (articleId && active.has(articleId)) {
-        const article = active.get(articleId);
-        return {
-          exists: true,
-          status: article.status || null,
-          title: article.title || null,
-          submissionEligible: evaluateArticleSubmissionEligibility(article).eligible,
-          lookupStatus: "available",
-        };
-      }
-      if (articleId && trashed.has(articleId)) {
-        const tombstone = trashed.get(articleId);
-        return {
-          exists: false,
-          removed: true,
-          status: "removed",
-          title: tombstone.titleSnapshot || tombstone.title || null,
-          lookupStatus: "available",
-        };
-      }
-      return {
-        exists: false,
-        status: value.articleStatus || null,
-        title: null,
-        lookupStatus: "not_found",
-      };
-    };
-  }
-
   function titleFor(item, articleState) {
     const snapshot = safeText(item && (item.titleSnapshot || item.title), 200);
     return snapshot || safeText(articleState && articleState.title, 200);
@@ -652,7 +567,13 @@ function createArticleAttentionQuery(options) {
   }
 
   function entries(clientId) {
-    const resolveArticle = batchArticleLookup(clientId);
+    const articleStates = new Map();
+    function resolveArticle(item) {
+      const key = JSON.stringify([item && item.clientId, item && item.articleId]);
+      if (!item || !item.clientId || !item.articleId) return articleLookup(item);
+      if (!articleStates.has(key)) articleStates.set(key, articleLookup(item));
+      return articleStates.get(key);
+    }
     const transactions = transactionEntries(clientId, resolveArticle);
     const all = transactions.concat(
       publicationEntries(clientId, resolveArticle),
@@ -680,14 +601,15 @@ function createArticleAttentionQuery(options) {
 
   function snapshot(clientId) {
     const revision = currentRevision();
-    if (cachedRevision !== revision) {
+    const cacheRevision = typeof opts.getCacheRevision === "function" ? opts.getCacheRevision() : revision;
+    if (cachedRevision !== cacheRevision) {
       cachedSnapshots.clear();
-      cachedRevision = revision;
+      cachedRevision = cacheRevision;
     }
-    const cacheKey = `${revision}\u0000${clientId || ""}`;
+    const cacheKey = `${cacheRevision}\u0000${clientId || ""}`;
     if (!cachedSnapshots.has(cacheKey))
       cachedSnapshots.set(cacheKey, { revision: revision, entries: entries(clientId) });
-    return cachedSnapshots.get(cacheKey);
+    return { ...cachedSnapshots.get(cacheKey), revision };
   }
 
   function list(input) {

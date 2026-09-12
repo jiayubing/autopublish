@@ -18,7 +18,7 @@ import type {
   PublicationArchiveEntry,
   PublicationHistoryRecord,
 } from "../../types/publication";
-import type { GeneratedContentArticle } from "../../types/generation";
+import type { ArticleSummary } from "../../types/generation";
 import { type ArticleWorkflowFilter } from "../../article-workflow";
 import type { ArticleLibraryNavigationIntent } from "../../article-library-navigation";
 import type {
@@ -51,7 +51,7 @@ const EMPTY_FAVORITE_MEDIA_PAGE: FavoriteMediaPage = {
   loading: false,
 };
 
-function selectionKey(article: GeneratedContentArticle) {
+function selectionKey(article: ArticleSummary) {
   return articleSelectionKey(article);
 }
 
@@ -90,6 +90,23 @@ export default function GeneratedArticlesView({
   } = management;
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [filter, setFilter] = useState("");
+  const [searchRetry, setSearchRetry] = useState(0);
+  const [searchResult, setSearchResult] = useState<{ key: string; ids: string[]; error?: string } | null>(null);
+  const searchText = filter.trim();
+  const searchKey = JSON.stringify([workspaceScopeKey, clientId, searchText]);
+  useEffect(() => {
+    if (!searchText) { setSearchResult(null); return; }
+    let current = true;
+    setSearchResult(null);
+    const timer = setTimeout(() => {
+      void commands.searchArticles({ clientId, search: searchText }).then(result => {
+        if (current && "articleIds" in result) setSearchResult({ key: searchKey, ids: result.articleIds });
+      }).catch(() => {
+        if (current) setSearchResult({ key: searchKey, ids: [], error: "文章搜索失败，请重试。" });
+      });
+    }, 200);
+    return () => { current = false; clearTimeout(timer); };
+  }, [searchKey, searchText, clientId, commands.searchArticles, articles, searchRetry]);
   const [createdFrom, setCreatedFrom] = useState("");
   const [createdTo, setCreatedTo] = useState("");
   const [selectedStage, setSelectedStage] = useState<ArticleWorkflowFilter>(
@@ -101,7 +118,7 @@ export default function GeneratedArticlesView({
     [allSubmissionPlatforms],
   );
   const [drawerArticle, setDrawerArticle] =
-    useState<GeneratedContentArticle | null>(null);
+    useState<ArticleSummary | null>(null);
   const handledArticleNavigationRef =
     useRef<ArticleLibraryNavigationIntent | null>(null);
   const lastNonTrashStageRef = useRef<ArticleWorkflowFilter>(
@@ -177,32 +194,32 @@ export default function GeneratedArticlesView({
     [articles],
   );
 
-  function workflowForArticle(article: GeneratedContentArticle) {
+  function workflowForArticle(article: ArticleSummary) {
     return workflowByArticle.get(article.id);
   }
 
-  function canSubmitArticle(article: GeneratedContentArticle): boolean {
+  function canSubmitArticle(article: ArticleSummary): boolean {
     const workflow = workflowForArticle(article);
     const allowed =
       workflow?.operations?.submit?.allowed ?? workflow?.locks.canSubmit;
     return allowed === true && !(dirtyArticleId && article.id === dirtyArticleId);
   }
 
-  function canTrashArticle(article: GeneratedContentArticle): boolean {
+  function canTrashArticle(article: ArticleSummary): boolean {
     const workflow = workflowForArticle(article);
     const allowed =
       workflow?.operations?.trash?.allowed ?? workflow?.locks.canTrash;
     return allowed === true && !isPublishedArticle(article);
   }
 
-  function isArticleSelectable(article: GeneratedContentArticle): boolean {
+  function isArticleSelectable(article: ArticleSummary): boolean {
     return (
       selectableArticles([article], clientId).length > 0 &&
       (canSubmitArticle(article) || canTrashArticle(article))
     );
   }
 
-  function isPublishedArticle(article: GeneratedContentArticle): boolean {
+  function isPublishedArticle(article: ArticleSummary): boolean {
     const workflow = workflowForArticle(article);
     return workflow?.stage === "published";
   }
@@ -224,9 +241,7 @@ export default function GeneratedArticlesView({
       );
       const textMatches =
         !query ||
-        `${article.title} ${article.content} ${article.platform} ${article.templateId} ${article.templateSnapshot?.name || ""} ${article.templateSnapshot?.scenario || ""} ${article.templateSnapshot?.body || ""}`
-          .toLowerCase()
-          .includes(query);
+        (searchResult?.key === searchKey && searchResult.ids.includes(article.id));
       return stageMatches && batchMatches && textMatches && dateMatches;
     });
   }, [
@@ -234,6 +249,8 @@ export default function GeneratedArticlesView({
     createdFrom,
     createdTo,
     filter,
+    searchResult,
+    searchKey,
     generationBatchId,
     publishedTimeFacts,
     selectedStage,
@@ -308,7 +325,7 @@ export default function GeneratedArticlesView({
     [commandBusy, removalSnapshot.busy],
   );
 
-  function toggleArticle(article: GeneratedContentArticle) {
+  function toggleArticle(article: ArticleSummary) {
     if (!isArticleSelectable(article)) return;
     const key = selectionKey(article);
     updateSelected((current) =>
@@ -318,7 +335,7 @@ export default function GeneratedArticlesView({
     );
   }
 
-  function toggleGroup(groupArticles: GeneratedContentArticle[]) {
+  function toggleGroup(groupArticles: ArticleSummary[]) {
     const ids = selectableArticles(groupArticles, clientId)
       .filter(isArticleSelectable)
       .map(selectionKey);
@@ -342,7 +359,7 @@ export default function GeneratedArticlesView({
   }
 
   function openArticle(
-    article: GeneratedContentArticle,
+    article: ArticleSummary,
     source?: HTMLElement | null,
   ) {
     const workflow = workflowForArticle(article);
@@ -603,6 +620,11 @@ export default function GeneratedArticlesView({
         >
           {visibleError}
         </div>
+      )}
+
+      {searchText && searchResult?.key !== searchKey && <div role="status">正在搜索文章…</div>}
+      {searchResult?.key === searchKey && searchResult.error && (
+        <div role="alert">{searchResult.error} <Button onClick={() => setSearchRetry(value => value + 1)}>重试搜索</Button></div>
       )}
 
       <GeneratedArticlesList

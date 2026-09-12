@@ -149,7 +149,7 @@ test("R5 generated articles cross ordinary submission and partial admission surv
       const snapshot = createArticleManagementSnapshot({
         workspaceIdentity: "r5-synthetic-workspace",
         getRevision: () => revision,
-        listArticles: (clientId) => contentStore.listArticles(clientId),
+        listArticles: (clientId) => contentStore.listArticleSummaries(clientId),
         operationalStore: store,
         publishedArchiveQueries: ports.publishedArchiveQueries,
       });
@@ -190,9 +190,12 @@ test("R5 generated articles cross ordinary submission and partial admission surv
     assert.ok(article);
     assert.equal(article.generationBatchId, started.id);
     assert.equal(article.platform, "draft");
-    assert.equal(article.researchSnapshots[0].answerText, sources.get(ref.clientId).answerText);
-    assert.equal(article.researchSnapshots[0].collectionMethod, sources.get(ref.clientId).collectionMethod);
-    assert.equal(article.materialSnapshots.length, 1);
+    assert.equal("content" in article, false);
+    assert.equal("researchSnapshots" in article, false);
+    const detail = runtime.contentStore.getArticle(ref.clientId, ref.articleId);
+    assert.equal(detail.researchSnapshots[0].answerText, sources.get(ref.clientId).answerText);
+    assert.equal(detail.researchSnapshots[0].collectionMethod, sources.get(ref.clientId).collectionMethod);
+    assert.equal(detail.materialSnapshots.length, 1);
     assert.equal(model.workflowByArticle[ref.articleId].stage, "pending_submission");
     assert.equal(model.workflowByArticle[ref.articleId].operations.submit.allowed, true);
     assert.ok(aiCalls.some((messages) => messages.some((message) => message.content.includes(sources.get(ref.clientId).answerText))));
@@ -210,7 +213,7 @@ test("R5 generated articles cross ordinary submission and partial admission surv
   const published = await runtime.snapshot.get(CLIENTS[0]);
   const publishedArchive = published.publishedArchives[0];
   assert.equal(published.workflowByArticle[articleRefs[0].articleId].stage, "published");
-  assert.equal(publishedArchive.publicationEvidence.body, published.articles[0].content);
+  assert.equal(publishedArchive.publicationEvidence.body, runtime.contentStore.getArticle(CLIENTS[0], articleRefs[0].articleId).content);
   assert.equal(publishedArchive.publicationEvidence.targetSnapshotV1.platformId, "hepan");
   assert.equal(publishedArchive.publicationEvidence.firstPublishedAt, PUBLISHED_AT);
   assert.equal(publishedArchive.publicationEvidence.firstPublishedAtSource, "provider_event_time");

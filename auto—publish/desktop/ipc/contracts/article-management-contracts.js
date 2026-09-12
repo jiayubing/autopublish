@@ -16,8 +16,8 @@ const {
 } = require("../../../src/domain/article-lifecycle-terminal-contract");
 const {
   generatedArticle,
-  projectArticle,
 } = require("./article-editor-contracts");
+const { projectArticleSummary } = require("../../../src/content/article-summary");
 const {
   projectTrashRecord,
   trashRecord,
@@ -31,8 +31,21 @@ const {
   own,
   projectFields,
   text,
+  multiline,
   timestamp,
 } = require("./content-core-contract-shared");
+
+const summaryFields = { ...generatedArticle.fields };
+for (const field of ["content", "researchSnapshots", "materialSnapshots", "templateSnapshot"]) delete summaryFields[field];
+const articleSummary = exactObject({
+  ...summaryFields,
+  summaryVersion: enumField([1]),
+  hasContent: "boolean",
+  templateSnapshot: optionalField(exactObject({
+    platform: id, id, name: text(1000), scenario: text(1000),
+    source: optionalField(enumField(["builtin", "custom"])),
+  })),
+});
 
 const publicationAttempt = exactObject({
   attemptId: nullableField(id),
@@ -160,7 +173,8 @@ const workflow = exactObject({
 const managementSnapshot = exactObject({
   clientId: id,
   revision: integerField({ min: 0 }),
-  articles: arrayField(generatedArticle, { max: 10000 }),
+  articles: arrayField(articleSummary, { max: 10000 }),
+  matchingArticleIds: optionalField(arrayField(id, { max: 10000 })),
   trash: arrayField(trashRecord, { max: 10000 }),
   publicationRecords: arrayField(publicationRecord, { max: 10000 }),
   publishedArchives: optionalField(
@@ -212,7 +226,7 @@ const articleManagementContracts = Object.freeze([
     channel: "content:get-article-management-snapshot",
     feature: "content",
     kind: "query",
-    request: exactObject({ clientId: id }),
+    request: exactObject({ clientId: id, search: optionalField(multiline(1000)) }),
     success: managementSnapshot,
     fromArgs: directArgs,
     toArgs: directInput,
@@ -412,8 +426,9 @@ function projectManagementSnapshot(value) {
     clientId: snapshot.clientId,
     revision: snapshot.revision,
     articles: Array.isArray(snapshot.articles)
-      ? snapshot.articles.map(projectArticle)
+      ? snapshot.articles.map(projectArticleSummary)
       : [],
+    ...(Array.isArray(snapshot.matchingArticleIds) ? { matchingArticleIds: snapshot.matchingArticleIds } : {}),
     trash: Array.isArray(snapshot.trash)
       ? snapshot.trash.map(projectTrashRecord)
       : [],

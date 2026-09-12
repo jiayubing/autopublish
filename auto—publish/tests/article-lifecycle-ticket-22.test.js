@@ -604,7 +604,8 @@ test("legacy unavailable evidence stays null and never falls back to current art
   assert.equal(archived.imageSummaryV1, null);
   assert.equal(archived.missingReasons.includes("LEGACY_SUBMISSION_CONTENT_UNAVAILABLE"), true);
   assert.equal(archived.missingReasons.includes("LEGACY_FIRST_PUBLISHED_AT_UNAVAILABLE"), true);
-  assert.equal(snapshot.articles[0].content, "当前文章正文");
+  assert.equal("content" in snapshot.articles[0], false);
+  assert.equal(snapshot.articles[0].hasContent, true);
 });
 
 test("archive query and article-management snapshot preserve an empty client state", async (t) => {

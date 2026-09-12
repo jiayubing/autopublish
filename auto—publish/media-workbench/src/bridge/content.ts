@@ -94,6 +94,7 @@ type CoreContentApi = {
   }) => Promise<ContentIpcResponse<{ material: ContentMaterial }>>;
   getArticleManagementSnapshot: (input: {
     clientId: string;
+    search?: string;
   }) => Promise<ContentIpcResponse<ArticleManagementSnapshotWire>>;
   openPublicationUrl: (input: {
     publicationId: string;
@@ -545,10 +546,14 @@ export async function retryContentMaterial(input: {
 
 export async function getArticleManagementSnapshot(
   clientId: string,
+  search?: string,
 ): Promise<ArticleManagementSnapshot> {
   return callCoreContent(
     (api) =>
-      requireBridgeMethod(api.getArticleManagementSnapshot)({ clientId }),
+      requireBridgeMethod(api.getArticleManagementSnapshot)({
+        clientId,
+        ...(search === undefined ? {} : { search }),
+      }),
     "Unable to load article management snapshot",
     (wire) => {
       const { workflowItems = [], ...snapshot } = wire;

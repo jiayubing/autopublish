@@ -51,6 +51,7 @@ test('article attention actions produce visible publication/detail results', asy
         listClients: () => ok({ clients: [{ id: article.clientId, name: '测试客户', knowledgeFiles: [] }] }),
         getClientDetails: () => ok({ client: { id: article.clientId, name: '测试客户', knowledgeFiles: [] }, research: [] }),
         listGeneratedArticles: () => ok({ articles: [article] }),
+        getArticleEditor: () => ok({ article, editFingerprint: "attention-editor-fixture" }),
         getArticleManagementSnapshot: () => ok({
           clientId: article.clientId,
           revision: 1,

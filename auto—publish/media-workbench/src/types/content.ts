@@ -90,7 +90,9 @@ export interface DoubaoQueueState {
   waitRemainingMs: number;
   tasks: DoubaoTask[];
 }
-export type DoubaoQueueEvent = Omit<DoubaoQueueState, "tasks"> & { tasks?: DoubaoTask[] };
+export type DoubaoQueueEvent = Omit<DoubaoQueueState, "tasks"> & {
+  tasks?: DoubaoTask[];
+};
 export interface DoubaoLoginState {
   status: DoubaoLoginStatus;
   observation?: "complete" | "unavailable";

@@ -1,5 +1,6 @@
 const crypto = require("node:crypto");
 const domain = require("../../src/domain");
+const { projectArticleSummary } = require("../../src/content/article-summary");
 const {
   ARTICLE_LIFECYCLE_PROJECTION_VERSION,
   projectArticleLifecycle,
@@ -207,8 +208,17 @@ function createArticleManagementSnapshot(options) {
       typeof input === "string" ? input : input && input.clientId,
     );
     const revision = Number(getRevision()) || 0;
-    const cacheKey = key(clientId, revision);
-    if (cache.has(cacheKey)) return JSON.parse(cache.get(cacheKey));
+    if (input && typeof input.search === "string" && input.search.trim()) {
+      const snapshot = await get({ clientId });
+      const matchingArticleIds = await opts.searchArticleIds(clientId, input.search);
+      if (Number(getRevision()) !== snapshot.revision) {
+        if (retry) throw snapshotError("ARTICLE_MANAGEMENT_SNAPSHOT_STALE");
+        return get(input, true);
+      }
+      return { ...snapshot, matchingArticleIds };
+    }
+    const cacheKey = key(clientId, typeof opts.getCacheRevision === "function" ? opts.getCacheRevision() : revision);
+    if (cache.has(cacheKey)) return { ...JSON.parse(cache.get(cacheKey)), revision };
 
     const articles = await read(
       "listArticles",
@@ -228,7 +238,7 @@ function createArticleManagementSnapshot(options) {
       },
       clientId,
     );
-    const articleList = Array.isArray(articles) ? clone(articles) : [];
+    const articleList = Array.isArray(articles) ? articles.map(projectArticleSummary) : [];
     const trashList = Array.isArray(trash) ? clone(trash) : [];
     const articleIds = [...articleList, ...trashList]
       .map(function (article) {

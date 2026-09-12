@@ -6,7 +6,7 @@ import {
   selectableArticles,
   selectionState,
 } from "../../article-history-logic";
-import type { GeneratedContentArticle } from "../../types/generation";
+import type { ArticleSummary } from "../../types/generation";
 import type { ArticleWorkflowStage } from "../../article-workflow";
 import type {
   PublicationArchiveEntry,
@@ -19,10 +19,10 @@ export interface ArticleGroup {
   key: string;
   platform: string;
   label: string;
-  templateSnapshot: GeneratedContentArticle["templateSnapshot"] | null;
+  templateSnapshot: ArticleSummary["templateSnapshot"] | null;
   displayTitle?: string;
   articleAnnotations?: Record<string, string>;
-  articles: GeneratedContentArticle[];
+  articles: ArticleSummary[];
 }
 
 interface GeneratedArticlesListProps {
@@ -43,19 +43,19 @@ interface GeneratedArticlesListProps {
   >;
   publishedArchives: PublicationArchiveEntry[];
   publishedView: boolean;
-  isArticleSelectable: (article: GeneratedContentArticle) => boolean;
-  isArticleSubmittable: (article: GeneratedContentArticle) => boolean;
+  isArticleSelectable: (article: ArticleSummary) => boolean;
+  isArticleSubmittable: (article: ArticleSummary) => boolean;
   removalSubmitDisabled: boolean;
   commandBusy: (...names: string[]) => boolean;
   onToggleCollapsed: (key: string) => void;
-  onToggleGroup: (articles: GeneratedContentArticle[]) => void;
-  onToggleArticle: (article: GeneratedContentArticle) => void;
+  onToggleGroup: (articles: ArticleSummary[]) => void;
+  onToggleArticle: (article: ArticleSummary) => void;
   onOpenArticle: (
-    article: GeneratedContentArticle,
+    article: ArticleSummary,
     source: HTMLElement,
     published: boolean,
   ) => void;
-  onOpenPublication: (article: GeneratedContentArticle) => void;
+  onOpenPublication: (article: ArticleSummary) => void;
   onOpenOrder?: () => void;
 }
 

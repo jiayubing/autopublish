@@ -26,14 +26,21 @@ class MediaResourceStore {
   constructor(opts) {
     opts = opts || {};
     this.filePath = resolveStorePath(opts, 'media-resources.json');
+    this.cachedRead = null;
   }
 
   /** Read the cache file and return parsed data, or null when it is missing. */
   _read() {
     let raw;
+    let version;
     try {
+      const stat = fs.statSync(this.filePath, { bigint: true });
+      version = [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(':');
+      if (this.cachedRead && this.cachedRead.version === version)
+        return structuredClone(this.cachedRead.value);
       raw = fs.readFileSync(this.filePath, 'utf-8');
     } catch (error) {
+      this.cachedRead = null;
       if (error && error.code === 'ENOENT') return null;
       diagnose('MEDIA_RESOURCE_STORE_READ_FAILED', 'read');
       throw storeError('MEDIA_RESOURCE_STORE_READ_FAILED');
@@ -42,7 +49,10 @@ class MediaResourceStore {
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
         throw new Error('invalid resource store shape');
-      return parsed;
+      // The pre-read version prevents a concurrent replacement from being
+      // accepted as the cache key of the old contents on the next query.
+      this.cachedRead = { version, value: parsed };
+      return structuredClone(parsed);
     } catch (_) {
       diagnose('MEDIA_RESOURCE_STORE_CORRUPT', 'parse');
       throw storeError('MEDIA_RESOURCE_STORE_CORRUPT');
@@ -51,6 +61,7 @@ class MediaResourceStore {
 
   /** Write data to the cache file. */
   _write(data) {
+    this.cachedRead = null;
     const dir = path.dirname(this.filePath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
@@ -137,6 +148,7 @@ class MediaResourceStore {
    * Clear the cache.
    */
   clear() {
+    this.cachedRead = null;
     try {
       fs.unlinkSync(this.filePath);
     } catch (error) {

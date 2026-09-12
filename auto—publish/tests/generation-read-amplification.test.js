@@ -39,7 +39,7 @@ function instrumentArticleStore(articleStore) {
   const proxy = new Proxy(articleStore, {
     get: function(target, property) {
       const value = target[property];
-      if (property === "listArticles" && typeof value === "function") {
+      if ((property === "listArticles" || property === "listArticleSummaries") && typeof value === "function") {
         return function() {
           counts.fullLibraryEnumerations += 1;
           const articles = value.apply(target, arguments);

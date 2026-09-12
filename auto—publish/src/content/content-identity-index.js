@@ -81,6 +81,10 @@ function createContentIdentityIndex(options) {
   });
 
   return {
+    getGenerationTaskArticleTitle: function(id) {
+      const matches = byTask.get(id) || [];
+      return matches.length === 1 && typeof matches[0].title === "string" ? matches[0].title : null;
+    },
     findByArticleId: function (articleId) {
       return resultFor(byArticle.get(articleId) || []);
     },

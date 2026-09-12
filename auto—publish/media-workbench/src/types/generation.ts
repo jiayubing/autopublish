@@ -109,18 +109,18 @@ export interface ResearchSnapshot {
   collectedAt?: string;
   collectionMethod: "automatic" | "manual" | "legacy";
 }
-export interface GeneratedContentArticle {
+export interface ArticleSummary {
+  summaryVersion?: 1;
+  hasContent?: boolean;
   id: string;
   clientId: string;
   materialIds?: string[];
   researchQueryIds?: string[];
   researchQueryId?: string;
-  researchSnapshots?: ResearchSnapshot[];
   platform?: string;
   scenario?: string;
   templateId?: string;
   title: string;
-  content: string;
   status: "generated" | "saved" | string;
   source?: {
     client_material: boolean;
@@ -130,6 +130,20 @@ export interface GeneratedContentArticle {
   };
   createdAt: string;
   updatedAt?: string;
+  templateSnapshot?: {
+    platform: string;
+    id: string;
+    name: string;
+    scenario: string;
+    source?: "builtin" | "custom";
+  };
+  generationBatchId?: string | null;
+  generationTaskId?: string | null;
+  generationOperationId?: string | null;
+}
+export interface GeneratedContentArticle extends ArticleSummary {
+  content: string;
+  researchSnapshots?: ResearchSnapshot[];
   materialSnapshots?: Array<{
     id: string;
     name: string;
@@ -138,18 +152,10 @@ export interface GeneratedContentArticle {
     contentHash: string;
     source: string;
   }>;
-  templateSnapshot?: {
-    platform: string;
-    id: string;
-    name: string;
-    scenario: string;
+  templateSnapshot?: NonNullable<ArticleSummary["templateSnapshot"]> & {
     body: string;
     bodyHash: string;
-    source?: "builtin" | "custom";
   };
-  generationBatchId?: string | null;
-  generationTaskId?: string | null;
-  generationOperationId?: string | null;
 }
 export interface ContentGenerationOperation {
   operationId: string;

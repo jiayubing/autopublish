@@ -1,0 +1,14 @@
+{"label":"title-cold","countPerClient":100,"totalArticles":200,"fileReads":1,"articleReads":1,"markdownReads":0,"returnBytes":9,"elapsedMs":1.93}
+{"label":"title-hit","countPerClient":100,"totalArticles":200,"fileReads":0,"articleReads":0,"markdownReads":0,"returnBytes":9,"elapsedMs":0.96}
+{"label":"attention-empty-cold","countPerClient":100,"totalArticles":200,"fileReads":0,"articleReads":0,"markdownReads":0,"returnBytes":61,"elapsedMs":0.2}
+{"label":"management-with-attention-cold","countPerClient":100,"totalArticles":200,"fileReads":99,"articleReads":99,"markdownReads":0,"returnBytes":249678,"elapsedMs":165}
+{"label":"management-hit","countPerClient":100,"totalArticles":200,"fileReads":0,"articleReads":0,"markdownReads":0,"returnBytes":249678,"elapsedMs":0.63}
+{"label":"management-after-unrelated-revision","countPerClient":100,"totalArticles":200,"fileReads":0,"articleReads":0,"markdownReads":0,"returnBytes":249678,"elapsedMs":0.55}
+{"label":"permission-one-cold","countPerClient":100,"totalArticles":200,"fileReads":0,"articleReads":0,"markdownReads":0,"returnBytes":91,"elapsedMs":1.9}
+{"label":"title-cold","countPerClient":1000,"totalArticles":2000,"fileReads":1,"articleReads":1,"markdownReads":0,"returnBytes":9,"elapsedMs":1.61}
+{"label":"title-hit","countPerClient":1000,"totalArticles":2000,"fileReads":0,"articleReads":0,"markdownReads":0,"returnBytes":9,"elapsedMs":0.87}
+{"label":"attention-empty-cold","countPerClient":1000,"totalArticles":2000,"fileReads":0,"articleReads":0,"markdownReads":0,"returnBytes":61,"elapsedMs":0.02}
+{"label":"management-with-attention-cold","countPerClient":1000,"totalArticles":2000,"fileReads":999,"articleReads":999,"markdownReads":0,"returnBytes":2505080,"elapsedMs":1566.45}
+{"label":"management-hit","countPerClient":1000,"totalArticles":2000,"fileReads":0,"articleReads":0,"markdownReads":0,"returnBytes":2505080,"elapsedMs":8.64}
+{"label":"management-after-unrelated-revision","countPerClient":1000,"totalArticles":2000,"fileReads":0,"articleReads":0,"markdownReads":0,"returnBytes":2505080,"elapsedMs":5.53}
+{"label":"permission-one-cold","countPerClient":1000,"totalArticles":2000,"fileReads":0,"articleReads":0,"markdownReads":0,"returnBytes":91,"elapsedMs":1.14}

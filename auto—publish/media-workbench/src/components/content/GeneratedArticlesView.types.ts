@@ -13,7 +13,7 @@ import type {
   PublicationHistorySummary,
   PublicationArchiveEntry,
 } from "../../types/publication";
-import type { GeneratedContentArticle } from "../../types/generation";
+import type { ArticleSummary, GeneratedContentArticle } from "../../types/generation";
 import type { MediaResource } from "../../types/media";
 import type {
   ContentClient,
@@ -40,7 +40,7 @@ export interface FavoriteMediaPage {
 }
 
 export type ArticleManagementReadModel = {
-  articles: GeneratedContentArticle[];
+  articles: ArticleSummary[];
   trash: ArticleTrashRecord[];
   publicationRecords: PublicationHistoryRecord[];
   publishedArchives?: PublicationArchiveEntry[];
@@ -111,6 +111,7 @@ export type ArticleRemovalSessionCommands = {
 
 export type GeneratedArticlesCommands = SubmissionIntakeCommands &
   ArticleRemovalSessionCommands & {
+    searchArticles: (input: { clientId: string; search: string }) => Promise<{ articleIds: string[] } | ContentCommandStaleResult>;
     openPublicationUrl: (input: {
       publicationId: string;
     }) => Promise<{ completed: boolean } | ContentCommandStaleResult>;
@@ -148,7 +149,7 @@ export interface GeneratedArticlesViewProps {
   favoriteMediaPage?: FavoriteMediaPage;
   onFavoriteMediaPageChange?: (page: number) => void;
   onArticleSelect: (
-    article: GeneratedContentArticle,
+    article: ArticleSummary,
     source?: HTMLElement | null,
     published?: boolean,
   ) => void;

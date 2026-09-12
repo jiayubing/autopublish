@@ -264,7 +264,7 @@ it("deduplicates stable attention identities and rebuilds only for a newer revis
   assert.equal(query.list({ clientId: "other-client" }).items.length, 0);
 });
 
-it("uses client-scoped article batches with an entity-count independent lookup budget", () => {
+it("reads only candidate article identities and reuses their states within one query", () => {
   let revision = 12;
   const calls = { articles: 0, trash: 0, single: 0 };
   const transactions = [];
@@ -298,9 +298,9 @@ it("uses client-scoped article batches with an entity-count independent lookup b
         calls.trash += 1;
         return [];
       },
-      getArticle: () => {
+      getArticle: (clientId, articleId) => {
         calls.single += 1;
-        throw new Error("single lookup must not run");
+        return { id: articleId, clientId, title: clientId === "client-1" ? "客户一" : "客户二", content: "body" };
       },
     },
     articleRemovalService: { retryArticleRemovalTransaction: () => ({}) },
@@ -309,18 +309,18 @@ it("uses client-scoped article batches with an entity-count independent lookup b
   const first = query.list({ clientId: "client-1" });
   assert.equal(first.items.length, 300);
   assert.equal(first.items.every((item) => item.clientId === "client-1"), true);
-  assert.deepEqual(calls, { articles: 1, trash: 1, single: 0 });
+  assert.deepEqual(calls, { articles: 0, trash: 0, single: 300 });
   query.list({ clientId: "client-1" });
-  assert.deepEqual(calls, { articles: 1, trash: 1, single: 0 });
+  assert.deepEqual(calls, { articles: 0, trash: 0, single: 300 });
 
   const secondClient = query.list({ clientId: "client-2" });
   assert.equal(secondClient.items.length, 1);
   assert.equal(secondClient.items[0].titleSnapshot, "客户二");
-  assert.deepEqual(calls, { articles: 2, trash: 2, single: 0 });
+  assert.deepEqual(calls, { articles: 0, trash: 0, single: 301 });
 
   revision += 1;
   query.list({ clientId: "client-1" });
-  assert.deepEqual(calls, { articles: 3, trash: 3, single: 0 });
+  assert.deepEqual(calls, { articles: 0, trash: 0, single: 601 });
 });
 
 it("fails closed to safe navigation when optional lookups fail and never probes generic retry", () => {

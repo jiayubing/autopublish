@@ -491,19 +491,20 @@ async function createWorkspaceRuntimeComposition(deps) {
         : undefined,
       clock: options.clock,
       getRevision: invalidation.getRevision,
+      getCacheRevision: invalidation.getArticleReadRevision,
       onDataInvalidated: invalidation.invalidate,
       readers: {
         listOrderAttention: mediaApplication.listOrderAttention,
         listTransactions: aiContentService.listArticleRemovalTransactions,
-        listArticles: aiContentService.listGeneratedArticles,
-        listTrashedArticles: aiContentService.listTrashedArticles,
-        getArticle: aiContentService.getGeneratedArticle,
+        getArticle: contentStore.getArticleSummary,
+        getTrashedTombstone: contentStore.getTrashedTombstone,
       },
     });
     const submissionCenterSnapshot =
       require("../services/submission-center-snapshot").createSubmissionCenterSnapshot(
         {
           getRevision: invalidation.getRevision,
+          getCacheRevision: invalidation.getArticleReadRevision,
           getWorkspaceRuntimeId: invalidation.getWorkspaceRuntimeId,
           validateClient: function (clientId) {
             return require("../../src/content/client-knowledge").getClient(
@@ -588,6 +589,7 @@ async function createWorkspaceRuntimeComposition(deps) {
       runtimeDiagnosticsService: runtime.diagnosticsService,
       invalidateData: invalidation.invalidate,
       getWorkspaceDataRevision: invalidation.getRevision,
+      getArticleReadRevision: invalidation.getArticleReadRevision,
       getWorkspaceRuntimeIdentity: invalidation.getRuntimeIdentity,
       authService: options.authService,
     };
