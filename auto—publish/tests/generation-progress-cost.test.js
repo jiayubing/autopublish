@@ -56,9 +56,9 @@ function createFixture(taskCount, concurrency, beforeGenerate = null) {
     });
     const titleStore = new Proxy(contentStore, {
       get(target, property) {
-        if (property === "getArticle") return function(...args) {
+        if (property === "getGenerationTaskArticleTitle") return function(...args) {
           count("titleQueries");
-          return target.getArticle(...args);
+          return target.getGenerationTaskArticleTitle(...args);
         };
         const value = target[property];
         return typeof value === "function" ? value.bind(target) : value;
