@@ -104,15 +104,11 @@ function createRegularQueueRuntime(context) {
     }
     return db
       .prepare(
-        "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,json_extract(s.payload_json,'$.clientId') current_client_id,s.claim_until current_claim_until,json_extract(s.payload_json,'$.attemptId') current_attempt_id,json_extract(i.payload_json,'$.detail.phase') current_phase,(SELECT json_extract(i2.payload_json,'$.detail.lastGroupBlockedCode') FROM submission_queue_items q2 JOIN submission_items s2 ON s2.item_id=q2.item_id JOIN recovery_intents i2 ON i2.attempt_id=json_extract(s2.payload_json,'$.attemptId') WHERE q2.queue_group_id=g.queue_group_id AND json_extract(i2.payload_json,'$.detail.lastGroupBlockedCode') IS NOT NULL ORDER BY q2.position LIMIT 1) last_group_blocked_code FROM submission_queue_groups g LEFT JOIN submission_queue_items q ON q.queue_group_id=g.queue_group_id LEFT JOIN submission_items s ON s.item_id=q.item_id AND s.status IN('claimed','remote_started') LEFT JOIN recovery_intents i ON i.attempt_id=json_extract(s.payload_json,'$.attemptId') " +
+        "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,json_extract(s.payload_json,'$.clientId') current_client_id,s.claim_until current_claim_until,json_extract(s.payload_json,'$.attemptId') current_attempt_id,json_extract(i.payload_json,'$.detail.phase') current_phase,(SELECT json_extract(i2.payload_json,'$.detail.lastGroupBlockedCode') FROM submission_queue_items q2 JOIN submission_items s2 ON s2.item_id=q2.item_id JOIN recovery_intents i2 ON i2.attempt_id=json_extract(s2.payload_json,'$.attemptId') WHERE q2.queue_group_id=g.queue_group_id AND json_extract(i2.payload_json,'$.detail.lastGroupBlockedCode') IS NOT NULL ORDER BY q2.position LIMIT 1) last_group_blocked_code FROM submission_queue_groups g LEFT JOIN submission_items s ON s.item_id=(SELECT q1.item_id FROM submission_queue_items q1 JOIN submission_items s1 ON s1.item_id=q1.item_id WHERE q1.queue_group_id=g.queue_group_id AND s1.status IN('claimed','remote_started') ORDER BY q1.position LIMIT 1) LEFT JOIN recovery_intents i ON i.attempt_id=json_extract(s.payload_json,'$.attemptId') " +
           where +
-          " ORDER BY g.platform_id,g.account_profile_id,g.queue_group_id,q.position",
+          " ORDER BY g.platform_id,g.account_profile_id,g.queue_group_id",
       )
-      .all(...params)
-      .filter(
-        (row, index, rows) =>
-          index === 0 || row.queue_group_id !== rows[index - 1].queue_group_id,
-      );
+      .all(...params);
   }
 
   function regularQueueRemainingRows(input) {

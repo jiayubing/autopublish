@@ -206,7 +206,8 @@ function createMediaWorkbenchApplication(options) {
         typeof paidMediaBatchOrchestrator.snapshot !== "function"
       )
         return { items: [] };
-      return { items: paidMediaBatchOrchestrator.snapshot(input || {}) };
+      const snapshot = paidMediaBatchOrchestrator.snapshot(input || {});
+      return Array.isArray(snapshot) ? { items: snapshot } : snapshot;
     },
     startPaidMediaBatch: (input) => {
       if (

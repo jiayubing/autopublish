@@ -47,7 +47,7 @@ function removeV4Schema(databasePath) {
       SELECT attempt_id,title_snapshot,filename,resource_name_snapshot,quoted_price,created_at
       FROM order_display_snapshots_v4;
     DROP TABLE order_display_snapshots_v4;
-    DELETE FROM schema_migrations WHERE version>=4;
+    DROP INDEX IF EXISTS publication_attempts_by_publication; DROP INDEX IF EXISTS submission_items_by_article; DELETE FROM schema_migrations WHERE version>=4;
   `);
   db.close();
 }
@@ -172,14 +172,14 @@ test("v3 to v4 migration is atomic, retryable, future-safe, and backup-verifiabl
     );
     assert.deepEqual(schemaSnapshot(databasePath), before);
     store = createOperationalStore({ workspaceRoot: root });
-    assert.equal(store.verify().schemaVersion, 9);
+    assert.equal(store.verify().schemaVersion, 10);
     const backup = path.join(root, `backup-${point}.sqlite`);
-    assert.equal(store.backup(backup).schemaVersion, 9);
+    assert.equal(store.backup(backup).schemaVersion, 10);
     store.close();
-    assert.equal(verifyOperationalDatabase(backup).schemaVersion, 9);
+    assert.equal(verifyOperationalDatabase(backup).schemaVersion, 10);
     fs.rmSync(root, { recursive: true, force: true });
   }
-  assert.equal(SCHEMA_VERSION, 9);
+  assert.equal(SCHEMA_VERSION, 10);
 });
 
 test("v4 order snapshot extension preserves rows from a real v3 database", () => {
@@ -265,13 +265,13 @@ test("v3 migration dry-run is read-only and reports the planned v4 step", () => 
   assert.equal(report.mode, "dry-run");
   assert.equal(report.fromVersion, 3);
   assert.equal(report.toVersion, SCHEMA_VERSION);
-  assert.deepEqual(report.migrations, [4, 5, 6, 7, 8, 9]);
+  assert.deepEqual(report.migrations, [4, 5, 6, 7, 8, 9, 10]);
   assert.deepEqual(schemaSnapshot(databasePath), before);
   assert.equal(fileHash(databasePath), beforeHash);
   store = createOperationalStore({ workspaceRoot: root });
   store.close();
   const current = dryRunOperationalStoreMigration({ workspaceRoot: root });
-  assert.equal(current.fromVersion, 9);
+  assert.equal(current.fromVersion, 10);
   assert.deepEqual(current.migrations, []);
   fs.rmSync(root, { recursive: true, force: true });
 });

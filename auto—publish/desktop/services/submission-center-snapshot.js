@@ -265,7 +265,7 @@ function createSubmissionCenterSnapshot(options) {
       throw fail("SUBMISSION_CENTER_SNAPSHOT_INVALID");
     const settled = await Promise.allSettled([
       Promise.resolve().then(() => opts.listRegularQueueGroups({ ...(clientId ? { clientId } : {}) })),
-      Promise.resolve().then(() => opts.listPaidMediaBatches({ ...(clientId ? { clientId } : {}) })),
+      Promise.resolve().then(() => opts.listPaidMediaBatches({ page: queryPage.page, pageSize: queryPage.pageSize, ...(clientId ? { clientId } : {}) })),
       Promise.resolve().then(() => opts.listAttention({ ...(clientId ? { clientId } : {}) })),
     ]);
     const failures = [];
@@ -287,7 +287,10 @@ function createSubmissionCenterSnapshot(options) {
     const regularItems = regularGroups.reduce(function (total, group) {
       return total + (group.current ? 1 : 0) + group.remaining.length;
     }, 0);
-    const paidBatchesCount = paidBatches.length;
+    const paidIsPage = paidRaw && Object.prototype.hasOwnProperty.call(paidRaw, "total");
+    if (paidIsPage && (!Number.isSafeInteger(paidRaw.total) || paidRaw.total < paidBatches.length || paidBatches.length > queryPage.pageSize || paidRaw.page !== queryPage.page || paidRaw.pageSize !== queryPage.pageSize))
+      throw fail("SUBMISSION_CENTER_SNAPSHOT_INVALID");
+    const paidBatchesCount = paidIsPage ? paidRaw.total : paidBatches.length;
     const totalCounts = {
       regularItems,
       paidBatches: paidBatchesCount,
@@ -297,7 +300,7 @@ function createSubmissionCenterSnapshot(options) {
     const start = (queryPage.page - 1) * queryPage.pageSize;
     const end = start + queryPage.pageSize;
     const regularPage = regularGroups.slice(start, end);
-    const paidPage = paidBatches.slice(start, end);
+    const paidPage = paidIsPage ? paidBatches : paidBatches.slice(start, end);
     const attentionPage = attentionItems.slice(start, end);
     return {
       revisionBefore,
@@ -312,7 +315,7 @@ function createSubmissionCenterSnapshot(options) {
         counts: totalCounts,
         page: queryPage.page,
         pageSize: queryPage.pageSize,
-        hasMore: end < Math.max(regularGroups.length, paidBatches.length, attentionItems.length),
+        hasMore: end < Math.max(regularGroups.length, paidBatchesCount, attentionItems.length),
         failures,
       },
     };

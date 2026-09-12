@@ -268,15 +268,24 @@ function createArticleManagementSnapshot(options) {
       })
       .filter(Boolean);
     const articleIdSet = new Set(articleIds);
+    const identityPages = [];
+    const uniqueArticleIds = [...articleIdSet];
+    for (let offset = 0; offset < uniqueArticleIds.length; offset += 5000)
+      identityPages.push(uniqueArticleIds.slice(offset, offset + 5000));
+    if (!identityPages.length) identityPages.push([]);
     let publishedArchives = [];
     if (
       publishedArchiveQueries &&
       typeof publishedArchiveQueries.listPublishedArchiveSummaries === "function"
     ) {
-      const archiveResult =
-        await publishedArchiveQueries.listPublishedArchiveSummaries({ articleIds });
-      if (!Array.isArray(archiveResult))
-        throw snapshotError("ARTICLE_MANAGEMENT_PUBLICATION_ARCHIVE_INVALID");
+      const archiveResult = [];
+      for (const page of identityPages) {
+        const entries = await publishedArchiveQueries.listPublishedArchiveSummaries({ articleIds: page });
+        if (!Array.isArray(entries))
+          throw snapshotError("ARTICLE_MANAGEMENT_PUBLICATION_ARCHIVE_INVALID");
+        for (const entry of entries) archiveResult.push(entry);
+        if (identityPages.length > 1) await new Promise(resolve => setImmediate(resolve));
+      }
       publishedArchives = archiveResult
         .filter(function (entry) {
           return (
@@ -293,12 +302,23 @@ function createArticleManagementSnapshot(options) {
     }
     const lifecycleFactsRaw = await read(
       "listLifecycleFacts",
-      function () {
+      async function () {
         if (
           operationalStore &&
           typeof operationalStore.listArticleLifecycleFacts === "function"
-        )
-          return operationalStore.listArticleLifecycleFacts({ articleIds });
+        ) {
+          const combined = { publications: [], submissionItems: [], orders: [] };
+          for (const page of identityPages) {
+            const facts = await operationalStore.listArticleLifecycleFacts({ articleIds: page });
+            for (const field of Object.keys(combined)) {
+              if (!facts || !Array.isArray(facts[field]))
+                throw snapshotError("ARTICLE_MANAGEMENT_LIFECYCLE_FACTS_INVALID");
+              for (const fact of facts[field]) combined[field].push(fact);
+            }
+            if (identityPages.length > 1) await new Promise(resolve => setImmediate(resolve));
+          }
+          return combined;
+        }
         return null;
       },
       clientId,

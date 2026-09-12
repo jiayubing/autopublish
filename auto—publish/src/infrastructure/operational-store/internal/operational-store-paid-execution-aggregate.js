@@ -237,17 +237,82 @@ function createPaidExecutionAggregate(context, activeTarget) {
     });
   }
 
-  function itemRows(batchId) {
+  function itemRows(batchId, summary = false) {
+    const ids = Array.isArray(batchId) ? batchId : [batchId];
+    if (!ids.length) return [];
+    const itemPayload = summary
+      ? "json_object('clientId',json_extract(s.payload_json,'$.clientId'),'publicationSnapshot',json_object('title',json_extract(s.payload_json,'$.publicationSnapshot.title')),'resourceNameSnapshot',json_extract(s.payload_json,'$.resourceNameSnapshot'),'systemSubmissionCode',json_extract(s.payload_json,'$.systemSubmissionCode'),'quotedPrice',json_extract(s.payload_json,'$.quotedPrice'),'estimatedTotal',json_extract(s.payload_json,'$.estimatedTotal'),'orderCreationAttemptId',json_extract(s.payload_json,'$.orderCreationAttemptId'))"
+      : "s.payload_json";
+    const intentPayload = summary
+      ? "json_object('orderCreationAttemptId',json_extract(i.payload_json,'$.orderCreationAttemptId'),'detail',json_object('phase',json_extract(i.payload_json,'$.detail.phase'),'pauseReason',json_extract(i.payload_json,'$.detail.pauseReason'),'reasonCode',json_extract(i.payload_json,'$.detail.reasonCode')))"
+      : "i.payload_json";
     return db
       .prepare(
-        "SELECT s.item_id,s.batch_id,s.article_id,s.revision,s.status item_status,s.claim_token,s.claim_until,s.payload_json item_payload,p.publication_id,p.target_key,p.target_json,p.status publication_status,a.attempt_id,a.status attempt_status,a.finished_at attempt_finished_at,i.payload_json intent_payload,i.state,o.order_id FROM submission_items s JOIN publication_records p ON p.article_id=s.article_id AND p.target_key=s.target_key JOIN publication_attempts a ON a.publication_id=p.publication_id AND a.attempt_id=json_extract(s.payload_json,'$.attemptId') JOIN recovery_intents i ON i.attempt_id=a.attempt_id LEFT JOIN (SELECT attempt_id,MIN(order_id) order_id FROM remote_orders GROUP BY attempt_id) o ON o.attempt_id=a.attempt_id WHERE s.batch_id=? ORDER BY s.rowid LIMIT 1000",
+        `SELECT s.item_id,s.batch_id,s.article_id,s.revision,s.status item_status,s.claim_token,s.claim_until,${itemPayload} item_payload,p.publication_id,p.target_key,p.target_json,p.status publication_status,a.attempt_id,a.status attempt_status,a.finished_at attempt_finished_at,${intentPayload} intent_payload,i.state,(SELECT MIN(order_id) FROM remote_orders o WHERE o.attempt_id=a.attempt_id) order_id FROM submission_items s JOIN publication_records p ON p.article_id=s.article_id AND p.target_key=s.target_key JOIN publication_attempts a ON a.publication_id=p.publication_id AND a.attempt_id=json_extract(s.payload_json,'$.attemptId') JOIN recovery_intents i ON i.attempt_id=a.attempt_id WHERE s.batch_id IN(${ids.map(() => "?").join(",")}) ORDER BY s.batch_id,s.rowid`,
       )
-      .all(batchId);
+      .all(...ids);
+  }
+
+  function listPaidSubmissionBatchPage(value) {
+    const pageSize = value.pageSize === undefined ? 100 : value.pageSize;
+    const offset = (value.page - 1) * pageSize;
+    if (
+      !Number.isSafeInteger(value.page) ||
+      value.page < 1 ||
+      !Number.isSafeInteger(pageSize) ||
+      pageSize < 1 ||
+      pageSize > 500 ||
+      !Number.isSafeInteger(offset) ||
+      value.batchId !== undefined
+    )
+      throw fail("PAID_EXECUTION_PAGE_INVALID");
+    const params = [];
+    const filters = [];
+    if (value.clientId !== undefined) {
+      params.push(
+        requiredText(value.clientId, 128, "PAID_EXECUTION_CLIENT_INVALID"),
+      );
+      filters.push(
+        "EXISTS (SELECT 1 FROM submission_items s WHERE s.batch_id=b.batch_id AND json_extract(s.payload_json,'$.clientId')=?)",
+      );
+    }
+    if (value.workbenchOnly === true) {
+      filters.push(`(EXISTS (SELECT 1 FROM submission_items s WHERE s.batch_id=b.batch_id AND s.status IN ('queued','uncertain','blocked')) OR
+        (EXISTS (SELECT 1 FROM submission_items s WHERE s.batch_id=b.batch_id AND s.status NOT IN ('completed','failed','cancelled')) AND
+          (b.pause_intent='none' OR NOT EXISTS (SELECT 1 FROM submission_items s WHERE s.batch_id=b.batch_id AND s.status IN ('claimed','remote_started')))))`);
+    }
+    const where = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+    const total = db
+      .prepare(`SELECT COUNT(*) total FROM paid_submission_batches b ${where}`)
+      .get(...params).total;
+    const rows = db
+      .prepare(
+        `SELECT b.* FROM paid_submission_batches b ${where} ORDER BY b.created_at,b.batch_id LIMIT ? OFFSET ?`,
+      )
+      .all(...params, pageSize, offset);
+    const itemsByBatch = new Map();
+    for (const item of itemRows(
+      rows.map((row) => row.batch_id),
+      true,
+    )) {
+      if (!itemsByBatch.has(item.batch_id)) itemsByBatch.set(item.batch_id, []);
+      itemsByBatch.get(item.batch_id).push(item);
+    }
+    const items = rows.map((row) =>
+      paidBatchSnapshot(row, itemsByBatch.get(row.batch_id) || []),
+    );
+    return Object.freeze({
+      items: Object.freeze(items),
+      total,
+      page: value.page,
+      pageSize,
+    });
   }
 
   function listPaidSubmissionBatchSnapshots(input) {
     open();
     const value = input || {};
+    if (value.page !== undefined) return listPaidSubmissionBatchPage(value);
     const rows =
       value.batchId === undefined
         ? db

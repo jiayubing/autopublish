@@ -676,6 +676,27 @@ test("posting-center read model exposes safe article summaries and queue actions
   }
 });
 
+test("queue current survives an earlier terminal item and preserves remaining FIFO", () => {
+  const fixture = makeFixture();
+  try {
+    for (const id of ["first", "second", "third"]) fixture.add(article(id));
+    const admitted = fixture.application.admitRegularQueueItems(admissionInput(fixture, [ref("first"), ref("second"), ref("third")]));
+    const queueGroupId = admitted.items[0].queueGroupId;
+    const transitions = fixture.transitionPorts.regularQueueGroupTransitions;
+    transitions.setRegularQueueGroupRunIntent({ queueGroupId, running: true });
+    const first = transitions.claimRegularQueueGroupHead({ queueGroupId, claimToken: "first-claim", leaseMs: 30000 });
+    fixture.store.commitRemoteOutcome({ attemptId: first.regularPublicationAttemptId, batchItemId: admitted.items[0].itemId, batchClaimToken: "first-claim", outcome: { status: "failed" } });
+    transitions.setRegularQueueGroupRunIntent({ queueGroupId, running: true });
+    const secondItem = fixture.store.getSubmissionBatch(admitted.batchId).items.find((item) => item.articleId === "second");
+    const second = fixture.store.claimSubmissionItemById({ batchId: admitted.batchId, itemId: secondItem.itemId, revision: secondItem.revision, claimToken: "second-claim" });
+    assert.ok(second);
+    const snapshot = fixture.application.listRegularQueueGroups()[0];
+    assert.equal(snapshot.current.articleRef.articleId, "second");
+    assert.deepEqual(snapshot.remaining.map((item) => item.articleRef.articleId), ["third"]);
+    assert.equal(snapshot.runState, "in_flight");
+  } finally { fixture.close(); }
+});
+
 test("queue summaries use persisted admission titles without reading client articles", () => {
   const fixture = makeFixture();
   try {

@@ -1,0 +1,248 @@
+{
+  "indexes": [
+    {
+      "name": "sqlite_autoindex_account_profiles_1",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_publication_records_1",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_publication_records_2",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_publication_attempts_1",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_remote_evidence_1",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_remote_evidence_2",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_recovery_intents_1",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_recovery_intents_2",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_submission_batches_1",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_submission_items_1",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_submission_items_2",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_remote_orders_1",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_remote_orders_2",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_post_processing_jobs_1",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_post_processing_jobs_2",
+      "sql": null
+    },
+    {
+      "name": "recovery_actionable",
+      "sql": "CREATE INDEX recovery_actionable ON recovery_intents(state,updated_at)"
+    },
+    {
+      "name": "job_actionable",
+      "sql": "CREATE INDEX job_actionable ON post_processing_jobs(status,claim_until)"
+    },
+    {
+      "name": "submission_claimable",
+      "sql": "CREATE INDEX submission_claimable ON submission_items(batch_id,status,claim_until,item_id)"
+    },
+    {
+      "name": "sqlite_autoindex_submission_item_operations_1",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_submission_item_operations_2",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_order_display_snapshots_1",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_article_active_targets_1",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_article_active_targets_2",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_article_active_targets_3",
+      "sql": null
+    },
+    {
+      "name": "active_target_attempt",
+      "sql": "CREATE INDEX active_target_attempt ON article_active_targets(attempt_id)"
+    },
+    {
+      "name": "sqlite_autoindex_submission_queue_groups_1",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_submission_queue_groups_2",
+      "sql": null
+    },
+    {
+      "name": "queue_group_pause_intent",
+      "sql": "CREATE INDEX queue_group_pause_intent ON submission_queue_groups(pause_intent,updated_at,queue_group_id)"
+    },
+    {
+      "name": "sqlite_autoindex_submission_queue_items_1",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_submission_queue_items_2",
+      "sql": null
+    },
+    {
+      "name": "queue_item_article",
+      "sql": "CREATE INDEX queue_item_article ON submission_queue_items(item_id,queue_group_id)"
+    },
+    {
+      "name": "sqlite_autoindex_paid_submission_batches_1",
+      "sql": null
+    },
+    {
+      "name": "paid_batch_pause_intent",
+      "sql": "CREATE INDEX paid_batch_pause_intent ON paid_submission_batches(pause_intent,updated_at,batch_id)"
+    },
+    {
+      "name": "sqlite_autoindex_manual_reconciliation_facts_1",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_manual_reconciliation_facts_2",
+      "sql": null
+    },
+    {
+      "name": "manual_reconciliation_article",
+      "sql": "CREATE INDEX manual_reconciliation_article ON manual_reconciliation_facts(article_id,created_at,reconciliation_id)"
+    },
+    {
+      "name": "sqlite_autoindex_migration_journals_1",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_migration_import_entries_1",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_migration_import_entries_2",
+      "sql": null
+    },
+    {
+      "name": "migration_import_run",
+      "sql": "CREATE INDEX migration_import_run ON migration_import_entries(migration_run_id,entry_id)"
+    },
+    {
+      "name": "sqlite_autoindex_migration_import_order_identities_1",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_submission_migration_notices_1",
+      "sql": null
+    },
+    {
+      "name": "submission_migration_notice_kind",
+      "sql": "CREATE UNIQUE INDEX submission_migration_notice_kind ON submission_migration_notices(kind)"
+    }
+  ],
+  "plans": [
+    {
+      "sql": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,json_extract(s.payload_json,'$.clientId') current_client_id,s.claim_until current_claim_until,json_extract(s.payload_json,'$.attemptId') current_attempt_id,json_extract(i.payload_json,'$.detail.phase') current_phase,(SELECT json_extract(i2.payload_json,'$.detail.lastGroupBlockedCode') FROM submission_queue_items q2 JOIN submission_items s2 ON s2.item_id=q2.item_id JOIN recovery_intents i2 ON i2.attempt_id=json_extract(s2.payload_json,'$.attemptId') WHERE q2.queue_group_id=g.queue_group_id AND json_extract(i2.payload_json,'$.detail.lastGroupBlockedCode') IS NOT NULL ORDER BY q2.position LIMIT 1) last_group_blocked_code FROM submission_queue_groups g LEFT JOIN submission_queue_items q ON q.queue_group_id=g.queue_group_id LEFT JOIN submission_items s ON s.item_id=q.item_id AND s.status IN('claimed','remote_started') LEFT JOIN recovery_intents i ON i.attempt_id=json_extract(s.payload_json,'$.attemptId')  ORDER BY g.platform_id,g.account_profile_id,g.queue_group_id,q.position",
+      "plan": [
+        {
+          "id": 10,
+          "parent": 0,
+          "notused": 224,
+          "detail": "SCAN g USING INDEX sqlite_autoindex_submission_queue_groups_2"
+        },
+        {
+          "id": 13,
+          "parent": 0,
+          "notused": 62,
+          "detail": "SEARCH q USING INDEX sqlite_autoindex_submission_queue_items_2 (queue_group_id=?) LEFT-JOIN"
+        },
+        {
+          "id": 20,
+          "parent": 0,
+          "notused": 46,
+          "detail": "SEARCH s USING INDEX sqlite_autoindex_submission_items_1 (item_id=?) LEFT-JOIN"
+        },
+        {
+          "id": 33,
+          "parent": 0,
+          "notused": 46,
+          "detail": "SEARCH i USING INDEX sqlite_autoindex_recovery_intents_2 (attempt_id=?) LEFT-JOIN"
+        },
+        {
+          "id": 66,
+          "parent": 0,
+          "notused": 0,
+          "detail": "CORRELATED SCALAR SUBQUERY 1"
+        },
+        {
+          "id": 77,
+          "parent": 66,
+          "notused": 62,
+          "detail": "SEARCH q2 USING INDEX sqlite_autoindex_submission_queue_items_2 (queue_group_id=?)"
+        },
+        {
+          "id": 82,
+          "parent": 66,
+          "notused": 46,
+          "detail": "SEARCH s2 USING INDEX sqlite_autoindex_submission_items_1 (item_id=?)"
+        },
+        {
+          "id": 87,
+          "parent": 66,
+          "notused": 46,
+          "detail": "SEARCH i2 USING INDEX sqlite_autoindex_recovery_intents_2 (attempt_id=?)"
+        }
+      ]
+    },
+    {
+      "sql": "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_id,json_extract(s.payload_json,'$.attemptId') attempt_id,q.position FROM submission_queue_items q JOIN submission_items s ON s.item_id=q.item_id WHERE s.status='queued' ORDER BY q.queue_group_id,q.position LIMIT 20000",
+      "plan": [
+        {
+          "id": 7,
+          "parent": 0,
+          "notused": 217,
+          "detail": "SCAN q USING INDEX sqlite_autoindex_submission_queue_items_2"
+        },
+        {
+          "id": 10,
+          "parent": 0,
+          "notused": 46,
+          "detail": "SEARCH s USING INDEX sqlite_autoindex_submission_items_1 (item_id=?)"
+        }
+      ]
+    }
+  ]
+}

@@ -294,3 +294,25 @@ test("supports global paged queries and isolates a failed section", async () => 
   assert.deepEqual(snapshot.failures, [{ section: "regular", code: "REGULAR_DOWN" }]);
   assert.deepEqual(snapshot.regular.groups, []);
 });
+
+test("uses paid query totals without paging twice and rejects inconsistent page metadata", async () => {
+  let revision = 1;
+  let metadata = { total: 20001, page: 2001, pageSize: 10 };
+  const service = createSubmissionCenterSnapshot({
+    getRevision: () => revision, getWorkspaceRuntimeId: () => "test", validateClient: () => {},
+    listRegularQueueGroups: () => [], listAttention: () => ({ items: [] }),
+    listPaidMediaBatches(input) {
+      assert.deepEqual(input, { clientId: "client-1", page: 2001, pageSize: 10 });
+      return { items: [paidBatch("client-1")], ...metadata };
+    },
+  });
+  const snapshot = await service.get({ clientId: "client-1", page: 2001, pageSize: 10 });
+  assert.equal(snapshot.paid.batches.length, 1);
+  assert.equal(snapshot.counts.total, 20001);
+  assert.equal(snapshot.hasMore, false);
+  for (const invalid of [{ total: -1 }, { page: 1 }, { pageSize: 100 }]) {
+    metadata = { total: 20001, page: 2001, pageSize: 10, ...invalid };
+    revision++;
+    await assert.rejects(service.get({ clientId: "client-1", page: 2001, pageSize: 10 }), { code: "SUBMISSION_CENTER_SNAPSHOT_INVALID" });
+  }
+});

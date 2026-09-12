@@ -1,0 +1,5 @@
+{"mode":"queue","n":10000,"groups":100,"kind":"regular","event":"begin","label":"store-open"}
+{"mode":"queue","n":10000,"groups":100,"kind":"regular","event":"measurement","label":"store-open","durationMs":15.9927,"timerTicks":1,"maxEventLoopGapMs":16.135799999999996,"heapDelta":377216,"resultBytes":15,"sqlCalls":0,"sqlRows":0,"sqlBytes":0,"sqlMs":0,"queries":{}}
+{"mode":"queue","n":10000,"groups":100,"kind":"regular","event":"begin","label":"regular-all"}
+{"mode":"queue","n":10000,"groups":100,"kind":"regular","event":"measurement","label":"regular-all","durationMs":8969.397200000001,"timerTicks":1,"maxEventLoopGapMs":8969.4909,"heapDelta":15626864,"resultBytes":2704941,"sqlCalls":0,"sqlRows":0,"sqlBytes":0,"sqlMs":0,"queries":{},"resultCount":100}
+{"mode":"queue","n":10000,"groups":100,"kind":"regular","event":"queue-census","shown":10000,"expected":10000}

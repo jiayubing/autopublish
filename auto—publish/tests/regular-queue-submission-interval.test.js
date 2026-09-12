@@ -80,7 +80,7 @@ test("schema v9 gives existing queue groups the persistent 30-second default", (
     const database = new DatabaseSync(databasePath);
     try {
       database.exec(
-        "ALTER TABLE submission_queue_groups DROP COLUMN submission_interval_seconds; DELETE FROM schema_migrations WHERE version=9;",
+        "ALTER TABLE submission_queue_groups DROP COLUMN submission_interval_seconds; DROP INDEX IF EXISTS publication_attempts_by_publication; DROP INDEX IF EXISTS submission_items_by_article; DELETE FROM schema_migrations WHERE version>=9;",
       );
     } finally {
       database.close();

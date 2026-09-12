@@ -1,0 +1,260 @@
+[
+  {
+    "sql": "SELECT p.publication_id,a.attempt_id,p.article_id,json_remove(e.evidence_json, '$.body') evidence_json FROM publication_records p JOIN publication_attempts a ON a.publication_id=p.publication_id AND a.status='published' LEFT JOIN remote_evidence e ON e.attempt_id=a.attempt_id AND e.remote_id=('publication-success:' || a.attempt_id) WHERE p.article_id IN(<article IDs>) AND p.status='published' ORDER BY p.article_id,p.updated_at,p.publication_id",
+    "ms": 8.387099999999919,
+    "plan": [
+      {
+        "id": 7,
+        "parent": 0,
+        "notused": 216,
+        "detail": "SCAN a"
+      },
+      {
+        "id": 11,
+        "parent": 0,
+        "notused": 46,
+        "detail": "SEARCH p USING INDEX sqlite_autoindex_publication_records_1 (publication_id=?)"
+      },
+      {
+        "id": 15026,
+        "parent": 0,
+        "notused": 47,
+        "detail": "SEARCH e USING INDEX sqlite_autoindex_remote_evidence_2 (attempt_id=? AND remote_id=?) LEFT-JOIN"
+      },
+      {
+        "id": 15052,
+        "parent": 0,
+        "notused": 0,
+        "detail": "USE TEMP B-TREE FOR ORDER BY"
+      }
+    ]
+  },
+  {
+    "sql": "SELECT p.publication_id,p.article_id,p.target_key,p.target_json,p.status,p.created_at,p.updated_at,a.attempt_id,a.finished_at,i.payload_json AS intent_payload,e.evidence_json AS success_evidence,e.remote_url AS success_remote_url,EXISTS(SELECT 1 FROM migration_import_entries m WHERE m.article_id=p.article_id AND m.variant='publishedEvidence') AS migration_success FROM publication_records p LEFT JOIN publication_attempts a ON a.attempt_id=(SELECT latest.attempt_id FROM publication_attempts latest WHERE latest.publication_id=p.publication_id ORDER BY latest.rowid DESC LIMIT 1) LEFT JOIN recovery_intents i ON i.attempt_id=a.attempt_id LEFT JOIN remote_evidence e ON e.attempt_id=a.attempt_id AND e.remote_id=('publication-success:' || a.attempt_id) WHERE p.article_id IN(<article IDs>) ORDER BY p.created_at,p.publication_id",
+    "ms": 15338.7625,
+    "plan": [
+      {
+        "id": 10,
+        "parent": 0,
+        "notused": 184,
+        "detail": "SEARCH p USING INDEX sqlite_autoindex_publication_records_2 (article_id=?)"
+      },
+      {
+        "id": 15023,
+        "parent": 0,
+        "notused": 46,
+        "detail": "SEARCH a USING INDEX sqlite_autoindex_publication_attempts_1 (attempt_id=?) LEFT-JOIN"
+      },
+      {
+        "id": 15026,
+        "parent": 0,
+        "notused": 0,
+        "detail": "CORRELATED SCALAR SUBQUERY 2"
+      },
+      {
+        "id": 15031,
+        "parent": 15026,
+        "notused": 216,
+        "detail": "SCAN latest"
+      },
+      {
+        "id": 15045,
+        "parent": 0,
+        "notused": 46,
+        "detail": "SEARCH i USING INDEX sqlite_autoindex_recovery_intents_2 (attempt_id=?) LEFT-JOIN"
+      },
+      {
+        "id": 15053,
+        "parent": 0,
+        "notused": 47,
+        "detail": "SEARCH e USING INDEX sqlite_autoindex_remote_evidence_2 (attempt_id=? AND remote_id=?) LEFT-JOIN"
+      },
+      {
+        "id": 15077,
+        "parent": 0,
+        "notused": 0,
+        "detail": "CORRELATED SCALAR SUBQUERY 1"
+      },
+      {
+        "id": 15082,
+        "parent": 15077,
+        "notused": 39,
+        "detail": "SEARCH m USING INDEX sqlite_autoindex_migration_import_entries_2 (article_id=?)"
+      },
+      {
+        "id": 15111,
+        "parent": 0,
+        "notused": 0,
+        "detail": "USE TEMP B-TREE FOR ORDER BY"
+      }
+    ]
+  },
+  {
+    "sql": "SELECT s.item_id,s.batch_id,s.article_id,s.target_key,s.revision,s.status,s.payload_json,q.queue_group_id,q.position,q.created_at AS queued_at,g.platform_id,g.account_profile_id,g.pause_intent FROM submission_items s LEFT JOIN submission_queue_items q ON q.item_id=s.item_id LEFT JOIN submission_queue_groups g ON g.queue_group_id=q.queue_group_id WHERE s.article_id IN(<article IDs>) ORDER BY s.article_id,s.item_id",
+    "ms": 206.76170000000275,
+    "plan": [
+      {
+        "id": 7,
+        "parent": 0,
+        "notused": 216,
+        "detail": "SCAN s"
+      },
+      {
+        "id": 15017,
+        "parent": 0,
+        "notused": 47,
+        "detail": "SEARCH q USING INDEX sqlite_autoindex_submission_queue_items_1 (item_id=?) LEFT-JOIN"
+      },
+      {
+        "id": 15025,
+        "parent": 0,
+        "notused": 46,
+        "detail": "SEARCH g USING INDEX sqlite_autoindex_submission_queue_groups_1 (queue_group_id=?) LEFT-JOIN"
+      },
+      {
+        "id": 15057,
+        "parent": 0,
+        "notused": 0,
+        "detail": "USE TEMP B-TREE FOR ORDER BY"
+      }
+    ]
+  },
+  {
+    "sql": "SELECT o.order_id,o.remote_id,o.payload_json,o.created_at,a.attempt_id,a.status AS publication_status,p.publication_id,p.article_id,p.target_json,d.title_snapshot,d.filename,d.resource_name_snapshot,d.quoted_price,d.media_resource_id,d.estimated_total,d.system_submission_code,h.evidence_json AS history_json FROM remote_orders o JOIN publication_attempts a ON a.attempt_id=o.attempt_id JOIN publication_records p ON p.publication_id=a.publication_id LEFT JOIN order_display_snapshots d ON d.attempt_id=a.attempt_id LEFT JOIN remote_evidence h ON h.attempt_id=o.attempt_id AND h.remote_id=('order-history:' || o.order_id) WHERE p.article_id IN(<article IDs>) AND json_extract(p.target_json,'$.kind')='media' ORDER BY o.created_at DESC,o.order_id DESC",
+    "ms": 0.7297999999973399,
+    "plan": [
+      {
+        "id": 12,
+        "parent": 0,
+        "notused": 216,
+        "detail": "SCAN o"
+      },
+      {
+        "id": 14,
+        "parent": 0,
+        "notused": 46,
+        "detail": "SEARCH a USING INDEX sqlite_autoindex_publication_attempts_1 (attempt_id=?)"
+      },
+      {
+        "id": 19,
+        "parent": 0,
+        "notused": 46,
+        "detail": "SEARCH p USING INDEX sqlite_autoindex_publication_records_1 (publication_id=?)"
+      },
+      {
+        "id": 15035,
+        "parent": 0,
+        "notused": 46,
+        "detail": "SEARCH d USING INDEX sqlite_autoindex_order_display_snapshots_1 (attempt_id=?) LEFT-JOIN"
+      },
+      {
+        "id": 15043,
+        "parent": 0,
+        "notused": 47,
+        "detail": "SEARCH h USING INDEX sqlite_autoindex_remote_evidence_2 (attempt_id=? AND remote_id=?) LEFT-JOIN"
+      },
+      {
+        "id": 15085,
+        "parent": 0,
+        "notused": 0,
+        "detail": "USE TEMP B-TREE FOR ORDER BY"
+      }
+    ]
+  },
+  {
+    "sql": "SELECT h.evidence_json AS history_json,h.created_at,a.attempt_id,a.status AS publication_status,p.publication_id,p.article_id,p.target_json FROM remote_evidence h JOIN publication_attempts a ON a.attempt_id=h.attempt_id JOIN publication_records p ON p.publication_id=a.publication_id WHERE p.article_id IN(<article IDs>) AND h.remote_id LIKE 'migration-order-history:%' ORDER BY h.created_at DESC,h.evidence_id DESC",
+    "ms": 0.6761999999980617,
+    "plan": [
+      {
+        "id": 8,
+        "parent": 0,
+        "notused": 216,
+        "detail": "SCAN h"
+      },
+      {
+        "id": 13,
+        "parent": 0,
+        "notused": 46,
+        "detail": "SEARCH a USING INDEX sqlite_autoindex_publication_attempts_1 (attempt_id=?)"
+      },
+      {
+        "id": 18,
+        "parent": 0,
+        "notused": 46,
+        "detail": "SEARCH p USING INDEX sqlite_autoindex_publication_records_1 (publication_id=?)"
+      },
+      {
+        "id": 15042,
+        "parent": 0,
+        "notused": 0,
+        "detail": "USE TEMP B-TREE FOR ORDER BY"
+      }
+    ]
+  },
+  {
+    "sql": "SELECT i.attempt_id,i.state,i.payload_json,p.publication_id,p.article_id,p.target_key,p.status,p.updated_at FROM recovery_intents i JOIN publication_attempts a ON a.attempt_id=i.attempt_id JOIN publication_records p ON p.publication_id=a.publication_id WHERE p.article_id IN(<article IDs>) AND i.state='manual_check' ORDER BY i.updated_at,i.attempt_id",
+    "ms": 0.7011999999995169,
+    "plan": [
+      {
+        "id": 9,
+        "parent": 0,
+        "notused": 62,
+        "detail": "SEARCH i USING INDEX recovery_actionable (state=?)"
+      },
+      {
+        "id": 14,
+        "parent": 0,
+        "notused": 46,
+        "detail": "SEARCH a USING INDEX sqlite_autoindex_publication_attempts_1 (attempt_id=?)"
+      },
+      {
+        "id": 19,
+        "parent": 0,
+        "notused": 46,
+        "detail": "SEARCH p USING INDEX sqlite_autoindex_publication_records_1 (publication_id=?)"
+      },
+      {
+        "id": 15050,
+        "parent": 0,
+        "notused": 0,
+        "detail": "USE TEMP B-TREE FOR LAST TERM OF ORDER BY"
+      }
+    ]
+  },
+  {
+    "sql": "SELECT entry_id,variant,entry_json,imported_at FROM migration_import_entries WHERE article_id IN(<article IDs>) AND variant IN('needsAttentionConflict','deletionRecoveryConflict') ORDER BY imported_at,entry_id",
+    "ms": 3.3665000000000873,
+    "plan": [
+      {
+        "id": 4,
+        "parent": 0,
+        "notused": 168,
+        "detail": "SEARCH migration_import_entries USING INDEX sqlite_autoindex_migration_import_entries_2 (article_id=?)"
+      },
+      {
+        "id": 15027,
+        "parent": 0,
+        "notused": 0,
+        "detail": "USE TEMP B-TREE FOR ORDER BY"
+      }
+    ]
+  },
+  {
+    "sql": "SELECT reconciliation_id,attempt_id,article_id,decision,evidence_json,created_at FROM manual_reconciliation_facts WHERE article_id IN(<article IDs>) ORDER BY created_at,reconciliation_id",
+    "ms": 3.525900000000547,
+    "plan": [
+      {
+        "id": 4,
+        "parent": 0,
+        "notused": 184,
+        "detail": "SEARCH manual_reconciliation_facts USING INDEX manual_reconciliation_article (article_id=?)"
+      },
+      {
+        "id": 15027,
+        "parent": 0,
+        "notused": 0,
+        "detail": "USE TEMP B-TREE FOR ORDER BY"
+      }
+    ]
+  }
+]

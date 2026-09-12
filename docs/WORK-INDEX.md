@@ -4,7 +4,7 @@
 
 ## 当前执行入口
 
-- 当前没有进行中的治理计划。新增任务按对应业务 owner 和最小阅读入口开展。
+- [规模审计修复](../.scratch/scale-audit/REMEDIATION.md)：SA-01 / SA-02 / SA-04 及付费页面分页/摘要读取完成；普通队列、全局执行/启动与其余失效优化待后续批次。
 
 关联功能合同：[客户生成任务化与并发](../.scratch/client-generation-tasks/CLIENT-GENERATION-TASKS-PLAN.md)，只在涉及其行为时读取。
 
@@ -19,6 +19,8 @@
 - Ticket 19 的独立 HTTP multipart 带图验收：[Ticket 19 合同](../.scratch/article-lifecycle-and-submission/issues/19-lieju-image-publication-adapter.md)。
 
 ## 最近已完成的本地计划
+
+- [规模化架构与性能审计：第一轮](../.scratch/scale-audit/AUDIT.md)：初始7项发现；后续修复状态以当前修复计划为准。
 
 - [文章列表载荷与并发构建优化](../.scratch/read-model-audit/SNAPSHOT-PLAN.md)：完成；同版本请求合并，已发布快照载荷约减半。
 

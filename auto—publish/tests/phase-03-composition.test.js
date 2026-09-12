@@ -32,7 +32,7 @@ test("Phase 3 composition owns one OperationalStore writer and releases it on di
     "recover",
     "drainPostProcessing",
   ]);
-  assert.equal(composition.operationalStore.verify().schemaVersion, 9);
+  assert.equal(composition.operationalStore.verify().schemaVersion, 10);
   await composition.dispose();
   const next = createPublicationRecoveryComposition({
     workspaceRoot,

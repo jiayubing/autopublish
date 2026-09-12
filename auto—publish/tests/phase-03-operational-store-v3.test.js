@@ -22,7 +22,7 @@ function downgradeToV2(workspaceRoot) {
   store.close();
   const database = new DatabaseSync(databasePath);
   database.exec(
-    "DROP TABLE IF EXISTS paid_staging_items; DROP TABLE IF EXISTS submission_migration_notices; DROP TABLE IF EXISTS migration_import_order_identities; DROP TABLE IF EXISTS migration_import_entries; DROP TABLE IF EXISTS migration_journals; DROP TABLE IF EXISTS manual_reconciliation_facts; DROP TABLE IF EXISTS paid_submission_batches; DROP TABLE IF EXISTS submission_queue_items; DROP TABLE IF EXISTS submission_queue_groups; DROP TABLE IF EXISTS article_active_targets; DROP TABLE IF EXISTS order_display_snapshots; DELETE FROM schema_migrations WHERE version>2;",
+    "DROP TABLE IF EXISTS paid_staging_items; DROP TABLE IF EXISTS submission_migration_notices; DROP TABLE IF EXISTS migration_import_order_identities; DROP TABLE IF EXISTS migration_import_entries; DROP TABLE IF EXISTS migration_journals; DROP TABLE IF EXISTS manual_reconciliation_facts; DROP TABLE IF EXISTS paid_submission_batches; DROP TABLE IF EXISTS submission_queue_items; DROP TABLE IF EXISTS submission_queue_groups; DROP TABLE IF EXISTS article_active_targets; DROP TABLE IF EXISTS order_display_snapshots; DROP INDEX IF EXISTS publication_attempts_by_publication; DROP INDEX IF EXISTS submission_items_by_article; DELETE FROM schema_migrations WHERE version>2;",
   );
   database.close();
   return databasePath;
@@ -114,8 +114,8 @@ test("schema v2 upgrades through v3 to v4 with the exact order display snapshot 
   const workspaceRoot = workspace();
   const databasePath = downgradeToV2(workspaceRoot);
   const upgraded = createOperationalStore({ workspaceRoot });
-  assert.equal(SCHEMA_VERSION, 9);
-  assert.equal(upgraded.verify().schemaVersion, 9);
+  assert.equal(SCHEMA_VERSION, 10);
+  assert.equal(upgraded.verify().schemaVersion, 10);
   upgraded.close();
 
   const database = new DatabaseSync(databasePath, { readOnly: true });
@@ -148,12 +148,12 @@ test("schema v2 upgrades through v3 to v4 with the exact order display snapshot 
       .prepare("SELECT version FROM schema_migrations ORDER BY version")
       .all()
       .map((row) => row.version),
-    [1, 2, 3, 4, 5, 6, 7, 8, 9],
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
   );
   database.close();
 
   const reopened = createOperationalStore({ workspaceRoot });
-  assert.equal(reopened.verify().schemaVersion, 9);
+  assert.equal(reopened.verify().schemaVersion, 10);
   reopened.close();
 });
 
@@ -178,7 +178,7 @@ test("every legacy migration fault rolls back and a clean retry reaches v4", () 
     );
     assert.deepEqual(snapshotSchema(databasePath), before);
     const retried = createOperationalStore({ workspaceRoot });
-    assert.equal(retried.verify().schemaVersion, 9);
+    assert.equal(retried.verify().schemaVersion, 10);
     retried.close();
   }
 });
@@ -244,7 +244,7 @@ test("v3 backup and restored temporary workspace preserve the bounded order snap
     quotedPrice: 36.5,
   });
   const backupPath = path.join(workspaceRoot, "operations-v3.backup.sqlite");
-  assert.equal(store.backup(backupPath).schemaVersion, 9);
+  assert.equal(store.backup(backupPath).schemaVersion, 10);
   store.close();
 
   const restoredWorkspace = workspace();

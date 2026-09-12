@@ -38,7 +38,14 @@ const {
   migrateV9Schema,
 } = require("./operational-store-schema-v9");
 
-const SCHEMA_VERSION = 9;
+const {
+  READ_INDEXES,
+  V10_SCHEMA,
+  verifyV10Structure,
+  migrateV10Schema,
+} = require("./operational-store-schema-v10");
+
+const SCHEMA_VERSION = 10;
 
 const V1_SCHEMA = `CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
 CREATE TABLE account_profiles(account_profile_id TEXT PRIMARY KEY, platform_id TEXT NOT NULL, display_name TEXT, created_at TEXT NOT NULL);
@@ -98,7 +105,7 @@ function tableNames(db) {
     .map((row) => row.name);
 }
 
-function verifyV1Structure(db, errorCode) {
+function verifyV1Structure(db, errorCode, allowV10Indexes = false) {
   if (!expectedV1Structure) {
     const expected = new DatabaseSync(":memory:");
     try {
@@ -114,10 +121,14 @@ function verifyV1Structure(db, errorCode) {
     }
   }
   if (
-    Object.entries(expectedV1Structure).some(
-      ([name, structure]) =>
-        JSON.stringify(tableStructure(db, name)) !== JSON.stringify(structure),
-    )
+    Object.entries(expectedV1Structure).some(([name, structure]) => {
+      const actual = tableStructure(db, name);
+      if (actual && allowV10Indexes)
+        actual.indexes = actual.indexes.filter(
+          (index) => !Object.hasOwn(READ_INDEXES, index.name),
+        );
+      return JSON.stringify(actual) !== JSON.stringify(structure);
+    })
   )
     throw fail(errorCode);
 }
@@ -353,26 +364,9 @@ function dryRunSchema(filename) {
     const version = schemaVersion(db);
     if (version > SCHEMA_VERSION) throw fail("OPERATIONAL_SCHEMA_FUTURE");
     if (version < 1) throw fail("OPERATIONAL_SCHEMA_INVALID");
-    const history =
-      version === 1
-        ? [1]
-        : version === 2
-          ? [1, 2]
-          : version === 3
-            ? [1, 2, 3]
-            : version === 4
-              ? [1, 2, 3, 4]
-              : version === 5
-                ? [1, 2, 3, 4, 5]
-                : version === 6
-                  ? [1, 2, 3, 4, 5, 6]
-                  : version === 7
-                    ? [1, 2, 3, 4, 5, 6, 7]
-                    : version === 8
-                      ? [1, 2, 3, 4, 5, 6, 7, 8]
-                      : [1, 2, 3, 4, 5, 6, 7, 8, 9];
+    const history = Array.from({ length: version }, (_, index) => index + 1);
     verifyMigrationHistory(db, history, "OPERATIONAL_SCHEMA_INVALID");
-    verifyV1Structure(db, "OPERATIONAL_SCHEMA_INVALID");
+    verifyV1Structure(db, "OPERATIONAL_SCHEMA_INVALID", version >= 10);
     if (version >= 2) verifyV2Structure(db, "OPERATIONAL_SCHEMA_INVALID");
     if (version >= 3)
       verifyV3Structure(db, "OPERATIONAL_SCHEMA_INVALID", {
@@ -391,6 +385,7 @@ function dryRunSchema(filename) {
         allowV9SubmissionInterval: version >= 9,
       });
     if (version >= 9) verifyV9Structure(db, "OPERATIONAL_SCHEMA_INVALID");
+    if (version >= 10) verifyV10Structure(db, "OPERATIONAL_SCHEMA_INVALID");
     return Object.freeze({
       mode: "dry-run",
       databasePath: filename,
@@ -427,26 +422,9 @@ function migrateSchema(db, migrationHook) {
   let version = schemaVersion(db);
   if (version > SCHEMA_VERSION) throw fail("OPERATIONAL_SCHEMA_FUTURE");
   if (version < 1) throw fail("OPERATIONAL_SCHEMA_INVALID");
-  const history =
-    version === 1
-      ? [1]
-      : version === 2
-        ? [1, 2]
-        : version === 3
-          ? [1, 2, 3]
-          : version === 4
-            ? [1, 2, 3, 4]
-            : version === 5
-              ? [1, 2, 3, 4, 5]
-              : version === 6
-                ? [1, 2, 3, 4, 5, 6]
-                : version === 7
-                  ? [1, 2, 3, 4, 5, 6, 7]
-                  : version === 8
-                    ? [1, 2, 3, 4, 5, 6, 7, 8]
-                    : [1, 2, 3, 4, 5, 6, 7, 8, 9];
+  const history = Array.from({ length: version }, (_, index) => index + 1);
   verifyMigrationHistory(db, history, "OPERATIONAL_SCHEMA_INVALID");
-  verifyV1Structure(db, "OPERATIONAL_SCHEMA_INVALID");
+  verifyV1Structure(db, "OPERATIONAL_SCHEMA_INVALID", version >= 10);
   if (version === 1) {
     runTransaction(db, () => {
       const before = tableDataHashes(db),
@@ -548,13 +526,20 @@ function migrateSchema(db, migrationHook) {
     });
     version = 9;
   }
+  if (version === 9) {
+    migrateV10Schema(db, migrationHook, {
+      runTransaction,
+      verifyMigrationHistory,
+    });
+    version = 10;
+  }
   if (version !== SCHEMA_VERSION) throw fail("OPERATIONAL_SCHEMA_INVALID");
   verifyMigrationHistory(
     db,
-    [1, 2, 3, 4, 5, 6, 7, 8, 9],
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
     "OPERATIONAL_SCHEMA_INVALID",
   );
-  verifyV1Structure(db, "OPERATIONAL_SCHEMA_INVALID");
+  verifyV1Structure(db, "OPERATIONAL_SCHEMA_INVALID", version >= 10);
   verifyV2Structure(db, "OPERATIONAL_SCHEMA_INVALID");
   verifyV3Structure(db, "OPERATIONAL_SCHEMA_INVALID", { allowV4Columns: true });
   verifyV4Structure(db, "OPERATIONAL_SCHEMA_INVALID", {
@@ -567,6 +552,7 @@ function migrateSchema(db, migrationHook) {
     allowV9SubmissionInterval: true,
   });
   verifyV9Structure(db, "OPERATIONAL_SCHEMA_INVALID");
+  verifyV10Structure(db, "OPERATIONAL_SCHEMA_INVALID");
 }
 
 function integrityOk(db) {
@@ -586,6 +572,7 @@ module.exports = {
   V7_SCHEMA,
   V8_SCHEMA,
   V9_SCHEMA,
+  V10_SCHEMA,
   tableNames,
   schemaVersion,
   verifyMigrationHistory,
@@ -602,6 +589,7 @@ module.exports = {
   verifyV7Structure,
   verifyV8Structure,
   verifyV9Structure,
+  verifyV10Structure,
   dryRunSchema,
   migrateSchema,
   migrateV7Schema,

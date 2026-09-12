@@ -88,7 +88,7 @@ function createLegacyV7QueueGroupDatabase() {
         UNIQUE(queue_group_id,position)
       );
       CREATE INDEX queue_item_article ON submission_queue_items(item_id,queue_group_id);
-      DELETE FROM schema_migrations WHERE version>=8;
+      DROP INDEX IF EXISTS publication_attempts_by_publication; DROP INDEX IF EXISTS submission_items_by_article; DELETE FROM schema_migrations WHERE version>=8;
     `);
     database
       .prepare(

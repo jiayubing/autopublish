@@ -14,6 +14,7 @@ const {
   verifyV7Structure,
   verifyV8Structure,
   verifyV9Structure,
+  verifyV10Structure,
   integrityOk,
 } = require("./operational-store-schema");
 const { verifyOperationalDatabase } = require("./operational-store-verifier");
@@ -35,10 +36,10 @@ function createMaintenanceAggregate(context) {
       throw fail("OPERATIONAL_VERIFY_FAILED");
     verifyMigrationHistory(
       db,
-      [1, 2, 3, 4, 5, 6, 7, 8, 9],
+      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
       "OPERATIONAL_VERIFY_FAILED",
     );
-    verifyV1Structure(db, "OPERATIONAL_VERIFY_FAILED");
+    verifyV1Structure(db, "OPERATIONAL_VERIFY_FAILED", true);
     verifyV2Structure(db, "OPERATIONAL_VERIFY_FAILED");
     verifyV3Structure(db, "OPERATIONAL_VERIFY_FAILED", {
       allowV4Columns: true,
@@ -53,6 +54,7 @@ function createMaintenanceAggregate(context) {
       allowV9SubmissionInterval: true,
     });
     verifyV9Structure(db, "OPERATIONAL_VERIFY_FAILED");
+    verifyV10Structure(db, "OPERATIONAL_VERIFY_FAILED");
     return {
       schemaVersion: version,
       databasePath: filename,

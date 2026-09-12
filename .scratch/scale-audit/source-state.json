@@ -1,0 +1,79 @@
+{
+  "head": "1e74583cf0ee2be02125c65298bf3b5579a8bca5",
+  "files": [
+    {
+      "path": "auto—publish/src/infrastructure/operational-store/operational-store.js",
+      "sha256": "600ee3eb00698a1e6ee0392c75c3e836b6199ce6af0af75f289f64fd432340a6"
+    },
+    {
+      "path": "auto—publish/src/infrastructure/operational-store/internal/operational-store-regular-queue-runtime.js",
+      "sha256": "46bdfcfe9eacfff3916c220409a0f15c8a4f1f2f0d93a5d44225d507fd8293ea"
+    },
+    {
+      "path": "auto—publish/src/infrastructure/operational-store/internal/operational-store-paid-execution-aggregate.js",
+      "sha256": "3181297e4f6362dc002b404d375b8fff66daf7f5704b393f50236be8c2744123"
+    },
+    {
+      "path": "auto—publish/src/infrastructure/operational-store/internal/operational-store-fact-reader.js",
+      "sha256": "c39709bfb82aa06f4dddbd3ecbfff357892a931b4ded877cb1c5ed16396c9032"
+    },
+    {
+      "path": "auto—publish/src/infrastructure/operational-store/internal/operational-store-publication-success.js",
+      "sha256": "5ad3d1a65c57fe72fc897bd9ee79bc40347bdbf2af07759e6b2174921da2c138"
+    },
+    {
+      "path": "auto—publish/desktop/services/article-management-snapshot.js",
+      "sha256": "bc306d55c77c7546a7324d4ded04b059b05042462e13fd9d4a467f87da244dab"
+    },
+    {
+      "path": "auto—publish/desktop/services/submission-center-snapshot.js",
+      "sha256": "7bca6e73096a0fa69a56208e48d6ff5979e29d4eb0069a65d195764fb294dd64"
+    },
+    {
+      "path": "auto—publish/desktop/services/regular-queue-group-query.js",
+      "sha256": "6b58f93903ff1a3f03d670a824845d84352c9fa0f769b63a4660dafbcb58bbeb"
+    },
+    {
+      "path": "auto—publish/desktop/services/paid-media-batch-orchestrator.js",
+      "sha256": "e3aeb5b2968ed9d41db0a60f2033c5869b3e617e9f240365006f29e07fdb21ef"
+    },
+    {
+      "path": "auto—publish/desktop/workspace-data-invalidation.js",
+      "sha256": "ca9f03ca3cfcbc5484446e4db9ebb8437011a22d9838e8c0fbade892688d8387"
+    },
+    {
+      "path": "auto—publish/desktop/composition/regular-queue-group-composition.js",
+      "sha256": "38aabf9381dea17cb72258a3e78dd0481ed71158be184deded4867c248ae2587"
+    },
+    {
+      "path": "auto—publish/desktop/composition/paid-media-batch-composition.js",
+      "sha256": "14f508cb5a5abed50b5d17705568f6f049dda26b592659a22c731e3e1152109e"
+    },
+    {
+      "path": "auto—publish/desktop/composition/workspace-runtime-composition.js",
+      "sha256": "7ae2b1438e1d3d805bdee27d05da9d5382fc7a7b0d7a253912d1199a17f3b84c"
+    },
+    {
+      "path": "auto—publish/media-workbench/src/App.tsx",
+      "sha256": "3a8b1b51e3159ca5923a3c647c1736cc1539c825d485aaf64af81cd3fbed5f44"
+    },
+    {
+      "path": "auto—publish/media-workbench/src/features/submission-center/use-submission-center-feature.ts",
+      "sha256": "2c8be2b077597fcae068bcd1f0f93f69788c9bc793fd7184d777fea42b076a12"
+    }
+  ],
+  "probeFiles": [
+    {
+      "path": "probe.cjs",
+      "sha256": "3f4178f253005dafe650f348a1bb8c772d8d3e5b1aca4561f34a56a4e7a82d74"
+    },
+    {
+      "path": "run.py",
+      "sha256": "6108266e9e39dd7c9c8a1c6d1f17b6680b03cc1098bfe381a56c35df489ba3c8"
+    },
+    {
+      "path": "index-experiment.cjs",
+      "sha256": "74e166ee184e16aaf3ff69f16fc8fceccb91eab608643b6592f0ca7c7328dc54"
+    }
+  ]
+}

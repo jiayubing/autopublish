@@ -56,7 +56,8 @@ function openOperationalStoreRuntime(options) {
       : acquireRuntimeOwner(
           filename,
           fail,
-          verifyOperationalDatabase,
+          (database) =>
+            verifyOperationalDatabase(database, { allowMigration: true }),
           null,
           value.migrationOwner,
         );

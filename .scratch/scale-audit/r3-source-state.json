@@ -1,0 +1,32 @@
+{
+  "head": "ddbfecd83781ac3bb449e15f423fc8be41e153c8",
+  "state": "uncommitted working tree; cumulative batches 1-3",
+  "files": {
+    ".scratch/scale-audit/r3-probe.cjs": "871f8b69308e757c4ce6fa3613d518a36931343dd6ed3cc3ca555cb2b330daee",
+    "auto—publish/desktop/services/article-management-snapshot.js": "bd88c6e434540e4fb52e814b98944ce76a26c960ccafd4e7a4a5bfb814cbe10d",
+    "auto—publish/desktop/services/media-workbench-application.js": "f1db3985ae2812a58df4c75c15ff50edd6fbb345e05c8207d46e62e79b0648ae",
+    "auto—publish/desktop/services/paid-media-batch-orchestrator.js": "008e10a06cab6e0bcea49ac5840e0f4a46f4f4c88698a1c2bb223938e03935fe",
+    "auto—publish/desktop/services/submission-center-snapshot.js": "d76030791a547c604891ff3a8c5f716f1154c2bfdf29d04ee24411fb16f4c6f7",
+    "auto—publish/src/infrastructure/operational-store/internal/operational-store-maintenance.js": "f8e816c1717e10b2f840f9ceba5d804d4567cfda796c118ad6779f8fdd602187",
+    "auto—publish/src/infrastructure/operational-store/internal/operational-store-paid-execution-aggregate.js": "e2fead832256d0e64a22664410cd023a5218884f9cef29670a784d169d0f2d9f",
+    "auto—publish/src/infrastructure/operational-store/internal/operational-store-regular-queue-runtime.js": "acb239e7989a55b952f96760dc9c71d1edf2cdb9e9192c096fa56e847d363ca7",
+    "auto—publish/src/infrastructure/operational-store/internal/operational-store-runtime.js": "93b100595f8f5219288cef7f4093969e3d2f6ca783f9cbaf9950171ced16c60e",
+    "auto—publish/src/infrastructure/operational-store/internal/operational-store-schema-v10.js": "afb4b07e87754c8235eba12a615759aa7711e313ca20aaa41d319f2a4de742c2",
+    "auto—publish/src/infrastructure/operational-store/internal/operational-store-schema.js": "00f30261540506a22e54f73d79d8cde17fb001550dc7c553074407d024cd12ed",
+    "auto—publish/src/infrastructure/operational-store/internal/operational-store-verifier.js": "09e21d937636038deb5a73d049165cf993f6aabc46e2c742df76d1c91150063d",
+    "auto—publish/tests/article-lifecycle-ticket-23-c.test.js": "2aacb88e13c2e8156f00a0674253661ddb3ab0162537a0b2c4c3ca7869807f8e",
+    "auto—publish/tests/article-management-capacity.test.js": "80380346be26fe7cce520fdf6995ea1e402f3e0a0f15c5d7a817115e82f7aaee",
+    "auto—publish/tests/paid-batch-pagination.test.js": "7e6f9b86a209a0b6ff395de66ac60310f7f99402e93d93f301bf6fcd36db9ccc",
+    "auto—publish/tests/phase-02-operational-store.test.js": "fa2fcf3fd452379ad8860d76c0697f731e2b29f1470376d41c6abad4eb87d509",
+    "auto—publish/tests/phase-03-composition.test.js": "57176135fa833ace1884c3dfd528338b541b0f61d68c0f524f776469ca7c7517",
+    "auto—publish/tests/phase-03-operational-store-v3.test.js": "ba3930d4d1c7ebbd3c419e20f70ff24b0a66397faa48cb46fd38c10400585a6f",
+    "auto—publish/tests/phase-04-operational-store-lifecycle.test.js": "de234dca1501aa8ab747265f91089d9e2e51f1c3c208a4b6b184e81c1c4079a0",
+    "auto—publish/tests/phase-07-regular-queue.test.js": "f9c2fcc7fe0b949703d6dbab1fffc3b5f50ac82bf07bf9650a6b62e2553f1c73",
+    "auto—publish/tests/phase-08-operational-store-internals.test.js": "772897f513a4c219eea1d5c4bd6c0377e6dd0ed744a8ed1873fd86cb1fac8609",
+    "auto—publish/tests/regular-queue-submission-interval.test.js": "d016cfc30e5ec054487dfd1d87ef5b31ce90c8dc5977fa468f1d51bd1ce9c682",
+    "auto—publish/tests/submission-center-snapshot.test.js": "f7232dab124f47d3d3e5747e51e4018fe1684b4d9416ed1bf1372f72c09b6fa1",
+    "auto—publish/tests/ticket-18-a-queue-image-count-persistence.test.js": "9df79af69c3767f7d0b5973659ca63ecc5ffa109222483726fc8ac16ee58c1a6",
+    "auto—publish/tests/ticket-25-e-migration-acceptance.test.js": "cf226faf01cc9ce23e34b584bc1322fee6324e507d0d6da4de94d687d866ec1c",
+    "auto—publish/tests/ticket-26-c-unified-submission-intake.test.js": "2086e8604ec64f397460f5866289b60b665485f9f86b27c6b88e5256813c60b1"
+  }
+}

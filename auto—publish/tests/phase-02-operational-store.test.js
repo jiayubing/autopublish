@@ -25,10 +25,77 @@ function input() {
     },
   };
 }
+
+test("v10 read indexes migrate atomically, preserve facts, and reject missing indexes on reopen", () => {
+  for (const point of ["before-v10", "after-v10-indexes", "after-v10-record"]) {
+    const dir = root();
+    const initial = createOperationalStore({ workspaceRoot: dir });
+    initial.reservePublicationTarget(input());
+    const database = initial.databasePath;
+    initial.close();
+    const legacy = new DatabaseSync(database);
+    legacy.exec(
+      "DROP INDEX publication_attempts_by_publication; DROP INDEX submission_items_by_article; DELETE FROM schema_migrations WHERE version=10;",
+    );
+    const before = legacy.prepare("SELECT * FROM publication_attempts").all();
+    legacy.close();
+    assert.throws(
+      () =>
+        createOperationalStore({
+          workspaceRoot: dir,
+          internalMigrationFault(actual) {
+            if (actual === point)
+              throw new Error("synthetic migration interruption");
+          },
+        }),
+      { code: "OPERATIONAL_DATABASE_OPEN_FAILED" },
+    );
+    const rolledBack = new DatabaseSync(database);
+    assert.equal(
+      rolledBack
+        .prepare("SELECT MAX(version) version FROM schema_migrations")
+        .get().version,
+      9,
+    );
+    assert.equal(
+      rolledBack
+        .prepare(
+          "SELECT COUNT(*) count FROM sqlite_master WHERE name IN ('publication_attempts_by_publication','submission_items_by_article')",
+        )
+        .get().count,
+      0,
+    );
+    assert.deepEqual(
+      rolledBack.prepare("SELECT * FROM publication_attempts").all(),
+      before,
+    );
+    rolledBack.close();
+    fs.writeFileSync(
+      path.join(path.dirname(database), "runtime.lock"),
+      JSON.stringify({ pid: 2147483647, token: "synthetic-old-owner" }),
+    );
+    const upgraded = createOperationalStore({ workspaceRoot: dir });
+    assert.equal(upgraded.verify().schemaVersion, 10);
+    upgraded.close();
+    const reopened = createOperationalStore({ workspaceRoot: dir });
+    assert.equal(reopened.verify().schemaVersion, 10);
+    reopened.close();
+    const verified = new DatabaseSync(database);
+    assert.deepEqual(
+      verified.prepare("SELECT * FROM publication_attempts").all(),
+      before,
+    );
+    verified.exec("DROP INDEX publication_attempts_by_publication");
+    verified.close();
+    assert.throws(() => createOperationalStore({ workspaceRoot: dir }), {
+      code: "OPERATIONAL_SCHEMA_INVALID",
+    });
+  }
+});
 function downgradeToSchemaV1(database) {
   const db = new DatabaseSync(database);
   db.exec(
-    "DROP TABLE IF EXISTS paid_staging_items; DROP TABLE IF EXISTS submission_migration_notices; DROP TABLE IF EXISTS migration_import_order_identities; DROP TABLE IF EXISTS migration_import_entries; DROP TABLE IF EXISTS migration_journals; DROP TABLE IF EXISTS manual_reconciliation_facts; DROP TABLE IF EXISTS paid_submission_batches; DROP TABLE IF EXISTS submission_queue_items; DROP TABLE IF EXISTS submission_queue_groups; DROP TABLE IF EXISTS article_active_targets; DROP TABLE IF EXISTS submission_item_operations; DROP TABLE IF EXISTS order_display_snapshots; DELETE FROM schema_migrations WHERE version > 1;",
+    "DROP TABLE IF EXISTS paid_staging_items; DROP TABLE IF EXISTS submission_migration_notices; DROP TABLE IF EXISTS migration_import_order_identities; DROP TABLE IF EXISTS migration_import_entries; DROP TABLE IF EXISTS migration_journals; DROP TABLE IF EXISTS manual_reconciliation_facts; DROP TABLE IF EXISTS paid_submission_batches; DROP TABLE IF EXISTS submission_queue_items; DROP TABLE IF EXISTS submission_queue_groups; DROP TABLE IF EXISTS article_active_targets; DROP TABLE IF EXISTS submission_item_operations; DROP TABLE IF EXISTS order_display_snapshots; DROP INDEX IF EXISTS publication_attempts_by_publication; DROP INDEX IF EXISTS submission_items_by_article; DELETE FROM schema_migrations WHERE version > 1;",
   );
   db.close();
 }
@@ -118,6 +185,11 @@ test("failed publication retry selects the latest attempt by insertion order at 
     retryFailed: true,
   });
   assert.equal(retried.attemptId, "attempt-next");
+  assert.equal(
+    store.listArticleLifecycleFacts({ articleIds: ["article-1"] })
+      .publications[0].attemptId,
+    "attempt-next",
+  );
   assert.deepEqual(
     store
       .listPublicationRecords({ articleIds: ["article-1"] })[0]
@@ -191,7 +263,7 @@ test("backup verifier reads destination and missing or corrupt targets have no s
   const backup = path.join(dir, "backup.db");
   const result = store.backup(backup);
   assert.equal(result.rows, 1);
-  assert.equal(verifyOperationalDatabase(backup).schemaVersion, 9);
+  assert.equal(verifyOperationalDatabase(backup).schemaVersion, 10);
   const missing = path.join(dir, "missing.db");
   assert.throws(() => verifyOperationalDatabase(missing), {
     code: "OPERATIONAL_RESTORE_TARGET_INVALID",
@@ -242,7 +314,7 @@ test("database reopens after close and explicit batch writes stay isolated from 
   const db = store.databasePath;
   store.close();
   const reopened = createOperationalStore({ workspaceRoot: dir });
-  assert.equal(reopened.verify().schemaVersion, 9);
+  assert.equal(reopened.verify().schemaVersion, 10);
   assert.equal(
     fs.existsSync(path.join(dir, ".autopublish", "publications")),
     false,
@@ -262,19 +334,21 @@ test("upgrades a real schema v1 database to the operation schema without changin
   legacy.exec(
     "DROP TABLE IF EXISTS paid_staging_items; DROP TABLE IF EXISTS submission_migration_notices; DROP TABLE IF EXISTS migration_import_order_identities; DROP TABLE IF EXISTS migration_import_entries; DROP TABLE IF EXISTS migration_journals; DROP TABLE IF EXISTS manual_reconciliation_facts; DROP TABLE IF EXISTS paid_submission_batches; DROP TABLE IF EXISTS submission_queue_items; DROP TABLE IF EXISTS submission_queue_groups; DROP TABLE IF EXISTS article_active_targets; DROP TABLE IF EXISTS submission_item_operations; DROP TABLE IF EXISTS order_display_snapshots",
   );
-  legacy.prepare("DELETE FROM schema_migrations WHERE version > 1").run();
+  legacy.exec(
+    "DROP INDEX IF EXISTS publication_attempts_by_publication; DROP INDEX IF EXISTS submission_items_by_article; DELETE FROM schema_migrations WHERE version > 1",
+  );
   const before = legacy
     .prepare("SELECT * FROM publication_records ORDER BY publication_id")
     .all();
   legacy.close();
 
   const upgraded = createOperationalStore({ workspaceRoot: dir });
-  assert.equal(SCHEMA_VERSION, 9);
-  assert.equal(upgraded.verify().schemaVersion, 9);
+  assert.equal(SCHEMA_VERSION, 10);
+  assert.equal(upgraded.verify().schemaVersion, 10);
   upgraded.close();
 
   const verified = verifyOperationalDatabase(database);
-  assert.equal(verified.schemaVersion, 9);
+  assert.equal(verified.schemaVersion, 10);
   const reopened = new DatabaseSync(database, { readOnly: true });
   assert.deepEqual(
     reopened
@@ -297,6 +371,7 @@ test("upgrades a real schema v1 database to the operation schema without changin
       { version: 7 },
       { version: 8 },
       { version: 9 },
+      { version: 10 },
     ],
   );
   assert.ok(
@@ -350,7 +425,7 @@ test("repairs the known v1 history plus legacy operation table left by an early 
     DROP TABLE IF EXISTS submission_queue_groups;
     DROP TABLE IF EXISTS article_active_targets;
     DROP TABLE IF EXISTS order_display_snapshots;
-    DELETE FROM schema_migrations WHERE version > 1;
+    DROP INDEX IF EXISTS publication_attempts_by_publication; DROP INDEX IF EXISTS submission_items_by_article; DELETE FROM schema_migrations WHERE version > 1;
     ALTER TABLE submission_item_operations RENAME TO submission_item_operations_final;
     CREATE TABLE submission_item_operations(
       operation_id TEXT PRIMARY KEY,
@@ -370,7 +445,7 @@ test("repairs the known v1 history plus legacy operation table left by an early 
   legacy.close();
 
   const upgraded = createOperationalStore({ workspaceRoot: dir });
-  assert.equal(upgraded.verify().schemaVersion, 9);
+  assert.equal(upgraded.verify().schemaVersion, 10);
   assert.deepEqual(
     upgraded.getSubmissionItemAction("operation-legacy-phase-05"),
     {
@@ -471,7 +546,7 @@ test("rejects a future operational schema before changing its database", () => {
       .prepare("SELECT version FROM schema_migrations ORDER BY version")
       .all()
       .map((row) => row.version),
-    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
   );
   unchanged.close();
 });
@@ -681,7 +756,7 @@ test("v1 to v2 migration preserves every pre-v2 table and rolls back detected ol
   assert.deepEqual(after, before);
   assert.deepEqual(
     history.map((row) => row.version),
-    [1, 2, 3, 4, 5, 6, 7, 8, 9],
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
   );
   assert.equal(Number.isFinite(Date.parse(history[1].applied_at)), true);
 });

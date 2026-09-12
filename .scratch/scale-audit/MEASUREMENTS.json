@@ -1,0 +1,5155 @@
+[
+  {
+    "file": "article-1000-regular.jsonl",
+    "mode": "article",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 18.11350000000001,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 18.2725,
+    "heapDelta": 459728,
+    "resultBytes": 15,
+    "sqlCalls": 309,
+    "sqlRows": 864,
+    "sqlBytes": 77369,
+    "sqlMs": 1.7550999999999561,
+    "topSql": [
+      {
+        "sha256": "eba52bfdd3e2b00654f026be28725405595adac04bff394ed602ed802ae46d0e",
+        "calls": 39,
+        "rows": 39,
+        "bytes": 12318,
+        "ms": 0.23339999999996763,
+        "prefix": "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      },
+      {
+        "sha256": "022756f7616d38499fc8d7abe0286bca873f370b926b3b1662bd0a6f87e8ac15",
+        "calls": 9,
+        "rows": 36,
+        "bytes": 3330,
+        "ms": 0.14330000000001064,
+        "prefix": "PRAGMA index_list(\"article_active_targets\")"
+      },
+      {
+        "sha256": "2dd43fe9595aa16cd87dfe8759cca59a4c4f34ce04b062b7e0c2cf4f1bc92e4a",
+        "calls": 5,
+        "rows": 94,
+        "bytes": 3059,
+        "ms": 0.12599999999999767,
+        "prefix": "SELECT name FROM sqlite_master WHERE type='table'"
+      }
+    ]
+  },
+  {
+    "file": "article-1000-regular.jsonl",
+    "mode": "article",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "lifecycle-whole-client",
+    "durationMs": 55.47210000000001,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 55.540099999999995,
+    "heapDelta": 8437488,
+    "resultBytes": 868247,
+    "sqlCalls": 7,
+    "sqlRows": 2000,
+    "sqlBytes": 5716722,
+    "sqlMs": 32.31260000000002,
+    "topSql": [
+      {
+        "sha256": "442de37040c2ade2266af8ce7b76275a72ae02855833092b68b7a0122cc73b70",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 5085261,
+        "ms": 17.087400000000002,
+        "prefix": "SELECT s.item_id,s.batch_id,s.article_id,s.target_key,s.revision,s.status,s.payload_json,q.queue_group_id,q.position,q.created_at AS queued_at,g.platform_id,g.account_profile_id,g."
+      },
+      {
+        "sha256": "51d5dd547025155bd7b5da85bb885a4251e9b27479ed49d450a58ef0907d2e36",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 631451,
+        "ms": 14.3472,
+        "prefix": "SELECT p.publication_id,p.article_id,p.target_key,p.target_json,p.status,p.created_at,p.updated_at,a.attempt_id,a.finished_at,i.payload_json AS intent_payload,e.evidence_json AS su"
+      },
+      {
+        "sha256": "4e8156ffe959d39abb56601abae5d1878a4c642b658f800c43d83f2263715d44",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.3271000000000015,
+        "prefix": "SELECT entry_id,variant,entry_json,imported_at FROM migration_import_entries WHERE article_id IN(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?"
+      }
+    ]
+  },
+  {
+    "file": "article-1000-regular.jsonl",
+    "mode": "article",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "lifecycle-one-client",
+    "durationMs": 6.1950999999999965,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 6.274000000000001,
+    "heapDelta": 2091648,
+    "resultBytes": 86912,
+    "sqlCalls": 7,
+    "sqlRows": 200,
+    "sqlBytes": 571683,
+    "sqlMs": 3.1071999999999917,
+    "topSql": [
+      {
+        "sha256": "8e9f93e6291269afe97d69c0008d043639a16011d991674b23a8de1835b6fbd6",
+        "calls": 1,
+        "rows": 100,
+        "bytes": 63146,
+        "ms": 1.5518,
+        "prefix": "SELECT p.publication_id,p.article_id,p.target_key,p.target_json,p.status,p.created_at,p.updated_at,a.attempt_id,a.finished_at,i.payload_json AS intent_payload,e.evidence_json AS su"
+      },
+      {
+        "sha256": "d2f0e9f81f2406414016881bb5f9136daecc6cb13c2a65de86e9fca6c5798ccc",
+        "calls": 1,
+        "rows": 100,
+        "bytes": 508527,
+        "ms": 1.4353000000000122,
+        "prefix": "SELECT s.item_id,s.batch_id,s.article_id,s.target_key,s.revision,s.status,s.payload_json,q.queue_group_id,q.position,q.created_at AS queued_at,g.platform_id,g.account_profile_id,g."
+      },
+      {
+        "sha256": "53144246e9455a260dcf2e9344b67fbe7c13c7fe1f585af00aa881233fa36316",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.037499999999994316,
+        "prefix": "SELECT o.order_id,o.remote_id,o.payload_json,o.created_at,a.attempt_id,a.status AS publication_status,p.publication_id,p.article_id,p.target_json,d.title_snapshot,d.filename,d.reso"
+      }
+    ]
+  },
+  {
+    "file": "article-1000-regular.jsonl",
+    "mode": "article",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "article-one-client-cold",
+    "durationMs": 10.56480000000002,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 10.653100000000023,
+    "heapDelta": 4808360,
+    "resultBytes": 141950,
+    "sqlCalls": 8,
+    "sqlRows": 200,
+    "sqlBytes": 571685,
+    "sqlMs": 2.5871999999999957,
+    "topSql": [
+      {
+        "sha256": "8e9f93e6291269afe97d69c0008d043639a16011d991674b23a8de1835b6fbd6",
+        "calls": 1,
+        "rows": 100,
+        "bytes": 63146,
+        "ms": 1.4581000000000017,
+        "prefix": "SELECT p.publication_id,p.article_id,p.target_key,p.target_json,p.status,p.created_at,p.updated_at,a.attempt_id,a.finished_at,i.payload_json AS intent_payload,e.evidence_json AS su"
+      },
+      {
+        "sha256": "d2f0e9f81f2406414016881bb5f9136daecc6cb13c2a65de86e9fca6c5798ccc",
+        "calls": 1,
+        "rows": 100,
+        "bytes": 508527,
+        "ms": 0.9581000000000017,
+        "prefix": "SELECT s.item_id,s.batch_id,s.article_id,s.target_key,s.revision,s.status,s.payload_json,q.queue_group_id,q.position,q.created_at AS queued_at,g.platform_id,g.account_profile_id,g."
+      },
+      {
+        "sha256": "cd77e9d9fe032853d853218c7faa5ada9934d0dbeefa429fe8af55a296b95bba",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.05750000000000455,
+        "prefix": "SELECT p.publication_id,a.attempt_id,p.article_id,json_remove(e.evidence_json, '$.body') evidence_json FROM publication_records p JOIN publication_attempts a ON a.publication_id=p."
+      }
+    ]
+  },
+  {
+    "file": "article-1000-regular.jsonl",
+    "mode": "article",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "article-one-client-hot",
+    "durationMs": 0.4414999999999907,
+    "timerTicks": 0,
+    "maxEventLoopGapMs": 0.48099999999999454,
+    "heapDelta": -47568,
+    "resultBytes": 141950,
+    "sqlCalls": 0,
+    "sqlRows": 0,
+    "sqlBytes": 0,
+    "sqlMs": 0,
+    "topSql": []
+  },
+  {
+    "file": "article-1000-regular.jsonl",
+    "mode": "article",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "article-unrelated-client-save",
+    "durationMs": 8.639900000000011,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 8.7106,
+    "heapDelta": -4475408,
+    "resultBytes": 141950,
+    "sqlCalls": 8,
+    "sqlRows": 200,
+    "sqlBytes": 571685,
+    "sqlMs": 2.7618999999999403,
+    "topSql": [
+      {
+        "sha256": "8e9f93e6291269afe97d69c0008d043639a16011d991674b23a8de1835b6fbd6",
+        "calls": 1,
+        "rows": 100,
+        "bytes": 63146,
+        "ms": 1.466399999999993,
+        "prefix": "SELECT p.publication_id,p.article_id,p.target_key,p.target_json,p.status,p.created_at,p.updated_at,a.attempt_id,a.finished_at,i.payload_json AS intent_payload,e.evidence_json AS su"
+      },
+      {
+        "sha256": "d2f0e9f81f2406414016881bb5f9136daecc6cb13c2a65de86e9fca6c5798ccc",
+        "calls": 1,
+        "rows": 100,
+        "bytes": 508527,
+        "ms": 0.930499999999995,
+        "prefix": "SELECT s.item_id,s.batch_id,s.article_id,s.target_key,s.revision,s.status,s.payload_json,q.queue_group_id,q.position,q.created_at AS queued_at,g.platform_id,g.account_profile_id,g."
+      },
+      {
+        "sha256": "cd77e9d9fe032853d853218c7faa5ada9934d0dbeefa429fe8af55a296b95bba",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.13190000000000168,
+        "prefix": "SELECT p.publication_id,a.attempt_id,p.article_id,json_remove(e.evidence_json, '$.body') evidence_json FROM publication_records p JOIN publication_attempts a ON a.publication_id=p."
+      }
+    ]
+  },
+  {
+    "file": "article-10000-regular-all.jsonl",
+    "mode": "article",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 16.7271,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 16.8767,
+    "heapDelta": 456696,
+    "resultBytes": 15,
+    "sqlCalls": 309,
+    "sqlRows": 864,
+    "sqlBytes": 77369,
+    "sqlMs": 1.9834999999999994,
+    "topSql": [
+      {
+        "sha256": "61ac4ba8461aca0e8320ad5e54c63736d0ab7cb2dcf0e5317fe6b0ecd54562d6",
+        "calls": 3,
+        "rows": 36,
+        "bytes": 3090,
+        "ms": 0.43019999999999214,
+        "prefix": "PRAGMA table_info(\"paid_submission_batches\")"
+      },
+      {
+        "sha256": "eba52bfdd3e2b00654f026be28725405595adac04bff394ed602ed802ae46d0e",
+        "calls": 39,
+        "rows": 39,
+        "bytes": 12318,
+        "ms": 0.2173000000000087,
+        "prefix": "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      },
+      {
+        "sha256": "2dd43fe9595aa16cd87dfe8759cca59a4c4f34ce04b062b7e0c2cf4f1bc92e4a",
+        "calls": 5,
+        "rows": 94,
+        "bytes": 3059,
+        "ms": 0.08169999999999078,
+        "prefix": "SELECT name FROM sqlite_master WHERE type='table'"
+      }
+    ]
+  },
+  {
+    "file": "article-10000-regular-all.jsonl",
+    "mode": "article",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "lifecycle-whole-client",
+    "durationMs": 0.2676000000000016,
+    "error": "OPERATIONAL_FACT_ARTICLES_INVALID",
+    "timerTicks": 0,
+    "maxEventLoopGapMs": 0.3054000000000059,
+    "heapDelta": 21968,
+    "resultBytes": 0,
+    "sqlCalls": 0,
+    "sqlRows": 0,
+    "sqlBytes": 0,
+    "sqlMs": 0,
+    "topSql": []
+  },
+  {
+    "file": "article-10000-regular-all.jsonl",
+    "mode": "article",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "lifecycle-one-client",
+    "durationMs": 152.83620000000002,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 152.89350000000002,
+    "heapDelta": 9360144,
+    "resultBytes": 879740,
+    "sqlCalls": 7,
+    "sqlRows": 2000,
+    "sqlBytes": 5733111,
+    "sqlMs": 132.74969999999993,
+    "topSql": [
+      {
+        "sha256": "51d5dd547025155bd7b5da85bb885a4251e9b27479ed49d450a58ef0907d2e36",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 638246,
+        "ms": 111.7015,
+        "prefix": "SELECT p.publication_id,p.article_id,p.target_key,p.target_json,p.status,p.created_at,p.updated_at,a.attempt_id,a.finished_at,i.payload_json AS intent_payload,e.evidence_json AS su"
+      },
+      {
+        "sha256": "442de37040c2ade2266af8ce7b76275a72ae02855833092b68b7a0122cc73b70",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 5094855,
+        "ms": 20.15009999999998,
+        "prefix": "SELECT s.item_id,s.batch_id,s.article_id,s.target_key,s.revision,s.status,s.payload_json,q.queue_group_id,q.position,q.created_at AS queued_at,g.platform_id,g.account_profile_id,g."
+      },
+      {
+        "sha256": "4e8156ffe959d39abb56601abae5d1878a4c642b658f800c43d83f2263715d44",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.32159999999998945,
+        "prefix": "SELECT entry_id,variant,entry_json,imported_at FROM migration_import_entries WHERE article_id IN(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?"
+      }
+    ]
+  },
+  {
+    "file": "article-10000-regular-all.jsonl",
+    "mode": "article",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "article-one-client-cold",
+    "durationMs": 180.1355,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 180.20460000000003,
+    "heapDelta": 660184,
+    "resultBytes": 1421752,
+    "sqlCalls": 8,
+    "sqlRows": 2000,
+    "sqlBytes": 5733113,
+    "sqlMs": 131.61249999999993,
+    "topSql": [
+      {
+        "sha256": "51d5dd547025155bd7b5da85bb885a4251e9b27479ed49d450a58ef0907d2e36",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 638246,
+        "ms": 111.63620000000003,
+        "prefix": "SELECT p.publication_id,p.article_id,p.target_key,p.target_json,p.status,p.created_at,p.updated_at,a.attempt_id,a.finished_at,i.payload_json AS intent_payload,e.evidence_json AS su"
+      },
+      {
+        "sha256": "442de37040c2ade2266af8ce7b76275a72ae02855833092b68b7a0122cc73b70",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 5094855,
+        "ms": 18.184300000000007,
+        "prefix": "SELECT s.item_id,s.batch_id,s.article_id,s.target_key,s.revision,s.status,s.payload_json,q.queue_group_id,q.position,q.created_at AS queued_at,g.platform_id,g.account_profile_id,g."
+      },
+      {
+        "sha256": "ea2b1d11422ccf257d71733eba3571e6eca6f41635bae16b09c2ce05c243e488",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.9398999999999944,
+        "prefix": "SELECT p.publication_id,a.attempt_id,p.article_id,json_remove(e.evidence_json, '$.body') evidence_json FROM publication_records p JOIN publication_attempts a ON a.publication_id=p."
+      }
+    ]
+  },
+  {
+    "file": "article-10000-regular-all.jsonl",
+    "mode": "article",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "article-one-client-hot",
+    "durationMs": 3.29910000000001,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 3.363200000000006,
+    "heapDelta": 2201632,
+    "resultBytes": 1421752,
+    "sqlCalls": 0,
+    "sqlRows": 0,
+    "sqlBytes": 0,
+    "sqlMs": 0,
+    "topSql": []
+  },
+  {
+    "file": "article-10000-regular-all.jsonl",
+    "mode": "article",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "article-unrelated-client-save",
+    "durationMs": 169.77659999999997,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 169.84729999999996,
+    "heapDelta": 27108720,
+    "resultBytes": 1421752,
+    "sqlCalls": 8,
+    "sqlRows": 2000,
+    "sqlBytes": 5733113,
+    "sqlMs": 130.25630000000012,
+    "topSql": [
+      {
+        "sha256": "51d5dd547025155bd7b5da85bb885a4251e9b27479ed49d450a58ef0907d2e36",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 638246,
+        "ms": 109.91410000000002,
+        "prefix": "SELECT p.publication_id,p.article_id,p.target_key,p.target_json,p.status,p.created_at,p.updated_at,a.attempt_id,a.finished_at,i.payload_json AS intent_payload,e.evidence_json AS su"
+      },
+      {
+        "sha256": "442de37040c2ade2266af8ce7b76275a72ae02855833092b68b7a0122cc73b70",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 5094855,
+        "ms": 18.6087,
+        "prefix": "SELECT s.item_id,s.batch_id,s.article_id,s.target_key,s.revision,s.status,s.payload_json,q.queue_group_id,q.position,q.created_at AS queued_at,g.platform_id,g.account_profile_id,g."
+      },
+      {
+        "sha256": "ea2b1d11422ccf257d71733eba3571e6eca6f41635bae16b09c2ce05c243e488",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.8684000000000083,
+        "prefix": "SELECT p.publication_id,a.attempt_id,p.article_id,json_remove(e.evidence_json, '$.body') evidence_json FROM publication_records p JOIN publication_attempts a ON a.publication_id=p."
+      }
+    ]
+  },
+  {
+    "file": "article-50000-regular-all.jsonl",
+    "mode": "article",
+    "n": 50000,
+    "groups": 500,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 650.1975,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 650.3596,
+    "heapDelta": 1385792,
+    "resultBytes": 15,
+    "sqlCalls": 502,
+    "sqlRows": 1467,
+    "sqlBytes": 131827,
+    "sqlMs": 628.1929999999988,
+    "topSql": [
+      {
+        "sha256": "5703922d81e137ae18f060aebc15210f118dc0ab28d445b2375cf789987525ab",
+        "calls": 1,
+        "rows": 1,
+        "bytes": 26,
+        "ms": 509.40650000000005,
+        "prefix": "PRAGMA integrity_check"
+      },
+      {
+        "sha256": "75d969201666ceebff397862f6a8b8d2eec57903f8ffbfbe0095a39cb3576f19",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 114.35560000000001,
+        "prefix": "PRAGMA foreign_key_check"
+      },
+      {
+        "sha256": "5d9f3742282a0643d048162ab1b9949badd7dcefb0de8528be81b0110bb795ed",
+        "calls": 1,
+        "rows": 1,
+        "bytes": 15,
+        "ms": 1.1651000000000522,
+        "prefix": "SELECT COUNT(*) count FROM publication_records"
+      }
+    ]
+  },
+  {
+    "file": "article-50000-regular-all.jsonl",
+    "mode": "article",
+    "n": 50000,
+    "groups": 500,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "lifecycle-whole-client",
+    "durationMs": 0.6059999999999945,
+    "error": "OPERATIONAL_FACT_ARTICLES_INVALID",
+    "timerTicks": 0,
+    "maxEventLoopGapMs": 0.6689000000000078,
+    "heapDelta": 14032,
+    "resultBytes": 0,
+    "sqlCalls": 0,
+    "sqlRows": 0,
+    "sqlBytes": 0,
+    "sqlMs": 0,
+    "topSql": []
+  },
+  {
+    "file": "article-50000-regular-all.jsonl",
+    "mode": "article",
+    "n": 50000,
+    "groups": 500,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "lifecycle-one-client",
+    "durationMs": 14060.8831,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 14060.982600000001,
+    "heapDelta": 45273152,
+    "resultBytes": 4451420,
+    "sqlCalls": 7,
+    "sqlRows": 10000,
+    "sqlBytes": 28740791,
+    "sqlMs": 13882.011500000002,
+    "topSql": [
+      {
+        "sha256": "58ce27cfac5e26686bbdd3926d20a8a5eb0d6f0455d41f0c30217f5497ef8cfc",
+        "calls": 1,
+        "rows": 5000,
+        "bytes": 3222246,
+        "ms": 13651.9094,
+        "prefix": "SELECT p.publication_id,p.article_id,p.target_key,p.target_json,p.status,p.created_at,p.updated_at,a.attempt_id,a.finished_at,i.payload_json AS intent_payload,e.evidence_json AS su"
+      },
+      {
+        "sha256": "f5413f4e54d6c150e44447e27b9d0dec1ee314f8181b1b8d847ddd09d59561da",
+        "calls": 1,
+        "rows": 5000,
+        "bytes": 25518535,
+        "ms": 221.17300000000068,
+        "prefix": "SELECT s.item_id,s.batch_id,s.article_id,s.target_key,s.revision,s.status,s.payload_json,q.queue_group_id,q.position,q.created_at AS queued_at,g.platform_id,g.account_profile_id,g."
+      },
+      {
+        "sha256": "22b99d9dcb18e873321b219e10d41872a3d230f84ef151157b8313615d33eb02",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 3.3444999999992433,
+        "prefix": "SELECT reconciliation_id,attempt_id,article_id,decision,evidence_json,created_at FROM manual_reconciliation_facts WHERE article_id IN(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,"
+      }
+    ]
+  },
+  {
+    "file": "article-50000-regular-all.jsonl",
+    "mode": "article",
+    "n": 50000,
+    "groups": 500,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "article-one-client-cold",
+    "durationMs": 15960.6802,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 15960.789900000002,
+    "heapDelta": 52153928,
+    "resultBytes": 7129752,
+    "sqlCalls": 8,
+    "sqlRows": 10000,
+    "sqlBytes": 28740793,
+    "sqlMs": 15562.910899999999,
+    "topSql": [
+      {
+        "sha256": "58ce27cfac5e26686bbdd3926d20a8a5eb0d6f0455d41f0c30217f5497ef8cfc",
+        "calls": 1,
+        "rows": 5000,
+        "bytes": 3222246,
+        "ms": 15338.7625,
+        "prefix": "SELECT p.publication_id,p.article_id,p.target_key,p.target_json,p.status,p.created_at,p.updated_at,a.attempt_id,a.finished_at,i.payload_json AS intent_payload,e.evidence_json AS su"
+      },
+      {
+        "sha256": "f5413f4e54d6c150e44447e27b9d0dec1ee314f8181b1b8d847ddd09d59561da",
+        "calls": 1,
+        "rows": 5000,
+        "bytes": 25518535,
+        "ms": 206.76170000000275,
+        "prefix": "SELECT s.item_id,s.batch_id,s.article_id,s.target_key,s.revision,s.status,s.payload_json,q.queue_group_id,q.position,q.created_at AS queued_at,g.platform_id,g.account_profile_id,g."
+      },
+      {
+        "sha256": "8aa59d30e09eed74338ae10d2d36c2c411c3237cfd03eba954b5a22eb21d64af",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 8.387099999999919,
+        "prefix": "SELECT p.publication_id,a.attempt_id,p.article_id,json_remove(e.evidence_json, '$.body') evidence_json FROM publication_records p JOIN publication_attempts a ON a.publication_id=p."
+      }
+    ]
+  },
+  {
+    "file": "article-50000-regular-all.jsonl",
+    "mode": "article",
+    "n": 50000,
+    "groups": 500,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "article-wire",
+    "durationMs": 315.4330999999984,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 315.5613999999987,
+    "heapDelta": 39897632,
+    "resultBytes": 7254785,
+    "sqlCalls": 0,
+    "sqlRows": 0,
+    "sqlBytes": 0,
+    "sqlMs": 0,
+    "topSql": []
+  },
+  {
+    "file": "article-50000-regular-all.jsonl",
+    "mode": "article",
+    "n": 50000,
+    "groups": 500,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "article-one-client-hot",
+    "durationMs": 31.421000000002095,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 31.52509999999893,
+    "heapDelta": 10620336,
+    "resultBytes": 7129752,
+    "sqlCalls": 0,
+    "sqlRows": 0,
+    "sqlBytes": 0,
+    "sqlMs": 0,
+    "topSql": []
+  },
+  {
+    "file": "article-50000-regular-all.jsonl",
+    "mode": "article",
+    "n": 50000,
+    "groups": 500,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "article-unrelated-client-save",
+    "durationMs": 16110.766599999999,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 16110.855700000004,
+    "heapDelta": -15851824,
+    "resultBytes": 7129752,
+    "sqlCalls": 8,
+    "sqlRows": 10000,
+    "sqlBytes": 28740793,
+    "sqlMs": 15751.322499999995,
+    "topSql": [
+      {
+        "sha256": "58ce27cfac5e26686bbdd3926d20a8a5eb0d6f0455d41f0c30217f5497ef8cfc",
+        "calls": 1,
+        "rows": 5000,
+        "bytes": 3222246,
+        "ms": 15510.525099999999,
+        "prefix": "SELECT p.publication_id,p.article_id,p.target_key,p.target_json,p.status,p.created_at,p.updated_at,a.attempt_id,a.finished_at,i.payload_json AS intent_payload,e.evidence_json AS su"
+      },
+      {
+        "sha256": "f5413f4e54d6c150e44447e27b9d0dec1ee314f8181b1b8d847ddd09d59561da",
+        "calls": 1,
+        "rows": 5000,
+        "bytes": 25518535,
+        "ms": 223.74369999999908,
+        "prefix": "SELECT s.item_id,s.batch_id,s.article_id,s.target_key,s.revision,s.status,s.payload_json,q.queue_group_id,q.position,q.created_at AS queued_at,g.platform_id,g.account_profile_id,g."
+      },
+      {
+        "sha256": "8aa59d30e09eed74338ae10d2d36c2c411c3237cfd03eba954b5a22eb21d64af",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 8.325700000001234,
+        "prefix": "SELECT p.publication_id,a.attempt_id,p.article_id,json_remove(e.evidence_json, '$.body') evidence_json FROM publication_records p JOIN publication_attempts a ON a.publication_id=p."
+      }
+    ]
+  },
+  {
+    "file": "article-dense-10000-regular-all.jsonl",
+    "mode": "article-dense",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 17.765800000000006,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 17.9309,
+    "heapDelta": 536960,
+    "resultBytes": 15,
+    "sqlCalls": 309,
+    "sqlRows": 864,
+    "sqlBytes": 77369,
+    "sqlMs": 1.6261000000000791,
+    "topSql": [
+      {
+        "sha256": "eba52bfdd3e2b00654f026be28725405595adac04bff394ed602ed802ae46d0e",
+        "calls": 39,
+        "rows": 39,
+        "bytes": 12318,
+        "ms": 0.22970000000000823,
+        "prefix": "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      },
+      {
+        "sha256": "2dd43fe9595aa16cd87dfe8759cca59a4c4f34ce04b062b7e0c2cf4f1bc92e4a",
+        "calls": 5,
+        "rows": 94,
+        "bytes": 3059,
+        "ms": 0.08499999999999375,
+        "prefix": "SELECT name FROM sqlite_master WHERE type='table'"
+      },
+      {
+        "sha256": "022756f7616d38499fc8d7abe0286bca873f370b926b3b1662bd0a6f87e8ac15",
+        "calls": 9,
+        "rows": 36,
+        "bytes": 3330,
+        "ms": 0.04919999999999192,
+        "prefix": "PRAGMA index_list(\"article_active_targets\")"
+      }
+    ]
+  },
+  {
+    "file": "article-dense-10000-regular-all.jsonl",
+    "mode": "article-dense",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "lifecycle-whole-client",
+    "durationMs": 0.2762999999999991,
+    "error": "OPERATIONAL_FACT_ARTICLES_INVALID",
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 0.31349999999999767,
+    "heapDelta": 22936,
+    "resultBytes": 0,
+    "sqlCalls": 0,
+    "sqlRows": 0,
+    "sqlBytes": 0,
+    "sqlMs": 0,
+    "topSql": []
+  },
+  {
+    "file": "article-dense-10000-regular-all.jsonl",
+    "mode": "article-dense",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "lifecycle-one-client",
+    "durationMs": 153.1234,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 153.19830000000002,
+    "heapDelta": 9256128,
+    "resultBytes": 879740,
+    "sqlCalls": 7,
+    "sqlRows": 2000,
+    "sqlBytes": 5733111,
+    "sqlMs": 132.7889,
+    "topSql": [
+      {
+        "sha256": "51d5dd547025155bd7b5da85bb885a4251e9b27479ed49d450a58ef0907d2e36",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 638246,
+        "ms": 110.31920000000001,
+        "prefix": "SELECT p.publication_id,p.article_id,p.target_key,p.target_json,p.status,p.created_at,p.updated_at,a.attempt_id,a.finished_at,i.payload_json AS intent_payload,e.evidence_json AS su"
+      },
+      {
+        "sha256": "442de37040c2ade2266af8ce7b76275a72ae02855833092b68b7a0122cc73b70",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 5094855,
+        "ms": 21.581799999999987,
+        "prefix": "SELECT s.item_id,s.batch_id,s.article_id,s.target_key,s.revision,s.status,s.payload_json,q.queue_group_id,q.position,q.created_at AS queued_at,g.platform_id,g.account_profile_id,g."
+      },
+      {
+        "sha256": "4e8156ffe959d39abb56601abae5d1878a4c642b658f800c43d83f2263715d44",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.3188000000000102,
+        "prefix": "SELECT entry_id,variant,entry_json,imported_at FROM migration_import_entries WHERE article_id IN(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?"
+      }
+    ]
+  },
+  {
+    "file": "article-dense-10000-regular-all.jsonl",
+    "mode": "article-dense",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "article-one-client-cold",
+    "durationMs": 12.528800000000018,
+    "error": "PUBLICATION_ARCHIVE_ARTICLES_INVALID",
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 12.6019,
+    "heapDelta": 8825624,
+    "resultBytes": 0,
+    "sqlCalls": 0,
+    "sqlRows": 0,
+    "sqlBytes": 0,
+    "sqlMs": 0,
+    "topSql": []
+  },
+  {
+    "file": "article-dense-10000-regular-all.jsonl",
+    "mode": "article-dense",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "article-one-client-hot",
+    "durationMs": 8.330000000000013,
+    "error": "PUBLICATION_ARCHIVE_ARTICLES_INVALID",
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 8.431399999999996,
+    "heapDelta": 6922184,
+    "resultBytes": 0,
+    "sqlCalls": 0,
+    "sqlRows": 0,
+    "sqlBytes": 0,
+    "sqlMs": 0,
+    "topSql": []
+  },
+  {
+    "file": "article-dense-10000-regular-all.jsonl",
+    "mode": "article-dense",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "article-unrelated-client-save",
+    "durationMs": 7.649499999999989,
+    "error": "PUBLICATION_ARCHIVE_ARTICLES_INVALID",
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 7.6995000000000005,
+    "heapDelta": 5728640,
+    "resultBytes": 0,
+    "sqlCalls": 0,
+    "sqlRows": 0,
+    "sqlBytes": 0,
+    "sqlMs": 0,
+    "topSql": []
+  },
+  {
+    "file": "attention-50000-paid-all.jsonl",
+    "mode": "attention",
+    "n": 50000,
+    "groups": 500,
+    "kind": "paid",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 16.7012,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 16.842,
+    "heapDelta": 545112,
+    "resultBytes": 15,
+    "sqlCalls": 309,
+    "sqlRows": 864,
+    "sqlBytes": 77369,
+    "sqlMs": 2.003499999999967,
+    "topSql": [
+      {
+        "sha256": "69569da60f3a30cf14bcb8f25d822bba2100b8bfc1a74d4e48f558a379686b55",
+        "calls": 2,
+        "rows": 2,
+        "bytes": 22,
+        "ms": 0.45600000000000307,
+        "prefix": "SELECT COUNT(*) count FROM submission_queue_groups WHERE typeof(image_count)!='integer' OR image_count NOT BETWEEN 0 AND 5"
+      },
+      {
+        "sha256": "eba52bfdd3e2b00654f026be28725405595adac04bff394ed602ed802ae46d0e",
+        "calls": 39,
+        "rows": 39,
+        "bytes": 12318,
+        "ms": 0.2132000000000076,
+        "prefix": "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      },
+      {
+        "sha256": "2dd43fe9595aa16cd87dfe8759cca59a4c4f34ce04b062b7e0c2cf4f1bc92e4a",
+        "calls": 5,
+        "rows": 94,
+        "bytes": 3059,
+        "ms": 0.08679999999999666,
+        "prefix": "SELECT name FROM sqlite_master WHERE type='table'"
+      }
+    ]
+  },
+  {
+    "file": "attention-50000-paid-all.jsonl",
+    "mode": "attention",
+    "n": 50000,
+    "groups": 500,
+    "kind": "paid",
+    "event": "measurement",
+    "label": "attention-all",
+    "durationMs": 8.983400000000003,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 9.0563,
+    "heapDelta": 32272,
+    "resultBytes": 61,
+    "sqlCalls": 2,
+    "sqlRows": 0,
+    "sqlBytes": 4,
+    "sqlMs": 8.41859999999999,
+    "counts": {
+      "total": 0,
+      "actionable": 0
+    },
+    "topSql": [
+      {
+        "sha256": "112bfe6364d7b5867caa685bcd9dd96d3f6f67c2f2eeb73e3e7817b21e574d08",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 8.391600000000004,
+        "prefix": "SELECT p.publication_id,p.article_id,p.target_key,p.status,p.updated_at,a.attempt_id,e.remote_id,e.remote_url,i.payload_json AS intent_payload FROM publication_records p JOIN publi"
+      },
+      {
+        "sha256": "817834e514c6da6d8fcb41ccc723904c3b427406fc458bfc30a7d8e7b0949c98",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.026999999999986812,
+        "prefix": "SELECT j.job_id,j.attempt_id,j.kind,j.attempts,j.payload_json,j.updated_at,p.article_id,p.target_key FROM post_processing_jobs j JOIN publication_attempts a ON a.attempt_id=j.attem"
+      }
+    ]
+  },
+  {
+    "file": "attention-50000-paid-all.jsonl",
+    "mode": "attention",
+    "n": 50000,
+    "groups": 500,
+    "kind": "paid",
+    "event": "measurement",
+    "label": "attention-one-client",
+    "durationMs": 7.832099999999997,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 7.894599999999997,
+    "heapDelta": 435840,
+    "resultBytes": 61,
+    "sqlCalls": 2,
+    "sqlRows": 0,
+    "sqlBytes": 4,
+    "sqlMs": 7.567300000000003,
+    "counts": {
+      "total": 0,
+      "actionable": 0
+    },
+    "topSql": [
+      {
+        "sha256": "112bfe6364d7b5867caa685bcd9dd96d3f6f67c2f2eeb73e3e7817b21e574d08",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 7.548500000000004,
+        "prefix": "SELECT p.publication_id,p.article_id,p.target_key,p.status,p.updated_at,a.attempt_id,e.remote_id,e.remote_url,i.payload_json AS intent_payload FROM publication_records p JOIN publi"
+      },
+      {
+        "sha256": "817834e514c6da6d8fcb41ccc723904c3b427406fc458bfc30a7d8e7b0949c98",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.018799999999998818,
+        "prefix": "SELECT j.job_id,j.attempt_id,j.kind,j.attempts,j.payload_json,j.updated_at,p.article_id,p.target_key FROM post_processing_jobs j JOIN publication_attempts a ON a.attempt_id=j.attem"
+      }
+    ]
+  },
+  {
+    "file": "center-1000-paid-center-page1.jsonl",
+    "mode": "center",
+    "n": 1000,
+    "groups": 10,
+    "kind": "paid",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 16.4936,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 16.634,
+    "heapDelta": 442056,
+    "resultBytes": 15,
+    "sqlCalls": 309,
+    "sqlRows": 864,
+    "sqlBytes": 77369,
+    "sqlMs": 1.9447000000000187,
+    "topSql": [
+      {
+        "sha256": "30feb81beae887c2ae1ccce5eb3969609543360f3e615608a22f04d5c9a6633b",
+        "calls": 3,
+        "rows": 27,
+        "bytes": 2307,
+        "ms": 0.4679000000000002,
+        "prefix": "PRAGMA table_info(submission_queue_groups)"
+      },
+      {
+        "sha256": "eba52bfdd3e2b00654f026be28725405595adac04bff394ed602ed802ae46d0e",
+        "calls": 39,
+        "rows": 39,
+        "bytes": 12318,
+        "ms": 0.2161999999999793,
+        "prefix": "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      },
+      {
+        "sha256": "2dd43fe9595aa16cd87dfe8759cca59a4c4f34ce04b062b7e0c2cf4f1bc92e4a",
+        "calls": 5,
+        "rows": 94,
+        "bytes": 3059,
+        "ms": 0.08050000000000068,
+        "prefix": "SELECT name FROM sqlite_master WHERE type='table'"
+      }
+    ]
+  },
+  {
+    "file": "center-1000-paid-center-page1.jsonl",
+    "mode": "center",
+    "n": 1000,
+    "groups": 10,
+    "kind": "paid",
+    "event": "measurement",
+    "label": "center-page1",
+    "durationMs": 112.76650000000001,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 112.84269999999998,
+    "heapDelta": 7083512,
+    "resultBytes": 7714,
+    "sqlCalls": 1003,
+    "sqlRows": 2000,
+    "sqlBytes": 6113135,
+    "sqlMs": 38.29190000000034,
+    "counts": {
+      "regularItems": 0,
+      "paidBatches": 1000,
+      "attentionItems": 0,
+      "total": 1000
+    },
+    "hasMore": true,
+    "failures": [],
+    "topSql": [
+      {
+        "sha256": "4855541d1b93654d097ee87d71ccab487619c8a829d8d792b2002d4541cbe2a5",
+        "calls": 1000,
+        "rows": 1000,
+        "bytes": 5507460,
+        "ms": 36.00360000000034,
+        "prefix": "SELECT s.item_id,s.batch_id,s.article_id,s.revision,s.status item_status,s.claim_token,s.claim_until,s.payload_json item_payload,p.publication_id,p.target_key,p.target_json,p.statu"
+      },
+      {
+        "sha256": "79896960c5e308b812e29d924562db8befb27e5f6388dfd6a46c73b2384fa6d5",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 605671,
+        "ms": 2.252599999999994,
+        "prefix": "SELECT * FROM paid_submission_batches ORDER BY created_at,batch_id LIMIT 20000"
+      },
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.025400000000004752,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      }
+    ]
+  },
+  {
+    "file": "center-1000-regular-all.jsonl",
+    "mode": "center",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 17.7288,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 17.880799999999994,
+    "heapDelta": 537488,
+    "resultBytes": 15,
+    "sqlCalls": 309,
+    "sqlRows": 864,
+    "sqlBytes": 77369,
+    "sqlMs": 2.3765000000000427,
+    "topSql": [
+      {
+        "sha256": "61ac4ba8461aca0e8320ad5e54c63736d0ab7cb2dcf0e5317fe6b0ecd54562d6",
+        "calls": 3,
+        "rows": 36,
+        "bytes": 3090,
+        "ms": 0.5650000000000048,
+        "prefix": "PRAGMA table_info(\"paid_submission_batches\")"
+      },
+      {
+        "sha256": "40b2ad2a998b995dc7c1aa4282bcf96728d9908bcba9a80ba6d96e33d5a2258f",
+        "calls": 3,
+        "rows": 24,
+        "bytes": 1947,
+        "ms": 0.25029999999999575,
+        "prefix": "PRAGMA table_info(\"article_active_targets\")"
+      },
+      {
+        "sha256": "eba52bfdd3e2b00654f026be28725405595adac04bff394ed602ed802ae46d0e",
+        "calls": 39,
+        "rows": 39,
+        "bytes": 12318,
+        "ms": 0.21680000000003474,
+        "prefix": "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      }
+    ]
+  },
+  {
+    "file": "center-1000-regular-all.jsonl",
+    "mode": "center",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "center-page1",
+    "durationMs": 476.2654,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 476.33209999999997,
+    "heapDelta": 639520,
+    "resultBytes": 265510,
+    "sqlCalls": 3,
+    "sqlRows": 2000,
+    "sqlBytes": 689484,
+    "sqlMs": 467.34019999999987,
+    "counts": {
+      "regularItems": 1000,
+      "paidBatches": 0,
+      "attentionItems": 0,
+      "total": 1000
+    },
+    "hasMore": false,
+    "failures": [],
+    "topSql": [
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 487001,
+        "ms": 461.15189999999996,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      },
+      {
+        "sha256": "e7eb5bd4abe7adee570551cbc310aea04e41e239fce66f5b6afc8b2e22d090ce",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 202481,
+        "ms": 6.135699999999929,
+        "prefix": "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_"
+      },
+      {
+        "sha256": "79896960c5e308b812e29d924562db8befb27e5f6388dfd6a46c73b2384fa6d5",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.05259999999998399,
+        "prefix": "SELECT * FROM paid_submission_batches ORDER BY created_at,batch_id LIMIT 20000"
+      }
+    ]
+  },
+  {
+    "file": "center-1000-regular-all.jsonl",
+    "mode": "center",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "center-wire",
+    "durationMs": 5.550100000000043,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 5.625400000000013,
+    "heapDelta": -302200,
+    "resultBytes": 265547,
+    "sqlCalls": 0,
+    "sqlRows": 0,
+    "sqlBytes": 0,
+    "sqlMs": 0,
+    "topSql": []
+  },
+  {
+    "file": "center-1000-regular-all.jsonl",
+    "mode": "center",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "center-page1-hot",
+    "durationMs": 1.480199999999968,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 1.526200000000017,
+    "heapDelta": 1094768,
+    "resultBytes": 265510,
+    "sqlCalls": 0,
+    "sqlRows": 0,
+    "sqlBytes": 0,
+    "sqlMs": 0,
+    "counts": {
+      "regularItems": 1000,
+      "paidBatches": 0,
+      "attentionItems": 0,
+      "total": 1000
+    },
+    "hasMore": false,
+    "failures": [],
+    "topSql": []
+  },
+  {
+    "file": "center-1000-regular-all.jsonl",
+    "mode": "center",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "center-page2",
+    "durationMs": 460.22540000000004,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 460.30600000000004,
+    "heapDelta": -499216,
+    "resultBytes": 251,
+    "sqlCalls": 3,
+    "sqlRows": 2000,
+    "sqlBytes": 689484,
+    "sqlMs": 456.1865,
+    "counts": {
+      "regularItems": 1000,
+      "paidBatches": 0,
+      "attentionItems": 0,
+      "total": 1000
+    },
+    "hasMore": false,
+    "failures": [],
+    "topSql": [
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 487001,
+        "ms": 450.408,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      },
+      {
+        "sha256": "e7eb5bd4abe7adee570551cbc310aea04e41e239fce66f5b6afc8b2e22d090ce",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 202481,
+        "ms": 5.7485000000000355,
+        "prefix": "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_"
+      },
+      {
+        "sha256": "79896960c5e308b812e29d924562db8befb27e5f6388dfd6a46c73b2384fa6d5",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.029999999999972715,
+        "prefix": "SELECT * FROM paid_submission_batches ORDER BY created_at,batch_id LIMIT 20000"
+      }
+    ]
+  },
+  {
+    "file": "center-1000-regular-all.jsonl",
+    "mode": "center",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "center-page1-return",
+    "durationMs": 465.23210000000006,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 465.2818000000001,
+    "heapDelta": -1994896,
+    "resultBytes": 265510,
+    "sqlCalls": 3,
+    "sqlRows": 2000,
+    "sqlBytes": 689484,
+    "sqlMs": 458.44450000000006,
+    "counts": {
+      "regularItems": 1000,
+      "paidBatches": 0,
+      "attentionItems": 0,
+      "total": 1000
+    },
+    "hasMore": false,
+    "failures": [],
+    "topSql": [
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 487001,
+        "ms": 452.4866999999999,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      },
+      {
+        "sha256": "e7eb5bd4abe7adee570551cbc310aea04e41e239fce66f5b6afc8b2e22d090ce",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 202481,
+        "ms": 5.917899999999918,
+        "prefix": "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_"
+      },
+      {
+        "sha256": "79896960c5e308b812e29d924562db8befb27e5f6388dfd6a46c73b2384fa6d5",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.039900000000216096,
+        "prefix": "SELECT * FROM paid_submission_batches ORDER BY created_at,batch_id LIMIT 20000"
+      }
+    ]
+  },
+  {
+    "file": "center-1000-regular-all.jsonl",
+    "mode": "center",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "center-after-article-save",
+    "durationMs": 468.8964000000001,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 468.9540999999999,
+    "heapDelta": 2027520,
+    "resultBytes": 265510,
+    "sqlCalls": 3,
+    "sqlRows": 2000,
+    "sqlBytes": 689484,
+    "sqlMs": 461.9689000000001,
+    "counts": {
+      "regularItems": 1000,
+      "paidBatches": 0,
+      "attentionItems": 0,
+      "total": 1000
+    },
+    "hasMore": false,
+    "failures": [],
+    "topSql": [
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 487001,
+        "ms": 455.75160000000005,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      },
+      {
+        "sha256": "e7eb5bd4abe7adee570551cbc310aea04e41e239fce66f5b6afc8b2e22d090ce",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 202481,
+        "ms": 6.182099999999991,
+        "prefix": "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_"
+      },
+      {
+        "sha256": "79896960c5e308b812e29d924562db8befb27e5f6388dfd6a46c73b2384fa6d5",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.03520000000003165,
+        "prefix": "SELECT * FROM paid_submission_batches ORDER BY created_at,batch_id LIMIT 20000"
+      }
+    ]
+  },
+  {
+    "file": "center-1000-regular-all.jsonl",
+    "mode": "center",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "center-page2001",
+    "durationMs": 455.1306000000002,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 455.1775,
+    "heapDelta": -560856,
+    "resultBytes": 254,
+    "sqlCalls": 3,
+    "sqlRows": 2000,
+    "sqlBytes": 689484,
+    "sqlMs": 450.80040000000054,
+    "counts": {
+      "regularItems": 1000,
+      "paidBatches": 0,
+      "attentionItems": 0,
+      "total": 1000
+    },
+    "hasMore": false,
+    "failures": [],
+    "topSql": [
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 487001,
+        "ms": 445.49569999999994,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      },
+      {
+        "sha256": "e7eb5bd4abe7adee570551cbc310aea04e41e239fce66f5b6afc8b2e22d090ce",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 202481,
+        "ms": 5.250600000000304,
+        "prefix": "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_"
+      },
+      {
+        "sha256": "79896960c5e308b812e29d924562db8befb27e5f6388dfd6a46c73b2384fa6d5",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.05410000000028958,
+        "prefix": "SELECT * FROM paid_submission_batches ORDER BY created_at,batch_id LIMIT 20000"
+      }
+    ]
+  },
+  {
+    "file": "center-1000-regular.jsonl",
+    "mode": "center",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 17.550199999999997,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 17.698200000000007,
+    "heapDelta": 451880,
+    "resultBytes": 15,
+    "sqlCalls": 309,
+    "sqlRows": 864,
+    "sqlBytes": 77369,
+    "sqlMs": 2.0745999999999327,
+    "topSql": [
+      {
+        "sha256": "d77bfc4b631570c6b4c5bcf4a287cb8cfd31a8bc64eaaf089decef9e9e3efa24",
+        "calls": 6,
+        "rows": 12,
+        "bytes": 1800,
+        "ms": 0.5189000000000021,
+        "prefix": "PRAGMA foreign_key_list(\"submission_queue_items\")"
+      },
+      {
+        "sha256": "eba52bfdd3e2b00654f026be28725405595adac04bff394ed602ed802ae46d0e",
+        "calls": 39,
+        "rows": 39,
+        "bytes": 12318,
+        "ms": 0.24999999999995737,
+        "prefix": "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      },
+      {
+        "sha256": "2dd43fe9595aa16cd87dfe8759cca59a4c4f34ce04b062b7e0c2cf4f1bc92e4a",
+        "calls": 5,
+        "rows": 94,
+        "bytes": 3059,
+        "ms": 0.0910999999999973,
+        "prefix": "SELECT name FROM sqlite_master WHERE type='table'"
+      }
+    ]
+  },
+  {
+    "file": "center-1000-regular.jsonl",
+    "mode": "center",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "center-page1",
+    "durationMs": 486.2831,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 486.35710000000006,
+    "heapDelta": 788392,
+    "resultBytes": 265510,
+    "sqlCalls": 3,
+    "sqlRows": 2000,
+    "sqlBytes": 689484,
+    "sqlMs": 476.7609,
+    "counts": {
+      "regularItems": 1000,
+      "paidBatches": 0,
+      "attentionItems": 0,
+      "total": 1000
+    },
+    "hasMore": false,
+    "failures": [],
+    "topSql": [
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 487001,
+        "ms": 470.336,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      },
+      {
+        "sha256": "e7eb5bd4abe7adee570551cbc310aea04e41e239fce66f5b6afc8b2e22d090ce",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 202481,
+        "ms": 6.3577999999999975,
+        "prefix": "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_"
+      },
+      {
+        "sha256": "79896960c5e308b812e29d924562db8befb27e5f6388dfd6a46c73b2384fa6d5",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.06709999999998217,
+        "prefix": "SELECT * FROM paid_submission_batches ORDER BY created_at,batch_id LIMIT 20000"
+      }
+    ]
+  },
+  {
+    "file": "center-1000-regular.jsonl",
+    "mode": "center",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "center-page1-hot",
+    "durationMs": 1.574200000000019,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 1.6225999999999203,
+    "heapDelta": 1464952,
+    "resultBytes": 265510,
+    "sqlCalls": 0,
+    "sqlRows": 0,
+    "sqlBytes": 0,
+    "sqlMs": 0,
+    "counts": {
+      "regularItems": 1000,
+      "paidBatches": 0,
+      "attentionItems": 0,
+      "total": 1000
+    },
+    "hasMore": false,
+    "failures": [],
+    "topSql": []
+  },
+  {
+    "file": "center-1000-regular.jsonl",
+    "mode": "center",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "center-page2",
+    "durationMs": 463.7333,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 463.8089,
+    "heapDelta": 48448,
+    "resultBytes": 251,
+    "sqlCalls": 3,
+    "sqlRows": 2000,
+    "sqlBytes": 689484,
+    "sqlMs": 459.1470999999999,
+    "counts": {
+      "regularItems": 1000,
+      "paidBatches": 0,
+      "attentionItems": 0,
+      "total": 1000
+    },
+    "hasMore": false,
+    "failures": [],
+    "topSql": [
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 487001,
+        "ms": 453.8372999999999,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      },
+      {
+        "sha256": "e7eb5bd4abe7adee570551cbc310aea04e41e239fce66f5b6afc8b2e22d090ce",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 202481,
+        "ms": 5.275800000000004,
+        "prefix": "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_"
+      },
+      {
+        "sha256": "79896960c5e308b812e29d924562db8befb27e5f6388dfd6a46c73b2384fa6d5",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.033999999999991815,
+        "prefix": "SELECT * FROM paid_submission_batches ORDER BY created_at,batch_id LIMIT 20000"
+      }
+    ]
+  },
+  {
+    "file": "center-1000-regular.jsonl",
+    "mode": "center",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "center-page1-return",
+    "durationMs": 488.4045,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 488.5024000000001,
+    "heapDelta": 1445192,
+    "resultBytes": 265510,
+    "sqlCalls": 3,
+    "sqlRows": 2000,
+    "sqlBytes": 689484,
+    "sqlMs": 481.2428000000002,
+    "counts": {
+      "regularItems": 1000,
+      "paidBatches": 0,
+      "attentionItems": 0,
+      "total": 1000
+    },
+    "hasMore": false,
+    "failures": [],
+    "topSql": [
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 487001,
+        "ms": 475.2287000000001,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      },
+      {
+        "sha256": "e7eb5bd4abe7adee570551cbc310aea04e41e239fce66f5b6afc8b2e22d090ce",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 202481,
+        "ms": 5.960900000000038,
+        "prefix": "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_"
+      },
+      {
+        "sha256": "79896960c5e308b812e29d924562db8befb27e5f6388dfd6a46c73b2384fa6d5",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.053200000000060754,
+        "prefix": "SELECT * FROM paid_submission_batches ORDER BY created_at,batch_id LIMIT 20000"
+      }
+    ]
+  },
+  {
+    "file": "center-1000-regular.jsonl",
+    "mode": "center",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "center-after-article-save",
+    "durationMs": 483.90049999999997,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 483.95979999999986,
+    "heapDelta": -2111224,
+    "resultBytes": 265510,
+    "sqlCalls": 3,
+    "sqlRows": 2000,
+    "sqlBytes": 689484,
+    "sqlMs": 477.1624999999999,
+    "counts": {
+      "regularItems": 1000,
+      "paidBatches": 0,
+      "attentionItems": 0,
+      "total": 1000
+    },
+    "hasMore": false,
+    "failures": [],
+    "topSql": [
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 487001,
+        "ms": 470.99569999999994,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      },
+      {
+        "sha256": "e7eb5bd4abe7adee570551cbc310aea04e41e239fce66f5b6afc8b2e22d090ce",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 202481,
+        "ms": 6.1077000000000226,
+        "prefix": "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_"
+      },
+      {
+        "sha256": "79896960c5e308b812e29d924562db8befb27e5f6388dfd6a46c73b2384fa6d5",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.059099999999943975,
+        "prefix": "SELECT * FROM paid_submission_batches ORDER BY created_at,batch_id LIMIT 20000"
+      }
+    ]
+  },
+  {
+    "file": "center-10000-paid-center-page1.jsonl",
+    "mode": "center",
+    "n": 10000,
+    "groups": 100,
+    "kind": "paid",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 16.583999999999996,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 16.7271,
+    "heapDelta": 427328,
+    "resultBytes": 15,
+    "sqlCalls": 309,
+    "sqlRows": 864,
+    "sqlBytes": 77369,
+    "sqlMs": 1.566799999999958,
+    "topSql": [
+      {
+        "sha256": "eba52bfdd3e2b00654f026be28725405595adac04bff394ed602ed802ae46d0e",
+        "calls": 39,
+        "rows": 39,
+        "bytes": 12318,
+        "ms": 0.2014999999999887,
+        "prefix": "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      },
+      {
+        "sha256": "2dd43fe9595aa16cd87dfe8759cca59a4c4f34ce04b062b7e0c2cf4f1bc92e4a",
+        "calls": 5,
+        "rows": 94,
+        "bytes": 3059,
+        "ms": 0.08399999999999608,
+        "prefix": "SELECT name FROM sqlite_master WHERE type='table'"
+      },
+      {
+        "sha256": "022756f7616d38499fc8d7abe0286bca873f370b926b3b1662bd0a6f87e8ac15",
+        "calls": 9,
+        "rows": 36,
+        "bytes": 3330,
+        "ms": 0.055699999999987426,
+        "prefix": "PRAGMA index_list(\"article_active_targets\")"
+      }
+    ]
+  },
+  {
+    "file": "center-10000-paid-center-page1.jsonl",
+    "mode": "center",
+    "n": 10000,
+    "groups": 100,
+    "kind": "paid",
+    "event": "measurement",
+    "label": "center-page1",
+    "durationMs": 866.3767,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 866.443,
+    "heapDelta": 98561888,
+    "resultBytes": 7747,
+    "sqlCalls": 10003,
+    "sqlRows": 20000,
+    "sqlBytes": 61346135,
+    "sqlMs": 304.5945000000008,
+    "counts": {
+      "regularItems": 0,
+      "paidBatches": 10000,
+      "attentionItems": 0,
+      "total": 10000
+    },
+    "hasMore": true,
+    "failures": [],
+    "topSql": [
+      {
+        "sha256": "4855541d1b93654d097ee87d71ccab487619c8a829d8d792b2002d4541cbe2a5",
+        "calls": 10000,
+        "rows": 10000,
+        "bytes": 55241460,
+        "ms": 269.3762000000008,
+        "prefix": "SELECT s.item_id,s.batch_id,s.article_id,s.revision,s.status item_status,s.claim_token,s.claim_until,s.payload_json item_payload,p.publication_id,p.target_key,p.target_json,p.statu"
+      },
+      {
+        "sha256": "79896960c5e308b812e29d924562db8befb27e5f6388dfd6a46c73b2384fa6d5",
+        "calls": 1,
+        "rows": 10000,
+        "bytes": 6104671,
+        "ms": 35.1873,
+        "prefix": "SELECT * FROM paid_submission_batches ORDER BY created_at,batch_id LIMIT 20000"
+      },
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.021499999999996078,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      }
+    ]
+  },
+  {
+    "file": "center-10000-regular-center-page1.jsonl",
+    "mode": "center",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 16.543999999999997,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 16.683,
+    "heapDelta": 489000,
+    "resultBytes": 15,
+    "sqlCalls": 309,
+    "sqlRows": 864,
+    "sqlBytes": 77369,
+    "sqlMs": 2.0235999999999947,
+    "topSql": [
+      {
+        "sha256": "d4c146a2c8fe5279a2cedabbcf9cfb1d33c095fb7f50f67183142ddf39be6316",
+        "calls": 3,
+        "rows": 3,
+        "bytes": 486,
+        "ms": 0.4624999999999986,
+        "prefix": "PRAGMA foreign_key_list(\"submission_queue_groups\")"
+      },
+      {
+        "sha256": "eba52bfdd3e2b00654f026be28725405595adac04bff394ed602ed802ae46d0e",
+        "calls": 39,
+        "rows": 39,
+        "bytes": 12318,
+        "ms": 0.20599999999998886,
+        "prefix": "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      },
+      {
+        "sha256": "2dd43fe9595aa16cd87dfe8759cca59a4c4f34ce04b062b7e0c2cf4f1bc92e4a",
+        "calls": 5,
+        "rows": 94,
+        "bytes": 3059,
+        "ms": 0.08800000000000097,
+        "prefix": "SELECT name FROM sqlite_master WHERE type='table'"
+      }
+    ]
+  },
+  {
+    "file": "center-10000-regular-center-page1.jsonl",
+    "mode": "center",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "center-page1",
+    "durationMs": 9024.5852,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 9024.692200000001,
+    "heapDelta": 8700512,
+    "resultBytes": 270509,
+    "sqlCalls": 3,
+    "sqlRows": 20000,
+    "sqlBytes": 6943764,
+    "sqlMs": 8927.3231,
+    "counts": {
+      "regularItems": 10000,
+      "paidBatches": 0,
+      "attentionItems": 0,
+      "total": 10000
+    },
+    "hasMore": true,
+    "failures": [],
+    "topSql": [
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 10000,
+        "bytes": 4879001,
+        "ms": 8781.7343,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      },
+      {
+        "sha256": "e7eb5bd4abe7adee570551cbc310aea04e41e239fce66f5b6afc8b2e22d090ce",
+        "calls": 1,
+        "rows": 10000,
+        "bytes": 2064761,
+        "ms": 145.4951000000001,
+        "prefix": "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_"
+      },
+      {
+        "sha256": "79896960c5e308b812e29d924562db8befb27e5f6388dfd6a46c73b2384fa6d5",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.09369999999944412,
+        "prefix": "SELECT * FROM paid_submission_batches ORDER BY created_at,batch_id LIMIT 20000"
+      }
+    ]
+  },
+  {
+    "file": "center-50000-paid-center-page1.jsonl",
+    "mode": "center",
+    "n": 50000,
+    "groups": 500,
+    "kind": "paid",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 16.639200000000002,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 16.782599999999995,
+    "heapDelta": 482008,
+    "resultBytes": 15,
+    "sqlCalls": 309,
+    "sqlRows": 864,
+    "sqlBytes": 77369,
+    "sqlMs": 1.9567999999999728,
+    "topSql": [
+      {
+        "sha256": "30feb81beae887c2ae1ccce5eb3969609543360f3e615608a22f04d5c9a6633b",
+        "calls": 3,
+        "rows": 27,
+        "bytes": 2307,
+        "ms": 0.45929999999999893,
+        "prefix": "PRAGMA table_info(submission_queue_groups)"
+      },
+      {
+        "sha256": "eba52bfdd3e2b00654f026be28725405595adac04bff394ed602ed802ae46d0e",
+        "calls": 39,
+        "rows": 39,
+        "bytes": 12318,
+        "ms": 0.20179999999997733,
+        "prefix": "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      },
+      {
+        "sha256": "2dd43fe9595aa16cd87dfe8759cca59a4c4f34ce04b062b7e0c2cf4f1bc92e4a",
+        "calls": 5,
+        "rows": 94,
+        "bytes": 3059,
+        "ms": 0.08899999999999864,
+        "prefix": "SELECT name FROM sqlite_master WHERE type='table'"
+      }
+    ]
+  },
+  {
+    "file": "center-50000-paid-center-page1.jsonl",
+    "mode": "center",
+    "n": 50000,
+    "groups": 500,
+    "kind": "paid",
+    "event": "measurement",
+    "label": "center-page1",
+    "durationMs": 1729.9439,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 1730.0092,
+    "heapDelta": 163127584,
+    "resultBytes": 7774,
+    "sqlCalls": 20003,
+    "sqlRows": 40000,
+    "sqlBytes": 123120043,
+    "sqlMs": 640.4314999999962,
+    "counts": {
+      "regularItems": 0,
+      "paidBatches": 20000,
+      "attentionItems": 0,
+      "total": 20000
+    },
+    "hasMore": true,
+    "failures": [],
+    "topSql": [
+      {
+        "sha256": "4855541d1b93654d097ee87d71ccab487619c8a829d8d792b2002d4541cbe2a5",
+        "calls": 20000,
+        "rows": 20000,
+        "bytes": 110815564,
+        "ms": 537.0376999999962,
+        "prefix": "SELECT s.item_id,s.batch_id,s.article_id,s.revision,s.status item_status,s.claim_token,s.claim_until,s.payload_json item_payload,p.publication_id,p.target_key,p.target_json,p.statu"
+      },
+      {
+        "sha256": "79896960c5e308b812e29d924562db8befb27e5f6388dfd6a46c73b2384fa6d5",
+        "calls": 1,
+        "rows": 20000,
+        "bytes": 12304475,
+        "ms": 103.36219999999999,
+        "prefix": "SELECT * FROM paid_submission_batches ORDER BY created_at,batch_id LIMIT 20000"
+      },
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.020199999999995555,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      }
+    ]
+  },
+  {
+    "file": "center-50000-paid-center-page2001.jsonl",
+    "mode": "center",
+    "n": 50000,
+    "groups": 500,
+    "kind": "paid",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 17.287900000000008,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 17.436100000000003,
+    "heapDelta": 549928,
+    "resultBytes": 15,
+    "sqlCalls": 309,
+    "sqlRows": 864,
+    "sqlBytes": 77369,
+    "sqlMs": 2.0779000000000067,
+    "topSql": [
+      {
+        "sha256": "d4c146a2c8fe5279a2cedabbcf9cfb1d33c095fb7f50f67183142ddf39be6316",
+        "calls": 3,
+        "rows": 3,
+        "bytes": 486,
+        "ms": 0.46300000000000097,
+        "prefix": "PRAGMA foreign_key_list(\"submission_queue_groups\")"
+      },
+      {
+        "sha256": "eba52bfdd3e2b00654f026be28725405595adac04bff394ed602ed802ae46d0e",
+        "calls": 39,
+        "rows": 39,
+        "bytes": 12318,
+        "ms": 0.21869999999999123,
+        "prefix": "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      },
+      {
+        "sha256": "2dd43fe9595aa16cd87dfe8759cca59a4c4f34ce04b062b7e0c2cf4f1bc92e4a",
+        "calls": 5,
+        "rows": 94,
+        "bytes": 3059,
+        "ms": 0.0928999999999931,
+        "prefix": "SELECT name FROM sqlite_master WHERE type='table'"
+      }
+    ]
+  },
+  {
+    "file": "center-50000-paid-center-page2001.jsonl",
+    "mode": "center",
+    "n": 50000,
+    "groups": 500,
+    "kind": "paid",
+    "event": "measurement",
+    "label": "center-page2001",
+    "durationMs": 1812.8332,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 1812.9029,
+    "heapDelta": 162638688,
+    "resultBytes": 256,
+    "sqlCalls": 20003,
+    "sqlRows": 40000,
+    "sqlBytes": 123120043,
+    "sqlMs": 650.7075000000075,
+    "counts": {
+      "regularItems": 0,
+      "paidBatches": 20000,
+      "attentionItems": 0,
+      "total": 20000
+    },
+    "hasMore": false,
+    "failures": [],
+    "topSql": [
+      {
+        "sha256": "4855541d1b93654d097ee87d71ccab487619c8a829d8d792b2002d4541cbe2a5",
+        "calls": 20000,
+        "rows": 20000,
+        "bytes": 110815564,
+        "ms": 551.3323000000075,
+        "prefix": "SELECT s.item_id,s.batch_id,s.article_id,s.revision,s.status item_status,s.claim_token,s.claim_until,s.payload_json item_payload,p.publication_id,p.target_key,p.target_json,p.statu"
+      },
+      {
+        "sha256": "79896960c5e308b812e29d924562db8befb27e5f6388dfd6a46c73b2384fa6d5",
+        "calls": 1,
+        "rows": 20000,
+        "bytes": 12304475,
+        "ms": 99.3411,
+        "prefix": "SELECT * FROM paid_submission_batches ORDER BY created_at,batch_id LIMIT 20000"
+      },
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.02400000000000091,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      }
+    ]
+  },
+  {
+    "file": "center-50000-regular-center-page1.jsonl",
+    "mode": "center",
+    "n": 50000,
+    "groups": 500,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 617.0362,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 617.1827000000001,
+    "heapDelta": 1389936,
+    "resultBytes": 15,
+    "sqlCalls": 502,
+    "sqlRows": 1467,
+    "sqlBytes": 131827,
+    "sqlMs": 594.485099999999,
+    "topSql": [
+      {
+        "sha256": "5703922d81e137ae18f060aebc15210f118dc0ab28d445b2375cf789987525ab",
+        "calls": 1,
+        "rows": 1,
+        "bytes": 26,
+        "ms": 480.9456,
+        "prefix": "PRAGMA integrity_check"
+      },
+      {
+        "sha256": "75d969201666ceebff397862f6a8b8d2eec57903f8ffbfbe0095a39cb3576f19",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 109.60119999999998,
+        "prefix": "PRAGMA foreign_key_check"
+      },
+      {
+        "sha256": "5d9f3742282a0643d048162ab1b9949badd7dcefb0de8528be81b0110bb795ed",
+        "calls": 1,
+        "rows": 1,
+        "bytes": 15,
+        "ms": 1.1399999999999864,
+        "prefix": "SELECT COUNT(*) count FROM publication_records"
+      }
+    ]
+  },
+  {
+    "file": "center-50000-regular-center-page1.jsonl",
+    "event": "timeout",
+    "seconds": 55,
+    "mode": "center",
+    "n": 50000,
+    "kind": "regular",
+    "label": "center-page1"
+  },
+  {
+    "file": "center-50000-wide.jsonl",
+    "mode": "center",
+    "n": 50000,
+    "groups": 50000,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 33.487700000000004,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 33.647600000000004,
+    "heapDelta": 537040,
+    "resultBytes": 15,
+    "sqlCalls": 309,
+    "sqlRows": 864,
+    "sqlBytes": 77369,
+    "sqlMs": 17.313900000000075,
+    "topSql": [
+      {
+        "sha256": "69569da60f3a30cf14bcb8f25d822bba2100b8bfc1a74d4e48f558a379686b55",
+        "calls": 2,
+        "rows": 2,
+        "bytes": 22,
+        "ms": 10.678600000000003,
+        "prefix": "SELECT COUNT(*) count FROM submission_queue_groups WHERE typeof(image_count)!='integer' OR image_count NOT BETWEEN 0 AND 5"
+      },
+      {
+        "sha256": "5cbf6c4e86e0a3d65fa5876eecff34dba1e3c044848ad129182c2c0af0d26376",
+        "calls": 1,
+        "rows": 1,
+        "bytes": 11,
+        "ms": 4.976700000000008,
+        "prefix": "SELECT COUNT(*) count FROM submission_queue_groups WHERE typeof(submission_interval_seconds)!='integer' OR submission_interval_seconds NOT BETWEEN 0 AND 3600"
+      },
+      {
+        "sha256": "eba52bfdd3e2b00654f026be28725405595adac04bff394ed602ed802ae46d0e",
+        "calls": 39,
+        "rows": 39,
+        "bytes": 12318,
+        "ms": 0.2604999999999933,
+        "prefix": "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      }
+    ]
+  },
+  {
+    "file": "center-50000-wide.jsonl",
+    "mode": "center",
+    "n": 50000,
+    "groups": 50000,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "center-page1",
+    "durationMs": 756.0261,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 756.0946,
+    "heapDelta": 131322888,
+    "resultBytes": 6807,
+    "sqlCalls": 3,
+    "sqlRows": 70000,
+    "sqlBytes": 28694454,
+    "sqlMs": 565.2262999999999,
+    "counts": {
+      "regularItems": 20000,
+      "paidBatches": 0,
+      "attentionItems": 0,
+      "total": 20000
+    },
+    "hasMore": true,
+    "failures": [],
+    "topSql": [
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 50000,
+        "bytes": 24538891,
+        "ms": 451.1064,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      },
+      {
+        "sha256": "e7eb5bd4abe7adee570551cbc310aea04e41e239fce66f5b6afc8b2e22d090ce",
+        "calls": 1,
+        "rows": 20000,
+        "bytes": 4155561,
+        "ms": 114.0743,
+        "prefix": "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_"
+      },
+      {
+        "sha256": "79896960c5e308b812e29d924562db8befb27e5f6388dfd6a46c73b2384fa6d5",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.04559999999992215,
+        "prefix": "SELECT * FROM paid_submission_batches ORDER BY created_at,batch_id LIMIT 20000"
+      }
+    ]
+  },
+  {
+    "file": "center-full-1000-regular-all.jsonl",
+    "mode": "center-full",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 18.714999999999996,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 18.899699999999996,
+    "heapDelta": 563808,
+    "resultBytes": 15,
+    "sqlCalls": 309,
+    "sqlRows": 864,
+    "sqlBytes": 77369,
+    "sqlMs": 2.219300000000132,
+    "topSql": [
+      {
+        "sha256": "d77bfc4b631570c6b4c5bcf4a287cb8cfd31a8bc64eaaf089decef9e9e3efa24",
+        "calls": 6,
+        "rows": 12,
+        "bytes": 1800,
+        "ms": 0.6088000000000022,
+        "prefix": "PRAGMA foreign_key_list(\"submission_queue_items\")"
+      },
+      {
+        "sha256": "eba52bfdd3e2b00654f026be28725405595adac04bff394ed602ed802ae46d0e",
+        "calls": 39,
+        "rows": 39,
+        "bytes": 12318,
+        "ms": 0.23599999999999,
+        "prefix": "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      },
+      {
+        "sha256": "2dd43fe9595aa16cd87dfe8759cca59a4c4f34ce04b062b7e0c2cf4f1bc92e4a",
+        "calls": 5,
+        "rows": 94,
+        "bytes": 3059,
+        "ms": 0.10989999999999611,
+        "prefix": "SELECT name FROM sqlite_master WHERE type='table'"
+      }
+    ]
+  },
+  {
+    "file": "center-full-1000-regular-all.jsonl",
+    "mode": "center-full",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "center-page1",
+    "durationMs": 483.8188,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 483.89549999999997,
+    "heapDelta": 678376,
+    "resultBytes": 265510,
+    "sqlCalls": 5,
+    "sqlRows": 2000,
+    "sqlBytes": 689488,
+    "sqlMs": 473.40479999999997,
+    "counts": {
+      "regularItems": 1000,
+      "paidBatches": 0,
+      "attentionItems": 0,
+      "total": 1000
+    },
+    "hasMore": false,
+    "failures": [],
+    "topSql": [
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 487001,
+        "ms": 466.4808,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      },
+      {
+        "sha256": "e7eb5bd4abe7adee570551cbc310aea04e41e239fce66f5b6afc8b2e22d090ce",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 202481,
+        "ms": 6.586000000000013,
+        "prefix": "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_"
+      },
+      {
+        "sha256": "112bfe6364d7b5867caa685bcd9dd96d3f6f67c2f2eeb73e3e7817b21e574d08",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.254099999999994,
+        "prefix": "SELECT p.publication_id,p.article_id,p.target_key,p.status,p.updated_at,a.attempt_id,e.remote_id,e.remote_url,i.payload_json AS intent_payload FROM publication_records p JOIN publi"
+      }
+    ]
+  },
+  {
+    "file": "center-full-1000-regular-all.jsonl",
+    "mode": "center-full",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "center-wire",
+    "durationMs": 5.972700000000032,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 6.073100000000068,
+    "heapDelta": -234472,
+    "resultBytes": 265547,
+    "sqlCalls": 0,
+    "sqlRows": 0,
+    "sqlBytes": 0,
+    "sqlMs": 0,
+    "topSql": []
+  },
+  {
+    "file": "center-full-1000-regular-all.jsonl",
+    "mode": "center-full",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "center-page1-hot",
+    "durationMs": 1.5596000000000458,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 1.6136999999999944,
+    "heapDelta": 1154656,
+    "resultBytes": 265510,
+    "sqlCalls": 0,
+    "sqlRows": 0,
+    "sqlBytes": 0,
+    "sqlMs": 0,
+    "counts": {
+      "regularItems": 1000,
+      "paidBatches": 0,
+      "attentionItems": 0,
+      "total": 1000
+    },
+    "hasMore": false,
+    "failures": [],
+    "topSql": []
+  },
+  {
+    "file": "center-full-1000-regular-all.jsonl",
+    "mode": "center-full",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "center-page2",
+    "durationMs": 486.7871,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 486.85890000000006,
+    "heapDelta": -3495024,
+    "resultBytes": 251,
+    "sqlCalls": 3,
+    "sqlRows": 2000,
+    "sqlBytes": 689484,
+    "sqlMs": 482.26520000000005,
+    "counts": {
+      "regularItems": 1000,
+      "paidBatches": 0,
+      "attentionItems": 0,
+      "total": 1000
+    },
+    "hasMore": false,
+    "failures": [],
+    "topSql": [
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 487001,
+        "ms": 476.6467,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      },
+      {
+        "sha256": "e7eb5bd4abe7adee570551cbc310aea04e41e239fce66f5b6afc8b2e22d090ce",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 202481,
+        "ms": 5.591499999999996,
+        "prefix": "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_"
+      },
+      {
+        "sha256": "79896960c5e308b812e29d924562db8befb27e5f6388dfd6a46c73b2384fa6d5",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.027000000000043656,
+        "prefix": "SELECT * FROM paid_submission_batches ORDER BY created_at,batch_id LIMIT 20000"
+      }
+    ]
+  },
+  {
+    "file": "center-full-1000-regular-all.jsonl",
+    "mode": "center-full",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "center-page1-return",
+    "durationMs": 474.62069999999994,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 474.6772000000001,
+    "heapDelta": 2171360,
+    "resultBytes": 265510,
+    "sqlCalls": 3,
+    "sqlRows": 2000,
+    "sqlBytes": 689484,
+    "sqlMs": 466.80589999999984,
+    "counts": {
+      "regularItems": 1000,
+      "paidBatches": 0,
+      "attentionItems": 0,
+      "total": 1000
+    },
+    "hasMore": false,
+    "failures": [],
+    "topSql": [
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 487001,
+        "ms": 461.09709999999995,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      },
+      {
+        "sha256": "e7eb5bd4abe7adee570551cbc310aea04e41e239fce66f5b6afc8b2e22d090ce",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 202481,
+        "ms": 5.679599999999937,
+        "prefix": "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_"
+      },
+      {
+        "sha256": "79896960c5e308b812e29d924562db8befb27e5f6388dfd6a46c73b2384fa6d5",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.029199999999946158,
+        "prefix": "SELECT * FROM paid_submission_batches ORDER BY created_at,batch_id LIMIT 20000"
+      }
+    ]
+  },
+  {
+    "file": "center-full-1000-regular-all.jsonl",
+    "mode": "center-full",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "center-after-article-save",
+    "durationMs": 499.0306999999998,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 499.08760000000007,
+    "heapDelta": 2645448,
+    "resultBytes": 265510,
+    "sqlCalls": 5,
+    "sqlRows": 2000,
+    "sqlBytes": 689488,
+    "sqlMs": 492.19759999999974,
+    "counts": {
+      "regularItems": 1000,
+      "paidBatches": 0,
+      "attentionItems": 0,
+      "total": 1000
+    },
+    "hasMore": false,
+    "failures": [],
+    "topSql": [
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 487001,
+        "ms": 486.0995999999998,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      },
+      {
+        "sha256": "e7eb5bd4abe7adee570551cbc310aea04e41e239fce66f5b6afc8b2e22d090ce",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 202481,
+        "ms": 6.010299999999916,
+        "prefix": "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_"
+      },
+      {
+        "sha256": "112bfe6364d7b5867caa685bcd9dd96d3f6f67c2f2eeb73e3e7817b21e574d08",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.04820000000017899,
+        "prefix": "SELECT p.publication_id,p.article_id,p.target_key,p.status,p.updated_at,a.attempt_id,e.remote_id,e.remote_url,i.payload_json AS intent_payload FROM publication_records p JOIN publi"
+      }
+    ]
+  },
+  {
+    "file": "center-full-1000-regular-all.jsonl",
+    "mode": "center-full",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "center-page2001",
+    "durationMs": 478.91910000000007,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 478.96399999999994,
+    "heapDelta": -3333504,
+    "resultBytes": 254,
+    "sqlCalls": 3,
+    "sqlRows": 2000,
+    "sqlBytes": 689484,
+    "sqlMs": 474.86880000000065,
+    "counts": {
+      "regularItems": 1000,
+      "paidBatches": 0,
+      "attentionItems": 0,
+      "total": 1000
+    },
+    "hasMore": false,
+    "failures": [],
+    "topSql": [
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 487001,
+        "ms": 468.9412000000002,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      },
+      {
+        "sha256": "e7eb5bd4abe7adee570551cbc310aea04e41e239fce66f5b6afc8b2e22d090ce",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 202481,
+        "ms": 5.903400000000147,
+        "prefix": "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_"
+      },
+      {
+        "sha256": "79896960c5e308b812e29d924562db8befb27e5f6388dfd6a46c73b2384fa6d5",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.024200000000291766,
+        "prefix": "SELECT * FROM paid_submission_batches ORDER BY created_at,batch_id LIMIT 20000"
+      }
+    ]
+  },
+  {
+    "file": "center-full-10000-regular-center-page1.jsonl",
+    "mode": "center-full",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 16.517000000000003,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 16.675400000000003,
+    "heapDelta": 505672,
+    "resultBytes": 15,
+    "sqlCalls": 309,
+    "sqlRows": 864,
+    "sqlBytes": 77369,
+    "sqlMs": 1.5749999999999318,
+    "topSql": [
+      {
+        "sha256": "eba52bfdd3e2b00654f026be28725405595adac04bff394ed602ed802ae46d0e",
+        "calls": 39,
+        "rows": 39,
+        "bytes": 12318,
+        "ms": 0.19909999999996586,
+        "prefix": "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      },
+      {
+        "sha256": "2dd43fe9595aa16cd87dfe8759cca59a4c4f34ce04b062b7e0c2cf4f1bc92e4a",
+        "calls": 5,
+        "rows": 94,
+        "bytes": 3059,
+        "ms": 0.09179999999999211,
+        "prefix": "SELECT name FROM sqlite_master WHERE type='table'"
+      },
+      {
+        "sha256": "022756f7616d38499fc8d7abe0286bca873f370b926b3b1662bd0a6f87e8ac15",
+        "calls": 9,
+        "rows": 36,
+        "bytes": 3330,
+        "ms": 0.04880000000000706,
+        "prefix": "PRAGMA index_list(\"article_active_targets\")"
+      }
+    ]
+  },
+  {
+    "file": "center-full-10000-regular-center-page1.jsonl",
+    "mode": "center-full",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "center-page1",
+    "durationMs": 9446.8957,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 9447.0012,
+    "heapDelta": 7585648,
+    "resultBytes": 270509,
+    "sqlCalls": 5,
+    "sqlRows": 20000,
+    "sqlBytes": 6943768,
+    "sqlMs": 9358.2062,
+    "counts": {
+      "regularItems": 10000,
+      "paidBatches": 0,
+      "attentionItems": 0,
+      "total": 10000
+    },
+    "hasMore": true,
+    "failures": [],
+    "topSql": [
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 10000,
+        "bytes": 4879001,
+        "ms": 9193.4059,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      },
+      {
+        "sha256": "e7eb5bd4abe7adee570551cbc310aea04e41e239fce66f5b6afc8b2e22d090ce",
+        "calls": 1,
+        "rows": 10000,
+        "bytes": 2064761,
+        "ms": 160.7425000000003,
+        "prefix": "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_"
+      },
+      {
+        "sha256": "112bfe6364d7b5867caa685bcd9dd96d3f6f67c2f2eeb73e3e7817b21e574d08",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 3.8859000000011292,
+        "prefix": "SELECT p.publication_id,p.article_id,p.target_key,p.status,p.updated_at,a.attempt_id,e.remote_id,e.remote_url,i.payload_json AS intent_payload FROM publication_records p JOIN publi"
+      }
+    ]
+  },
+  {
+    "file": "center-full-50000-paid-center-page1.jsonl",
+    "mode": "center-full",
+    "n": 50000,
+    "groups": 500,
+    "kind": "paid",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 17.253700000000002,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 17.398300000000006,
+    "heapDelta": 538432,
+    "resultBytes": 15,
+    "sqlCalls": 309,
+    "sqlRows": 864,
+    "sqlBytes": 77369,
+    "sqlMs": 1.6033999999999793,
+    "topSql": [
+      {
+        "sha256": "eba52bfdd3e2b00654f026be28725405595adac04bff394ed602ed802ae46d0e",
+        "calls": 39,
+        "rows": 39,
+        "bytes": 12318,
+        "ms": 0.22719999999996787,
+        "prefix": "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      },
+      {
+        "sha256": "2dd43fe9595aa16cd87dfe8759cca59a4c4f34ce04b062b7e0c2cf4f1bc92e4a",
+        "calls": 5,
+        "rows": 94,
+        "bytes": 3059,
+        "ms": 0.09189999999998832,
+        "prefix": "SELECT name FROM sqlite_master WHERE type='table'"
+      },
+      {
+        "sha256": "022756f7616d38499fc8d7abe0286bca873f370b926b3b1662bd0a6f87e8ac15",
+        "calls": 9,
+        "rows": 36,
+        "bytes": 3330,
+        "ms": 0.05399999999999494,
+        "prefix": "PRAGMA index_list(\"article_active_targets\")"
+      }
+    ]
+  },
+  {
+    "file": "center-full-50000-paid-center-page1.jsonl",
+    "mode": "center-full",
+    "n": 50000,
+    "groups": 500,
+    "kind": "paid",
+    "event": "measurement",
+    "label": "center-page1",
+    "durationMs": 1788.8851,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 1788.9494,
+    "heapDelta": 162149088,
+    "resultBytes": 7774,
+    "sqlCalls": 20005,
+    "sqlRows": 40000,
+    "sqlBytes": 123120047,
+    "sqlMs": 680.2397999999891,
+    "counts": {
+      "regularItems": 0,
+      "paidBatches": 20000,
+      "attentionItems": 0,
+      "total": 20000
+    },
+    "hasMore": true,
+    "failures": [],
+    "topSql": [
+      {
+        "sha256": "4855541d1b93654d097ee87d71ccab487619c8a829d8d792b2002d4541cbe2a5",
+        "calls": 20000,
+        "rows": 20000,
+        "bytes": 110815564,
+        "ms": 569.6444999999887,
+        "prefix": "SELECT s.item_id,s.batch_id,s.article_id,s.revision,s.status item_status,s.claim_token,s.claim_until,s.payload_json item_payload,p.publication_id,p.target_key,p.target_json,p.statu"
+      },
+      {
+        "sha256": "79896960c5e308b812e29d924562db8befb27e5f6388dfd6a46c73b2384fa6d5",
+        "calls": 1,
+        "rows": 20000,
+        "bytes": 12304475,
+        "ms": 102.4063,
+        "prefix": "SELECT * FROM paid_submission_batches ORDER BY created_at,batch_id LIMIT 20000"
+      },
+      {
+        "sha256": "112bfe6364d7b5867caa685bcd9dd96d3f6f67c2f2eeb73e3e7817b21e574d08",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 8.131600000000162,
+        "prefix": "SELECT p.publication_id,p.article_id,p.target_key,p.status,p.updated_at,a.attempt_id,e.remote_id,e.remote_url,i.payload_json AS intent_payload FROM publication_records p JOIN publi"
+      }
+    ]
+  },
+  {
+    "file": "paid-1000-paid-all.jsonl",
+    "mode": "paid",
+    "n": 1000,
+    "groups": 10,
+    "kind": "paid",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 17.281400000000005,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 17.431900000000006,
+    "heapDelta": 467656,
+    "resultBytes": 15,
+    "sqlCalls": 309,
+    "sqlRows": 864,
+    "sqlBytes": 77369,
+    "sqlMs": 1.679900000000032,
+    "topSql": [
+      {
+        "sha256": "eba52bfdd3e2b00654f026be28725405595adac04bff394ed602ed802ae46d0e",
+        "calls": 39,
+        "rows": 39,
+        "bytes": 12318,
+        "ms": 0.22120000000001028,
+        "prefix": "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      },
+      {
+        "sha256": "2dd43fe9595aa16cd87dfe8759cca59a4c4f34ce04b062b7e0c2cf4f1bc92e4a",
+        "calls": 5,
+        "rows": 94,
+        "bytes": 3059,
+        "ms": 0.08609999999999474,
+        "prefix": "SELECT name FROM sqlite_master WHERE type='table'"
+      },
+      {
+        "sha256": "40b2ad2a998b995dc7c1aa4282bcf96728d9908bcba9a80ba6d96e33d5a2258f",
+        "calls": 3,
+        "rows": 24,
+        "bytes": 1947,
+        "ms": 0.06509999999999394,
+        "prefix": "PRAGMA table_info(\"article_active_targets\")"
+      }
+    ]
+  },
+  {
+    "file": "paid-1000-paid-all.jsonl",
+    "mode": "paid",
+    "n": 1000,
+    "groups": 10,
+    "kind": "paid",
+    "event": "measurement",
+    "label": "paid-batches",
+    "durationMs": 89.6515,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 89.7246,
+    "heapDelta": 10219352,
+    "resultBytes": 10148681,
+    "sqlCalls": 1001,
+    "sqlRows": 2000,
+    "sqlBytes": 6113131,
+    "sqlMs": 31.163699999999736,
+    "resultCount": 1000,
+    "topSql": [
+      {
+        "sha256": "4855541d1b93654d097ee87d71ccab487619c8a829d8d792b2002d4541cbe2a5",
+        "calls": 1000,
+        "rows": 1000,
+        "bytes": 5507460,
+        "ms": 29.044699999999736,
+        "prefix": "SELECT s.item_id,s.batch_id,s.article_id,s.revision,s.status item_status,s.claim_token,s.claim_until,s.payload_json item_payload,p.publication_id,p.target_key,p.target_json,p.statu"
+      },
+      {
+        "sha256": "79896960c5e308b812e29d924562db8befb27e5f6388dfd6a46c73b2384fa6d5",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 605671,
+        "ms": 2.1189999999999998,
+        "prefix": "SELECT * FROM paid_submission_batches ORDER BY created_at,batch_id LIMIT 20000"
+      }
+    ]
+  },
+  {
+    "file": "paid-10000-paid-all.jsonl",
+    "mode": "paid",
+    "n": 10000,
+    "groups": 100,
+    "kind": "paid",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 16.932900000000004,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 17.0762,
+    "heapDelta": 455496,
+    "resultBytes": 15,
+    "sqlCalls": 309,
+    "sqlRows": 864,
+    "sqlBytes": 77369,
+    "sqlMs": 2.066500000000012,
+    "topSql": [
+      {
+        "sha256": "438fe150b1f426fddc092d91a2bbe2bd31a7d1e5aeda8c517626559ba9b7e5ca",
+        "calls": 3,
+        "rows": 3,
+        "bytes": 123,
+        "ms": 0.4328999999999894,
+        "prefix": "PRAGMA index_info(\"sqlite_autoindex_article_active_targets_1\")"
+      },
+      {
+        "sha256": "eba52bfdd3e2b00654f026be28725405595adac04bff394ed602ed802ae46d0e",
+        "calls": 39,
+        "rows": 39,
+        "bytes": 12318,
+        "ms": 0.21290000000000475,
+        "prefix": "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      },
+      {
+        "sha256": "2dd43fe9595aa16cd87dfe8759cca59a4c4f34ce04b062b7e0c2cf4f1bc92e4a",
+        "calls": 5,
+        "rows": 94,
+        "bytes": 3059,
+        "ms": 0.07759999999998968,
+        "prefix": "SELECT name FROM sqlite_master WHERE type='table'"
+      }
+    ]
+  },
+  {
+    "file": "paid-10000-paid-all.jsonl",
+    "mode": "paid",
+    "n": 10000,
+    "groups": 100,
+    "kind": "paid",
+    "event": "measurement",
+    "label": "paid-batches",
+    "durationMs": 850.9746,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 851.0583999999999,
+    "heapDelta": 82098344,
+    "resultBytes": 101660681,
+    "sqlCalls": 10001,
+    "sqlRows": 20000,
+    "sqlBytes": 61346131,
+    "sqlMs": 316.3746000000011,
+    "resultCount": 10000,
+    "topSql": [
+      {
+        "sha256": "4855541d1b93654d097ee87d71ccab487619c8a829d8d792b2002d4541cbe2a5",
+        "calls": 10000,
+        "rows": 10000,
+        "bytes": 55241460,
+        "ms": 282.2954000000011,
+        "prefix": "SELECT s.item_id,s.batch_id,s.article_id,s.revision,s.status item_status,s.claim_token,s.claim_until,s.payload_json item_payload,p.publication_id,p.target_key,p.target_json,p.statu"
+      },
+      {
+        "sha256": "79896960c5e308b812e29d924562db8befb27e5f6388dfd6a46c73b2384fa6d5",
+        "calls": 1,
+        "rows": 10000,
+        "bytes": 6104671,
+        "ms": 34.07919999999999,
+        "prefix": "SELECT * FROM paid_submission_batches ORDER BY created_at,batch_id LIMIT 20000"
+      }
+    ]
+  },
+  {
+    "file": "paid-50000-paid-all.jsonl",
+    "mode": "paid",
+    "n": 50000,
+    "groups": 500,
+    "kind": "paid",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 16.4658,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 16.611800000000002,
+    "heapDelta": 441672,
+    "resultBytes": 15,
+    "sqlCalls": 309,
+    "sqlRows": 864,
+    "sqlBytes": 77369,
+    "sqlMs": 2.055000000000007,
+    "topSql": [
+      {
+        "sha256": "d77bfc4b631570c6b4c5bcf4a287cb8cfd31a8bc64eaaf089decef9e9e3efa24",
+        "calls": 6,
+        "rows": 12,
+        "bytes": 1800,
+        "ms": 0.5461999999999989,
+        "prefix": "PRAGMA foreign_key_list(\"submission_queue_items\")"
+      },
+      {
+        "sha256": "eba52bfdd3e2b00654f026be28725405595adac04bff394ed602ed802ae46d0e",
+        "calls": 39,
+        "rows": 39,
+        "bytes": 12318,
+        "ms": 0.2115000000000009,
+        "prefix": "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      },
+      {
+        "sha256": "2dd43fe9595aa16cd87dfe8759cca59a4c4f34ce04b062b7e0c2cf4f1bc92e4a",
+        "calls": 5,
+        "rows": 94,
+        "bytes": 3059,
+        "ms": 0.08330000000000126,
+        "prefix": "SELECT name FROM sqlite_master WHERE type='table'"
+      }
+    ]
+  },
+  {
+    "file": "paid-50000-paid-all.jsonl",
+    "mode": "paid",
+    "n": 50000,
+    "groups": 500,
+    "kind": "paid",
+    "event": "measurement",
+    "label": "paid-batches",
+    "durationMs": 1737.3957,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 1737.4748,
+    "heapDelta": 160926344,
+    "resultBytes": 203666745,
+    "sqlCalls": 20001,
+    "sqlRows": 40000,
+    "sqlBytes": 123120039,
+    "sqlMs": 657.2766999999967,
+    "resultCount": 20000,
+    "topSql": [
+      {
+        "sha256": "4855541d1b93654d097ee87d71ccab487619c8a829d8d792b2002d4541cbe2a5",
+        "calls": 20000,
+        "rows": 20000,
+        "bytes": 110815564,
+        "ms": 558.4109999999966,
+        "prefix": "SELECT s.item_id,s.batch_id,s.article_id,s.revision,s.status item_status,s.claim_token,s.claim_until,s.payload_json item_payload,p.publication_id,p.target_key,p.target_json,p.statu"
+      },
+      {
+        "sha256": "79896960c5e308b812e29d924562db8befb27e5f6388dfd6a46c73b2384fa6d5",
+        "calls": 1,
+        "rows": 20000,
+        "bytes": 12304475,
+        "ms": 98.8657,
+        "prefix": "SELECT * FROM paid_submission_batches ORDER BY created_at,batch_id LIMIT 20000"
+      }
+    ]
+  },
+  {
+    "file": "queue-1000-fanout.jsonl",
+    "mode": "queue",
+    "n": 1000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 17.3093,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 17.454699999999995,
+    "heapDelta": 533288,
+    "resultBytes": 15,
+    "sqlCalls": 309,
+    "sqlRows": 864,
+    "sqlBytes": 77369,
+    "sqlMs": 2.0355000000000913,
+    "topSql": [
+      {
+        "sha256": "30feb81beae887c2ae1ccce5eb3969609543360f3e615608a22f04d5c9a6633b",
+        "calls": 3,
+        "rows": 27,
+        "bytes": 2307,
+        "ms": 0.4820000000000064,
+        "prefix": "PRAGMA table_info(submission_queue_groups)"
+      },
+      {
+        "sha256": "eba52bfdd3e2b00654f026be28725405595adac04bff394ed602ed802ae46d0e",
+        "calls": 39,
+        "rows": 39,
+        "bytes": 12318,
+        "ms": 0.2154000000000309,
+        "prefix": "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      },
+      {
+        "sha256": "2dd43fe9595aa16cd87dfe8759cca59a4c4f34ce04b062b7e0c2cf4f1bc92e4a",
+        "calls": 5,
+        "rows": 94,
+        "bytes": 3059,
+        "ms": 0.09499999999999886,
+        "prefix": "SELECT name FROM sqlite_master WHERE type='table'"
+      }
+    ]
+  },
+  {
+    "file": "queue-1000-fanout.jsonl",
+    "mode": "queue",
+    "n": 1000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "regular-all",
+    "durationMs": 66.12629999999999,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 66.20469999999999,
+    "heapDelta": 2736960,
+    "resultBytes": 303641,
+    "sqlCalls": 2,
+    "sqlRows": 2000,
+    "sqlBytes": 690462,
+    "sqlMs": 60.67199999999998,
+    "resultCount": 100,
+    "topSql": [
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 487901,
+        "ms": 53.92519999999999,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      },
+      {
+        "sha256": "e7eb5bd4abe7adee570551cbc310aea04e41e239fce66f5b6afc8b2e22d090ce",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 202561,
+        "ms": 6.746799999999993,
+        "prefix": "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_"
+      }
+    ]
+  },
+  {
+    "file": "queue-1000-fanout.jsonl",
+    "mode": "queue",
+    "n": 1000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "queue-census",
+    "shown": 1000,
+    "expected": 1000
+  },
+  {
+    "file": "queue-1000-fanout.jsonl",
+    "mode": "queue",
+    "n": 1000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "regular-one-client",
+    "durationMs": 60.92490000000001,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 60.99159999999998,
+    "heapDelta": -1684248,
+    "resultBytes": 3014,
+    "sqlCalls": 2,
+    "sqlRows": 2000,
+    "sqlBytes": 690462,
+    "sqlMs": 58.144000000000005,
+    "resultCount": 1,
+    "topSql": [
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 487901,
+        "ms": 51.87819999999999,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      },
+      {
+        "sha256": "e7eb5bd4abe7adee570551cbc310aea04e41e239fce66f5b6afc8b2e22d090ce",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 202561,
+        "ms": 6.265800000000013,
+        "prefix": "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_"
+      }
+    ]
+  },
+  {
+    "file": "queue-1000-long.jsonl",
+    "mode": "queue",
+    "n": 1000,
+    "groups": 1,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 16.7337,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 16.871100000000006,
+    "heapDelta": 571888,
+    "resultBytes": 15,
+    "sqlCalls": 309,
+    "sqlRows": 864,
+    "sqlBytes": 77369,
+    "sqlMs": 1.9855999999999838,
+    "topSql": [
+      {
+        "sha256": "61ac4ba8461aca0e8320ad5e54c63736d0ab7cb2dcf0e5317fe6b0ecd54562d6",
+        "calls": 3,
+        "rows": 36,
+        "bytes": 3090,
+        "ms": 0.46289999999999054,
+        "prefix": "PRAGMA table_info(\"paid_submission_batches\")"
+      },
+      {
+        "sha256": "eba52bfdd3e2b00654f026be28725405595adac04bff394ed602ed802ae46d0e",
+        "calls": 39,
+        "rows": 39,
+        "bytes": 12318,
+        "ms": 0.21079999999997057,
+        "prefix": "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      },
+      {
+        "sha256": "2dd43fe9595aa16cd87dfe8759cca59a4c4f34ce04b062b7e0c2cf4f1bc92e4a",
+        "calls": 5,
+        "rows": 94,
+        "bytes": 3059,
+        "ms": 0.09999999999999432,
+        "prefix": "SELECT name FROM sqlite_master WHERE type='table'"
+      }
+    ]
+  },
+  {
+    "file": "queue-1000-long.jsonl",
+    "mode": "queue",
+    "n": 1000,
+    "groups": 1,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "regular-all",
+    "durationMs": 5914.783399999999,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 5914.8640000000005,
+    "heapDelta": 711640,
+    "resultBytes": 262756,
+    "sqlCalls": 2,
+    "sqlRows": 2000,
+    "sqlBytes": 690455,
+    "sqlMs": 5904.3806,
+    "resultCount": 1,
+    "topSql": [
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 487001,
+        "ms": 5893.1203000000005,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      },
+      {
+        "sha256": "e7eb5bd4abe7adee570551cbc310aea04e41e239fce66f5b6afc8b2e22d090ce",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 203454,
+        "ms": 11.260299999999916,
+        "prefix": "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_"
+      }
+    ]
+  },
+  {
+    "file": "queue-1000-long.jsonl",
+    "mode": "queue",
+    "n": 1000,
+    "groups": 1,
+    "kind": "regular",
+    "event": "queue-census",
+    "shown": 1000,
+    "expected": 1000
+  },
+  {
+    "file": "queue-1000-regular.jsonl",
+    "mode": "queue",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 17.447100000000006,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 17.603500000000004,
+    "heapDelta": 476432,
+    "resultBytes": 15,
+    "sqlCalls": 309,
+    "sqlRows": 864,
+    "sqlBytes": 77369,
+    "sqlMs": 1.5741000000000156,
+    "topSql": [
+      {
+        "sha256": "eba52bfdd3e2b00654f026be28725405595adac04bff394ed602ed802ae46d0e",
+        "calls": 39,
+        "rows": 39,
+        "bytes": 12318,
+        "ms": 0.2208000000000112,
+        "prefix": "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      },
+      {
+        "sha256": "2dd43fe9595aa16cd87dfe8759cca59a4c4f34ce04b062b7e0c2cf4f1bc92e4a",
+        "calls": 5,
+        "rows": 94,
+        "bytes": 3059,
+        "ms": 0.09189999999998832,
+        "prefix": "SELECT name FROM sqlite_master WHERE type='table'"
+      },
+      {
+        "sha256": "022756f7616d38499fc8d7abe0286bca873f370b926b3b1662bd0a6f87e8ac15",
+        "calls": 9,
+        "rows": 36,
+        "bytes": 3330,
+        "ms": 0.05730000000001212,
+        "prefix": "PRAGMA index_list(\"article_active_targets\")"
+      }
+    ]
+  },
+  {
+    "file": "queue-1000-regular.jsonl",
+    "mode": "queue",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "regular-all",
+    "durationMs": 457.03240000000005,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 457.1021,
+    "heapDelta": 2725256,
+    "resultBytes": 265491,
+    "sqlCalls": 2,
+    "sqlRows": 2000,
+    "sqlBytes": 689482,
+    "sqlMs": 451.2134000000001,
+    "resultCount": 10,
+    "topSql": [
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 487001,
+        "ms": 445.18100000000004,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      },
+      {
+        "sha256": "e7eb5bd4abe7adee570551cbc310aea04e41e239fce66f5b6afc8b2e22d090ce",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 202481,
+        "ms": 6.032400000000052,
+        "prefix": "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_"
+      }
+    ]
+  },
+  {
+    "file": "queue-1000-regular.jsonl",
+    "mode": "queue",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "queue-census",
+    "shown": 1000,
+    "expected": 1000
+  },
+  {
+    "file": "queue-1000-regular.jsonl",
+    "mode": "queue",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "regular-one-client",
+    "durationMs": 469.10669999999993,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 469.2003000000001,
+    "heapDelta": -964248,
+    "resultBytes": 26550,
+    "sqlCalls": 2,
+    "sqlRows": 2000,
+    "sqlBytes": 689482,
+    "sqlMs": 465.9837000000001,
+    "resultCount": 1,
+    "topSql": [
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 487001,
+        "ms": 460.1437000000001,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      },
+      {
+        "sha256": "e7eb5bd4abe7adee570551cbc310aea04e41e239fce66f5b6afc8b2e22d090ce",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 202481,
+        "ms": 5.840000000000032,
+        "prefix": "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_"
+      }
+    ]
+  },
+  {
+    "file": "queue-10000-long.jsonl",
+    "mode": "queue",
+    "n": 10000,
+    "groups": 1,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 17.215400000000002,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 17.357800000000005,
+    "heapDelta": 519520,
+    "resultBytes": 15,
+    "sqlCalls": 309,
+    "sqlRows": 864,
+    "sqlBytes": 77369,
+    "sqlMs": 2.0349999999999113,
+    "topSql": [
+      {
+        "sha256": "2d661377e02cd600c9f1f1bbc963546c9162a1198675483e85cd0cc7872ddb78",
+        "calls": 3,
+        "rows": 27,
+        "bytes": 2307,
+        "ms": 0.4964999999999904,
+        "prefix": "PRAGMA table_info(\"submission_queue_groups\")"
+      },
+      {
+        "sha256": "eba52bfdd3e2b00654f026be28725405595adac04bff394ed602ed802ae46d0e",
+        "calls": 39,
+        "rows": 39,
+        "bytes": 12318,
+        "ms": 0.21829999999997085,
+        "prefix": "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      },
+      {
+        "sha256": "2dd43fe9595aa16cd87dfe8759cca59a4c4f34ce04b062b7e0c2cf4f1bc92e4a",
+        "calls": 5,
+        "rows": 94,
+        "bytes": 3059,
+        "ms": 0.08010000000000161,
+        "prefix": "SELECT name FROM sqlite_master WHERE type='table'"
+      }
+    ]
+  },
+  {
+    "file": "queue-10000-long.jsonl",
+    "event": "timeout",
+    "n": 10000,
+    "groups": 1,
+    "seconds": 45
+  },
+  {
+    "file": "queue-10000-regular-regular-all.jsonl",
+    "mode": "queue",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 16.997499999999995,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 17.144800000000004,
+    "heapDelta": 444944,
+    "resultBytes": 15,
+    "sqlCalls": 309,
+    "sqlRows": 864,
+    "sqlBytes": 77369,
+    "sqlMs": 2.0214000000000496,
+    "topSql": [
+      {
+        "sha256": "30feb81beae887c2ae1ccce5eb3969609543360f3e615608a22f04d5c9a6633b",
+        "calls": 3,
+        "rows": 27,
+        "bytes": 2307,
+        "ms": 0.5060000000000002,
+        "prefix": "PRAGMA table_info(submission_queue_groups)"
+      },
+      {
+        "sha256": "eba52bfdd3e2b00654f026be28725405595adac04bff394ed602ed802ae46d0e",
+        "calls": 39,
+        "rows": 39,
+        "bytes": 12318,
+        "ms": 0.21070000000000988,
+        "prefix": "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      },
+      {
+        "sha256": "2dd43fe9595aa16cd87dfe8759cca59a4c4f34ce04b062b7e0c2cf4f1bc92e4a",
+        "calls": 5,
+        "rows": 94,
+        "bytes": 3059,
+        "ms": 0.09199999999999875,
+        "prefix": "SELECT name FROM sqlite_master WHERE type='table'"
+      }
+    ]
+  },
+  {
+    "file": "queue-10000-regular-regular-all.jsonl",
+    "mode": "queue",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "regular-all",
+    "durationMs": 9061.7595,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 9061.8693,
+    "heapDelta": 5614896,
+    "resultBytes": 2704941,
+    "sqlCalls": 2,
+    "sqlRows": 20000,
+    "sqlBytes": 6943762,
+    "sqlMs": 8974.7829,
+    "resultCount": 100,
+    "topSql": [
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 10000,
+        "bytes": 4879001,
+        "ms": 8831.6886,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      },
+      {
+        "sha256": "e7eb5bd4abe7adee570551cbc310aea04e41e239fce66f5b6afc8b2e22d090ce",
+        "calls": 1,
+        "rows": 10000,
+        "bytes": 2064761,
+        "ms": 143.09430000000066,
+        "prefix": "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_"
+      }
+    ]
+  },
+  {
+    "file": "queue-10000-regular-regular-all.jsonl",
+    "mode": "queue",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "queue-census",
+    "shown": 10000,
+    "expected": 10000
+  },
+  {
+    "file": "queue-10000-regular-regular-one-client.jsonl",
+    "mode": "queue",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 16.921999999999997,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 17.074200000000005,
+    "heapDelta": 449472,
+    "resultBytes": 15,
+    "sqlCalls": 309,
+    "sqlRows": 864,
+    "sqlBytes": 77369,
+    "sqlMs": 1.5969999999999587,
+    "topSql": [
+      {
+        "sha256": "eba52bfdd3e2b00654f026be28725405595adac04bff394ed602ed802ae46d0e",
+        "calls": 39,
+        "rows": 39,
+        "bytes": 12318,
+        "ms": 0.21060000000000656,
+        "prefix": "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      },
+      {
+        "sha256": "2dd43fe9595aa16cd87dfe8759cca59a4c4f34ce04b062b7e0c2cf4f1bc92e4a",
+        "calls": 5,
+        "rows": 94,
+        "bytes": 3059,
+        "ms": 0.09079999999999444,
+        "prefix": "SELECT name FROM sqlite_master WHERE type='table'"
+      },
+      {
+        "sha256": "69569da60f3a30cf14bcb8f25d822bba2100b8bfc1a74d4e48f558a379686b55",
+        "calls": 2,
+        "rows": 2,
+        "bytes": 22,
+        "ms": 0.08259999999999224,
+        "prefix": "SELECT COUNT(*) count FROM submission_queue_groups WHERE typeof(image_count)!='integer' OR image_count NOT BETWEEN 0 AND 5"
+      }
+    ]
+  },
+  {
+    "file": "queue-10000-regular-regular-one-client.jsonl",
+    "mode": "queue",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "queue-census",
+    "expected": 10000
+  },
+  {
+    "file": "queue-10000-regular-regular-one-client.jsonl",
+    "mode": "queue",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "regular-one-client",
+    "durationMs": 8928.7611,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 8928.8427,
+    "heapDelta": 21054416,
+    "resultBytes": 270495,
+    "sqlCalls": 2,
+    "sqlRows": 20000,
+    "sqlBytes": 6943762,
+    "sqlMs": 8873.735700000001,
+    "resultCount": 10,
+    "topSql": [
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 10000,
+        "bytes": 4879001,
+        "ms": 8729.9267,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      },
+      {
+        "sha256": "e7eb5bd4abe7adee570551cbc310aea04e41e239fce66f5b6afc8b2e22d090ce",
+        "calls": 1,
+        "rows": 10000,
+        "bytes": 2064761,
+        "ms": 143.8090000000011,
+        "prefix": "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_"
+      }
+    ]
+  },
+  {
+    "file": "queue-50000-regular-regular-all.jsonl",
+    "mode": "queue",
+    "n": 50000,
+    "groups": 500,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 17.380000000000003,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 17.524299999999997,
+    "heapDelta": 478280,
+    "resultBytes": 15,
+    "sqlCalls": 309,
+    "sqlRows": 864,
+    "sqlBytes": 77369,
+    "sqlMs": 1.7350999999999601,
+    "topSql": [
+      {
+        "sha256": "eba52bfdd3e2b00654f026be28725405595adac04bff394ed602ed802ae46d0e",
+        "calls": 39,
+        "rows": 39,
+        "bytes": 12318,
+        "ms": 0.20960000000000178,
+        "prefix": "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      },
+      {
+        "sha256": "d77bfc4b631570c6b4c5bcf4a287cb8cfd31a8bc64eaaf089decef9e9e3efa24",
+        "calls": 6,
+        "rows": 12,
+        "bytes": 1800,
+        "ms": 0.11939999999999884,
+        "prefix": "PRAGMA foreign_key_list(\"submission_queue_items\")"
+      },
+      {
+        "sha256": "69569da60f3a30cf14bcb8f25d822bba2100b8bfc1a74d4e48f558a379686b55",
+        "calls": 2,
+        "rows": 2,
+        "bytes": 22,
+        "ms": 0.09379999999999455,
+        "prefix": "SELECT COUNT(*) count FROM submission_queue_groups WHERE typeof(image_count)!='integer' OR image_count NOT BETWEEN 0 AND 5"
+      }
+    ]
+  },
+  {
+    "file": "queue-50000-regular-regular-all.jsonl",
+    "event": "timeout",
+    "seconds": 55,
+    "mode": "queue",
+    "n": 50000,
+    "kind": "regular",
+    "label": "regular-all"
+  },
+  {
+    "file": "queue-50000-regular-regular-one-client.jsonl",
+    "mode": "queue",
+    "n": 50000,
+    "groups": 500,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 622.3756000000001,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 622.5273,
+    "heapDelta": 1297232,
+    "resultBytes": 15,
+    "sqlCalls": 502,
+    "sqlRows": 1467,
+    "sqlBytes": 131827,
+    "sqlMs": 600.7548000000006,
+    "topSql": [
+      {
+        "sha256": "5703922d81e137ae18f060aebc15210f118dc0ab28d445b2375cf789987525ab",
+        "calls": 1,
+        "rows": 1,
+        "bytes": 26,
+        "ms": 486.2817,
+        "prefix": "PRAGMA integrity_check"
+      },
+      {
+        "sha256": "75d969201666ceebff397862f6a8b8d2eec57903f8ffbfbe0095a39cb3576f19",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 110.30789999999999,
+        "prefix": "PRAGMA foreign_key_check"
+      },
+      {
+        "sha256": "5d9f3742282a0643d048162ab1b9949badd7dcefb0de8528be81b0110bb795ed",
+        "calls": 1,
+        "rows": 1,
+        "bytes": 15,
+        "ms": 1.0951000000000022,
+        "prefix": "SELECT COUNT(*) count FROM publication_records"
+      }
+    ]
+  },
+  {
+    "file": "queue-50000-regular-regular-one-client.jsonl",
+    "mode": "queue",
+    "n": 50000,
+    "groups": 500,
+    "kind": "regular",
+    "event": "queue-census",
+    "expected": 50000
+  },
+  {
+    "file": "queue-50000-regular-regular-one-client.jsonl",
+    "event": "timeout",
+    "seconds": 55,
+    "mode": "queue",
+    "n": 50000,
+    "kind": "regular",
+    "label": "regular-one-client"
+  },
+  {
+    "file": "queue-50000-wide.jsonl",
+    "mode": "queue",
+    "n": 50000,
+    "groups": 50000,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 31.870199999999997,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 32.0236,
+    "heapDelta": 565608,
+    "resultBytes": 15,
+    "sqlCalls": 309,
+    "sqlRows": 864,
+    "sqlBytes": 77369,
+    "sqlMs": 16.93080000000009,
+    "topSql": [
+      {
+        "sha256": "69569da60f3a30cf14bcb8f25d822bba2100b8bfc1a74d4e48f558a379686b55",
+        "calls": 2,
+        "rows": 2,
+        "bytes": 22,
+        "ms": 10.155300000000011,
+        "prefix": "SELECT COUNT(*) count FROM submission_queue_groups WHERE typeof(image_count)!='integer' OR image_count NOT BETWEEN 0 AND 5"
+      },
+      {
+        "sha256": "5cbf6c4e86e0a3d65fa5876eecff34dba1e3c044848ad129182c2c0af0d26376",
+        "calls": 1,
+        "rows": 1,
+        "bytes": 11,
+        "ms": 4.753,
+        "prefix": "SELECT COUNT(*) count FROM submission_queue_groups WHERE typeof(submission_interval_seconds)!='integer' OR submission_interval_seconds NOT BETWEEN 0 AND 3600"
+      },
+      {
+        "sha256": "8d049ee7eaf59dd361f57b9f0acf87b157eadd1537deabeae891afd8b9edba37",
+        "calls": 3,
+        "rows": 27,
+        "bytes": 2310,
+        "ms": 0.4941000000000031,
+        "prefix": "PRAGMA table_info(\"order_display_snapshots\")"
+      }
+    ]
+  },
+  {
+    "file": "queue-50000-wide.jsonl",
+    "mode": "queue",
+    "n": 50000,
+    "groups": 50000,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "regular-all",
+    "durationMs": 727.0799,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 727.1703,
+    "heapDelta": 104702664,
+    "resultBytes": 26903341,
+    "sqlCalls": 2,
+    "sqlRows": 70000,
+    "sqlBytes": 28694452,
+    "sqlMs": 562.53,
+    "resultCount": 50000,
+    "topSql": [
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 50000,
+        "bytes": 24538891,
+        "ms": 444.0668,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      },
+      {
+        "sha256": "e7eb5bd4abe7adee570551cbc310aea04e41e239fce66f5b6afc8b2e22d090ce",
+        "calls": 1,
+        "rows": 20000,
+        "bytes": 4155561,
+        "ms": 118.46319999999992,
+        "prefix": "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_"
+      }
+    ]
+  },
+  {
+    "file": "queue-50000-wide.jsonl",
+    "mode": "queue",
+    "n": 50000,
+    "groups": 50000,
+    "kind": "regular",
+    "event": "queue-census",
+    "shown": 20000,
+    "expected": 50000
+  },
+  {
+    "file": "seed-1000-fanout.jsonl",
+    "mode": "seed",
+    "n": 1000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "seed",
+    "bodyBytes": 4096,
+    "census": {
+      "account_profiles": 100,
+      "submission_queue_groups": 100,
+      "submission_batches": 1000,
+      "publication_records": 1000,
+      "publication_attempts": 1000,
+      "submission_items": 1000,
+      "recovery_intents": 1000,
+      "article_active_targets": 1000,
+      "submission_queue_items": 1000
+    },
+    "clients": 100,
+    "platforms": 2,
+    "foreignKeyViolations": 0
+  },
+  {
+    "file": "seed-1000-long.jsonl",
+    "mode": "seed",
+    "n": 1000,
+    "groups": 1,
+    "kind": "regular",
+    "event": "seed",
+    "bodyBytes": 4096,
+    "census": {
+      "account_profiles": 1,
+      "submission_queue_groups": 1,
+      "submission_batches": 1000,
+      "publication_records": 1000,
+      "publication_attempts": 1000,
+      "submission_items": 1000,
+      "recovery_intents": 1000,
+      "article_active_targets": 1000,
+      "submission_queue_items": 1000
+    },
+    "foreignKeyViolations": 0
+  },
+  {
+    "file": "seed-1000-paid.jsonl",
+    "mode": "seed",
+    "n": 1000,
+    "groups": 10,
+    "kind": "paid",
+    "event": "seed",
+    "bodyBytes": 4096,
+    "census": {
+      "submission_batches": 1000,
+      "publication_records": 1000,
+      "publication_attempts": 1000,
+      "submission_items": 1000,
+      "recovery_intents": 1000,
+      "article_active_targets": 1000,
+      "submission_queue_items": 0,
+      "paid_submission_batches": 1000
+    },
+    "foreignKeyViolations": 0
+  },
+  {
+    "file": "seed-1000-regular.jsonl",
+    "mode": "seed",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "seed",
+    "bodyBytes": 4096,
+    "census": {
+      "account_profiles": 10,
+      "submission_queue_groups": 10,
+      "submission_batches": 1000,
+      "publication_records": 1000,
+      "publication_attempts": 1000,
+      "submission_items": 1000,
+      "recovery_intents": 1000,
+      "article_active_targets": 1000,
+      "submission_queue_items": 1000
+    },
+    "foreignKeyViolations": 0
+  },
+  {
+    "file": "seed-10000-long.jsonl",
+    "mode": "seed",
+    "n": 10000,
+    "groups": 1,
+    "kind": "regular",
+    "event": "seed",
+    "bodyBytes": 4096,
+    "census": {
+      "account_profiles": 1,
+      "submission_queue_groups": 1,
+      "submission_batches": 10000,
+      "publication_records": 10000,
+      "publication_attempts": 10000,
+      "submission_items": 10000,
+      "recovery_intents": 10000,
+      "article_active_targets": 10000,
+      "submission_queue_items": 10000
+    },
+    "foreignKeyViolations": 0
+  },
+  {
+    "file": "seed-10000-paid.jsonl",
+    "mode": "seed",
+    "n": 10000,
+    "groups": 100,
+    "kind": "paid",
+    "event": "seed",
+    "bodyBytes": 4096,
+    "census": {
+      "submission_batches": 10000,
+      "publication_records": 10000,
+      "publication_attempts": 10000,
+      "submission_items": 10000,
+      "recovery_intents": 10000,
+      "article_active_targets": 10000,
+      "submission_queue_items": 0,
+      "paid_submission_batches": 10000
+    },
+    "foreignKeyViolations": 0
+  },
+  {
+    "file": "seed-10000-regular.jsonl",
+    "mode": "seed",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "seed",
+    "bodyBytes": 4096,
+    "census": {
+      "account_profiles": 100,
+      "submission_queue_groups": 100,
+      "submission_batches": 10000,
+      "publication_records": 10000,
+      "publication_attempts": 10000,
+      "submission_items": 10000,
+      "recovery_intents": 10000,
+      "article_active_targets": 10000,
+      "submission_queue_items": 10000
+    },
+    "foreignKeyViolations": 0
+  },
+  {
+    "file": "seed-50000-paid.jsonl",
+    "mode": "seed",
+    "n": 50000,
+    "groups": 500,
+    "kind": "paid",
+    "event": "seed",
+    "bodyBytes": 4096,
+    "census": {
+      "submission_batches": 50000,
+      "publication_records": 50000,
+      "publication_attempts": 50000,
+      "submission_items": 50000,
+      "recovery_intents": 50000,
+      "article_active_targets": 50000,
+      "submission_queue_items": 0,
+      "paid_submission_batches": 50000
+    },
+    "foreignKeyViolations": 0
+  },
+  {
+    "file": "seed-50000-regular.jsonl",
+    "mode": "seed",
+    "n": 50000,
+    "groups": 500,
+    "kind": "regular",
+    "event": "seed",
+    "bodyBytes": 4096,
+    "census": {
+      "account_profiles": 500,
+      "submission_queue_groups": 500,
+      "submission_batches": 50000,
+      "publication_records": 50000,
+      "publication_attempts": 50000,
+      "submission_items": 50000,
+      "recovery_intents": 50000,
+      "article_active_targets": 50000,
+      "submission_queue_items": 50000
+    },
+    "foreignKeyViolations": 0
+  },
+  {
+    "file": "seed-50000-wide.jsonl",
+    "mode": "seed",
+    "n": 50000,
+    "groups": 50000,
+    "kind": "regular",
+    "event": "seed",
+    "bodyBytes": 4096,
+    "census": {
+      "account_profiles": 50000,
+      "submission_queue_groups": 50000,
+      "submission_batches": 50000,
+      "publication_records": 50000,
+      "publication_attempts": 50000,
+      "submission_items": 50000,
+      "recovery_intents": 50000,
+      "article_active_targets": 50000,
+      "submission_queue_items": 50000
+    },
+    "foreignKeyViolations": 0
+  },
+  {
+    "file": "startup-1000-paid-all.jsonl",
+    "mode": "startup",
+    "n": 1000,
+    "groups": 10,
+    "kind": "paid",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 16.296099999999996,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 16.437600000000003,
+    "heapDelta": 480432,
+    "resultBytes": 15,
+    "sqlCalls": 309,
+    "sqlRows": 864,
+    "sqlBytes": 77369,
+    "sqlMs": 1.967599999999969,
+    "topSql": [
+      {
+        "sha256": "2d661377e02cd600c9f1f1bbc963546c9162a1198675483e85cd0cc7872ddb78",
+        "calls": 3,
+        "rows": 27,
+        "bytes": 2307,
+        "ms": 0.4519999999999982,
+        "prefix": "PRAGMA table_info(\"submission_queue_groups\")"
+      },
+      {
+        "sha256": "eba52bfdd3e2b00654f026be28725405595adac04bff394ed602ed802ae46d0e",
+        "calls": 39,
+        "rows": 39,
+        "bytes": 12318,
+        "ms": 0.21009999999999707,
+        "prefix": "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      },
+      {
+        "sha256": "2dd43fe9595aa16cd87dfe8759cca59a4c4f34ce04b062b7e0c2cf4f1bc92e4a",
+        "calls": 5,
+        "rows": 94,
+        "bytes": 3059,
+        "ms": 0.08029999999998694,
+        "prefix": "SELECT name FROM sqlite_master WHERE type='table'"
+      }
+    ]
+  },
+  {
+    "file": "startup-1000-paid-all.jsonl",
+    "mode": "startup",
+    "n": 1000,
+    "groups": 10,
+    "kind": "paid",
+    "event": "measurement",
+    "label": "pause-regular-on-startup",
+    "durationMs": 0.9033999999999978,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 0.9576999999999956,
+    "heapDelta": 29288,
+    "resultBytes": 47,
+    "sqlCalls": 3,
+    "sqlRows": 0,
+    "sqlBytes": 37,
+    "sqlMs": 0.034900000000000375,
+    "topSql": [
+      {
+        "sha256": "90e408d9ef0f60e33fbe3e97e2410d8278284fb06b656ffd6c0112506724b072",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 33,
+        "ms": 0.021299999999996544,
+        "prefix": "UPDATE submission_queue_groups SET pause_intent='system',revision=revision+1,updated_at=? WHERE pause_intent='none'"
+      },
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.008600000000001273,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      },
+      {
+        "sha256": "e7eb5bd4abe7adee570551cbc310aea04e41e239fce66f5b6afc8b2e22d090ce",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.005000000000002558,
+        "prefix": "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_"
+      }
+    ]
+  },
+  {
+    "file": "startup-1000-paid-all.jsonl",
+    "mode": "startup",
+    "n": 1000,
+    "groups": 10,
+    "kind": "paid",
+    "event": "measurement",
+    "label": "pause-paid-on-startup",
+    "durationMs": 93.64030000000001,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 93.7047,
+    "heapDelta": 9873392,
+    "resultBytes": 10148727,
+    "sqlCalls": 1002,
+    "sqlRows": 2000,
+    "sqlBytes": 6113164,
+    "sqlMs": 29.990399999999525,
+    "topSql": [
+      {
+        "sha256": "4855541d1b93654d097ee87d71ccab487619c8a829d8d792b2002d4541cbe2a5",
+        "calls": 1000,
+        "rows": 1000,
+        "bytes": 5507460,
+        "ms": 27.832399999999524,
+        "prefix": "SELECT s.item_id,s.batch_id,s.article_id,s.revision,s.status item_status,s.claim_token,s.claim_until,s.payload_json item_payload,p.publication_id,p.target_key,p.target_json,p.statu"
+      },
+      {
+        "sha256": "79896960c5e308b812e29d924562db8befb27e5f6388dfd6a46c73b2384fa6d5",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 605671,
+        "ms": 2.139100000000006,
+        "prefix": "SELECT * FROM paid_submission_batches ORDER BY created_at,batch_id LIMIT 20000"
+      },
+      {
+        "sha256": "6487a4652313805887fcd7cf2ea1a205b6b7d5528e4f59f1abd449470e54d58f",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 33,
+        "ms": 0.018899999999995032,
+        "prefix": "UPDATE paid_submission_batches SET pause_intent='system',updated_at=? WHERE pause_intent='none'"
+      }
+    ]
+  },
+  {
+    "file": "startup-1000-paid-all.jsonl",
+    "mode": "startup",
+    "n": 1000,
+    "groups": 10,
+    "kind": "paid",
+    "event": "measurement",
+    "label": "recovery-page",
+    "durationMs": 0.38900000000001,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 0.48229999999998086,
+    "heapDelta": 15280,
+    "resultBytes": 2,
+    "sqlCalls": 1,
+    "sqlRows": 0,
+    "sqlBytes": 2,
+    "sqlMs": 0.05349999999998545,
+    "resultCount": 0,
+    "topSql": [
+      {
+        "sha256": "525e3a2020e17a382be6a5a06af5bb52450a4ff233ebcb5956f143eb9330e2eb",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.05349999999998545,
+        "prefix": "SELECT i.attempt_id,i.state,i.payload_json,p.publication_id,p.article_id,p.target_key,p.status FROM recovery_intents i JOIN publication_attempts a ON a.attempt_id=i.attempt_id JOIN"
+      }
+    ]
+  },
+  {
+    "file": "startup-1000-regular.jsonl",
+    "mode": "startup",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 18.92439999999999,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 19.1051,
+    "heapDelta": 472744,
+    "resultBytes": 15,
+    "sqlCalls": 309,
+    "sqlRows": 864,
+    "sqlBytes": 77369,
+    "sqlMs": 1.8155000000001351,
+    "topSql": [
+      {
+        "sha256": "eba52bfdd3e2b00654f026be28725405595adac04bff394ed602ed802ae46d0e",
+        "calls": 39,
+        "rows": 39,
+        "bytes": 12318,
+        "ms": 0.23370000000003444,
+        "prefix": "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      },
+      {
+        "sha256": "2dd43fe9595aa16cd87dfe8759cca59a4c4f34ce04b062b7e0c2cf4f1bc92e4a",
+        "calls": 5,
+        "rows": 94,
+        "bytes": 3059,
+        "ms": 0.22639999999999816,
+        "prefix": "SELECT name FROM sqlite_master WHERE type='table'"
+      },
+      {
+        "sha256": "022756f7616d38499fc8d7abe0286bca873f370b926b3b1662bd0a6f87e8ac15",
+        "calls": 9,
+        "rows": 36,
+        "bytes": 3330,
+        "ms": 0.06680000000000064,
+        "prefix": "PRAGMA index_list(\"article_active_targets\")"
+      }
+    ]
+  },
+  {
+    "file": "startup-1000-regular.jsonl",
+    "mode": "startup",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "pause-regular-on-startup",
+    "durationMs": 481.65880000000004,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 481.7277,
+    "heapDelta": 1180312,
+    "resultBytes": 186316,
+    "sqlCalls": 3,
+    "sqlRows": 2000,
+    "sqlBytes": 689515,
+    "sqlMs": 477.7770999999999,
+    "topSql": [
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 487001,
+        "ms": 471.70889999999997,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      },
+      {
+        "sha256": "e7eb5bd4abe7adee570551cbc310aea04e41e239fce66f5b6afc8b2e22d090ce",
+        "calls": 1,
+        "rows": 1000,
+        "bytes": 202481,
+        "ms": 6.040499999999952,
+        "prefix": "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_"
+      },
+      {
+        "sha256": "90e408d9ef0f60e33fbe3e97e2410d8278284fb06b656ffd6c0112506724b072",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 33,
+        "ms": 0.02769999999999584,
+        "prefix": "UPDATE submission_queue_groups SET pause_intent='system',revision=revision+1,updated_at=? WHERE pause_intent='none'"
+      }
+    ]
+  },
+  {
+    "file": "startup-1000-regular.jsonl",
+    "mode": "startup",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "pause-paid-on-startup",
+    "durationMs": 0.27350000000001273,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 0.31999999999993634,
+    "heapDelta": 549896,
+    "resultBytes": 48,
+    "sqlCalls": 2,
+    "sqlRows": 0,
+    "sqlBytes": 35,
+    "sqlMs": 0.04030000000011569,
+    "topSql": [
+      {
+        "sha256": "6487a4652313805887fcd7cf2ea1a205b6b7d5528e4f59f1abd449470e54d58f",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 33,
+        "ms": 0.02970000000004802,
+        "prefix": "UPDATE paid_submission_batches SET pause_intent='system',updated_at=? WHERE pause_intent='none'"
+      },
+      {
+        "sha256": "79896960c5e308b812e29d924562db8befb27e5f6388dfd6a46c73b2384fa6d5",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.010600000000067666,
+        "prefix": "SELECT * FROM paid_submission_batches ORDER BY created_at,batch_id LIMIT 20000"
+      }
+    ]
+  },
+  {
+    "file": "startup-1000-regular.jsonl",
+    "mode": "startup",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "recovery-page",
+    "durationMs": 0.15850000000000364,
+    "timerTicks": 0,
+    "maxEventLoopGapMs": 0.19679999999993925,
+    "heapDelta": 10096,
+    "resultBytes": 2,
+    "sqlCalls": 1,
+    "sqlRows": 0,
+    "sqlBytes": 2,
+    "sqlMs": 0.04210000000000491,
+    "resultCount": 0,
+    "topSql": [
+      {
+        "sha256": "525e3a2020e17a382be6a5a06af5bb52450a4ff233ebcb5956f143eb9330e2eb",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.04210000000000491,
+        "prefix": "SELECT i.attempt_id,i.state,i.payload_json,p.publication_id,p.article_id,p.target_key,p.status FROM recovery_intents i JOIN publication_attempts a ON a.attempt_id=i.attempt_id JOIN"
+      }
+    ]
+  },
+  {
+    "file": "startup-10000-paid-all.jsonl",
+    "mode": "startup",
+    "n": 10000,
+    "groups": 100,
+    "kind": "paid",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 16.5616,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 16.710700000000003,
+    "heapDelta": 450536,
+    "resultBytes": 15,
+    "sqlCalls": 309,
+    "sqlRows": 864,
+    "sqlBytes": 77369,
+    "sqlMs": 2.0852000000000572,
+    "topSql": [
+      {
+        "sha256": "887a611e2dadd8e7c23015834362c3db36c90881b554dbb4e18219fde6c4eb49",
+        "calls": 3,
+        "rows": 9,
+        "bytes": 873,
+        "ms": 0.5526000000000053,
+        "prefix": "PRAGMA index_list(\"manual_reconciliation_facts\")"
+      },
+      {
+        "sha256": "eba52bfdd3e2b00654f026be28725405595adac04bff394ed602ed802ae46d0e",
+        "calls": 39,
+        "rows": 39,
+        "bytes": 12318,
+        "ms": 0.20819999999999084,
+        "prefix": "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      },
+      {
+        "sha256": "2dd43fe9595aa16cd87dfe8759cca59a4c4f34ce04b062b7e0c2cf4f1bc92e4a",
+        "calls": 5,
+        "rows": 94,
+        "bytes": 3059,
+        "ms": 0.07390000000000185,
+        "prefix": "SELECT name FROM sqlite_master WHERE type='table'"
+      }
+    ]
+  },
+  {
+    "file": "startup-10000-paid-all.jsonl",
+    "mode": "startup",
+    "n": 10000,
+    "groups": 100,
+    "kind": "paid",
+    "event": "measurement",
+    "label": "pause-regular-on-startup",
+    "durationMs": 0.9365999999999985,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 0.9898000000000025,
+    "heapDelta": 538000,
+    "resultBytes": 47,
+    "sqlCalls": 3,
+    "sqlRows": 0,
+    "sqlBytes": 37,
+    "sqlMs": 0.04879999999999285,
+    "topSql": [
+      {
+        "sha256": "90e408d9ef0f60e33fbe3e97e2410d8278284fb06b656ffd6c0112506724b072",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 33,
+        "ms": 0.035799999999994725,
+        "prefix": "UPDATE submission_queue_groups SET pause_intent='system',revision=revision+1,updated_at=? WHERE pause_intent='none'"
+      },
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.00829999999999842,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      },
+      {
+        "sha256": "e7eb5bd4abe7adee570551cbc310aea04e41e239fce66f5b6afc8b2e22d090ce",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.004699999999999704,
+        "prefix": "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_"
+      }
+    ]
+  },
+  {
+    "file": "startup-10000-paid-all.jsonl",
+    "mode": "startup",
+    "n": 10000,
+    "groups": 100,
+    "kind": "paid",
+    "event": "measurement",
+    "label": "pause-paid-on-startup",
+    "durationMs": 779.1106,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 779.1818,
+    "heapDelta": 82095136,
+    "resultBytes": 101660727,
+    "sqlCalls": 10002,
+    "sqlRows": 20000,
+    "sqlBytes": 61346164,
+    "sqlMs": 264.96340000000185,
+    "topSql": [
+      {
+        "sha256": "4855541d1b93654d097ee87d71ccab487619c8a829d8d792b2002d4541cbe2a5",
+        "calls": 10000,
+        "rows": 10000,
+        "bytes": 55241460,
+        "ms": 231.14130000000185,
+        "prefix": "SELECT s.item_id,s.batch_id,s.article_id,s.revision,s.status item_status,s.claim_token,s.claim_until,s.payload_json item_payload,p.publication_id,p.target_key,p.target_json,p.statu"
+      },
+      {
+        "sha256": "79896960c5e308b812e29d924562db8befb27e5f6388dfd6a46c73b2384fa6d5",
+        "calls": 1,
+        "rows": 10000,
+        "bytes": 6104671,
+        "ms": 33.802299999999995,
+        "prefix": "SELECT * FROM paid_submission_batches ORDER BY created_at,batch_id LIMIT 20000"
+      },
+      {
+        "sha256": "6487a4652313805887fcd7cf2ea1a205b6b7d5528e4f59f1abd449470e54d58f",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 33,
+        "ms": 0.019800000000003593,
+        "prefix": "UPDATE paid_submission_batches SET pause_intent='system',updated_at=? WHERE pause_intent='none'"
+      }
+    ]
+  },
+  {
+    "file": "startup-10000-paid-all.jsonl",
+    "mode": "startup",
+    "n": 10000,
+    "groups": 100,
+    "kind": "paid",
+    "event": "measurement",
+    "label": "recovery-page",
+    "durationMs": 0.5793999999999642,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 0.6422999999999774,
+    "heapDelta": 24608,
+    "resultBytes": 2,
+    "sqlCalls": 1,
+    "sqlRows": 0,
+    "sqlBytes": 2,
+    "sqlMs": 0.10550000000000637,
+    "resultCount": 0,
+    "topSql": [
+      {
+        "sha256": "525e3a2020e17a382be6a5a06af5bb52450a4ff233ebcb5956f143eb9330e2eb",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.10550000000000637,
+        "prefix": "SELECT i.attempt_id,i.state,i.payload_json,p.publication_id,p.article_id,p.target_key,p.status FROM recovery_intents i JOIN publication_attempts a ON a.attempt_id=i.attempt_id JOIN"
+      }
+    ]
+  },
+  {
+    "file": "startup-10000-regular-all.jsonl",
+    "mode": "startup",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 16.9169,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 17.081300000000006,
+    "heapDelta": 463936,
+    "resultBytes": 15,
+    "sqlCalls": 309,
+    "sqlRows": 864,
+    "sqlBytes": 77369,
+    "sqlMs": 1.6106000000001117,
+    "topSql": [
+      {
+        "sha256": "eba52bfdd3e2b00654f026be28725405595adac04bff394ed602ed802ae46d0e",
+        "calls": 39,
+        "rows": 39,
+        "bytes": 12318,
+        "ms": 0.21489999999996456,
+        "prefix": "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      },
+      {
+        "sha256": "2dd43fe9595aa16cd87dfe8759cca59a4c4f34ce04b062b7e0c2cf4f1bc92e4a",
+        "calls": 5,
+        "rows": 94,
+        "bytes": 3059,
+        "ms": 0.09600000000000364,
+        "prefix": "SELECT name FROM sqlite_master WHERE type='table'"
+      },
+      {
+        "sha256": "69569da60f3a30cf14bcb8f25d822bba2100b8bfc1a74d4e48f558a379686b55",
+        "calls": 2,
+        "rows": 2,
+        "bytes": 22,
+        "ms": 0.05590000000000117,
+        "prefix": "SELECT COUNT(*) count FROM submission_queue_groups WHERE typeof(image_count)!='integer' OR image_count NOT BETWEEN 0 AND 5"
+      }
+    ]
+  },
+  {
+    "file": "startup-10000-regular-all.jsonl",
+    "mode": "startup",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "pause-regular-on-startup",
+    "durationMs": 8986.14,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 8986.2389,
+    "heapDelta": 19589952,
+    "resultBytes": 1902796,
+    "sqlCalls": 3,
+    "sqlRows": 20000,
+    "sqlBytes": 6943795,
+    "sqlMs": 8936.2348,
+    "topSql": [
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 10000,
+        "bytes": 4879001,
+        "ms": 8787.965400000001,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      },
+      {
+        "sha256": "e7eb5bd4abe7adee570551cbc310aea04e41e239fce66f5b6afc8b2e22d090ce",
+        "calls": 1,
+        "rows": 10000,
+        "bytes": 2064761,
+        "ms": 148.23669999999947,
+        "prefix": "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_"
+      },
+      {
+        "sha256": "90e408d9ef0f60e33fbe3e97e2410d8278284fb06b656ffd6c0112506724b072",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 33,
+        "ms": 0.0326999999999984,
+        "prefix": "UPDATE submission_queue_groups SET pause_intent='system',revision=revision+1,updated_at=? WHERE pause_intent='none'"
+      }
+    ]
+  },
+  {
+    "file": "startup-10000-regular-all.jsonl",
+    "mode": "startup",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "pause-paid-on-startup",
+    "durationMs": 0.5885999999991327,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 0.6864000000005035,
+    "heapDelta": 25640,
+    "resultBytes": 48,
+    "sqlCalls": 2,
+    "sqlRows": 0,
+    "sqlBytes": 35,
+    "sqlMs": 0.09870000000046275,
+    "topSql": [
+      {
+        "sha256": "6487a4652313805887fcd7cf2ea1a205b6b7d5528e4f59f1abd449470e54d58f",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 33,
+        "ms": 0.0787000000000262,
+        "prefix": "UPDATE paid_submission_batches SET pause_intent='system',updated_at=? WHERE pause_intent='none'"
+      },
+      {
+        "sha256": "79896960c5e308b812e29d924562db8befb27e5f6388dfd6a46c73b2384fa6d5",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.020000000000436557,
+        "prefix": "SELECT * FROM paid_submission_batches ORDER BY created_at,batch_id LIMIT 20000"
+      }
+    ]
+  },
+  {
+    "file": "startup-10000-regular-all.jsonl",
+    "mode": "startup",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "recovery-page",
+    "durationMs": 0.30429999999978463,
+    "timerTicks": 0,
+    "maxEventLoopGapMs": 0.35689999999885913,
+    "heapDelta": 8672,
+    "resultBytes": 2,
+    "sqlCalls": 1,
+    "sqlRows": 0,
+    "sqlBytes": 2,
+    "sqlMs": 0.1242999999994936,
+    "resultCount": 0,
+    "topSql": [
+      {
+        "sha256": "525e3a2020e17a382be6a5a06af5bb52450a4ff233ebcb5956f143eb9330e2eb",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.1242999999994936,
+        "prefix": "SELECT i.attempt_id,i.state,i.payload_json,p.publication_id,p.article_id,p.target_key,p.status FROM recovery_intents i JOIN publication_attempts a ON a.attempt_id=i.attempt_id JOIN"
+      }
+    ]
+  },
+  {
+    "file": "startup-50000-paid-all.jsonl",
+    "mode": "startup",
+    "n": 50000,
+    "groups": 500,
+    "kind": "paid",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 16.571599999999997,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 16.729099999999995,
+    "heapDelta": 460472,
+    "resultBytes": 15,
+    "sqlCalls": 309,
+    "sqlRows": 864,
+    "sqlBytes": 77369,
+    "sqlMs": 1.9768999999999153,
+    "topSql": [
+      {
+        "sha256": "61ac4ba8461aca0e8320ad5e54c63736d0ab7cb2dcf0e5317fe6b0ecd54562d6",
+        "calls": 3,
+        "rows": 36,
+        "bytes": 3090,
+        "ms": 0.42839999999999634,
+        "prefix": "PRAGMA table_info(\"paid_submission_batches\")"
+      },
+      {
+        "sha256": "eba52bfdd3e2b00654f026be28725405595adac04bff394ed602ed802ae46d0e",
+        "calls": 39,
+        "rows": 39,
+        "bytes": 12318,
+        "ms": 0.229099999999967,
+        "prefix": "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      },
+      {
+        "sha256": "2dd43fe9595aa16cd87dfe8759cca59a4c4f34ce04b062b7e0c2cf4f1bc92e4a",
+        "calls": 5,
+        "rows": 94,
+        "bytes": 3059,
+        "ms": 0.0870999999999853,
+        "prefix": "SELECT name FROM sqlite_master WHERE type='table'"
+      }
+    ]
+  },
+  {
+    "file": "startup-50000-paid-all.jsonl",
+    "mode": "startup",
+    "n": 50000,
+    "groups": 500,
+    "kind": "paid",
+    "event": "measurement",
+    "label": "pause-regular-on-startup",
+    "durationMs": 0.9989999999999952,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 1.0583000000000027,
+    "heapDelta": 703968,
+    "resultBytes": 47,
+    "sqlCalls": 3,
+    "sqlRows": 0,
+    "sqlBytes": 37,
+    "sqlMs": 0.05750000000001165,
+    "topSql": [
+      {
+        "sha256": "90e408d9ef0f60e33fbe3e97e2410d8278284fb06b656ffd6c0112506724b072",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 33,
+        "ms": 0.04250000000000398,
+        "prefix": "UPDATE submission_queue_groups SET pause_intent='system',revision=revision+1,updated_at=? WHERE pause_intent='none'"
+      },
+      {
+        "sha256": "e07bd31fa8773c26c582b075be716d342ea15cea92403007e6793cff7f30166e",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.009300000000003195,
+        "prefix": "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,js"
+      },
+      {
+        "sha256": "e7eb5bd4abe7adee570551cbc310aea04e41e239fce66f5b6afc8b2e22d090ce",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.005700000000004479,
+        "prefix": "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_"
+      }
+    ]
+  },
+  {
+    "file": "startup-50000-paid-all.jsonl",
+    "mode": "startup",
+    "n": 50000,
+    "groups": 500,
+    "kind": "paid",
+    "event": "measurement",
+    "label": "pause-paid-on-startup",
+    "durationMs": 1624.1861,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 1624.2691000000002,
+    "heapDelta": 160965728,
+    "resultBytes": 203666791,
+    "sqlCalls": 20002,
+    "sqlRows": 40000,
+    "sqlBytes": 123120072,
+    "sqlMs": 567.1664999999947,
+    "topSql": [
+      {
+        "sha256": "4855541d1b93654d097ee87d71ccab487619c8a829d8d792b2002d4541cbe2a5",
+        "calls": 20000,
+        "rows": 20000,
+        "bytes": 110815564,
+        "ms": 466.52619999999473,
+        "prefix": "SELECT s.item_id,s.batch_id,s.article_id,s.revision,s.status item_status,s.claim_token,s.claim_until,s.payload_json item_payload,p.publication_id,p.target_key,p.target_json,p.statu"
+      },
+      {
+        "sha256": "79896960c5e308b812e29d924562db8befb27e5f6388dfd6a46c73b2384fa6d5",
+        "calls": 1,
+        "rows": 20000,
+        "bytes": 12304475,
+        "ms": 100.61679999999998,
+        "prefix": "SELECT * FROM paid_submission_batches ORDER BY created_at,batch_id LIMIT 20000"
+      },
+      {
+        "sha256": "6487a4652313805887fcd7cf2ea1a205b6b7d5528e4f59f1abd449470e54d58f",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 33,
+        "ms": 0.023499999999998522,
+        "prefix": "UPDATE paid_submission_batches SET pause_intent='system',updated_at=? WHERE pause_intent='none'"
+      }
+    ]
+  },
+  {
+    "file": "startup-50000-paid-all.jsonl",
+    "mode": "startup",
+    "n": 50000,
+    "groups": 500,
+    "kind": "paid",
+    "event": "measurement",
+    "label": "recovery-page",
+    "durationMs": 0.3299000000001797,
+    "timerTicks": 0,
+    "maxEventLoopGapMs": 0.39409999999998035,
+    "heapDelta": 9712,
+    "resultBytes": 2,
+    "sqlCalls": 1,
+    "sqlRows": 0,
+    "sqlBytes": 2,
+    "sqlMs": 0.1065000000000964,
+    "resultCount": 0,
+    "topSql": [
+      {
+        "sha256": "525e3a2020e17a382be6a5a06af5bb52450a4ff233ebcb5956f143eb9330e2eb",
+        "calls": 1,
+        "rows": 0,
+        "bytes": 2,
+        "ms": 0.1065000000000964,
+        "prefix": "SELECT i.attempt_id,i.state,i.payload_json,p.publication_id,p.article_id,p.target_key,p.status FROM recovery_intents i JOIN publication_attempts a ON a.attempt_id=i.attempt_id JOIN"
+      }
+    ]
+  },
+  {
+    "file": "startup-50000-regular-all.jsonl",
+    "mode": "startup",
+    "n": 50000,
+    "groups": 500,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 17.642999999999994,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 17.785200000000003,
+    "heapDelta": 548696,
+    "resultBytes": 15,
+    "sqlCalls": 309,
+    "sqlRows": 864,
+    "sqlBytes": 77369,
+    "sqlMs": 1.706799999999852,
+    "topSql": [
+      {
+        "sha256": "eba52bfdd3e2b00654f026be28725405595adac04bff394ed602ed802ae46d0e",
+        "calls": 39,
+        "rows": 39,
+        "bytes": 12318,
+        "ms": 0.21579999999997312,
+        "prefix": "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+      },
+      {
+        "sha256": "2dd43fe9595aa16cd87dfe8759cca59a4c4f34ce04b062b7e0c2cf4f1bc92e4a",
+        "calls": 5,
+        "rows": 94,
+        "bytes": 3059,
+        "ms": 0.09070000000000533,
+        "prefix": "SELECT name FROM sqlite_master WHERE type='table'"
+      },
+      {
+        "sha256": "69569da60f3a30cf14bcb8f25d822bba2100b8bfc1a74d4e48f558a379686b55",
+        "calls": 2,
+        "rows": 2,
+        "bytes": 22,
+        "ms": 0.08779999999999433,
+        "prefix": "SELECT COUNT(*) count FROM submission_queue_groups WHERE typeof(image_count)!='integer' OR image_count NOT BETWEEN 0 AND 5"
+      }
+    ]
+  },
+  {
+    "file": "startup-50000-regular-all.jsonl",
+    "event": "timeout",
+    "seconds": 55,
+    "mode": "startup",
+    "n": 50000,
+    "kind": "regular",
+    "label": ""
+  },
+  {
+    "file": "timing-queue-1000-0.jsonl",
+    "mode": "queue",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 15.5593,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 15.702799999999996,
+    "heapDelta": 293992,
+    "resultBytes": 15,
+    "sqlCalls": 0,
+    "sqlRows": 0,
+    "sqlBytes": 0,
+    "sqlMs": 0,
+    "topSql": []
+  },
+  {
+    "file": "timing-queue-1000-0.jsonl",
+    "mode": "queue",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "regular-all",
+    "durationMs": 474.3298,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 474.39300000000003,
+    "heapDelta": 1808136,
+    "resultBytes": 265491,
+    "sqlCalls": 0,
+    "sqlRows": 0,
+    "sqlBytes": 0,
+    "sqlMs": 0,
+    "resultCount": 10,
+    "topSql": []
+  },
+  {
+    "file": "timing-queue-1000-0.jsonl",
+    "mode": "queue",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "queue-census",
+    "shown": 1000,
+    "expected": 1000
+  },
+  {
+    "file": "timing-queue-1000-1.jsonl",
+    "mode": "queue",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 15.736899999999999,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 15.879200000000004,
+    "heapDelta": 417600,
+    "resultBytes": 15,
+    "sqlCalls": 0,
+    "sqlRows": 0,
+    "sqlBytes": 0,
+    "sqlMs": 0,
+    "topSql": []
+  },
+  {
+    "file": "timing-queue-1000-1.jsonl",
+    "mode": "queue",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "regular-all",
+    "durationMs": 480.9095,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 480.96470000000005,
+    "heapDelta": 1789456,
+    "resultBytes": 265491,
+    "sqlCalls": 0,
+    "sqlRows": 0,
+    "sqlBytes": 0,
+    "sqlMs": 0,
+    "resultCount": 10,
+    "topSql": []
+  },
+  {
+    "file": "timing-queue-1000-1.jsonl",
+    "mode": "queue",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "queue-census",
+    "shown": 1000,
+    "expected": 1000
+  },
+  {
+    "file": "timing-queue-1000-2.jsonl",
+    "mode": "queue",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 15.566799999999994,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 15.7194,
+    "heapDelta": 319904,
+    "resultBytes": 15,
+    "sqlCalls": 0,
+    "sqlRows": 0,
+    "sqlBytes": 0,
+    "sqlMs": 0,
+    "topSql": []
+  },
+  {
+    "file": "timing-queue-1000-2.jsonl",
+    "mode": "queue",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "regular-all",
+    "durationMs": 469.08879999999994,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 469.1412,
+    "heapDelta": 1785680,
+    "resultBytes": 265491,
+    "sqlCalls": 0,
+    "sqlRows": 0,
+    "sqlBytes": 0,
+    "sqlMs": 0,
+    "resultCount": 10,
+    "topSql": []
+  },
+  {
+    "file": "timing-queue-1000-2.jsonl",
+    "mode": "queue",
+    "n": 1000,
+    "groups": 10,
+    "kind": "regular",
+    "event": "queue-census",
+    "shown": 1000,
+    "expected": 1000
+  },
+  {
+    "file": "timing-queue-10000-0.jsonl",
+    "mode": "queue",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 15.403500000000001,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 15.550899999999999,
+    "heapDelta": 366720,
+    "resultBytes": 15,
+    "sqlCalls": 0,
+    "sqlRows": 0,
+    "sqlBytes": 0,
+    "sqlMs": 0,
+    "topSql": []
+  },
+  {
+    "file": "timing-queue-10000-0.jsonl",
+    "mode": "queue",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "regular-all",
+    "durationMs": 8804.197100000001,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 8804.2821,
+    "heapDelta": 15736312,
+    "resultBytes": 2704941,
+    "sqlCalls": 0,
+    "sqlRows": 0,
+    "sqlBytes": 0,
+    "sqlMs": 0,
+    "resultCount": 100,
+    "topSql": []
+  },
+  {
+    "file": "timing-queue-10000-0.jsonl",
+    "mode": "queue",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "queue-census",
+    "shown": 10000,
+    "expected": 10000
+  },
+  {
+    "file": "timing-queue-10000-1.jsonl",
+    "mode": "queue",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 16.709699999999998,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 16.9311,
+    "heapDelta": 372096,
+    "resultBytes": 15,
+    "sqlCalls": 0,
+    "sqlRows": 0,
+    "sqlBytes": 0,
+    "sqlMs": 0,
+    "topSql": []
+  },
+  {
+    "file": "timing-queue-10000-1.jsonl",
+    "mode": "queue",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "regular-all",
+    "durationMs": 8926.1232,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 8926.234,
+    "heapDelta": 15686008,
+    "resultBytes": 2704941,
+    "sqlCalls": 0,
+    "sqlRows": 0,
+    "sqlBytes": 0,
+    "sqlMs": 0,
+    "resultCount": 100,
+    "topSql": []
+  },
+  {
+    "file": "timing-queue-10000-1.jsonl",
+    "mode": "queue",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "queue-census",
+    "shown": 10000,
+    "expected": 10000
+  },
+  {
+    "file": "timing-queue-10000-2.jsonl",
+    "mode": "queue",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "store-open",
+    "durationMs": 15.9927,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 16.135799999999996,
+    "heapDelta": 377216,
+    "resultBytes": 15,
+    "sqlCalls": 0,
+    "sqlRows": 0,
+    "sqlBytes": 0,
+    "sqlMs": 0,
+    "topSql": []
+  },
+  {
+    "file": "timing-queue-10000-2.jsonl",
+    "mode": "queue",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "measurement",
+    "label": "regular-all",
+    "durationMs": 8969.397200000001,
+    "timerTicks": 1,
+    "maxEventLoopGapMs": 8969.4909,
+    "heapDelta": 15626864,
+    "resultBytes": 2704941,
+    "sqlCalls": 0,
+    "sqlRows": 0,
+    "sqlBytes": 0,
+    "sqlMs": 0,
+    "resultCount": 100,
+    "topSql": []
+  },
+  {
+    "file": "timing-queue-10000-2.jsonl",
+    "mode": "queue",
+    "n": 10000,
+    "groups": 100,
+    "kind": "regular",
+    "event": "queue-census",
+    "shown": 10000,
+    "expected": 10000
+  }
+]

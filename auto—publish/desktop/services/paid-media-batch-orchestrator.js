@@ -162,6 +162,13 @@ function createPaidMediaBatchOrchestrator(options) {
 
   function snapshot(input) {
     const request = input || {};
+    if (request.page !== undefined) {
+      return transitions.listPaidSubmissionBatchSnapshots({
+        page: request.page, pageSize: request.pageSize,
+        ...(request.clientId ? { clientId: request.clientId } : {}),
+        workbenchOnly: true,
+      });
+    }
     const batches = transitions.listPaidSubmissionBatchSnapshots(
       request.batchId === undefined ? {} : { batchId: request.batchId },
     );

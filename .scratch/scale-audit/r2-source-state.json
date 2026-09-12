@@ -1,0 +1,8 @@
+{
+  "head": "ddbfecd83781ac3bb449e15f423fc8be41e153c8",
+  "state": "uncommitted working tree; prior batch changes retained",
+  "files": {
+    "auto—publish/desktop/services/article-management-snapshot.js": "bd88c6e434540e4fb52e814b98944ce76a26c960ccafd4e7a4a5bfb814cbe10d",
+    "auto—publish/tests/article-management-capacity.test.js": "80380346be26fe7cce520fdf6995ea1e402f3e0a0f15c5d7a817115e82f7aaee"
+  }
+}

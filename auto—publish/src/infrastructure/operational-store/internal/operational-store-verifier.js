@@ -4,6 +4,7 @@ const { DatabaseSync } = require("node:sqlite");
 const { fail } = require("./operational-store-utils");
 const {
   SCHEMA_VERSION,
+  dryRunSchema,
   tableNames,
   schemaVersion,
   verifyMigrationHistory,
@@ -15,10 +16,11 @@ const {
   verifyV7Structure,
   verifyV8Structure,
   verifyV9Structure,
+  verifyV10Structure,
   integrityOk,
 } = require("./operational-store-schema");
 
-function verifyOperationalDatabase(filename) {
+function verifyOperationalDatabase(filename, options) {
   if (
     typeof filename !== "string" ||
     !fs.existsSync(filename) ||
@@ -36,15 +38,29 @@ function verifyOperationalDatabase(filename) {
       !tables.includes("publication_records") ||
       !integrityOk(db) ||
       foreignKeys.length ||
-      version !== SCHEMA_VERSION
+      (version !== SCHEMA_VERSION &&
+        !(
+          options?.allowMigration === true &&
+          version >= 1 &&
+          version < SCHEMA_VERSION
+        ))
     )
       throw fail("OPERATIONAL_RESTORE_INVALID");
+    if (version !== SCHEMA_VERSION) {
+      dryRunSchema(filename);
+      return {
+        schemaVersion: version,
+        tables: tables.length,
+        rows: db.prepare("SELECT COUNT(*) count FROM publication_records").get()
+          .count,
+      };
+    }
     verifyMigrationHistory(
       db,
-      [1, 2, 3, 4, 5, 6, 7, 8, 9],
+      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
       "OPERATIONAL_RESTORE_INVALID",
     );
-    verifyV1Structure(db, "OPERATIONAL_RESTORE_INVALID");
+    verifyV1Structure(db, "OPERATIONAL_RESTORE_INVALID", true);
     verifyV2Structure(db, "OPERATIONAL_RESTORE_INVALID");
     verifyV3Structure(db, "OPERATIONAL_RESTORE_INVALID", {
       allowV4Columns: true,
@@ -59,6 +75,7 @@ function verifyOperationalDatabase(filename) {
       allowV9SubmissionInterval: true,
     });
     verifyV9Structure(db, "OPERATIONAL_RESTORE_INVALID");
+    verifyV10Structure(db, "OPERATIONAL_RESTORE_INVALID");
     return {
       schemaVersion: version,
       tables: tables.length,
