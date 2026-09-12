@@ -184,7 +184,7 @@ function createContentGenerationBatchService(options) {
 
   // Only mutate an owned projection, never the batch store's task objects.
   function projectBatchTitles(batch, reuseTitles) {
-    if (!batch || !Array.isArray(batch.tasks)) return batch;
+    if (!batch || !Array.isArray(batch.tasks) || typeof contentStore.getGenerationTaskArticleTitle !== "function") return batch;
     const cache = titleCache && batch.id === activeBatchId ? titleCache : null;
     batch.tasks.forEach(function(task) {
       if (!task || task.status !== "succeeded" || !task.articleId) return;
@@ -194,13 +194,7 @@ function createContentGenerationBatchService(options) {
         title = cache.get(key);
       } else {
         try {
-          const result = contentStore.findByGenerationTaskId(task.id);
-          const article = result && result.kind === "one"
-            ? result.article
-            : result && result.kind === undefined
-              ? result
-              : null;
-          title = projectedArticleTitle(article && article.title);
+          title = projectedArticleTitle(contentStore.getGenerationTaskArticleTitle(task.id));
         } catch (_) {
           // Titles are optional display data; an explicit refresh retries them.
         }
