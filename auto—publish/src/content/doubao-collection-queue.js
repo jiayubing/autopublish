@@ -41,6 +41,7 @@ function createDoubaoCollectionQueue(options) {
   }
 
   const collectOne = opts.collectOne;
+  const stateStore = opts.stateStore || null;
   const hasCustomSleep = typeof opts.sleep === "function";
   const sleep = hasCustomSleep ? opts.sleep : defaultSleep;
   const legacyDelay = typeof opts.randomDelayMs === "function" ? opts.randomDelayMs : null;
@@ -58,6 +59,7 @@ function createDoubaoCollectionQueue(options) {
     ? Number(opts.countdownIntervalMs) : DEFAULT_COUNTDOWN_INTERVAL_MS;
 
   let disposed = false;
+  let shutdownRequested = false;
   let status = "idle";
   let currentTaskId = null;
   let completed = 0;
@@ -98,8 +100,35 @@ function createDoubaoCollectionQueue(options) {
     };
   }
 
+  function persistedState() {
+    return {
+      status: status,
+      currentTaskId: currentTaskId,
+      completed: completed,
+      total: total,
+      tasks: tasks.map(function(task) {
+        return {
+          id: task.id,
+          clientId: task.clientId,
+          questionId: task.questionId,
+          input: Object.assign({}, task.input),
+          status: task.status,
+          answerLength: task.answerLength,
+          referenceCount: task.referenceCount,
+          error: task.error ? Object.assign({}, task.error) : null
+        };
+      })
+    };
+  }
+
+  function persist() {
+    if (!stateStore || typeof stateStore.save !== "function") return;
+    stateStore.save(persistedState());
+  }
+
   function emit(type) {
     if (disposed) return;
+    if (type !== "countdown") persist();
     const state = snapshot(type !== "countdown");
     const event = Object.assign({ type: type || "state", state: state }, state);
     Array.from(subscribers).forEach(function(listener) {
@@ -158,6 +187,51 @@ function createDoubaoCollectionQueue(options) {
     };
   }
 
+  function restore() {
+    if (!stateStore || typeof stateStore.load !== "function") return;
+    let saved;
+    try { saved = stateStore.load(); }
+    catch (error) {
+      reportDiagnostic({
+        code: "DOUBAO_COLLECTION_RECOVERY_READ_FAILED",
+        module: "doubao-collection-queue",
+        category: "storage",
+        operationId: "doubao-collection-recovery",
+        metadata: { operation: "recovery-read", phase: "startup", outcome: "ignored" }
+      });
+      return;
+    }
+    if (!saved || !Array.isArray(saved.tasks) || saved.tasks.length === 0) return;
+    let changed = false;
+    saved.tasks.forEach(function(item) {
+      const task = createTask(item.input, item.id);
+      task.answerLength = item.answerLength || 0;
+      task.referenceCount = item.referenceCount || 0;
+      task.error = item.error || null;
+      if (item.status === "running" || item.status === "waiting_login" || item.status === "waiting_human") {
+        task.status = "failed";
+        task.error = {
+          code: "DOUBAO_SEND_UNCERTAIN",
+          message: "上次采集在软件退出前结果未确认，为避免重复发送不会自动重试"
+        };
+        changed = true;
+      } else {
+        task.status = item.status;
+      }
+      tasks.push(task);
+    });
+    total = tasks.length;
+    completed = tasks.filter(function(task) {
+      return task.status === "succeeded" || task.status === "failed" || task.status === "cancelled";
+    }).length;
+    currentTaskId = null;
+    waitRemainingMs = 0;
+    pauseRequested = tasks.some(function(task) { return task.status === "pending"; });
+    status = pauseRequested ? "paused" : "completed";
+    nextTaskNumber = tasks.length + 1;
+    if (changed || status !== saved.status || saved.currentTaskId) persist();
+  }
+
   function makeControlPromise() {
     if (!controlPromise) {
       controlPromise = new Promise(function(resolve) { controlResolve = resolve; });
@@ -210,7 +284,28 @@ function createDoubaoCollectionQueue(options) {
     return finalState;
   }
 
-  async function cancellableDefaultSleep(milliseconds, controlPromise) {
+  function suspendRun() {
+    if (countdownTimer) {
+      clearInterval(countdownTimer);
+      countdownTimer = null;
+    }
+    waitRemainingMs = 0;
+    currentTaskId = null;
+    const hasPending = tasks.some(function(task) {
+      return task.status === "pending" || task.status === "waiting_login" || task.status === "waiting_human";
+    });
+    status = hasPending ? "paused" : "completed";
+    pauseRequested = hasPending;
+    const finalState = snapshot();
+    const resolve = resolveRun;
+    resolveRun = null;
+    runPromise = null;
+    emit(hasPending ? "paused" : "completed");
+    if (resolve) resolve(finalState);
+    return finalState;
+  }
+
+  async function cancellableDefaultSleep(milliseconds, currentControlPromise) {
     let timer;
     let completedNaturally = false;
     const delayPromise = new Promise(function(resolve) {
@@ -219,7 +314,7 @@ function createDoubaoCollectionQueue(options) {
         resolve();
       }, milliseconds);
     });
-    await Promise.race([delayPromise, controlPromise]);
+    await Promise.race([delayPromise, currentControlPromise]);
     clearTimeout(timer);
     return completedNaturally;
   }
@@ -227,8 +322,8 @@ function createDoubaoCollectionQueue(options) {
   async function waitBetweenTasks(milliseconds) {
     waitRemainingMs = milliseconds;
     emit("countdown");
-    while (waitRemainingMs > 0 && !stopRequested) {
-      const controlPromise = makeControlPromise();
+    while (waitRemainingMs > 0 && !stopRequested && !shutdownRequested) {
+      const currentControlPromise = makeControlPromise();
       const requestedMs = waitRemainingMs;
       const startedAt = Date.now();
       let completedNaturally = false;
@@ -243,10 +338,10 @@ function createDoubaoCollectionQueue(options) {
           const sleepPromise = Promise.resolve().then(function() { return sleep(requestedMs); });
           await Promise.race([
             sleepPromise.then(function() { completedNaturally = true; }),
-            controlPromise
+            currentControlPromise
           ]);
         } else {
-          completedNaturally = await cancellableDefaultSleep(requestedMs, controlPromise);
+          completedNaturally = await cancellableDefaultSleep(requestedMs, currentControlPromise);
         }
       } finally {
         if (countdownTimer) {
@@ -259,10 +354,10 @@ function createDoubaoCollectionQueue(options) {
           waitRemainingMs = Math.max(0, requestedMs - (Date.now() - startedAt));
         }
         emit("countdown");
-        clearControlPromise(controlPromise);
+        clearControlPromise(currentControlPromise);
       }
 
-      if (stopRequested || completedNaturally) return;
+      if (stopRequested || shutdownRequested || completedNaturally) return;
       if (pauseRequested) {
         status = "paused";
         emit("paused");
@@ -274,13 +369,14 @@ function createDoubaoCollectionQueue(options) {
   }
 
   async function waitUntilResumed() {
-    while (!stopRequested && pauseRequested) {
+    while (!stopRequested && !shutdownRequested && pauseRequested) {
       await makeControlPromise();
     }
   }
 
   async function processQueue() {
     while (true) {
+      if (shutdownRequested) return suspendRun();
       if (stopRequested) {
         cancelPendingTasks();
         return finishRun();
@@ -309,7 +405,7 @@ function createDoubaoCollectionQueue(options) {
         markTerminal(task, "succeeded");
         emit("task_succeeded");
       } catch (error) {
-        if (error && (error.code === "DOUBAO_LOGIN_REQUIRED" || error.code === "DOUBAO_CHALLENGE") && !stopRequested) {
+        if (error && (error.code === "DOUBAO_LOGIN_REQUIRED" || error.code === "DOUBAO_CHALLENGE") && !stopRequested && !shutdownRequested) {
           task.status = error.code === "DOUBAO_LOGIN_REQUIRED" ? "waiting_login" : "waiting_human";
           task.error = safeError(error);
           status = "paused";
@@ -323,7 +419,7 @@ function createDoubaoCollectionQueue(options) {
         // A timed-out send/answer is not evidence that the shared page is idle.
         // Keep the failed task terminal; resume continues only pending tasks.
         // Re-sending this question remains an explicit retryFailed operation.
-        if (!stopRequested && SESSION_FAILURES.has(task.error.code) && tasks.some(function(item) { return item.status === "pending"; })) {
+        if (!stopRequested && !shutdownRequested && SESSION_FAILURES.has(task.error.code) && tasks.some(function(item) { return item.status === "pending"; })) {
           pauseRequested = true;
         }
         emit("task_failed");
@@ -331,6 +427,7 @@ function createDoubaoCollectionQueue(options) {
 
       currentTaskId = null;
       emit("task_finished");
+      if (shutdownRequested) continue;
       if (stopRequested) continue;
       const nextTask = tasks.find(function(item) { return item.status === "pending"; });
       if (!nextTask) return finishRun();
@@ -346,6 +443,7 @@ function createDoubaoCollectionQueue(options) {
   function beginRun() {
     collectionRunId = randomUUID();
     stopRequested = false;
+    shutdownRequested = false;
     pauseRequested = false;
     status = "running";
     runPromise = new Promise(function(resolve) { resolveRun = resolve; });
@@ -408,9 +506,13 @@ function createDoubaoCollectionQueue(options) {
     if (disposed || status === "completed" || status === "idle" || status === "stopping") return snapshot();
     pauseRequested = false;
     tasks.forEach(function(task) {
-      if (task.status === "waiting_login" || task.status === "waiting_human") task.status = "pending";
+      if (runPromise && (task.status === "waiting_login" || task.status === "waiting_human")) task.status = "pending";
     });
     status = "running";
+    if (!runPromise) {
+      beginRun();
+      return snapshot();
+    }
     notifyControl();
     emit("resumed");
     return snapshot();
@@ -462,13 +564,19 @@ function createDoubaoCollectionQueue(options) {
 
   async function dispose() {
     if (disposed) return snapshot();
-    const pending = status !== "idle" && status !== "completed" ? stop() : null;
+    shutdownRequested = true;
+    pauseRequested = false;
+    notifyControl();
+    const pendingRun = runPromise;
+    if (pendingRun) await pendingRun;
+    else persist();
     disposed = true;
     subscribers.clear();
     notifyControl();
-    if (pending) await pending;
     return snapshot();
   }
+
+  restore();
 
   return {
     start: start,

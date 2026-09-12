@@ -7,6 +7,7 @@ const { createTemplateStore } = require("../../src/content/template-store");
 const { createClientMaterialStore } = require("../../src/content/client-material-store");
 const { createArticleGenerator } = require("../../src/content/article-generator");
 const { buildPrompt } = require("../../src/content/prompt-builder");
+const { createClientGenerationOperationStore } = require("../../src/content/client-generation-operation-store");
 const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
 const RETRY_DELAYS = [5000, 15000];
@@ -100,6 +101,18 @@ function countsFor(tasks) {
   return counts;
 }
 
+function childOperationId(operation, task) {
+  return operation.articleCount === 1 ? operation.id : operation.id + "-" + String(task.index + 1);
+}
+
+function stoppedStatus(tasks) {
+  const counts = countsFor(tasks);
+  if (counts.running > 0) return "running";
+  if (counts.pending > 0) return counts.succeeded > 0 || counts.failed > 0 ? "partial" : "failed";
+  if (counts.failed > 0) return counts.succeeded > 0 ? "partial" : "failed";
+  return "completed";
+}
+
 function createClientGenerationService(options) {
   const value = options || {};
   if (typeof value.workspaceRoot !== "string" || !value.workspaceRoot.trim()) {
@@ -124,6 +137,7 @@ function createClientGenerationService(options) {
   const seenIds = value.seenIds || new Set();
   const sleep = value.sleep || function(milliseconds) { return new Promise(function(resolve) { setTimeout(resolve, milliseconds); }); };
   const now = value.now || function() { return new Date().toISOString(); };
+  const operationStore = value.operationStore || createClientGenerationOperationStore({ workspaceRoot: workspaceRoot });
   const listeners = new Set();
   const operations = new Map();
   const latestByClient = new Map();
@@ -132,6 +146,7 @@ function createClientGenerationService(options) {
     ? value.maxRetainedOperations
     : DEFAULT_MAX_RETAINED_OPERATIONS;
   let disposed = false;
+  let shuttingDown = false;
 
   function snapshot(operation) {
     if (!operation) return null;
@@ -157,8 +172,36 @@ function createClientGenerationService(options) {
     };
   }
 
+  function persistedOperation(operation) {
+    return {
+      id: operation.id,
+      clientId: operation.clientId,
+      articleCount: operation.articleCount,
+      concurrency: operation.concurrency,
+      status: operation.status,
+      request: clone(operation.request),
+      tasks: operation.tasks.map(function(task) {
+        return {
+          index: task.index,
+          status: task.status,
+          attempts: task.attempts,
+          articleId: task.articleId || null,
+          articleTitle: task.articleTitle || null,
+          error: task.error ? clone(task.error) : null,
+        };
+      }),
+      createdAt: operation.createdAt,
+      updatedAt: operation.updatedAt,
+    };
+  }
+
+  function persist() {
+    operationStore.save(Array.from(operations.values()).map(persistedOperation));
+  }
+
   function emit(operation) {
     operation.updatedAt = now();
+    persist();
     const event = snapshot(operation);
     listeners.forEach(function(listener) {
       try { listener(clone(event)); } catch (error) {
@@ -173,11 +216,7 @@ function createClientGenerationService(options) {
     });
   }
 
-  function finalize(operation) {
-    const counts = countsFor(operation.tasks);
-    operation.status = counts.failed > 0 ? (counts.succeeded > 0 ? "partial" : "failed") : "completed";
-    operation.updatedAt = now();
-    emit(operation);
+  function rememberTerminal(operation) {
     const existingIndex = terminalOperationIds.indexOf(operation.id);
     if (existingIndex >= 0) terminalOperationIds.splice(existingIndex, 1);
     terminalOperationIds.push(operation.id);
@@ -191,12 +230,74 @@ function createClientGenerationService(options) {
     }
   }
 
+  function finalize(operation) {
+    operation.status = stoppedStatus(operation.tasks);
+    operation.updatedAt = now();
+    rememberTerminal(operation);
+    emit(operation);
+  }
+
   function findExisting(operationId) {
     if (typeof contentStore.findByGenerationOperationId !== "function") return null;
     const existing = contentStore.findByGenerationOperationId(operationId);
     if (!existing || existing.kind === "none") return null;
     if (existing.kind === "many") throw clientGenerationError("CONTENT_GENERATION_ID_CONFLICT", "Generation operation identity is ambiguous");
     return existing.kind === "one" ? existing.article : existing;
+  }
+
+  function reconcileRecoveredTask(operation, task) {
+    if (task.status === "succeeded") return false;
+    if (task.status !== "running") return false;
+    let existing = null;
+    try { existing = findExisting(childOperationId(operation, task)); }
+    catch (error) {
+      task.status = "failed";
+      task.error = safeError(error);
+      return true;
+    }
+    if (existing) {
+      task.status = "succeeded";
+      task.articleId = existing.id || null;
+      task.articleTitle = typeof existing.title === "string" ? existing.title.slice(0, 300) : null;
+      task.error = null;
+      return true;
+    }
+    task.status = "failed";
+    task.error = { code: "CONTENT_GENERATION_INTERRUPTED", message: "上次生成在软件退出前未确认完成，请手动重试" };
+    return true;
+  }
+
+  function hydrate() {
+    let stored;
+    try { stored = operationStore.load(); }
+    catch (error) {
+      reportDiagnostic({
+        code: "CLIENT_GENERATION_RECOVERY_READ_FAILED",
+        module: "client-generation-service",
+        category: "storage",
+        operationId: "client-generation-recovery",
+        metadata: { operation: "recovery-read", phase: "startup", outcome: "ignored" },
+      });
+      return;
+    }
+    let changed = false;
+    stored.slice(-maxRetainedOperations).forEach(function(saved) {
+      const operation = Object.assign({}, saved, {
+        request: clone(saved.request),
+        tasks: saved.tasks.map(clone),
+        controller: new AbortController(),
+        promise: null,
+      });
+      operation.tasks.forEach(function(task) {
+        if (reconcileRecoveredTask(operation, task)) changed = true;
+      });
+      operation.status = stoppedStatus(operation.tasks);
+      operations.set(operation.id, operation);
+      rememberTerminal(operation);
+      const current = latestByClient.get(operation.clientId);
+      if (!current || Date.parse(operation.updatedAt) >= Date.parse(current.updatedAt)) latestByClient.set(operation.clientId, operation);
+    });
+    if (changed) persist();
   }
 
   function saveGeneratedArticle(article) {
@@ -212,8 +313,8 @@ function createClientGenerationService(options) {
   }
 
   async function generateOnce(operation, task) {
-    const childOperationId = operation.articleCount === 1 ? operation.id : operation.id + "-" + String(task.index + 1);
-    const existing = findExisting(childOperationId);
+    const operationId = childOperationId(operation, task);
+    const existing = findExisting(operationId);
     if (existing) return existing;
     const executionClient = aiClientFactory("client-generation:" + operation.id);
     const generator = articleGeneratorFactory({
@@ -232,12 +333,12 @@ function createClientGenerationService(options) {
     });
     const generated = await generator.generateArticle(Object.assign({}, operation.request, {
       articleCount: 1,
-      generationOperationId: childOperationId,
+      generationOperationId: operationId,
     }));
     if (!generated || typeof generated !== "object") throw clientGenerationError("CONTENT_GENERATION_INVALID", "Generated article is invalid");
-    const article = generated.generationOperationId === childOperationId
+    const article = generated.generationOperationId === operationId
       ? generated
-      : Object.assign({}, generated, { generationOperationId: childOperationId });
+      : Object.assign({}, generated, { generationOperationId: operationId });
     return saveGeneratedArticle(article);
   }
 
@@ -253,14 +354,16 @@ function createClientGenerationService(options) {
     }
   }
 
-  async function runOperation(operation) {
+  async function runOperation(operation, selectedIndexes) {
+    const indexes = selectedIndexes.slice();
     let nextIndex = 0;
     let configurationFailure = null;
     async function worker() {
       while (!disposed && !operation.controller.signal.aborted && !configurationFailure) {
-        const task = operation.tasks[nextIndex++];
-        if (!task) return;
-        if (task.status !== "pending") continue;
+        const taskIndex = indexes[nextIndex++];
+        if (taskIndex === undefined) return;
+        const task = operation.tasks[taskIndex];
+        if (!task || task.status !== "pending") continue;
         task.status = "running";
         task.attempts += 1;
         task.error = null;
@@ -274,7 +377,9 @@ function createClientGenerationService(options) {
         } catch (error) {
           if (operation.controller.signal.aborted || error && error.code === "AI_ABORTED") {
             task.status = "failed";
-            task.error = { code: "AI_ABORTED", message: "生成任务已停止" };
+            task.error = shuttingDown
+              ? { code: "CONTENT_GENERATION_INTERRUPTED", message: "上次生成在软件退出前未确认完成，请手动重试" }
+              : { code: "AI_ABORTED", message: "生成任务已停止" };
           } else {
             task.status = "failed";
             task.error = safeError(error);
@@ -286,16 +391,18 @@ function createClientGenerationService(options) {
     }
     await Promise.all(Array.from({ length: operation.concurrency }, worker));
     if (configurationFailure) {
-      operation.tasks.forEach(function(task) {
-        if (task.status === "pending") {
+      indexes.forEach(function(index) {
+        const task = operation.tasks[index];
+        if (task && task.status === "pending") {
           task.status = "failed";
           task.error = clone(configurationFailure);
         }
       });
     }
-    if (operation.controller.signal.aborted) {
-      operation.tasks.forEach(function(task) {
-        if (task.status === "pending") {
+    if (operation.controller.signal.aborted && !shuttingDown) {
+      indexes.forEach(function(index) {
+        const task = operation.tasks[index];
+        if (task && task.status === "pending") {
           task.status = "failed";
           task.error = { code: "AI_ABORTED", message: "生成任务已停止" };
         }
@@ -330,6 +437,33 @@ function createClientGenerationService(options) {
     });
   }
 
+  function launch(operation, indexes) {
+    operation.status = "running";
+    operation.controller = new AbortController();
+    latestByClient.set(operation.clientId, operation);
+    emit(operation);
+    operation.promise = runOperation(operation, indexes).catch(function(error) {
+      indexes.forEach(function(index) {
+        const task = operation.tasks[index];
+        if (task && (task.status === "pending" || task.status === "running")) {
+          task.status = "failed";
+          task.error = safeError(error);
+        }
+      });
+      finalize(operation);
+      return snapshot(operation);
+    });
+    return snapshot(operation);
+  }
+
+  function assertRunnable(operation) {
+    if (operation.status === "running") throw clientGenerationError("CONTENT_GENERATION_CLIENT_BUSY", "当前客户已有文章生成任务正在运行");
+    const current = latestByClient.get(operation.clientId);
+    if (current && current !== operation && current.status === "running") {
+      throw clientGenerationError("CONTENT_GENERATION_CLIENT_BUSY", "当前客户已有文章生成任务正在运行");
+    }
+  }
+
   function start(input) {
     if (disposed) throw clientGenerationError("CONTENT_RUNTIME_DISPOSED", "Content runtime is disposed");
     const request = prepareRequest(input);
@@ -358,18 +492,7 @@ function createClientGenerationService(options) {
     };
     operations.set(operation.id, operation);
     latestByClient.set(operation.clientId, operation);
-    emit(operation);
-    operation.promise = runOperation(operation).catch(function(error) {
-      operation.tasks.forEach(function(task) {
-        if (task.status === "pending" || task.status === "running") {
-          task.status = "failed";
-          task.error = safeError(error);
-        }
-      });
-      finalize(operation);
-      return snapshot(operation);
-    });
-    return snapshot(operation);
+    return launch(operation, operation.tasks.map(function(task) { return task.index; }));
   }
 
   function getState(clientId) {
@@ -381,35 +504,28 @@ function createClientGenerationService(options) {
     return snapshot(latestByClient.get(clientId) || null);
   }
 
-  function retryFailed(input) {
+  function continuePending(input) {
     if (disposed) throw clientGenerationError("CONTENT_RUNTIME_DISPOSED", "Content runtime is disposed");
-    const request = input || {};
-    const operationId = assertId(request.operationId, "Operation id");
+    const operationId = assertId(input && input.operationId, "Operation id");
     const operation = operations.get(operationId);
     if (!operation) throw clientGenerationError("CONTENT_GENERATION_OPERATION_NOT_FOUND", "Generation operation was not found");
-    if (operation.status === "running") throw clientGenerationError("CONTENT_GENERATION_CLIENT_BUSY", "当前客户已有文章生成任务正在运行");
+    assertRunnable(operation);
+    const indexes = operation.tasks.filter(function(task) { return task.status === "pending"; }).map(function(task) { return task.index; });
+    if (!indexes.length) return snapshot(operation);
+    return launch(operation, indexes);
+  }
+
+  function retryFailed(input) {
+    if (disposed) throw clientGenerationError("CONTENT_RUNTIME_DISPOSED", "Content runtime is disposed");
+    const operationId = assertId(input && input.operationId, "Operation id");
+    const operation = operations.get(operationId);
+    if (!operation) throw clientGenerationError("CONTENT_GENERATION_OPERATION_NOT_FOUND", "Generation operation was not found");
+    assertRunnable(operation);
     const failed = operation.tasks.filter(function(task) { return task.status === "failed"; });
     if (!failed.length) return snapshot(operation);
-    const current = latestByClient.get(operation.clientId);
-    if (current && current !== operation && current.status === "running") {
-      throw clientGenerationError("CONTENT_GENERATION_CLIENT_BUSY", "当前客户已有文章生成任务正在运行");
-    }
+    const indexes = failed.map(function(task) { return task.index; });
     failed.forEach(function(task) { task.status = "pending"; task.error = null; });
-    operation.status = "running";
-    operation.controller = new AbortController();
-    latestByClient.set(operation.clientId, operation);
-    emit(operation);
-    operation.promise = runOperation(operation).catch(function(error) {
-      operation.tasks.forEach(function(task) {
-        if (task.status === "pending" || task.status === "running") {
-          task.status = "failed";
-          task.error = safeError(error);
-        }
-      });
-      finalize(operation);
-      return snapshot(operation);
-    });
-    return snapshot(operation);
+    return launch(operation, indexes);
   }
 
   async function waitForOperation(operationId) {
@@ -444,19 +560,24 @@ function createClientGenerationService(options) {
 
   async function dispose() {
     if (disposed) return;
-    disposed = true;
+    shuttingDown = true;
     const active = Array.from(operations.values()).filter(function(operation) { return operation.status === "running"; });
     active.forEach(function(operation) { operation.controller.abort(); });
     await Promise.allSettled(active.map(function(operation) { return operation.promise; }));
+    persist();
+    disposed = true;
     listeners.clear();
     operations.clear();
     latestByClient.clear();
     terminalOperationIds.length = 0;
   }
 
+  hydrate();
+
   return {
     start: start,
     getState: getState,
+    continuePending: continuePending,
     retryFailed: retryFailed,
     waitForOperation: waitForOperation,
     generateArticle: generateArticle,

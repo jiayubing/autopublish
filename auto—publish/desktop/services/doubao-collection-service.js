@@ -3,6 +3,7 @@ const { createResearchStore } = require("../../src/content/research-store");
 const { createDoubaoBrowserAdapter } = require("../../src/content/doubao-browser-adapter");
 const { createDoubaoCollectionService: createSourceCollectionService } = require("../../src/content/doubao-collection-service");
 const { createDoubaoCollectionQueue } = require("../../src/content/doubao-collection-queue");
+const { createDoubaoCollectionBatchStore } = require("../../src/content/doubao-collection-batch-store");
 const { pwSessionConfig } = require("../../src/core/playwright");
 const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
@@ -43,7 +44,9 @@ function createDoubaoCollectionDesktopService(options) {
     researchStore: researchStore,
     browserAdapter: browserAdapter
   });
+  const recoveryStore = opts.recoveryStore || createDoubaoCollectionBatchStore({ workspaceRoot: workspaceRoot });
   const queue = opts.queue || createDoubaoCollectionQueue({
+    stateStore: recoveryStore,
     collectOne: function(input) { return collectionService.collectOne(input); }
   });
   let disposePromise = null;
