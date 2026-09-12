@@ -182,9 +182,13 @@ function createPublicationSuccessPrimitive(context) {
       throw fail("PUBLICATION_ARCHIVE_ARTICLES_INVALID");
     if (!articleIds.length) return Object.freeze([]);
     const placeholders = articleIds.map(() => "?").join(",");
+    const evidenceColumn =
+      options && options.summary
+        ? "json_remove(e.evidence_json, '$.body')"
+        : "e.evidence_json";
     const rows = db
       .prepare(
-        `SELECT p.publication_id,a.attempt_id,p.article_id,e.evidence_json FROM publication_records p JOIN publication_attempts a ON a.publication_id=p.publication_id AND a.status='published' LEFT JOIN remote_evidence e ON e.attempt_id=a.attempt_id AND e.remote_id=('publication-success:' || a.attempt_id) WHERE p.article_id IN(${placeholders}) AND p.status='published' ORDER BY p.article_id,p.updated_at,p.publication_id`,
+        `SELECT p.publication_id,a.attempt_id,p.article_id,${evidenceColumn} evidence_json FROM publication_records p JOIN publication_attempts a ON a.publication_id=p.publication_id AND a.status='published' LEFT JOIN remote_evidence e ON e.attempt_id=a.attempt_id AND e.remote_id=('publication-success:' || a.attempt_id) WHERE p.article_id IN(${placeholders}) AND p.status='published' ORDER BY p.article_id,p.updated_at,p.publication_id`,
       )
       .all(...articleIds);
     const seen = new Set();
@@ -199,10 +203,15 @@ function createPublicationSuccessPrimitive(context) {
           articleId: row.article_id,
           status: "published",
           firstWins: true,
-          publicationEvidence: parseEvidence(
-            fromText(row.evidence_json),
-            options && options.allowLegacy === true,
-          ),
+          publicationEvidence:
+            options && options.summary
+              ? domain.parsePublicationEvidenceSummary(
+                  fromText(row.evidence_json),
+                )
+              : parseEvidence(
+                  fromText(row.evidence_json),
+                  options && options.allowLegacy === true,
+                ),
         }),
       );
     }

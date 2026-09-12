@@ -15,7 +15,7 @@ import {
   selectableArticles,
 } from "../../article-history-logic";
 import type {
-  PublicationArchiveEntry,
+  PublicationArchiveSummary,
   PublicationHistoryRecord,
 } from "../../types/publication";
 import type { ArticleSummary } from "../../types/generation";
@@ -165,7 +165,7 @@ export default function GeneratedArticlesView({
   }, [publicationRecords]);
 
   const publicationArchivesByArticle = useMemo(() => {
-    const grouped = new Map<string, PublicationArchiveEntry[]>();
+    const grouped = new Map<string, PublicationArchiveSummary[]>();
     publishedArchives.forEach((archive) => {
       const articleId = archive.publicationEvidence.articleIdentityV1.articleId;
       grouped.set(articleId, [
@@ -654,6 +654,8 @@ export default function GeneratedArticlesView({
       />
 
       <PublicationHistoryDrawer
+        loadArchives={commands.getPublishedArticleArchives}
+        workspaceScopeKey={workspaceScopeKey}
         article={drawerArticle}
         records={
           drawerArticle

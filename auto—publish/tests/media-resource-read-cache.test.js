@@ -32,6 +32,13 @@ test("resource pages reuse a file version and observe replace, corruption and de
   store.getAll().resources[0].name = "caller changed";
   assert.equal(store.getAll().resources[0].name, "Resource 0");
   assert.equal(reads, 1);
+  let normalized = 0;
+  const project = resource => { normalized++; return { ...resource }; };
+  const snapshot = store.getResourceSnapshot(project);
+  assert.equal(store.getResourceSnapshot(project), snapshot);
+  assert.equal(normalized, 25);
+  assert.equal(Object.isFrozen(snapshot), true);
+  assert.equal(Object.isFrozen(snapshot[0]), true);
   writer.setAll([{ resourceId: "new", name: "Replacement", price: 1 }]);
   assert.equal(service.getCachedResourcePage({}).items[0].name, "Replacement");
   assert.equal(reads, 2);

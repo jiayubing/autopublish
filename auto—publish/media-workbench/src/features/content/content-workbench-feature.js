@@ -128,6 +128,7 @@ export function createContentWorkbenchFeature(adapters = {}) {
     saveArticle: management.commands.saveArticle,
   });
   const libraryCommands = Object.freeze({
+    getPublishedArticleArchives: management.commands.getPublishedArticleArchives,
     searchArticles: management.commands.searchArticles,
     ...sources.commands,
     getArticleEditor: management.commands.getArticleEditor,

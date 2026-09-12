@@ -44,6 +44,7 @@ const {
 } = require("../src/infrastructure/operational-store/operational-store");
 
 const CHANNELS = [
+  "content:get-published-article-archives",
   "content:get-client-groups",
   "content:update-client-groups",
   "content:list-clients",

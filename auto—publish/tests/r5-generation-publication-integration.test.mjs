@@ -213,7 +213,9 @@ test("R5 generated articles cross ordinary submission and partial admission surv
   const published = await runtime.snapshot.get(CLIENTS[0]);
   const publishedArchive = published.publishedArchives[0];
   assert.equal(published.workflowByArticle[articleRefs[0].articleId].stage, "published");
-  assert.equal(publishedArchive.publicationEvidence.body, runtime.contentStore.getArticle(CLIENTS[0], articleRefs[0].articleId).content);
+  assert.equal("body" in publishedArchive.publicationEvidence, false);
+  const detail = await runtime.snapshot.getPublishedArchives(articleRefs[0]);
+  assert.equal(detail.archives[0].publicationEvidence.body, runtime.contentStore.getArticle(CLIENTS[0], articleRefs[0].articleId).content);
   assert.equal(publishedArchive.publicationEvidence.targetSnapshotV1.platformId, "hepan");
   assert.equal(publishedArchive.publicationEvidence.firstPublishedAt, PUBLISHED_AT);
   assert.equal(publishedArchive.publicationEvidence.firstPublishedAtSource, "provider_event_time");

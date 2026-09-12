@@ -11,6 +11,7 @@ import type {
   ContentSubmissionPlatform,
   PublicationHistoryRecord,
   PublicationHistorySummary,
+  PublicationArchiveSummary,
   PublicationArchiveEntry,
 } from "../../types/publication";
 import type { ArticleSummary, GeneratedContentArticle } from "../../types/generation";
@@ -43,7 +44,7 @@ export type ArticleManagementReadModel = {
   articles: ArticleSummary[];
   trash: ArticleTrashRecord[];
   publicationRecords: PublicationHistoryRecord[];
-  publishedArchives?: PublicationArchiveEntry[];
+  publishedArchives?: PublicationArchiveSummary[];
   workflowByArticle: Record<
     string,
     {
@@ -111,6 +112,7 @@ export type ArticleRemovalSessionCommands = {
 
 export type GeneratedArticlesCommands = SubmissionIntakeCommands &
   ArticleRemovalSessionCommands & {
+    getPublishedArticleArchives: (input: { clientId: string; articleId: string }) => Promise<{ archives: PublicationArchiveEntry[] } | ContentCommandStaleResult>;
     searchArticles: (input: { clientId: string; search: string }) => Promise<{ articleIds: string[] } | ContentCommandStaleResult>;
     openPublicationUrl: (input: {
       publicationId: string;

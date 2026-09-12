@@ -20,6 +20,8 @@
 
 ## 最近已完成的本地计划
 
+- [读模型后续性能优化](../.scratch/read-model-audit/FOLLOWUP-PLAN.md)：2026-09-12 完成；[测量与最终验证](../.scratch/read-model-audit/FOLLOWUP-RESULTS.md)。
+
 - [读模型与数据访问修复](../.scratch/read-model-audit/PLAN.md)：2026-09-12 完成；[修复与最终证据](../.scratch/read-model-audit/REMEDIATION.md)。
 
 - [代码库治理](../.scratch/codebase-governance/PLAN.md)：2026-09-10 完成；[项目审查修复与最终证据](../.scratch/codebase-governance/REMEDIATION-2026-09-10.md)。

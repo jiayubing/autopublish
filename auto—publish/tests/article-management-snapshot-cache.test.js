@@ -144,7 +144,7 @@ it("failed identity, publication, order or archive reads never become empty cach
         publications: [publication("client-a")], submissionItems: [], orders: [],
       }),
     },
-    publishedArchiveQueries: { listPublishedArchives: () => read("archives", archives) },
+    publishedArchiveQueries: { listPublishedArchiveSummaries: () => read("archives", archives) },
   });
   await service.get("client-a");
   for (const [source, code] of [

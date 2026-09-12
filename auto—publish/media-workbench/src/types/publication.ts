@@ -112,6 +112,8 @@ export interface PublicationEvidenceV2 extends Omit<
   remoteId: string | null;
 }
 export type PublicationEvidence = PublicationEvidenceV1 | PublicationEvidenceV2;
+export type PublicationEvidenceSummary =
+  Omit<PublicationEvidenceV1, "body"> | Omit<PublicationEvidenceV2, "body">;
 export interface TerminalTargetV1 {
   version: 1;
   articleIdentityV1: { version: 1; clientId: string; articleId: string };
@@ -173,6 +175,12 @@ export interface PublicationArchiveEntry {
       "MANUAL_CONFIRMED_NO_LOCATOR" | "RECORDED" | "UNKNOWN_LEGACY";
   };
   terminalTargetV1: TerminalTargetV1;
+}
+export interface PublicationArchiveSummary extends Omit<
+  PublicationArchiveEntry,
+  "publicationEvidence"
+> {
+  publicationEvidence: PublicationEvidenceSummary;
 }
 
 export interface ArticleSelection {
@@ -713,7 +721,7 @@ export interface ArticleManagementSnapshot {
   matchingArticleIds?: string[];
   trash: ArticleTrashRecord[];
   publicationRecords: PublicationHistoryRecord[];
-  publishedArchives?: PublicationArchiveEntry[];
+  publishedArchives?: PublicationArchiveSummary[];
   submissionPlatforms: ContentSubmissionPlatform[];
   workflowByArticle: Record<
     string,

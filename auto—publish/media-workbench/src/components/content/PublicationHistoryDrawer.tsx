@@ -1,10 +1,11 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { AlertTriangle, ExternalLink, X } from "lucide-react";
 import { publishedTimeFactFromEvidence } from "../../article-history-logic";
 import { formatBeijingTime } from "../../time-format";
 import type {
   PublicationArchiveEntry,
-  PublicationEvidence,
+  PublicationEvidenceSummary,
+  PublicationArchiveSummary,
   PublicationHistoryRecord,
   PublicationHistorySummary,
 } from "../../types/publication";
@@ -18,7 +19,9 @@ import {
 interface PublicationHistoryDrawerProps {
   article: ArticleSummary | null;
   records: PublicationHistoryRecord[];
-  archives?: PublicationArchiveEntry[];
+  archives?: PublicationArchiveSummary[];
+  workspaceScopeKey?: string;
+  loadArchives: (input: { clientId: string; articleId: string }) => Promise<{ archives: PublicationArchiveEntry[] } | import("../../types/content").ContentCommandStaleResult>;
   summary?: PublicationHistorySummary;
   onClose: () => void;
   onOpenPublicationUrl?: (record: PublicationHistoryRecord) => void;
@@ -55,7 +58,7 @@ function missingReasonLabel(reason: string | undefined): string {
 }
 
 function evidenceTime(
-  evidence: PublicationEvidence,
+  evidence: PublicationEvidenceSummary,
   value: string | null,
   missingReason: string,
 ): string {
@@ -66,7 +69,7 @@ function evidenceTime(
 
 function targetFacts(
   record: PublicationHistoryRecord,
-  evidence: PublicationEvidence | undefined,
+  evidence: PublicationEvidenceSummary | undefined,
 ): { platform: string; account: string | null } {
   if (evidence?.targetSnapshotV1.kind === "platform") {
     return {
@@ -89,7 +92,7 @@ function targetFacts(
   };
 }
 
-function evidenceSourceLabel(evidence: PublicationEvidence | undefined): string {
+function evidenceSourceLabel(evidence: PublicationEvidenceSummary | undefined): string {
   if (!evidence) return "执行记录";
   if (evidence.firstPublishedAtSource === "manual_positive_evidence_time")
     return "人工确认";
@@ -102,7 +105,7 @@ function evidenceSourceLabel(evidence: PublicationEvidence | undefined): string 
 
 function publicationTime(
   record: PublicationHistoryRecord,
-  evidence: PublicationEvidence | undefined,
+  evidence: PublicationEvidenceSummary | undefined,
 ): { label: string; value: string } {
   const fact = publishedTimeFactFromEvidence(evidence);
   if (fact)
@@ -135,6 +138,8 @@ function resultExplanation(
 export default function PublicationHistoryDrawer({
   article,
   records,
+  workspaceScopeKey,
+  loadArchives,
   archives = [],
   summary: snapshotSummary,
   onClose,
@@ -143,6 +148,22 @@ export default function PublicationHistoryDrawer({
   publicationUrlError,
   onOpenAttention,
 }: PublicationHistoryDrawerProps) {
+  const [retry, setRetry] = useState(0);
+  const [detail, setDetail] = useState<{ key: string; archives: PublicationArchiveEntry[]; error?: string } | null>(null);
+  const key = JSON.stringify([workspaceScopeKey, article?.clientId, article?.id]);
+  const hasArchives = archives.length > 0;
+  useEffect(() => {
+    setDetail(null);
+    if (!article || !hasArchives) return;
+    let current = true;
+    void Promise.resolve().then(() => loadArchives({ clientId: article.clientId, articleId: article.id })).then(result => {
+      if (!current) return;
+      if (!("archives" in result) || !archives.every(summary => result.archives.some(entry => entry.publicationId === summary.publicationId)))
+        throw new Error("PUBLICATION_ARCHIVE_UNAVAILABLE");
+      setDetail({ key, archives: result.archives });
+    }).catch(() => { if (current) setDetail({ key, archives: [], error: "发布档案加载失败，请重试。" }); });
+    return () => { current = false; };
+  }, [key, hasArchives, loadArchives, retry]);
   if (!article) return null;
   const summary = snapshotSummary || null;
   const summaryLabel = summary
@@ -225,6 +246,7 @@ export default function PublicationHistoryDrawer({
               (entry) => entry.publicationId === record.publicationId,
             );
             const evidence = archive?.publicationEvidence;
+            const fullEvidence = detail?.key === key ? detail.archives.find(entry => entry.publicationId === record.publicationId)?.publicationEvidence : null;
             const locator = archive?.publicationLocator;
             const remoteUrl = safeRemoteUrl(
               locator?.remoteUrl || evidence?.remoteUrl || attempt.remoteUrl,
@@ -354,7 +376,9 @@ export default function PublicationHistoryDrawer({
                         <span className="text-slate-400">投稿正文</span>
                         {evidence.contentAvailable ? (
                           <pre className="max-h-64 min-w-0 overflow-auto whitespace-pre-wrap break-words font-sans text-slate-700">
-                            {evidence.body}
+                            {fullEvidence ? fullEvidence.body : detail?.key === key && detail.error ? (
+                              <span role="alert">{detail.error} <button type="button" onClick={() => setRetry(value => value + 1)}>重试加载档案</button></span>
+                            ) : <span role="status">正在加载投稿正文…</span>}
                           </pre>
                         ) : (
                           <span className="min-w-0 break-words text-amber-700">

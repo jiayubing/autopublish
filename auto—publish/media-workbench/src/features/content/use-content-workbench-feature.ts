@@ -1,6 +1,7 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import {
   getArticleManagementSnapshot,
+  getPublishedArticleArchives,
   openPublicationUrl,
   getArticleEditor,
   createContentQuestion,
@@ -83,6 +84,7 @@ export function useContentWorkbenchFeature() {
       getClientDetails: getContentClientDetails,
       listResearchMetadata: listContentResearchMetadata,
       loadManagement: getArticleManagementSnapshot,
+      getPublishedArticleArchives,
       searchArticles: async (input: { clientId: string; search: string }) => {
         const result = await getArticleManagementSnapshot(input.clientId, input.search);
         if (!Array.isArray(result.matchingArticleIds)) throw new Error("文章搜索结果不可用，请重试。");

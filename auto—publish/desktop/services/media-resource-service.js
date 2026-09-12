@@ -97,7 +97,7 @@ function createMediaResourceService(opts) {
   function getCachedResourcePage(opts) {
     var page = normalizePositiveInteger(opts && opts.page, 1);
     var pageSize = boundedPageSize(opts && opts.pageSize, DEFAULT_PAGE_SIZE);
-    return paginate(readCachedResources(resourceStore), page, pageSize);
+    return structuredClone(paginate(readCachedResources(resourceStore), page, pageSize));
   }
 
   function searchResourcePage(opts) {
@@ -114,7 +114,7 @@ function createMediaResourceService(opts) {
           });
       });
     }
-    return paginate(resources, page, pageSize);
+    return structuredClone(paginate(resources, page, pageSize));
   }
 
   async function refreshResources(opts) {
@@ -436,9 +436,15 @@ function createClient(opts) {
 }
 
 function readCachedResources(store) {
+  if (store && typeof store.getResourceSnapshot === "function") return store.getResourceSnapshot(projectCachedResource);
   var data = store ? store.getAll() : null;
   var resources = Array.isArray(data && data.resources) ? data.resources : [];
   return resources.map(normalizeResourceShape).filter(hasResourceId);
+}
+
+function projectCachedResource(resource) {
+  const value = normalizeResourceShape(resource);
+  return hasResourceId(value) ? value : null;
 }
 
 function readPoolEntries(store) {

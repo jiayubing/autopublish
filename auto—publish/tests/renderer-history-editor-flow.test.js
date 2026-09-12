@@ -393,6 +393,67 @@ function historyPane(page) {
 }
 
 describe("renderer history editor flow", { concurrency: false }, () => {
+  it("loads publication body only after opening details and recovers from a failed load", async () => {
+    const { page, fixture } = await openHistory();
+    try {
+      await page.evaluate(() => {
+        const api = window.desktopConsole.content;
+        const original = api.getArticleManagementSnapshot;
+        const state = window.__historyEditorFlow;
+        const article = state.articles.find(item => item.id === "published-article");
+        const evidence = {
+          version: 1, articleIdentityV1: { version: 1, clientId: article.clientId, articleId: article.id },
+          customerSnapshotV1: { version: 1, clientId: article.clientId, displayName: "测试客户" },
+          contentAvailable: true, title: "历史投稿标题", contentFingerprint: "a".repeat(64),
+          targetSnapshotV1: { version: 1, kind: "platform", platformId: "fixture-platform", platformName: "测试发布目标", accountProfileId: "account", accountLabel: "历史账号" },
+          resultCode: "REGULAR_ACCEPTED", submittedAt: article.createdAt, submittedAtSource: "regular_remote_call_started",
+          firstPublishedAt: article.createdAt, firstPublishedAtSource: "provider_event_time",
+          imageSummaryV1: { deliveryMode: "text_only", images: [], decisionKind: "initial" },
+          orderNumber: null, remoteUrl: "https://example.invalid/fixture-publication", missingReasons: [],
+          safeEvidenceRefs: [{ kind: "PREPARED_SUBMISSION", fingerprint: "a".repeat(64) }],
+        };
+        const archive = { publicationId: "publication-published-article", attemptId: "attempt-published-1", publicationEvidence: evidence,
+          publicationLocator: { remoteId: null, remoteUrl: evidence.remoteUrl, displayStatus: "RECORDED" }, terminalTargetV1: {} };
+        api.getArticleManagementSnapshot = async input => {
+          const result = await original(input);
+          result.data.publishedArchives = [archive];
+          return result;
+        };
+        window.archiveReads = 0;
+        api.getPublishedArticleArchives = input => {
+          window.archiveReads++;
+          if (window.archiveReads === 1) return new Promise((_, reject) => { window.failArchiveRead = () => reject(new Error("fixture failure")); });
+          return Promise.resolve({ ok: true, data: { ...input, archives: [{ ...archive, publicationEvidence: { ...evidence, body: "不可变的历史投稿正文" } }] } });
+        };
+        state.revision++;
+
+      });
+      await page.getByRole("button", { name: "刷新客户与模板" }).click();
+      await page.getByRole("status").filter({ hasText: "客户与模板已刷新" }).waitFor();
+      await page.getByRole("tab", { name: "已发布 (1)" }).click();
+      await page.getByRole("button", { name: /测试发布目标/ }).click();
+      assert.equal(await page.evaluate(() => window.archiveReads), 0);
+      await page.getByRole("button", { name: "发布详情", exact: true }).click();
+      await page.getByText("投稿内容快照", { exact: true }).click();
+      await page.getByText("正在加载投稿正文…").waitFor();
+      await page.evaluate(() => window.failArchiveRead());
+      await page.getByRole("button", { name: "重试加载档案" }).click();
+      await page.getByText("不可变的历史投稿正文", { exact: true }).waitFor();
+      assert.equal(await page.evaluate(() => window.archiveReads), 2);
+      await page.getByRole("button", { name: "关闭发布详情", exact: true }).last().click();
+      await page.evaluate(() => {
+        const original = window.desktopConsole.content.getPublishedArticleArchives;
+        window.desktopConsole.content.getPublishedArticleArchives = input => new Promise(resolve => {
+          window.finishLateArchive = () => original(input).then(resolve);
+        });
+      });
+      await page.getByRole("button", { name: "发布详情", exact: true }).click();
+      await page.waitForFunction(() => typeof window.finishLateArchive === "function");
+      await page.getByRole("button", { name: "关闭发布详情", exact: true }).last().click();
+      await page.evaluate(() => window.finishLateArchive());
+      assert.equal(await page.getByText("不可变的历史投稿正文", { exact: true }).count(), 0);
+    } finally { await page.close(); }
+  });
   it("searches body text from summaries, reports failures and ignores a late prior search", async () => {
     const { page } = await openHistory();
     try {

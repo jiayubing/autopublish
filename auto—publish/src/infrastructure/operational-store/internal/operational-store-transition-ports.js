@@ -112,6 +112,8 @@ function exposeOperationalStoreTransitionPorts(options, dependencies) {
   });
   holder.publishedArchiveQueries = Object.freeze({
     listPublishedArchives: publishedArchiveQueries.listPublishedArchives,
+    listPublishedArchiveSummaries:
+      publishedArchiveQueries.listPublishedArchiveSummaries,
   });
 }
 

@@ -247,6 +247,40 @@ function createContentPathPolicy(workspaceRoot, options) {
     return { directory: directory, owner: path.join(directory, "owner.json") };
   }
 
+  // A batch read validates the directory chain once, then checks that none of
+  // those directories was replaced before resolving each individual file.
+  function articleReadScope(clientId) {
+    const probe = articlePaths(clientId, "list-probe", false);
+    let current = path.resolve(workspace.root);
+    const directories = [current];
+    for (const part of path.relative(current, probe.directory).split(path.sep).filter(Boolean)) {
+      current = path.join(current, part);
+      directories.push(current);
+    }
+    const identities = directories.map(directory => {
+      try {
+        const stat = fsApi.lstatSync(directory);
+        return { directory, dev: stat.dev, ino: stat.ino };
+      } catch (error) { if (isMissing(error)) return { directory, missing: true }; throw error; }
+    });
+    return Object.freeze({
+      directory: probe.directory,
+      filesFor(articleId) {
+        assertSegment(articleId, "ARTICLE_PATH_OUT_OF_BOUNDS", "article id");
+        for (const identity of identities) {
+          let stat;
+          try { stat = fsApi.lstatSync(identity.directory); }
+          catch (error) { fail("ARTICLE_PATH_OUT_OF_BOUNDS", "Article directory changed during reading", error); }
+          if (identity.missing || !stat.isDirectory() || stat.isSymbolicLink() ||
+              identity.dev !== stat.dev || identity.ino !== stat.ino)
+            fail("ARTICLE_PATH_OUT_OF_BOUNDS", "Article directory changed during reading");
+        }
+        return { directory: probe.directory, json: path.join(probe.directory, articleId + ".json"),
+          markdown: path.join(probe.directory, articleId + ".md") };
+      },
+    });
+  }
+
   function trashRoot(create) {
     const autopublish = inspectDirectory(
       path.join(workspace.root, ".autopublish"),
@@ -458,6 +492,7 @@ function createContentPathPolicy(workspaceRoot, options) {
     assertWorkspaceRoot,
     assertRegularFile,
     articlePaths,
+    articleReadScope,
     articleLock,
     trashPaths,
     generationBatchDirectory,

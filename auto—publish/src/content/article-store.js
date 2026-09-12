@@ -130,8 +130,7 @@ function createArticleStore(workspaceRoot, options) {
     });
   }
 
-  function listArticleIds(clientId) {
-    const files = articlePaths(clientId, "list-probe", false);
+  function listArticleIds(clientId, files = articlePaths(clientId, "list-probe", false)) {
     if (!exists(files.directory)) return [];
     const names = [...new Set(fsApi.readdirSync(files.directory, { withFileTypes: true })
       .filter(function (entry) { return entry.isFile() && !entry.isSymbolicLink() && (entry.name.toLowerCase().endsWith(".json") || (entry.name.endsWith(".journal") && !entry.name.endsWith(".trash.journal"))); })
@@ -140,8 +139,14 @@ function createArticleStore(workspaceRoot, options) {
   }
 
   function listArticles(clientId) {
-    return listArticleIds(clientId).map(function (articleId) {
-      const itemFiles = articlePaths(clientId, articleId, false);
+    const scope = policy.articleReadScope(clientId);
+    return listArticleIds(clientId, scope).map(articleId => readListedArticle(clientId, articleId, scope.filesFor(articleId))).sort(function (left, right) {
+      const created = Date.parse(right.createdAt) - Date.parse(left.createdAt);
+      return created || String(left.id).localeCompare(String(right.id));
+    });
+  }
+
+  function readListedArticle(clientId, articleId, itemFiles) {
       // A stable pair can be read without creating a write lock. Any concurrent
       // replacement or recovery marker falls back to the existing locked read.
       const before = readVersion(itemFiles);
@@ -158,10 +163,6 @@ function createArticleStore(workspaceRoot, options) {
         transactions.recoverArticlePair(itemFiles);
         return readArticle(clientId, articleId);
       });
-    }).sort(function (left, right) {
-      const created = Date.parse(right.createdAt) - Date.parse(left.createdAt);
-      return created || String(left.id).localeCompare(String(right.id));
-    });
   }
 
   function readVersion(files, locked = false) {
@@ -182,7 +183,10 @@ function createArticleStore(workspaceRoot, options) {
   }
 
   function getArticleSummary(clientId, articleId) {
-    const files = articlePaths(clientId, articleId, false);
+    return readArticleSummary(clientId, articleId, articlePaths(clientId, articleId, false));
+  }
+
+  function readArticleSummary(clientId, articleId, files) {
     const version = readVersion(files);
     const cacheFile = files.json.slice(0, -5) + ".summary";
     if (version === null) {
@@ -246,17 +250,45 @@ function createArticleStore(workspaceRoot, options) {
   }
 
   function listArticleSummaries(clientId) {
-    return listArticleIds(clientId).map(id => getArticleSummary(clientId, id)).sort(function(left, right) {
+    const scope = policy.articleReadScope(clientId);
+    return listArticleIds(clientId, scope).map(id => readArticleSummary(clientId, id, scope.filesFor(id))).sort(function(left, right) {
       return Date.parse(right.createdAt) - Date.parse(left.createdAt) || String(left.id).localeCompare(String(right.id));
     });
   }
 
-  function searchArticleIds(clientId, query) {
+  async function searchArticleIds(clientId, query, options = {}) {
     const term = String(query || "").trim().toLowerCase();
-    if (!term) return listArticleIds(clientId);
-    return listArticles(clientId).filter(article =>
-      `${article.title} ${article.content} ${article.platform} ${article.templateId} ${article.templateSnapshot?.name || ""} ${article.templateSnapshot?.scenario || ""} ${article.templateSnapshot?.body || ""}`
-        .toLowerCase().includes(term)).map(article => article.id);
+    const scope = policy.articleReadScope(clientId);
+    const ids = listArticleIds(clientId, scope);
+    if (!term) return ids;
+    const matches = [];
+    let deadline = performance.now() + 8;
+    for (const id of ids) {
+      if (options.signal && options.signal.aborted) throw storeError("ARTICLE_SEARCH_SUPERSEDED");
+      const article = readListedArticle(clientId, id, scope.filesFor(id));
+      const text = [article.title, article.content, article.platform, article.templateId,
+        article.templateSnapshot?.name || "", article.templateSnapshot?.scenario || "", article.templateSnapshot?.body || ""].join(" ");
+      if (!term || text.toLowerCase().includes(term)) matches.push(id);
+      if (performance.now() >= deadline) {
+        await new Promise(resolve => setImmediate(resolve));
+        deadline = performance.now() + 8;
+      }
+    }
+    return matches;
+  }
+
+  async function listArticleSummariesAsync(clientId) {
+    const scope = policy.articleReadScope(clientId);
+    const result = [];
+    let deadline = performance.now() + 8;
+    for (const id of listArticleIds(clientId, scope)) {
+      result.push(readArticleSummary(clientId, id, scope.filesFor(id)));
+      if (performance.now() >= deadline) {
+        await new Promise(resolve => setImmediate(resolve));
+        deadline = performance.now() + 8;
+      }
+    }
+    return result.sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt) || String(left.id).localeCompare(String(right.id)));
   }
 
   function getTrashedPaths(clientId, articleId, create) {
@@ -546,6 +578,7 @@ function createArticleStore(workspaceRoot, options) {
     listArticles,
     getArticleSummary,
     listArticleSummaries,
+    listArticleSummariesAsync,
     searchArticleIds,
     moveArticleToTrash,
     restoreTrashedArticle,

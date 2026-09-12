@@ -83,11 +83,13 @@ const domainTypeSymbols = {
     "PublicationEvidenceV1",
     "PublicationEvidenceV2",
     "PublicationEvidence",
+    "PublicationEvidenceSummary",
     "TerminalTargetV1",
     "ClosedTargetV1",
     "TombstoneIdentityV1",
     "DeletionTransactionIdentityV1",
     "PublicationArchiveEntry",
+    "PublicationArchiveSummary",
     "ArticleSelection",
     "ArticleRemovalTransactionStatus",
     "ArticleRemovalTransaction",
@@ -175,6 +177,7 @@ const domainTypeSymbols = {
 };
 
 const typeAliasSymbols = new Set([
+  "PublicationEvidenceSummary",
   "AiProviderSource",
   "ArticleRemovalTransactionStatus",
   "ClientGenerationOperationStatus",

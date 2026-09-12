@@ -209,6 +209,10 @@ function denseArray(value) {
 }
 
 function parsePublicationEvidenceV1(input, options) {
+  return parseEvidenceV1(input, options, false);
+}
+
+function parseEvidenceV1(input, options, summary) {
   const allowLegacy = Boolean(options && options.allowLegacy);
   exact(input, [
     "version",
@@ -216,7 +220,7 @@ function parsePublicationEvidenceV1(input, options) {
     "customerSnapshotV1",
     "contentAvailable",
     "title",
-    "body",
+    ...(summary ? [] : ["body"]),
     "contentFingerprint",
     "targetSnapshotV1",
     "resultCode",
@@ -262,20 +266,25 @@ function parsePublicationEvidenceV1(input, options) {
   if (input.contentAvailable) {
     if (
       !displayText(input.title) ||
-      typeof input.body !== "string" ||
-      input.body.length < 1 ||
-      input.body.length > 200000 ||
-      /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(input.body) ||
+      (!summary &&
+        (typeof input.body !== "string" ||
+          input.body.length < 1 ||
+          input.body.length > 200000 ||
+          /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(input.body))) ||
       !FINGERPRINT.test(input.contentFingerprint) ||
-      input.contentFingerprint !==
-        preparedContentFingerprint({ title: input.title, body: input.body }) ||
+      (!summary &&
+        input.contentFingerprint !==
+          preparedContentFingerprint({
+            title: input.title,
+            body: input.body,
+          })) ||
       contentMissing
     )
       invalid();
   } else if (
     !allowLegacy ||
     input.title !== null ||
-    input.body !== null ||
+    (!summary && input.body !== null) ||
     input.contentFingerprint !== null ||
     !contentMissing
   ) {
@@ -360,7 +369,7 @@ function parsePublicationEvidenceV1(input, options) {
     customerSnapshotV1,
     contentAvailable: input.contentAvailable,
     title: input.title,
-    body: input.body,
+    ...(summary ? {} : { body: input.body }),
     contentFingerprint: input.contentFingerprint,
     targetSnapshotV1,
     resultCode: input.resultCode,
@@ -377,13 +386,17 @@ function parsePublicationEvidenceV1(input, options) {
 }
 
 function parsePublicationEvidenceV2(input, options) {
+  return parseEvidenceV2(input, options, false);
+}
+
+function parseEvidenceV2(input, options, summary) {
   exact(input, [
     "version",
     "articleIdentityV1",
     "customerSnapshotV1",
     "contentAvailable",
     "title",
-    "body",
+    ...(summary ? [] : ["body"]),
     "contentFingerprint",
     "targetSnapshotV1",
     "resultCode",
@@ -402,9 +415,10 @@ function parsePublicationEvidenceV2(input, options) {
   if (input.resultCode !== "REGULAR_ACCEPTED")
     invalid("PUBLICATION_EVIDENCE_V2_RESULT_INVALID");
   const { remoteId: inputRemoteId, ...v1Input } = input;
-  const parsedV1 = parsePublicationEvidenceV1(
+  const parsedV1 = parseEvidenceV1(
     { ...v1Input, version: 1 },
     options,
+    summary,
   );
   // V1 is deliberately closed.  V2 is the only online contract that can
   // preserve a regular platform's display-only remote identifier.
@@ -443,8 +457,23 @@ function parsePublicationEvidence(input, options) {
   return invalid("PUBLICATION_EVIDENCE_VERSION_UNSUPPORTED");
 }
 
+function parsePublicationEvidenceSummary(input) {
+  if (input && input.version === 1)
+    return parseEvidenceV1(input, { allowLegacy: true }, true);
+  if (input && input.version === 2)
+    return parseEvidenceV2(input, { allowLegacy: true }, true);
+  return invalid("PUBLICATION_EVIDENCE_VERSION_UNSUPPORTED");
+}
+
 function projectPublicationLocator(input) {
-  const evidence = parsePublicationEvidence(input, { allowLegacy: true });
+  return locatorFor(parsePublicationEvidence(input, { allowLegacy: true }));
+}
+
+function projectPublicationSummaryLocator(input) {
+  return locatorFor(parsePublicationEvidenceSummary(input));
+}
+
+function locatorFor(evidence) {
   const remoteId = evidence.version === 2 ? evidence.remoteId : null;
   const manualWithoutLocator =
     evidence.resultCode === "REGULAR_ACCEPTED" &&
@@ -496,6 +525,8 @@ module.exports = Object.freeze({
   parseCustomerSnapshotV1,
   parseImageSummaryV1,
   parsePublicationEvidence,
+  parsePublicationEvidenceSummary,
+  projectPublicationSummaryLocator,
   parsePublicationEvidenceV1,
   parsePublicationEvidenceV2,
   parsePublicationLocator,

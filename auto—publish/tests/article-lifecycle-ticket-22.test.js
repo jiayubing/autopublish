@@ -455,7 +455,7 @@ test("published archive query is read-only and covers regular accepted and paid 
 
   for (const fixture of [regular, paid]) {
     const query = fixture.transitionPorts.publishedArchiveQueries;
-    assert.deepEqual(Object.keys(query), ["listPublishedArchives"]);
+    assert.deepEqual(Object.keys(query), ["listPublishedArchives", "listPublishedArchiveSummaries"]);
     const db = new DatabaseSync(fixture.store.databasePath, { readOnly: true });
     const before = db.prepare("SELECT COUNT(*) AS count FROM remote_evidence").get().count;
     db.close();
@@ -468,9 +468,54 @@ test("published archive query is read-only and covers regular accepted and paid 
     assert.equal(archives[0].publicationEvidence.body, fixture.evidence.body);
     assert.equal(archives[0].terminalTargetV1.terminalKind, "PUBLISHED");
     assert.equal(archives[0].terminalTargetV1.attemptId, archives[0].attemptId);
+    const summaries = query.listPublishedArchiveSummaries({ articleIds: [fixture.articleId] });
+    const { body, ...metadata } = archives[0].publicationEvidence;
+    assert.equal(body, fixture.evidence.body);
+    assert.deepEqual(summaries[0].publicationEvidence, metadata);
+    assert.equal("body" in summaries[0].publicationEvidence, false);
   }
   assert.equal(regular.evidence.resultCode, "REGULAR_ACCEPTED");
   assert.equal(paid.evidence.resultCode, "PAID_PUBLISHED");
+});
+
+test("archive detail is client-scoped and retains full evidence validation", async t => {
+  const fixture = regularPublishedFixture();
+  t.after(() => fixture.close());
+  const service = createArticleManagementSnapshot({ publishedArchiveQueries: fixture.transitionPorts.publishedArchiveQueries });
+  const ref = fixture.evidence.articleIdentityV1;
+  const result = await service.getPublishedArchives({ clientId: ref.clientId, articleId: ref.articleId });
+  assert.equal(result.archives[0].publicationEvidence.body, fixture.evidence.body);
+  await assert.rejects(service.getPublishedArchives({ clientId: "another-client", articleId: ref.articleId }), { code: "ARTICLE_MANAGEMENT_PUBLICATION_ARCHIVE_CLIENT_MISMATCH" });
+  const db = new DatabaseSync(fixture.store.databasePath);
+  try {
+    const row = db.prepare("SELECT evidence_id,evidence_json FROM remote_evidence WHERE remote_id LIKE 'publication-success:%'").get();
+    const damaged = JSON.parse(row.evidence_json);
+    damaged.body += " tampered";
+    db.prepare("UPDATE remote_evidence SET evidence_json=? WHERE evidence_id=?").run(JSON.stringify(damaged), row.evidence_id);
+    await assert.rejects(service.getPublishedArchives({ clientId: ref.clientId, articleId: ref.articleId }), { code: "PUBLICATION_SUCCESS_EVIDENCE_INVALID" });
+  } finally { db.close(); }
+});
+
+test("archive summary SQL never returns publication body bytes to JavaScript", t => {
+  const fixture = regularPublishedFixture();
+  t.after(() => fixture.close());
+  const probe = new DatabaseSync(":memory:");
+  const prototype = Object.getPrototypeOf(probe.prepare("SELECT 1"));
+  probe.close();
+  const original = prototype.all;
+  const evidenceRows = [];
+  prototype.all = function(...args) {
+    const result = original.apply(this, args);
+    for (const row of result) if (typeof row.evidence_json === "string") evidenceRows.push(JSON.parse(row.evidence_json));
+    return result;
+  };
+  try {
+    const summaries = fixture.transitionPorts.publishedArchiveQueries.listPublishedArchiveSummaries({ articleIds: [fixture.articleId] });
+    assert.equal(summaries.length, 1);
+    assert.equal(evidenceRows.length, 1);
+    assert.equal(Object.hasOwn(evidenceRows[0], "body"), false);
+    assert.equal(evidenceRows[0].contentFingerprint, fixture.evidence.contentFingerprint);
+  } finally { prototype.all = original; }
 });
 
 test("published archive remains immutable after a later paid aftercare observation", (t) => {
@@ -597,7 +642,8 @@ test("legacy unavailable evidence stays null and never falls back to current art
     publishedArchiveQueries: transitionPorts.publishedArchiveQueries,
   }).get({ clientId: "client-22" });
   const archived = snapshot.publishedArchives[0].publicationEvidence;
-  assert.equal(archived.body, null);
+  assert.equal("body" in archived, false);
+  assert.equal(transitionPorts.publishedArchiveQueries.listPublishedArchives({ articleIds: [articleId] })[0].publicationEvidence.body, null);
   assert.equal(archived.title, null);
   assert.equal(archived.firstPublishedAt, null);
   assert.equal(archived.submittedAt, null);
@@ -630,15 +676,15 @@ test("archive query and article-management snapshot preserve an empty client sta
   assert.deepEqual(snapshot.publishedArchives, []);
 });
 
-test("typed article-management archive field delegates V1 validation and rejects sensitive extras", () => {
+test("typed article-management summary omits the body and rejects sensitive extras", () => {
   const registry = createContractRegistry(articleManagementContracts);
   const contract = registry.byChannel("content:get-article-management-snapshot");
-  const evidence = domain.parsePublicationEvidenceV1(evidenceFixture());
+  const { body, ...evidence } = domain.parsePublicationEvidenceV1(evidenceFixture());
   const archive = {
     publicationId: "publication-22",
     attemptId: "attempt-22",
     publicationEvidence: evidence,
-    publicationLocator: domain.projectPublicationLocator(evidence),
+    publicationLocator: domain.projectPublicationSummaryLocator(evidence),
     terminalTargetV1: domain.parseTerminalTargetV1(terminalFixture()),
   };
   const data = {
@@ -652,7 +698,8 @@ test("typed article-management archive field delegates V1 validation and rejects
     workflowItems: [],
   };
   const encoded = registry.success(contract, data);
-  assert.equal(encoded.data.publishedArchives[0].publicationEvidence.body, "实际投稿正文");
+  assert.equal(body, "实际投稿正文");
+  assert.equal("body" in encoded.data.publishedArchives[0].publicationEvidence, false);
   assert.throws(
     () => registry.success(contract, Object.assign({}, data, {
       publishedArchives: [Object.assign({}, archive, { token: "secret" })],

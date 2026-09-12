@@ -9,6 +9,7 @@ const {
 } = require("./registry");
 const {
   parsePublicationEvidence,
+  parsePublicationEvidenceSummary,
   parsePublicationLocator,
 } = require("../../../src/domain/publication-evidence-contract");
 const {
@@ -95,6 +96,10 @@ const publishedArchive = exactObject({
   publicationLocator: publicationLocatorField,
   terminalTargetV1: terminalTargetField,
 });
+const publishedArchiveSummary = exactObject({
+  ...publishedArchive.fields,
+  publicationEvidence: customField(parsePublicationEvidenceSummary),
+});
 const submissionPlatform = exactObject({
   id,
   displayName: text(1000),
@@ -178,7 +183,7 @@ const managementSnapshot = exactObject({
   trash: arrayField(trashRecord, { max: 10000 }),
   publicationRecords: arrayField(publicationRecord, { max: 10000 }),
   publishedArchives: optionalField(
-    arrayField(publishedArchive, { max: 10000 }),
+    arrayField(publishedArchiveSummary, { max: 10000 }),
   ),
   submissionPlatforms: arrayField(submissionPlatform, { max: 1000 }),
   workflowItems: arrayField(exactObject({ articleId: id, workflow }), {
@@ -221,6 +226,14 @@ const publicationLinkErrors = Object.freeze({
 });
 
 const articleManagementContracts = Object.freeze([
+  contentContract({
+    capability: "content.getPublishedArticleArchives",
+    channel: "content:get-published-article-archives",
+    feature: "content", kind: "query",
+    request: exactObject({ clientId: id, articleId: id }),
+    success: exactObject({ clientId: id, articleId: id, archives: arrayField(publishedArchive, { max: 10000 }) }),
+    fromArgs: directArgs, toArgs: directInput,
+  }),
   contentContract({
     capability: "content.getArticleManagementSnapshot",
     channel: "content:get-article-management-snapshot",

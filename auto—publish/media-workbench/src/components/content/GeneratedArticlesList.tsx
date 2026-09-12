@@ -9,7 +9,7 @@ import {
 import type { ArticleSummary } from "../../types/generation";
 import type { ArticleWorkflowStage } from "../../article-workflow";
 import type {
-  PublicationArchiveEntry,
+  PublicationArchiveSummary,
   PublicationHistorySummary,
 } from "../../types/publication";
 import { publicationStatusLabel } from "../../publication-status";
@@ -41,7 +41,7 @@ interface GeneratedArticlesListProps {
       }
     | undefined
   >;
-  publishedArchives: PublicationArchiveEntry[];
+  publishedArchives: PublicationArchiveSummary[];
   publishedView: boolean;
   isArticleSelectable: (article: ArticleSummary) => boolean;
   isArticleSubmittable: (article: ArticleSummary) => boolean;

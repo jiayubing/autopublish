@@ -48,11 +48,12 @@ function createOperationalStorePublicationArchiveQuery(
     });
   }
 
-  function archiveFor(success) {
-    const evidence = domain.parsePublicationEvidence(
-      success.publicationEvidence,
-      { allowLegacy: true },
-    );
+  function archiveFor(success, summary = false) {
+    const evidence = (
+      summary
+        ? domain.parsePublicationEvidenceSummary
+        : domain.parsePublicationEvidence
+    )(success.publicationEvidence, { allowLegacy: true });
     let articleId;
     try {
       articleId = domain.ArticleId.serialize(
@@ -88,7 +89,9 @@ function createOperationalStorePublicationArchiveQuery(
       publicationId,
       attemptId: success.attemptId,
       publicationEvidence: evidence,
-      publicationLocator: domain.projectPublicationLocator(evidence),
+      publicationLocator: (summary
+        ? domain.projectPublicationSummaryLocator
+        : domain.projectPublicationLocator)(evidence),
       terminalTargetV1,
     });
   }
@@ -100,11 +103,26 @@ function createOperationalStorePublicationArchiveQuery(
         .listFirstPublicationSuccesses(articleIdsOf(input), {
           allowLegacy: true,
         })
-        .map(archiveFor),
+        .map((success) => archiveFor(success)),
     );
   }
 
-  return Object.freeze({ listPublishedArchives });
+  function listPublishedArchiveSummaries(input) {
+    open();
+    return Object.freeze(
+      publicationSuccess
+        .listFirstPublicationSuccesses(articleIdsOf(input), {
+          allowLegacy: true,
+          summary: true,
+        })
+        .map((success) => archiveFor(success, true)),
+    );
+  }
+
+  return Object.freeze({
+    listPublishedArchives,
+    listPublishedArchiveSummaries,
+  });
 }
 
 module.exports = { createOperationalStorePublicationArchiveQuery };

@@ -98,7 +98,6 @@ function sandboxManagementSnapshot() {
           },
           contentAvailable: true,
           title: "实际投稿标题",
-          body: "实际投稿正文",
           contentFingerprint:
             "1a88d16fedaddbfebe52843e4ba68264466658f0b16d4ea8b414d29cf9da98a3",
           targetSnapshotV1: {

@@ -27,7 +27,7 @@ function registerArticleManagementIpc(deps) {
     getRevision: values.getWorkspaceDataRevision,
     getCacheRevision: values.getArticleReadRevision,
     aiContentService: values.aiContentService,
-    listArticles: values.contentStore && values.contentStore.listArticleSummaries,
+    listArticles: values.contentStore && values.contentStore.listArticleSummariesAsync,
     searchArticleIds: values.contentStore && values.contentStore.searchArticleIds,
     submissionPlatformDirectory: values.submissionPlatformDirectory || createSubmissionTargetCatalog({
       directoryEntries: values.directoryEntries,
@@ -55,6 +55,9 @@ function registerArticleManagementIpc(deps) {
   });
   values.ipcMain.handle("content:get-article-management-snapshot", function(event, input) {
     return wrap(async function() { return projectManagementSnapshot(await snapshot.get(validateInput(input))); });
+  });
+  values.ipcMain.handle("content:get-published-article-archives", function(event, input) {
+    return wrap(() => snapshot.getPublishedArchives(input));
   });
   values.ipcMain.handle("content:list-regular-submission-permissions", function(event, input) {
     return wrap(async function() {

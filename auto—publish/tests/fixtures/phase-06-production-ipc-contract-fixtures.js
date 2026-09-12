@@ -1025,6 +1025,13 @@ const rawProductionIpcContractFixtures = [
     result: contentManagementFixture(),
   },
   {
+    capability: "content.getPublishedArticleArchives",
+    channel: "content:get-published-article-archives",
+    owner: "content",
+    request: { clientId: "client-1", articleId: "article-1" },
+    result: { clientId: "client-1", articleId: "article-1", archives: [] },
+  },
+  {
     capability: "content.openPublicationUrl",
     channel: "content:open-publication-url",
     owner: "content",

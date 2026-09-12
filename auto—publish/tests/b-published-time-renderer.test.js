@@ -12,6 +12,8 @@ const root = path.resolve(__dirname, "..");
 
 function fakeReact() {
   return {
+    useState: initial => [initial, () => {}],
+    useEffect: () => {},
     createElement(type, props, ...children) {
       return { type, props: props || {}, children: children.flat(Infinity) };
     },

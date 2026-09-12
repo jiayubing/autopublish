@@ -140,7 +140,7 @@ function safePublishedArchive(entry, scopedClientId) {
   let evidence;
   let terminal;
   try {
-    evidence = domain.parsePublicationEvidence(value.publicationEvidence, {
+    evidence = domain.parsePublicationEvidenceSummary(value.publicationEvidence, {
       allowLegacy: true,
     });
     domain.parsePublicationLocator(value.publicationLocator);
@@ -162,7 +162,7 @@ function safePublishedArchive(entry, scopedClientId) {
     publicationId,
     attemptId,
     publicationEvidence: evidence,
-    publicationLocator: domain.projectPublicationLocator(evidence),
+    publicationLocator: domain.projectPublicationSummaryLocator(evidence),
     terminalTargetV1: terminal,
   };
 }
@@ -170,6 +170,7 @@ function safePublishedArchive(entry, scopedClientId) {
 function createArticleManagementSnapshot(options) {
   const opts = options || {};
   const cache = new Map();
+  const searches = new Map();
   const latestCacheKeyByClient = new Map();
   const latestCacheRevisionByClient = new Map();
   const workspaceIdentity = String(
@@ -209,8 +210,14 @@ function createArticleManagementSnapshot(options) {
     );
     const revision = Number(getRevision()) || 0;
     if (input && typeof input.search === "string" && input.search.trim()) {
-      const snapshot = await get({ clientId });
-      const matchingArticleIds = await opts.searchArticleIds(clientId, input.search);
+      searches.get(clientId)?.abort();
+      const search = new AbortController();
+      searches.set(clientId, search);
+      let snapshot, matchingArticleIds;
+      try {
+        snapshot = await get({ clientId });
+        matchingArticleIds = await opts.searchArticleIds(clientId, input.search, { signal: search.signal });
+      } finally { if (searches.get(clientId) === search) searches.delete(clientId); }
       if (Number(getRevision()) !== snapshot.revision) {
         if (retry) throw snapshotError("ARTICLE_MANAGEMENT_SNAPSHOT_STALE");
         return get(input, true);
@@ -249,10 +256,10 @@ function createArticleManagementSnapshot(options) {
     let publishedArchives = [];
     if (
       publishedArchiveQueries &&
-      typeof publishedArchiveQueries.listPublishedArchives === "function"
+      typeof publishedArchiveQueries.listPublishedArchiveSummaries === "function"
     ) {
       const archiveResult =
-        await publishedArchiveQueries.listPublishedArchives({ articleIds });
+        await publishedArchiveQueries.listPublishedArchiveSummaries({ articleIds });
       if (!Array.isArray(archiveResult))
         throw snapshotError("ARTICLE_MANAGEMENT_PUBLICATION_ARCHIVE_INVALID");
       publishedArchives = archiveResult
@@ -406,6 +413,8 @@ function createArticleManagementSnapshot(options) {
   }
 
   function invalidate() {
+    searches.forEach(search => search.abort());
+    searches.clear();
     cache.clear();
     latestCacheKeyByClient.clear();
     latestCacheRevisionByClient.clear();
@@ -413,7 +422,20 @@ function createArticleManagementSnapshot(options) {
   function cacheSize() {
     return cache.size;
   }
-  return { get, invalidate, cacheSize };
+  async function getPublishedArchives(input) {
+    const clientId = assertClientId(input && input.clientId);
+    const articleId = assertClientId(input && input.articleId);
+    if (!publishedArchiveQueries || typeof publishedArchiveQueries.listPublishedArchives !== "function")
+      throw snapshotError("ARTICLE_MANAGEMENT_PUBLICATION_ARCHIVE_INVALID");
+    const archives = await publishedArchiveQueries.listPublishedArchives({ articleIds: [articleId] });
+    for (const archive of archives) {
+      if (archive.publicationEvidence.articleIdentityV1.clientId !== clientId ||
+          archive.publicationEvidence.articleIdentityV1.articleId !== articleId)
+        throw snapshotError("ARTICLE_MANAGEMENT_PUBLICATION_ARCHIVE_CLIENT_MISMATCH");
+    }
+    return { clientId, articleId, archives };
+  }
+  return { get, getPublishedArchives, invalidate, cacheSize };
 }
 
 module.exports = { createArticleManagementSnapshot };

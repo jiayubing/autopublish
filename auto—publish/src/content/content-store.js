@@ -85,7 +85,7 @@ function createContentStore(options) {
     supportsIdempotentRemovalOperation: articleStore.supportsIdempotentRemovalOperation === true,
   };
 
-  const readOnlyDelegated = ["getArticle", "listArticles", "getArticleSummary", "listArticleSummaries", "searchArticleIds", "listTrashedArticles", "getTrashedTombstone", "isArticleTrashed", "isArticleRemoved"];
+  const readOnlyDelegated = ["getArticle", "listArticles", "getArticleSummary", "listArticleSummaries", "listArticleSummariesAsync", "searchArticleIds", "listTrashedArticles", "getTrashedTombstone", "isArticleTrashed", "isArticleRemoved"];
   readOnlyDelegated.forEach(function(name) {
     if (typeof articleStore[name] === "function") api[name] = articleStore[name].bind(articleStore);
   });

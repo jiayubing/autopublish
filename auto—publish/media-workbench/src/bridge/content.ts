@@ -1,5 +1,6 @@
 import type {
   ArticleManagementSnapshot,
+  PublicationArchiveEntry,
   ContentSubmissionBatchRecord,
   PaidMediaAdmissionResult,
   PaidMediaConfirmationInput,
@@ -96,6 +97,16 @@ type CoreContentApi = {
     clientId: string;
     search?: string;
   }) => Promise<ContentIpcResponse<ArticleManagementSnapshotWire>>;
+  getPublishedArticleArchives: (input: {
+    clientId: string;
+    articleId: string;
+  }) => Promise<
+    ContentIpcResponse<{
+      clientId: string;
+      articleId: string;
+      archives: PublicationArchiveEntry[];
+    }>
+  >;
   openPublicationUrl: (input: {
     publicationId: string;
   }) => Promise<ContentIpcResponse<{ completed: boolean }>>;
@@ -573,6 +584,20 @@ export async function openPublicationUrl(input: {
   return callCoreContent(
     (api) => requireBridgeMethod(api.openPublicationUrl)(input),
     "Unable to open publication URL",
+  );
+}
+
+export async function getPublishedArticleArchives(input: {
+  clientId: string;
+  articleId: string;
+}): Promise<{
+  clientId: string;
+  articleId: string;
+  archives: PublicationArchiveEntry[];
+}> {
+  return callCoreContent(
+    (api) => requireBridgeMethod(api.getPublishedArticleArchives)(input),
+    "发布档案加载失败，请重试。",
   );
 }
 

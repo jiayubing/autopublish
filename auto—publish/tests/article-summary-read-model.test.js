@@ -54,7 +54,7 @@ test("scoped titles and summaries never enumerate another client or load bodies 
   assert.equal(reopened.getArticle("a", "a-0").content.length, 16384);
 });
 
-test("legacy cache rebuild, edits from another store, corrupt sources and search preserve source semantics", t => {
+test("legacy cache rebuild, edits from another store, corrupt sources and search preserve source semantics", async t => {
   const f = fixture(t);
   f.content.createArticle(f.article("a", 0));
   // Locate the derived file from observed public summary reads, independent of workspace layout.
@@ -72,7 +72,7 @@ test("legacy cache rebuild, edits from another store, corrupt sources and search
   assert.throws(() => f.content.saveArticle({ ...f.article("a", 0), content: "   " }), { code: "ARTICLE_INVALID" });
   assert.equal(reopened.getArticleSummary("a", "a-0").hasContent, true);
   f.content.saveArticle(f.article("a", 0));
-  assert.deepEqual(reopened.searchArticleIds("a", "body-only-search-token"), ["a-0"]);
+  assert.deepEqual(await reopened.searchArticleIds("a", "body-only-search-token"), ["a-0"]);
   const bodyFile = f.reads.find(file => file.endsWith(".md"));
   fs.writeFileSync(bodyFile, "broken source pair");
   assert.throws(() => reopened.getArticleSummary("a", "a-0"), { code: "ARTICLE_INVALID" });
@@ -168,4 +168,36 @@ test("independent attention facts for one article share a single bounded summary
   assert.equal(query.list({ clientId: "a" }).items.length, 2);
   assert.equal(f.reads.length, 1);
   assert.ok(f.reads[0].endsWith("a-0.summary"));
+});
+
+test("large summary and full-text queries yield to the event loop and cancel superseded work", async t => {
+  const f = fixture(t);
+  for (let i = 0; i < 120; i++) f.content.createArticle(f.article("a", i, "searchable " + "x".repeat(8192)));
+  let ticks = 0;
+  const timer = setInterval(() => ticks++, 0);
+  try {
+    const summary = await f.open().listArticleSummariesAsync("a");
+    assert.equal(summary.length, 120);
+    assert.ok(ticks > 0, "summary reading must let timers run");
+    ticks = 0;
+    const found = await f.content.searchArticleIds("a", "searchable");
+    assert.equal(found.length, 120);
+    assert.ok(ticks > 0, "search must let timers run");
+    const controller = new AbortController();
+    const pending = f.content.searchArticleIds("a", "searchable", { signal: controller.signal });
+    controller.abort();
+    await assert.rejects(pending, { code: "ARTICLE_SEARCH_SUPERSEDED" });
+  } finally { clearInterval(timer); }
+});
+
+test("a replacement client directory between search slices fails closed", async t => {
+  const f = fixture(t);
+  for (let i = 0; i < 80; i++) f.content.createArticle(f.article("a", i));
+  f.open().getArticleSummary("a", "a-0");
+  const directory = path.dirname(f.reads.find(file => file.endsWith(".summary")));
+  const moved = directory + "-original";
+  const pending = f.content.searchArticleIds("a", "body");
+  fs.renameSync(directory, moved);
+  fs.mkdirSync(directory);
+  await assert.rejects(pending, { code: "ARTICLE_PATH_OUT_OF_BOUNDS" });
 });

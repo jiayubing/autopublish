@@ -104,8 +104,8 @@ function fixture(articleCount) {
     active.sqlResultBytes += bytes(result);
     return result;
   }
-  function query(name, action) {
-    const result = action();
+  async function query(name, action) {
+    const result = await action();
     if (active) {
       active.queries[name] += 1;
       active.queryResultBytes += bytes(result);
@@ -117,10 +117,10 @@ function fixture(articleCount) {
     const readContent = createContentStore({ articleStore: createArticleStore(root, { fs: articleFs }), listClientIds: () => CLIENTS });
     const service = createArticleManagementSnapshot({
       workspaceRoot: root, getRevision: invalidation.getRevision,
-      listArticles: (clientId) => query("articles", () => readContent.listArticleSummaries(clientId)),
+      listArticles: (clientId) => query("articles", () => readContent.listArticleSummariesAsync(clientId)),
       listTrash: (clientId) => query("trash", () => content.listTrashedArticles(clientId)),
       operationalStore: { listArticleLifecycleFacts: (input) => query("facts", () => store.listArticleLifecycleFacts(input)) },
-      publishedArchiveQueries: { listPublishedArchives: (input) => query("archives", () => ports.publishedArchiveQueries.listPublishedArchives(input)) },
+      publishedArchiveQueries: { listPublishedArchiveSummaries: (input) => query("archives", () => ports.publishedArchiveQueries.listPublishedArchiveSummaries(input)) },
     });
     return { service, invalidation };
   }

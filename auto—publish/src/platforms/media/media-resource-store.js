@@ -30,14 +30,14 @@ class MediaResourceStore {
   }
 
   /** Read the cache file and return parsed data, or null when it is missing. */
-  _read() {
+  _read(copy = true) {
     let raw;
     let version;
     try {
       const stat = fs.statSync(this.filePath, { bigint: true });
       version = [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(':');
       if (this.cachedRead && this.cachedRead.version === version)
-        return structuredClone(this.cachedRead.value);
+        return copy ? structuredClone(this.cachedRead.value) : this.cachedRead.value;
       raw = fs.readFileSync(this.filePath, 'utf-8');
     } catch (error) {
       this.cachedRead = null;
@@ -52,7 +52,7 @@ class MediaResourceStore {
       // The pre-read version prevents a concurrent replacement from being
       // accepted as the cache key of the old contents on the next query.
       this.cachedRead = { version, value: parsed };
-      return structuredClone(parsed);
+      return copy ? structuredClone(parsed) : parsed;
     } catch (_) {
       diagnose('MEDIA_RESOURCE_STORE_CORRUPT', 'parse');
       throw storeError('MEDIA_RESOURCE_STORE_CORRUPT');
@@ -90,6 +90,24 @@ class MediaResourceStore {
    */
   getAll() {
     return this._read();
+  }
+
+  getResourceSnapshot(project) {
+    const data = this._read(false);
+    if (!data) return Object.freeze([]);
+    if (this.cachedRead.project !== project) {
+      const freeze = value => {
+        if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+          Object.values(value).forEach(freeze);
+          Object.freeze(value);
+        }
+        return value;
+      };
+      this.cachedRead.resources = freeze((Array.isArray(data.resources) ? data.resources : [])
+        .map(project).filter(Boolean));
+      this.cachedRead.project = project;
+    }
+    return this.cachedRead.resources;
   }
 
   /**

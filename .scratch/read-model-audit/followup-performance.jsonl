@@ -1,0 +1,4 @@
+{"label":"summary-cold-1000","elapsedMs":923.5277999999998,"timerTicks":108,"maxTimerGapMs":10.05909999999949,"count":1000}
+{"label":"summary-warm-1000","elapsedMs":173.19949999999972,"timerTicks":20,"maxTimerGapMs":9.052899999999681,"count":1000}
+{"label":"full-text-search-1000","elapsedMs":1939.231499999999,"timerTicks":210,"maxTimerGapMs":11.585100000000239,"count":1000}
+{"label":"media-10000-page-100","firstMs":11.800799999999072,"warmMedianMs":0.08870000000024447,"repeats":30}
