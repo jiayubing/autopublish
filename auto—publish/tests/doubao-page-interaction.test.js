@@ -3,6 +3,7 @@ const { it } = require("node:test");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const vm = require("node:vm");
 const { chromium } = require("playwright");
 const { createDoubaoBrowserAdapter } = require("../src/content/doubao-browser-adapter");
 
@@ -12,7 +13,8 @@ it("real DOM collection confirms a new user message and binds its answer in a lo
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage();
-  await page.route("**/*", (route) => route.abort());
+  await page.route("**/*", (route) => route.fulfill({ contentType: "text/html", body: "<main></main>" }));
+  await page.goto("https://www.doubao.com/chat/100");
   await page.setContent('<main id="messages"></main><button style="display:none">登录</button><textarea></textarea>');
   await page.evaluate(() => {
     const messages = document.getElementById("messages");
@@ -40,7 +42,9 @@ it("real DOM collection confirms a new user message and binds its answer in a lo
     sleep: async () => {}, runtime: {
       open: async () => {},
       evaluate: async (input) => {
-        const result = await new Function("page", `return (async () => {${input.script}})();`)(page);
+        if (input.action === "new-conversation") return { url: page.url() };
+        // Match the CLI sandbox: browser globals exist only inside page.evaluate.
+        const result = await vm.runInNewContext(`(async () => {${input.script}})()`, { page });
         if (input.action === "send-question") {
           acknowledgedId = result.questionMessageId;
           // A later identical manual question must not change this task's identity.
@@ -56,7 +60,7 @@ it("real DOM collection confirms a new user message and binds its answer in a lo
       }
     }
   });
-  assert.equal((await adapter.collect("测试问题")).answerText, "这是本题明确对应且完整的合成回答。");
+  assert.equal((await adapter.collect({ clientId: "synthetic", question: "测试问题" })).answerText, "这是本题明确对应且完整的合成回答。");
   assert.equal(acknowledgedId, "sent-question");
   assert.equal(await page.locator('[data-role="user"]').count(), 2);
   await page.setContent('<textarea></textarea><div role="dialog">请完成人机验证</div>');
@@ -124,16 +128,15 @@ it(`the send command refuses ${boundary} changes between readiness and Enter`, a
       press: async () => assert.fail("must not submit in the changed conversation"),
     }) }),
   };
-  const stored = new Map([["client-a", "https://www.doubao.com/chat/100"]]);
   const adapter = createDoubaoBrowserAdapter({
     session: { session: "synthetic" }, diagnosticsDir: root,
     timeoutMs: boundary === "deadline" ? 20 : 2000, clock: () => 0,
-    conversationStore: { get: id => stored.get(id), set: (id, url) => stored.set(id, url) },
-    runtime: { open: async () => {}, evaluate: input => new Function("page", `return (async () => {${input.script}})();`)(input.action === "send-question" ? wrappedPage : page) },
+    runtime: { open: async () => {}, evaluate: input => input.action === "new-conversation"
+      ? { url: page.url() }
+      : new Function("page", `return (async () => {${input.script}})();`)(input.action === "send-question" ? wrappedPage : page) },
   });
   await assert.rejects(adapter.collect({ clientId: "client-a", question: "Synthetic private question" }), boundary === "navigation" ? /DOUBAO_CONVERSATION_CHANGED/ : /DOUBAO_SEND_DEADLINE_EXPIRED/);
   assert.equal(fills, 0);
-  assert.equal(stored.get("client-a"), "https://www.doubao.com/chat/100");
 });
 
 }

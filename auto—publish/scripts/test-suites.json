@@ -52,7 +52,7 @@
     "tests/platform-account-binding-store.test.js",
     "tests/doubao-collection-queue.test.js",
     "tests/doubao-page-parser.test.js",
-    "tests/doubao-conversation-store.test.js",
+    "tests/doubao-conversation-url.test.js",
     "tests/workspace-bootstrap-service.test.js",
     "tests/workspace-runtime-lifecycle.test.js",
     "tests/workspace-validator.test.js",

@@ -78,6 +78,12 @@ function installQuestionFixture(page, options = {}) {
       executeCalls: 0,
       resolvePreview: null,
     };
+    const queueFlow = { queue: null, resumeCalls: 0 };
+    const queueListeners = new Set();
+    queueFlow.publishQueue = (queue) => {
+      queueFlow.queue = queue;
+      queueListeners.forEach(listener => listener({ type: "state", state: queue, ...queue }));
+    };
     const content = {
       listClients: () => result({ clients }),
       getClientDetails: (clientId) => result({ client: clients.find((item) => item.id === clientId), research: research[clientId] || [] }),
@@ -111,7 +117,7 @@ function installQuestionFixture(page, options = {}) {
       getDoubaoLoginState: () => result({ loginState: { status: "unknown" } }),
       getDoubaoQueueState: () =>
         result({
-          queue: {
+          queue: queueFlow.queue || {
             status: "idle",
             currentTaskId: null,
             completed: 0,
@@ -120,7 +126,8 @@ function installQuestionFixture(page, options = {}) {
             tasks: [],
           },
         }),
-      onDoubaoQueueState: () => () => {},
+      onDoubaoQueueState: listener => { queueListeners.add(listener); return () => queueListeners.delete(listener); },
+      resumeDoubaoBatch: () => { queueFlow.resumeCalls += 1; return result({ queue: queueFlow.queue }); },
       listGenerationBatches: () => result({ batches: [] }),
       getGenerationBatchState: () => result({ state: "idle", status: "idle" }),
       previewGenerationBatch: () => result({}),
@@ -188,6 +195,7 @@ function installQuestionFixture(page, options = {}) {
         result({ items: [], counts: { total: 0, actionable: 0 } }),
     };
     window.__questionFixture = questionFlow;
+    window.__questionQueue = queueFlow;
     window.desktopConsole = {
       auth: {
         getState: () =>
@@ -274,6 +282,47 @@ describe(
       ({ browser } = await startRenderer({ port: 4174 }));
     });
     after(closeRenderer);
+
+    it("distinguishes current collection from retained failures and supports pause, details and empty completion", async function(t) {
+      const page = await browser.newPage({ viewport: { width: 1024, height: 800 } });
+      t.after(() => page.close());
+      page.setDefaultTimeout(8000);
+      await installQuestionFixture(page);
+      await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
+      await page.locator("#nav-item-content-production").click();
+      const bar = page.locator(".collection-task-bar");
+      await bar.getByText("尚未开始采集", { exact: true }).waitFor();
+      const failed = { id: "task-1", clientId: "client-a", questionId: "question-1", status: "failed", error: { code: "DOUBAO_TIMEOUT", message: "合成超时信息" } };
+      const second = { id: "task-2", clientId: "client-b", questionId: "question-b", status: "pending", error: null };
+      const state = { status: "paused", currentTaskId: null, completed: 1, total: 2, waitRemainingMs: 0, tasks: [failed, second] };
+      const publish = queue => page.evaluate(value => window.__questionQueue.publishQueue(value), queue);
+      await publish(state);
+      await bar.getByText(/采集已暂停；检查页面后点击继续/).waitFor();
+      await bar.getByRole("button", { name: "继续批量采集" }).click();
+      assert.equal(await page.evaluate(() => window.__questionQueue.resumeCalls), 1);
+      await publish({ ...state, status: "running", currentTaskId: second.id, tasks: [failed, { ...second, status: "running" }] });
+      await bar.getByText("正在采集：客户 B · 第 2 题", { exact: true }).waitFor();
+      assert.match(await bar.innerText(), /成功 0 · 失败 1/);
+      assert.equal(await bar.getByText(/合成超时信息/).count(), 0);
+      await bar.getByRole("button", { name: "失败详情（1）" }).click();
+      const details = page.getByRole("region", { name: "采集失败详情" });
+      await details.getByText(/DOUBAO_TIMEOUT 合成超时信息/).waitFor();
+      const box = await details.boundingBox();
+      assert.ok(box && box.y >= 0 && box.x >= 0 && box.x + box.width <= 1024);
+      const evidenceDir = path.join(rootDir, "build", "evidence");
+      require("node:fs").mkdirSync(evidenceDir, { recursive: true });
+      await page.screenshot({ path: path.join(evidenceDir, "doubao-task-bar.png") });
+      await details.getByRole("button", { name: "关闭详情" }).click();
+      await publish({ ...state, status: "running", waitRemainingMs: 4000 });
+      await bar.getByText("等待下一题，采集仍在继续", { exact: true }).waitFor();
+      await publish({ ...state, status: "completed", completed: 2, tasks: [failed, { ...second, status: "succeeded" }] });
+      await bar.getByText(/成功 1 · 失败 1/).waitFor();
+      assert.equal(await bar.getByRole("button", { name: "重试失败任务" }).isEnabled(), true);
+      await publish({ status: "completed", currentTaskId: null, completed: 0, total: 0, waitRemainingMs: 0, tasks: [] });
+      await bar.getByText(/成功 0 · 失败 0/).waitFor();
+      assert.equal(await bar.getByRole("button", { name: "重试失败任务" }).isDisabled(), true);
+      assert.equal(await bar.getByRole("button", { name: /失败详情/ }).count(), 0);
+    });
 
     it("opens, closes, restores focus, resets references, and survives client switching", async function () {
       const page = await browser.newPage({

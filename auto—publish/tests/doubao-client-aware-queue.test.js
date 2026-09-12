@@ -36,8 +36,10 @@ describe("doubao client-aware queue policy", function() {
 
   it("pauses on a Doubao challenge and retries the same task after resume", async function() {
     let attempts = 0;
+    const runIds = [];
     const queue = createDoubaoCollectionQueue({
-      collectOne: async function() {
+      collectOne: async function(input) {
+        runIds.push(input.collectionRunId);
         attempts += 1;
         if (attempts === 1) {
           const error = new Error("human action required");
@@ -63,14 +65,18 @@ describe("doubao client-aware queue policy", function() {
     assert.equal(result.tasks[0].status, "succeeded");
     assert.equal(result.completed, 1);
     assert.equal(attempts, 2);
+    assert.equal(typeof runIds[0], "string");
+    assert.equal(runIds[0], runIds[1]);
   });
 
   it("retries failed tasks in place without growing the queue", async function(t) {
     let allowSuccess = false;
     const calls = [];
+    const runIds = [];
     const queue = createDoubaoCollectionQueue({
       collectOne: async function(input) {
         calls.push(input.questionId);
+        runIds.push(input.collectionRunId);
         if (input.questionId === "q1" && !allowSuccess) {
           const error = new Error("temporary failure");
           error.code = "DOUBAO_PAGE_ERROR";
@@ -115,5 +121,9 @@ describe("doubao client-aware queue policy", function() {
     assert.equal(retried.tasks.length, 2);
     assert.equal(retried.completed, 2);
     assert.equal(retried.tasks.every((task) => task.status === "succeeded"), true);
+    assert.equal(runIds[0], runIds[1], "continuing pending work keeps the same conversation run");
+    assert.notEqual(runIds[1], runIds[2], "explicit retry creates a fresh conversation run");
+    await queue.start([{ clientId: "client-a", questionId: "q3" }]);
+    assert.notEqual(runIds[2], runIds[3], "a new batch never adopts the previous run");
   });
 });

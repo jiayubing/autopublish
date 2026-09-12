@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { reportDiagnostic } = require("../diagnostics/diagnostic-producer");
 
-const { validConversationUrl } = require("./doubao-conversation-store");
+const { validConversationUrl } = require("./doubao-conversation-url");
 
 const { DIRS, PW } = require("../../scripts/config");
 const { createPlaywrightRuntime, pwSessionConfig } = require("../core/playwright");
@@ -58,16 +58,14 @@ function inspectPageScript() {
     "return await page.evaluate(function() {",
     "  var visible = function(node) {",
     "    if (!node) return false;",
-    "    var style = window.getComputedStyle ? window.getComputedStyle(node) : null;",
     "    var rect = typeof node.getBoundingClientRect === 'function' ? node.getBoundingClientRect() : null;",
+    "    if (rect && (rect.width <= 0 || rect.height <= 0)) return false;",
     "    var current = node;",
     "    while (current) {",
     "      var ariaHidden = (current.getAttribute('aria-hidden') || '').toLowerCase();",
     "      if (ariaHidden === 'true') return false;",
     "      var currentStyle = window.getComputedStyle ? window.getComputedStyle(current) : null;",
     "      if (currentStyle && (currentStyle.display === 'none' || currentStyle.visibility === 'hidden' || currentStyle.visibility === 'collapse' || Number(currentStyle.opacity) === 0)) return false;",
-    "      var currentRect = typeof current.getBoundingClientRect === 'function' ? current.getBoundingClientRect() : null;",
-    "      if (currentRect && (currentRect.width <= 0 || currentRect.height <= 0)) return false;",
     "      current = current.parentElement;",
     "    }",
     "    return true;",
@@ -148,9 +146,11 @@ function inspectPageScript() {
     "  });",
     "  var challenge = /验证码|安全验证|人机验证|captcha|challenge/i.test(statusText);",
     "  var errorMatch = statusText.match(/(?:加载失败|出错了|服务异常|网络错误)[^\\n]*/i);",
+    "  var inputs = Array.from(document.querySelectorAll('textarea, input[type=\"text\"], [contenteditable=\"true\"]'));",
     "  return {",
     "    url: location.href,",
-    "    inputAvailable: Array.from(document.querySelectorAll('textarea, input[type=\"text\"], [contenteditable=\"true\"]')).some(visible),",
+    "    inputAvailable: inputs.some(visible),",
+    "    inputCandidateCount: inputs.length,",
     "    loginRequired: loginRequired,",
     "    generating: generating,",
     "    challenge: challenge,",
@@ -166,17 +166,21 @@ function sendQuestionScript(questionJson, expectedUrl, deadline) {
     "var question = " + questionJson + ";",
     "var expectedUrl = " + JSON.stringify(expectedUrl || null) + ";",
     "var deadline = " + JSON.stringify(deadline) + ";",
-    "var assertSendAllowed = function() {",
+    "var assertSendAllowed = async function() {",
     "  if (Date.now() >= deadline) throw new Error('DOUBAO_SEND_DEADLINE_EXPIRED');",
-    "  if (expectedUrl && (new URL(page.url()).origin !== new URL(expectedUrl).origin || new URL(page.url()).pathname.replace(/\\/$/, '') !== new URL(expectedUrl).pathname.replace(/\\/$/, ''))) throw new Error('DOUBAO_CONVERSATION_CHANGED');",
+    "  if (expectedUrl && !await page.evaluate(function(expected) {",
+    "    var target = new URL(expected);",
+    "    return location.origin === target.origin && location.pathname.replace(/\\/$/, '') === target.pathname.replace(/\\/$/, '');",
+    "  }, expectedUrl)) throw new Error('DOUBAO_CONVERSATION_CHANGED');",
+    "  if (Date.now() >= deadline) throw new Error('DOUBAO_SEND_DEADLINE_EXPIRED');",
     "};",
-    "assertSendAllowed();",
+    "await assertSendAllowed();",
     "var knownIds = await page.evaluate(function() { return Array.from(document.querySelectorAll('[data-message-id]')).map(function(node) { return node.getAttribute('data-message-id'); }); });",
     "var input = page.locator('textarea:visible, input[type=\"text\"]:visible, [contenteditable=\"true\"]:visible').first();",
     "await input.waitFor({ state: 'visible', timeout: 15000 });",
-    "assertSendAllowed();",
+    "await assertSendAllowed();",
     "await input.fill(question);",
-    "assertSendAllowed();",
+    "await assertSendAllowed();",
     "await input.press('Enter');",
     "var acknowledgement = await page.waitForFunction(function(value) {",
     "  var normalize = function(text) { return String(text || '').trim().replace(/\\s+/g, ' '); };",
@@ -272,11 +276,8 @@ function createDoubaoBrowserAdapter(options) {
   let sessionGeneration = 0;
   let pendingAnswer = null;
   let sessionResetRequired = false;
-  const conversationStore = opts.conversationStore || {
-    get: function() { return null; },
-    set: function() { return false; },
-    remove: function() { return false; }
-  };
+  const conversationStore = new Map();
+  let collectionRunId;
 
   async function openPage(input) {
     return runtime.open(Object.assign({
@@ -335,6 +336,8 @@ function createDoubaoBrowserAdapter(options) {
       capturedAt: now(),
       status: classifyPage(page).status,
       messageCount: Array.isArray(page.messages) ? page.messages.length : 0,
+      inputAvailable: page.inputAvailable === true,
+      inputCandidateCount: Number.isInteger(page.inputCandidateCount) ? page.inputCandidateCount : null,
       errorCode: error && error.code ? String(error.code) : "",
       ...(progress || {})
     };
@@ -405,6 +408,13 @@ function createDoubaoBrowserAdapter(options) {
         : input == null ? "" : input
     );
     if (!requestedQuestion.trim()) throw codedError("DOUBAO_INVALID_QUESTION", "Doubao question is required");
+
+    const requestedRunId = input && typeof input === "object" ? input.collectionRunId : undefined;
+    if (requestedRunId !== collectionRunId) {
+      conversationStore.clear();
+      pendingAnswer = null;
+      collectionRunId = requestedRunId;
+    }
 
     const startedAt = clock();
     const deadline = startedAt + timeoutMs;
@@ -556,6 +566,7 @@ function createDoubaoBrowserAdapter(options) {
     sessionReady = false;
     openingPromise = null;
     pendingAnswer = null;
+    conversationStore.clear();
     if (sessionResetRequired && !runtime.close)
       throw codedError("DOUBAO_SESSION_RESET_REQUIRED", "浏览器任务尚未确认结束，请关闭豆包浏览器后重试。");
     if (!runtime.close) return;

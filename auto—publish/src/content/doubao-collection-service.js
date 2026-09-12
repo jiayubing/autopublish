@@ -230,6 +230,7 @@ function createDoubaoCollectionService(deps) {
 
     const result = await browserAdapter.collect({
       clientId: input.clientId,
+      collectionRunId: input.collectionRunId,
       question: question.text
     });
     if (!result || typeof result !== "object" || Array.isArray(result)) {

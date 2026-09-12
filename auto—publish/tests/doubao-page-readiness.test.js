@@ -29,17 +29,18 @@ it("missing composer is unknown, not proof of logout or authentication", () => {
   assert.equal(classifyPage({ ...ready(), loginRequired: true }).status, "login_required");
 });
 
-it("new and saved client conversations wait for their composer without manual resume", async (t) => {
+it("new and current-run client conversations wait for their composer without manual resume", async (t) => {
   let elapsed = 0; let polls = 0; let sent = false;
-  let currentUrl = "https://www.doubao.com/chat/"; let nextId = 100; let savedUrl;
-  const actions = []; const urls = new Map();
+  let currentUrl = "https://www.doubao.com/chat/"; let nextId = 100;
+  const actions = [];
   const adapter = createDoubaoBrowserAdapter({
     session: SESSION, diagnosticsDir: temporary(t), timeoutMs: 100, intervalMs: 1,
     clock: () => elapsed, sleep: async (ms) => { elapsed += ms; },
-    conversationStore: { get: (clientId) => (savedUrl = urls.get(clientId)), set: (clientId, url) => urls.set(clientId, url) },
     runtime: { open: async () => {}, evaluate: async (input) => {
       if (["new-conversation", "switch-conversation"].includes(input.action)) {
-        currentUrl = input.action === "switch-conversation" ? savedUrl : "https://www.doubao.com/chat/";
+        await new Function("page", `return (async () => {${input.script}})();`)({
+          goto: async url => { currentUrl = url; }, url: () => currentUrl,
+        });
         actions.push(input.action); polls = 0; sent = false; return { url: currentUrl };
       }
       if (input.action === "send-question") {
@@ -162,6 +163,23 @@ it("Chromium: DOMContentLoaded before composer hydration does not require login 
   assert.equal((await adapter.collect({ clientId: "client-a", question: QUESTION })).answerText, ANSWER);
   assert.equal(sends, 1);
   assert.ok(polls >= 4);
+});
+
+it("Chromium: a visible composer remains usable inside display:contents or zero-size layout ancestors", async (t) => {
+  const browser = await chromium.launch({ headless: true });
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  await page.route("**/*", route => route.abort());
+  const inspect = () => new Function("page", `return (async () => {${inspectPageScript()}})();`)(page);
+  for (const wrapperStyle of ["display:contents", "height:0;width:0;overflow:visible"]) {
+    await page.setContent(`<div id="wrapper" style="${wrapperStyle}"><textarea style="position:fixed;bottom:20px;width:200px;height:40px"></textarea></div>`);
+    assert.equal(await page.locator("textarea").isVisible(), true);
+    assert.equal(classifyPage(await inspect()).status, "authenticated");
+    for (const hiddenStyle of ["display:none", "visibility:hidden", "opacity:0"]) {
+      await page.locator("#wrapper").evaluate((node, style) => { node.style.cssText = style; }, hiddenStyle);
+      assert.equal(classifyPage(await inspect()).status, "unknown");
+    }
+  }
 });
 
 it("Chromium: hidden inputs do not establish readiness; a later visible composer does", async (t) => {

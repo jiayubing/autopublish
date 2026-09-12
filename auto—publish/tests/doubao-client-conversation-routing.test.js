@@ -24,30 +24,13 @@ function snapshot(url, messages) {
 }
 
 describe("doubao client conversation routing", function() {
-  it("keeps one conversation for the same client and switches only when the client changes", async function() {
+  it("shares a conversation within a run and opens fresh conversations after a new run or close", async function() {
     const calls = [];
-    const stored = new Map();
     const histories = new Map();
-    let pendingSwitchUrl = null;
     let currentUrl = "https://www.doubao.com/chat/";
     let messages = [];
     let nextConversation = 1000;
     let draftConversation = null;
-
-    const conversationStore = {
-      get(clientId) {
-        pendingSwitchUrl = stored.get(clientId) || null;
-        return pendingSwitchUrl;
-      },
-      set(clientId, url) {
-        if (/\/chat\/\d+/.test(url)) stored.set(clientId, url);
-        return true;
-      },
-      remove(clientId) {
-        stored.delete(clientId);
-        return true;
-      },
-    };
 
     const runtime = {
       async open(input) {
@@ -65,7 +48,9 @@ describe("doubao client conversation routing", function() {
           return { url: currentUrl, created: true };
         }
         if (input.action === "switch-conversation") {
-          currentUrl = pendingSwitchUrl;
+          await new Function("page", `return (async () => {${input.script}})();`)({
+            goto: async url => { currentUrl = url; }, url: () => currentUrl,
+          });
           messages = (histories.get(currentUrl) || []).map((item) => ({ ...item }));
           return { url: currentUrl };
         }
@@ -93,13 +78,13 @@ describe("doubao client conversation routing", function() {
 
     const adapter = createDoubaoBrowserAdapter({
       runtime,
-      conversationStore,
       sleep: async function() {},
       clock: function() { return 0; },
       now: function() { return "2026-09-03T00:00:00.000Z"; },
     });
 
     await adapter.collect({ clientId: "client-a", question: "问题 A1" });
+    const firstUrl = currentUrl;
     await adapter.collect({ clientId: "client-a", question: "问题 A2" });
     assert.equal(
       calls.filter((call) => call[0] === "evaluate" && call[1] === "new-conversation").length,
@@ -115,14 +100,24 @@ describe("doubao client conversation routing", function() {
       calls.filter((call) => call[0] === "evaluate" && call[1] === "new-conversation").length,
       2,
     );
-    assert.notEqual(stored.get("client-a"), stored.get("client-b"));
+    assert.notEqual(firstUrl, currentUrl);
+
+    await adapter.collect({ clientId: "client-a", question: "问题 A3" });
+    assert.equal(currentUrl, firstUrl);
+
+    await adapter.collect({ clientId: "client-a", question: "问题 A4", collectionRunId: "next-run" });
+    assert.notEqual(currentUrl, firstUrl);
+    const secondUrl = currentUrl;
+    await adapter.collect({ clientId: "client-a", question: "问题 A5", collectionRunId: "next-run" });
+    assert.equal(currentUrl, secondUrl);
 
     await adapter.close();
-    await adapter.collect({ clientId: "client-a", question: "问题 A3" });
+    await adapter.collect({ clientId: "client-a", question: "问题 A6", collectionRunId: "next-run" });
+    assert.notEqual(currentUrl, secondUrl);
     assert.equal(
       calls.filter((call) => call[0] === "evaluate" && call[1] === "switch-conversation").length,
       1,
     );
-    assert.match(stored.get("client-a"), /^https:\/\/www\.doubao\.com\/chat\/\d+/);
+    assert.equal(calls.filter(call => call[1] === "new-conversation").length, 4);
   });
 });

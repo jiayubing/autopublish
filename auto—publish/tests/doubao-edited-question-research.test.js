@@ -84,10 +84,12 @@ describe("doubao edited-question research validity", function() {
     const saved = await value.service.collectOne({
       clientId: "client-a",
       questionId: "question-1",
+      collectionRunId: "synthetic-run",
     });
     assert.equal(saved.question, "修改后的问题文本");
     assert.deepEqual(value.collectInputs, [{
       clientId: "client-a",
+      collectionRunId: "synthetic-run",
       question: "修改后的问题文本",
     }]);
   });

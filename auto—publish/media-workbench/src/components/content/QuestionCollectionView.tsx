@@ -556,6 +556,7 @@ export default function QuestionCollectionView({
 
       <CollectionTaskBar
         queue={queue}
+        clients={clients}
         busy={collectionPending}
         onPause={() => void pauseCollection()}
         onResume={() => void resumeCollection()}

@@ -13,11 +13,15 @@ function fixture(t) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "doubao-resume-"));
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   const state = { url: A, sends: [], messages: [], challenge: false, loginRequired: false, afterSend: null, beforeInspect: null, opens: 0 };
-  const stored = new Map([["client-a", A]]);
   const runtime = {
     async open() { state.opens += 1; },
     async close() {},
     async evaluate(input) {
+      if (input.action === "new-conversation") {
+        state.url = A;
+        state.messages = [];
+        return { url: A };
+      }
       if (input.action === "switch-conversation") {
         state.url = A;
         return { url: A };
@@ -38,9 +42,8 @@ function fixture(t) {
   const adapter = createDoubaoBrowserAdapter({
     session: { session: "fixture", profileId: "fixture" }, diagnosticsDir: directory,
     intervalMs: 1, sleep: async () => {}, runtime,
-    conversationStore: { get: id => stored.get(id), set: (id, url) => stored.set(id, url) },
   });
-  return { state, stored, runtime, adapter };
+  return { state, runtime, adapter };
 }
 for (const interruption of ["challenge", "loginRequired"]) {
   test(`resume ${interruption} after acknowledged send waits for the original answer without resending`, async t => {
@@ -60,7 +63,7 @@ for (const interruption of ["challenge", "loginRequired"]) {
     assert.equal(pauses, 1);
     assert.equal(result.tasks[0].status, "succeeded");
     assert.equal(f.state.sends.length, 1);
-    assert.equal(f.stored.get("client-a"), A);
+    assert.equal(f.state.url, A);
   });
 }
 test("a pre-send challenge can resume normally and sends once", async t => {
@@ -78,14 +81,16 @@ test("manual navigation between questions routes back without overwriting the cl
   f.state.url = B;
   await f.adapter.collect({ clientId: "client-a", question: "Next question" });
   assert.deepEqual(f.state.sends.map(send => send.url), [A, A]);
-  assert.equal(f.stored.get("client-a"), A);
+  assert.equal(f.state.url, A);
 });
-test("navigation during answer collection fails closed and preserves the saved conversation", async t => {
+test("navigation during answer collection fails closed and does not adopt the unrelated conversation", async t => {
   const f = fixture(t);
   f.state.afterSend = () => { f.state.url = B; };
   await assert.rejects(f.adapter.collect({ clientId: "client-a", question: QUESTION }), { code: "DOUBAO_CONVERSATION_CHANGED" });
-  assert.equal(f.stored.get("client-a"), A);
   assert.equal(f.state.sends.length, 1);
+  f.state.afterSend = null;
+  await f.adapter.collect({ clientId: "client-a", question: "Next question" });
+  assert.equal(f.state.sends[1].url, A);
 });
 test("editing a paused question cannot turn answer recovery into a new send", async t => {
   const f = fixture(t);
@@ -133,7 +138,6 @@ test("runtime timeout waits for session closure; failed closure prevents reopeni
 
 test("a delayed new conversation URL is bound only by the acknowledged message", async t => {
   const f = fixture(t);
-  f.stored.clear();
   const evaluate = f.runtime.evaluate;
   f.runtime.evaluate = async input => {
     if (input.action === "new-conversation") {
@@ -144,13 +148,12 @@ test("a delayed new conversation URL is bound only by the acknowledged message",
   };
   f.state.afterSend = () => { f.state.url = A; };
   assert.equal((await f.adapter.collect({ clientId: "client-a", question: QUESTION })).answerText, ANSWER);
-  assert.equal(f.stored.get("client-a"), A);
+  assert.equal(f.state.url, A);
   assert.equal(f.state.sends.length, 1);
 });
 
 test("an unrelated conversation cannot supply the URL for a newly acknowledged message", async t => {
   const f = fixture(t);
-  f.stored.clear();
   const evaluate = f.runtime.evaluate;
   f.runtime.evaluate = async input => {
     if (input.action === "new-conversation") {
@@ -161,5 +164,5 @@ test("an unrelated conversation cannot supply the URL for a newly acknowledged m
   };
   f.state.afterSend = () => { f.state.url = B; f.state.messages = []; };
   await assert.rejects(f.adapter.collect({ clientId: "client-a", question: QUESTION }), { code: "DOUBAO_CONVERSATION_CHANGED" });
-  assert.equal(f.stored.has("client-a"), false);
+  assert.equal(f.state.sends.length, 1);
 });

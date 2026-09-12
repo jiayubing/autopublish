@@ -1,4 +1,5 @@
 const MAX_TASKS = 500;
+const { randomUUID } = require("node:crypto");
 const SESSION_FAILURES = new Set([
   "DOUBAO_TIMEOUT", "DOUBAO_PAGE_ERROR", "DOUBAO_SEND_FAILED",
   "DOUBAO_CONVERSATION_CHANGED", "DOUBAO_SEND_UNCERTAIN", "DOUBAO_RESUME_MISMATCH", "DOUBAO_SESSION_RESET_REQUIRED",
@@ -66,6 +67,7 @@ function createDoubaoCollectionQueue(options) {
   let pauseRequested = false;
   let stopRequested = false;
   let runPromise = null;
+  let collectionRunId = null;
   let resolveRun = null;
   let countdownTimer = null;
   let controlPromise = null;
@@ -299,7 +301,7 @@ function createDoubaoCollectionQueue(options) {
       currentTaskId = task.id;
       emit("task_started");
       try {
-        const result = await collectOne(task.input);
+        const result = await collectOne({ ...task.input, collectionRunId });
         const answerText = result && typeof result.answerText === "string" ? result.answerText : "";
         const references = result && Array.isArray(result.references) ? result.references : [];
         task.answerLength = answerText.length;
@@ -342,6 +344,7 @@ function createDoubaoCollectionQueue(options) {
   }
 
   function beginRun() {
+    collectionRunId = randomUUID();
     stopRequested = false;
     pauseRequested = false;
     status = "running";
