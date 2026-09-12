@@ -247,8 +247,11 @@ export function createContentSourcesFeature(adapters = {}) {
   const applyQueue = (value, reason = 'event', token = null) => {
     if (disposed) return false;
     if (token && !queueIdentity.isCurrent(token)) return false;
-    if (!token && reason === 'event') queueIdentity.invalidate();
-    const nextQueue = normalizeQueue(value);
+    const countdownOnly = value && !Array.isArray(value.tasks);
+    if (!token && reason === 'event' && !countdownOnly) queueIdentity.invalidate();
+    const nextQueue = countdownOnly
+      ? Object.freeze({ ...doubaoQueue, waitRemainingMs: value.waitRemainingMs })
+      : normalizeQueue(value);
     const wasActive = previousQueueStatus === 'running'
       || previousQueueStatus === 'paused'
       || previousQueueStatus === 'stopping';

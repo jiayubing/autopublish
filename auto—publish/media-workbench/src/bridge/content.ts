@@ -30,6 +30,7 @@ import type {
   DoubaoBatchPreview,
   DoubaoLoginState,
   DoubaoQueueState,
+  DoubaoQueueEvent,
 } from "../types/content";
 import type { GeneratedContentArticle } from "../types/generation";
 import { ipcError, requireBridgeMethod, requireContentApi } from "./transport";
@@ -180,7 +181,7 @@ type DoubaoContentApi = {
     references: ContentResearch["references"];
   }) => Promise<ContentIpcResponse<{ research: ContentResearch }>>;
   onDoubaoQueueState: (
-    listener: (state: DoubaoQueueState) => void,
+    listener: (state: DoubaoQueueEvent) => void,
   ) => () => void;
 };
 type SubmissionContentApi = {
@@ -505,7 +506,7 @@ export async function getDoubaoQueueState(): Promise<DoubaoQueueState> {
   );
 }
 export function subscribeDoubaoQueue(
-  listener: (state: DoubaoQueueState) => void,
+  listener: (state: DoubaoQueueEvent) => void,
 ): () => void {
   const subscribe = requireBridgeMethod(
     requireContentApi<DoubaoContentApi>().onDoubaoQueueState,

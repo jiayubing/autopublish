@@ -138,7 +138,7 @@ function projectResearch(value) {
   return output;
 }
 function projectQueue(value) {
-  return {
+  const output = {
     status: value.status,
     currentTaskId: value.currentTaskId == null ? null : value.currentTaskId,
     completed: value.completed,
@@ -169,7 +169,10 @@ function projectQueue(value) {
         })
       : [],
   };
+  if (value.tasks === undefined) delete output.tasks;
+  return output;
 }
+
 function projectLogin(value) {
   const output = { status: value.status };
   if (value.errorText !== undefined)
@@ -401,7 +404,7 @@ const doubaoContracts = Object.freeze([
     channel: "content:doubao-queue-state",
     feature: "content",
     kind: "event",
-    event: queue,
+    event: exactObject({ ...queue.fields, tasks: optionalField(arrayField(queueTask, { max: 10000 })) }),
     errorCodes: [],
   }),
 ]);

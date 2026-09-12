@@ -638,3 +638,23 @@ test("a successful removal command refreshes management when its event is missed
   assert.equal(managementReads, baselineReads + 1);
   feature.dispose();
 });
+
+
+test("countdown events retain task identity and do not cancel an initial queue query", async () => {
+  const pending = deferred();
+  let listener;
+  const feature = await readyFeature({
+    getDoubaoQueueState: () => pending.promise,
+    subscribeDoubaoQueue: callback => { listener = callback; return () => {}; },
+  });
+  const refresh = feature.refreshDoubaoQueue("initial");
+  listener({ ...queueState("running"), tasks: undefined, waitRemainingMs: 5000 });
+  pending.resolve(queueState("running", { total: 1, tasks: [{ id: "task-1", status: "pending" }] }));
+  await refresh;
+  const tasks = feature.getSnapshot().doubaoQueue.tasks;
+  assert.equal(tasks.length, 1);
+  listener({ ...queueState("running"), tasks: undefined, waitRemainingMs: 4000 });
+  assert.equal(feature.getSnapshot().doubaoQueue.tasks, tasks);
+  assert.equal(feature.getSnapshot().doubaoQueue.waitRemainingMs, 4000);
+  feature.dispose();
+});

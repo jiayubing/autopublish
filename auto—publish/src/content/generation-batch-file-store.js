@@ -154,11 +154,21 @@ function createGenerationBatchFileStore(options) {
     }
   }
 
+  let cachedRead = null;
+  function fileStamp(filename) {
+    const stat = fsApi.lstatSync(filename);
+    return [stat.dev, stat.ino, stat.size, stat.mtimeMs, stat.ctimeMs].join(":");
+  }
+
   function read(filename) {
     try {
       recover(filename);
       assertRegular(filename, false);
-      return readPersisted(filename);
+      const stamp = fileStamp(filename);
+      if (cachedRead && cachedRead.filename === filename && cachedRead.stamp === stamp) return clone(cachedRead.batch);
+      const batch = readPersisted(filename);
+      cachedRead = { filename, stamp, batch: clone(batch) };
+      return batch;
     } catch (error) {
       if (
         error &&
@@ -171,6 +181,7 @@ function createGenerationBatchFileStore(options) {
   }
 
   function write(batch) {
+    cachedRead = null;
     const normalized = normalizePersisted(batch);
     normalized.updatedAt =
       typeof opts.now === "function" ? opts.now() : normalized.updatedAt;

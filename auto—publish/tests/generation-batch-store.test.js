@@ -33,6 +33,33 @@ describe("generation batch store", function() {
     fs.rmSync(workspaceRoot, { recursive: true, force: true });
   });
 
+  it("reuses unchanged batch reads and skips idempotent writes without hiding external edits", function() {
+    let reads = 0;
+    let syncs = 0;
+    const fsApi = Object.assign({}, fs, {
+      readFileSync(...args) { reads++; return fs.readFileSync(...args); },
+      fsyncSync(...args) { syncs++; return fs.fsyncSync(...args); },
+    });
+    const store = createGenerationBatchStore({ workspaceRoot, fs: fsApi });
+    const batch = store.createBatch({ clientSources: [source("c1", "q1")], templates: templates(), aiConfigFingerprint: "fingerprint" });
+    const first = store.getBatch(batch.id);
+    const count = reads;
+    first.tasks[0].status = "cancelled";
+    assert.equal(store.getBatch(batch.id).tasks[0].status, "pending");
+    assert.equal(reads, count);
+    const beforeSyncs = syncs;
+    store.updateBatchStatus(batch.id, "pending");
+    assert.equal(syncs, beforeSyncs);
+    store.markTaskRunning(batch.id, batch.tasks[0].id);
+    store.markTaskSucceeded(batch.id, batch.tasks[0].id, "article-1");
+    const successSyncs = syncs;
+    store.markTaskSucceeded(batch.id, batch.tasks[0].id, "article-1");
+    assert.equal(syncs, successSyncs);
+    const filename = path.join(createWorkspacePaths(workspaceRoot).generationBatches, "batch-" + batch.id + ".json");
+    fs.writeFileSync(filename, "invalid external data");
+    assert.throws(() => store.getBatch(batch.id), { code: "GENERATION_BATCH_INVALID" });
+  });
+
   for (const remaining of ["succeeded", "cancelled", "pending", "failed", "interrupted"]) {
     it("recovers a saved paused batch without losing task outcomes: " + remaining, function() {
       const store = createGenerationBatchStore({ workspaceRoot });

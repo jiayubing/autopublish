@@ -355,6 +355,8 @@ describe("Doubao collection queue", { concurrency: false }, function() {
       { clientId: "client", questionId: "q2" }
     ]);
     assert.ok(secondEvents.some(function(event) { return event.type === "countdown" && event.waitRemainingMs > 0; }));
+    assert.ok(secondEvents.filter(event => event.type === "countdown").every(event => !("tasks" in event) && !("tasks" in event.state)));
+    assert.equal(secondQueue.getState().tasks.length, 2);
     const eventCount = secondEvents.length;
     remove();
     await secondQueue.retryFailed();

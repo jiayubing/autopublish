@@ -303,6 +303,11 @@ test("Doubao preload exposes named methods and exact versioned event mapping", a
   const encoded = productionIpcRegistry.event(event, queue);
   preload.emit(event.channel, encoded);
   assert.deepEqual(received, [queue]);
+  const countdown = { ...queue, waitRemainingMs: 3000 };
+  delete countdown.tasks;
+  preload.emit(event.channel, productionIpcRegistry.event(event, countdown));
+  assert.deepEqual(received[1], countdown);
+  assert.equal("tasks" in received[1], false);
   dispose();
   assert.equal(preload.transportListeners.has(event.channel), false);
 });

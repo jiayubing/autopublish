@@ -4,7 +4,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
-const { listClients, getClient, getClientPublicationProfile, loadClientKnowledge, readSearchQuery, saveLiejuPublicationProfile } = require("../src/content/client-knowledge");
+const { resolveClientIdentity, listClients, getClient, getClientPublicationProfile, loadClientKnowledge, readSearchQuery, saveLiejuPublicationProfile } = require("../src/content/client-knowledge");
 
 const LINK_UNAVAILABLE_CODES = new Set(["EPERM", "EACCES", "ENOTSUP", "EOPNOTSUPP", "EINVAL", "ENOSYS"]);
 
@@ -42,6 +42,32 @@ describe("client knowledge", function() {
   });
 
   afterEach(function() { fs.rmSync(root, { recursive: true, force: true }); });
+
+  it("reuses unchanged identity metadata but detects edits and new duplicates", function(t) {
+    let reads = 0;
+    let scans = 0;
+    const originalRead = fs.readFileSync;
+    const originalScan = fs.readdirSync;
+    t.mock.method(fs, "readFileSync", function(filename, ...args) {
+      if (String(filename).endsWith("client.json")) reads++;
+      return originalRead.call(fs, filename, ...args);
+    });
+    t.mock.method(fs, "readdirSync", function(...args) {
+      scans++;
+      return originalScan.apply(fs, args);
+    });
+    assert.equal(resolveClientIdentity(root, "client-1").directory, clientDirectory);
+    assert.equal(resolveClientIdentity(root, "client-1").directory, clientDirectory);
+    assert.equal(reads, 1);
+    assert.equal(scans, 1);
+    fs.writeFileSync(path.join(clientDirectory, "client.json"), JSON.stringify({ id: "changed-client-id" }));
+    assert.throws(() => resolveClientIdentity(root, "client-1"), { code: "CLIENT_NOT_FOUND" });
+    assert.equal(resolveClientIdentity(root, "changed-client-id").directory, clientDirectory);
+    const second = path.join(root, "clients", "second");
+    fs.mkdirSync(second);
+    fs.writeFileSync(path.join(second, "client.json"), JSON.stringify({ id: "changed-client-id" }));
+    assert.throws(() => resolveClientIdentity(root, "changed-client-id"), { code: "CLIENT_IDENTITY_CONFLICT" });
+  });
 
   it("lists clients with metadata and first-level knowledge files", function() {
     const clients = listClients(root);

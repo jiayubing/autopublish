@@ -49,7 +49,7 @@ function createGenerationBatchStore(options) {
     const task = batch.tasks.find(function (item) { return item.id === taskIdValue; });
     if (!task) throw storeError("GENERATION_TASK_NOT_FOUND", "Generation task was not found");
     const configurationPaused = batch.status === "paused_configuration";
-    update(task, batch);
+    if (update(task, batch) === false) return batch;
     // Task outcomes must not clear the batch-level reason while workers drain.
     // Only an explicit batch transition can leave a configuration pause.
     if (configurationPaused) batch.status = "paused_configuration";
@@ -60,6 +60,7 @@ function createGenerationBatchStore(options) {
   function updateBatchStatus(batchId, status) {
     if (!BATCH_STATUSES.has(status)) throw storeError("GENERATION_BATCH_STATUS_INVALID", "Generation batch status is invalid");
     const batch = getBatch(batchId);
+    if (batch.status === status) return batch;
     batch.status = status;
     return writeBatch(batch);
   }
@@ -84,7 +85,7 @@ function createGenerationBatchStore(options) {
     assertIdentifier(articleId, "article id");
     return updateTask(batchId, taskIdValue, function (task, batch) {
       if (task.status === "succeeded") {
-        if (task.articleId === articleId) return;
+        if (task.articleId === articleId) return false;
         throw storeError("GENERATION_TASK_CONFLICT", "Generation task already has a different article");
       }
       if (task.articleId && task.articleId !== articleId) throw storeError("GENERATION_TASK_CONFLICT", "Generation task already has a different article");

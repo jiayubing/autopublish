@@ -336,17 +336,39 @@ function getClientPublicationProfile(workspaceRoot, clientId, profileKey) {
 
 // Identity lookup intentionally reads only directory and client.json metadata.
 // Callers which merely need a physical location must not load knowledge files.
+// One workspace discovery cache; every lookup still validates directory boundaries
+// and stats all metadata files so external edits and duplicate ids remain visible.
+let identityDiscovery = null;
+function identityStamp(stats) {
+  return [stats.dev, stats.ino, stats.size, stats.mtimeMs, stats.ctimeMs].join(":");
+}
+
 function resolveClientIdentity(workspaceRoot, clientId) {
   const clients = resolveClientContext(workspaceRoot);
   if (!clients.realClientsRoot) throw contentError("CLIENT_NOT_FOUND", "Client was not found");
   let entries;
-  try { entries = fs.readdirSync(clients.clientsRoot, { withFileTypes: true }); }
-  catch (_) { throw pathOutOfBounds(); }
+  try {
+    const stamp = identityStamp(fs.statSync(clients.clientsRoot));
+    if (!identityDiscovery || identityDiscovery.root !== clients.realClientsRoot || identityDiscovery.stamp !== stamp) {
+      identityDiscovery = {
+        root: clients.realClientsRoot, stamp,
+        entries: fs.readdirSync(clients.clientsRoot, { withFileTypes: true }),
+        metadata: new Map(),
+      };
+    }
+    entries = identityDiscovery.entries;
+  } catch (_) { identityDiscovery = null; throw pathOutOfBounds(); }
   const matches = [];
   entries.filter(function(entry) { return entry.isDirectory() && !entry.name.startsWith("."); }).forEach(function(entry) {
     const directory = getClientWorkspace({ root: clients.workspaceRoot, clients: clients.clientsRoot }, entry.name);
     const boundary = assertClientDirectory(directory, clients);
-    const metadata = readClientMetadata(boundary);
+    const metadataPath = path.join(directory, "client.json");
+    const realMetadata = assertRegularFile(metadataPath, boundary.realClientDirectory, true);
+    const stamp = realMetadata ? identityStamp(fs.statSync(realMetadata)) : "missing";
+    const cached = identityDiscovery.metadata.get(directory);
+    const metadata = cached && cached.stamp === stamp && cached.realDirectory === boundary.realClientDirectory
+      ? cached.value : readClientMetadata(boundary);
+    identityDiscovery.metadata.set(directory, { stamp, realDirectory: boundary.realClientDirectory, value: metadata });
     if (metadata.id === clientId) matches.push({ id: metadata.id, name: metadata.name, directory: directory });
   });
   if (!matches.length) throw contentError("CLIENT_NOT_FOUND", "Client was not found");

@@ -85,20 +85,20 @@ function createDoubaoCollectionQueue(options) {
     };
   }
 
-  function snapshot() {
+  function snapshot(includeTasks = true) {
     return {
       status: status,
       currentTaskId: currentTaskId,
       completed: completed,
       total: total,
       waitRemainingMs: waitRemainingMs,
-      tasks: tasks.map(publicTask)
+      ...(includeTasks ? { tasks: tasks.map(publicTask) } : {})
     };
   }
 
   function emit(type) {
     if (disposed) return;
-    const state = snapshot();
+    const state = snapshot(type !== "countdown");
     const event = Object.assign({ type: type || "state", state: state }, state);
     Array.from(subscribers).forEach(function(listener) {
       try { listener(event); } catch (error) {
