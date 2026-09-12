@@ -11,12 +11,12 @@ const {
 } = require("./contracts/regular-submission-permission-contracts");
 
 function validateInput(input) {
-  if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some(function(key) { return !["clientId", "search"].includes(key); }) || typeof input.clientId !== "string" || !input.clientId.trim() || (input.search !== undefined && (typeof input.search !== "string" || input.search.length > 1000))) {
+  if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some(function(key) { return !["clientId"].includes(key); }) || typeof input.clientId !== "string" || !input.clientId.trim()) {
     const error = new Error("Article management client is invalid");
     error.code = "ARTICLE_MANAGEMENT_CLIENT_INVALID";
     throw error;
   }
-  return { clientId: input.clientId.trim(), ...(input.search === undefined ? {} : { search: input.search }) };
+  return { clientId: input.clientId.trim() };
 }
 
 function registerArticleManagementIpc(deps) {
@@ -28,7 +28,6 @@ function registerArticleManagementIpc(deps) {
     getCacheRevision: values.getArticleReadRevision,
     aiContentService: values.aiContentService,
     listArticles: values.contentStore && values.contentStore.listArticleSummariesAsync,
-    searchArticleIds: values.contentStore && values.contentStore.searchArticleIds,
     submissionPlatformDirectory: values.submissionPlatformDirectory || createSubmissionTargetCatalog({
       directoryEntries: values.directoryEntries,
     }),
@@ -55,9 +54,6 @@ function registerArticleManagementIpc(deps) {
   });
   values.ipcMain.handle("content:get-article-management-snapshot", function(event, input) {
     return wrap(async function() { return projectManagementSnapshot(await snapshot.get(validateInput(input))); });
-  });
-  values.ipcMain.handle("content:get-published-article-archives", function(event, input) {
-    return wrap(() => snapshot.getPublishedArchives(input));
   });
   values.ipcMain.handle("content:list-regular-submission-permissions", function(event, input) {
     return wrap(async function() {

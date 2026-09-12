@@ -234,7 +234,8 @@ describe("publication history renderer boundary", async function () {
     assert.match(archiveFixtures.failure, /最近更新时间/);
     assert.doesNotMatch(archiveFixtures.failure, /最近确认时间/);
     assert.match(archiveFixtures.idOnly, /平台接受结果/);
-    assert.match(archiveFixtures.idOnly, /投稿内容快照/);
+    assert.match(archiveFixtures.idOnly, /投稿信息/);
+    assert.doesNotMatch(archiveFixtures.idOnly, /投稿正文|安全投稿正文|正在加载/);
     assert.match(archiveFixtures.idOnly, /投稿处理与核对详情/);
   });
 

@@ -348,9 +348,6 @@ const api = {
         input,
       );
     },
-    getPublishedArticleArchives: function (input) {
-      return ipcRenderer.invoke("content:get-published-article-archives", input);
-    },
     listRegularSubmissionPermissions: function (input) {
       return ipcRenderer.invoke(
         "content:list-regular-submission-permissions",

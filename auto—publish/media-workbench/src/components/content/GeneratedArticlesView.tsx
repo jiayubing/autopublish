@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Search, Send, Trash2 } from "lucide-react";
+import { Send, Trash2 } from "lucide-react";
 import {
   articleMatchesLibraryDateRange,
   articleSelectionKey,
@@ -89,24 +89,6 @@ export default function GeneratedArticlesView({
     submissionPlatforms: allSubmissionPlatforms,
   } = management;
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-  const [filter, setFilter] = useState("");
-  const [searchRetry, setSearchRetry] = useState(0);
-  const [searchResult, setSearchResult] = useState<{ key: string; ids: string[]; error?: string } | null>(null);
-  const searchText = filter.trim();
-  const searchKey = JSON.stringify([workspaceScopeKey, clientId, searchText]);
-  useEffect(() => {
-    if (!searchText) { setSearchResult(null); return; }
-    let current = true;
-    setSearchResult(null);
-    const timer = setTimeout(() => {
-      void commands.searchArticles({ clientId, search: searchText }).then(result => {
-        if (current && "articleIds" in result) setSearchResult({ key: searchKey, ids: result.articleIds });
-      }).catch(() => {
-        if (current) setSearchResult({ key: searchKey, ids: [], error: "文章搜索失败，请重试。" });
-      });
-    }, 200);
-    return () => { current = false; clearTimeout(timer); };
-  }, [searchKey, searchText, clientId, commands.searchArticles, articles, searchRetry]);
   const [createdFrom, setCreatedFrom] = useState("");
   const [createdTo, setCreatedTo] = useState("");
   const [selectedStage, setSelectedStage] = useState<ArticleWorkflowFilter>(
@@ -225,7 +207,6 @@ export default function GeneratedArticlesView({
   }
 
   const filtered = useMemo(() => {
-    const query = filter.trim().toLowerCase();
     return articles.filter((article) => {
       const stageMatches =
         selectedStage === "all" ||
@@ -239,18 +220,12 @@ export default function GeneratedArticlesView({
         createdFrom,
         createdTo,
       );
-      const textMatches =
-        !query ||
-        (searchResult?.key === searchKey && searchResult.ids.includes(article.id));
-      return stageMatches && batchMatches && textMatches && dateMatches;
+      return stageMatches && batchMatches && dateMatches;
     });
   }, [
     articles,
     createdFrom,
     createdTo,
-    filter,
-    searchResult,
-    searchKey,
     generationBatchId,
     publishedTimeFacts,
     selectedStage,
@@ -364,7 +339,11 @@ export default function GeneratedArticlesView({
   ) {
     const workflow = workflowForArticle(article);
     if (!workflow) return;
-    onArticleSelect(article, source, workflow.stage === "published");
+    if (workflow.stage === "published") {
+      setDrawerArticle(article);
+      return;
+    }
+    onArticleSelect(article, source, false);
   }
 
   useEffect(() => {
@@ -472,17 +451,7 @@ export default function GeneratedArticlesView({
         />
 
         <Surface className="overflow-hidden">
-          <div className="grid min-w-0 gap-2 bg-slate-50/55 p-2.5 lg:grid-cols-[minmax(13rem,1fr)_minmax(10rem,auto)_auto_auto]">
-            <div className="relative min-w-0">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-              <input
-                value={filter}
-                onChange={(event) => setFilter(event.target.value)}
-                placeholder="筛选标题、平台或模板"
-                aria-label="筛选文章库"
-                className="ui-field ui-field-with-icon h-9"
-              />
-            </div>
+          <div className="grid min-w-0 gap-2 bg-slate-50/55 p-2.5 lg:grid-cols-[minmax(10rem,1fr)_auto_auto]">
             <select
               aria-label="生成批次筛选"
               value={generationBatchId || ""}
@@ -622,11 +591,6 @@ export default function GeneratedArticlesView({
         </div>
       )}
 
-      {searchText && searchResult?.key !== searchKey && <div role="status">正在搜索文章…</div>}
-      {searchResult?.key === searchKey && searchResult.error && (
-        <div role="alert">{searchResult.error} <Button onClick={() => setSearchRetry(value => value + 1)}>重试搜索</Button></div>
-      )}
-
       <GeneratedArticlesList
         groups={groups}
         visibleError={visibleError}
@@ -654,8 +618,6 @@ export default function GeneratedArticlesView({
       />
 
       <PublicationHistoryDrawer
-        loadArchives={commands.getPublishedArticleArchives}
-        workspaceScopeKey={workspaceScopeKey}
         article={drawerArticle}
         records={
           drawerArticle

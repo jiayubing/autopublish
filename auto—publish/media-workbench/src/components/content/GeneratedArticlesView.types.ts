@@ -12,7 +12,6 @@ import type {
   PublicationHistoryRecord,
   PublicationHistorySummary,
   PublicationArchiveSummary,
-  PublicationArchiveEntry,
 } from "../../types/publication";
 import type { ArticleSummary, GeneratedContentArticle } from "../../types/generation";
 import type { MediaResource } from "../../types/media";
@@ -112,8 +111,6 @@ export type ArticleRemovalSessionCommands = {
 
 export type GeneratedArticlesCommands = SubmissionIntakeCommands &
   ArticleRemovalSessionCommands & {
-    getPublishedArticleArchives: (input: { clientId: string; articleId: string }) => Promise<{ archives: PublicationArchiveEntry[] } | ContentCommandStaleResult>;
-    searchArticles: (input: { clientId: string; search: string }) => Promise<{ articleIds: string[] } | ContentCommandStaleResult>;
     openPublicationUrl: (input: {
       publicationId: string;
     }) => Promise<{ completed: boolean } | ContentCommandStaleResult>;

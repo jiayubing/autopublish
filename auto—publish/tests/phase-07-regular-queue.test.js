@@ -539,7 +539,7 @@ test("regular queue removal invalidation refreshes cached article management fro
     );
     assert.equal(restored.workflowByArticle["article-a"].locks.canEdit, true);
     assert.equal(restored.workflowByArticle["article-a"].locks.canSubmit, true);
-    assert.equal(restored.workflowByArticle["article-a"].locks.canQueue, true);
+    assert.equal("canQueue" in restored.workflowByArticle["article-a"].locks, false);
   } finally {
     fixture.close();
   }

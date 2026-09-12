@@ -163,16 +163,15 @@ function safePublishedArchive(entry, scopedClientId) {
     attemptId,
     publicationEvidence: evidence,
     publicationLocator: domain.projectPublicationSummaryLocator(evidence),
-    terminalTargetV1: terminal,
   };
 }
 
 function createArticleManagementSnapshot(options) {
   const opts = options || {};
   const cache = new Map();
-  const searches = new Map();
   const latestCacheKeyByClient = new Map();
-  const latestCacheRevisionByClient = new Map();
+  const inFlight = new Map();
+  let generation = 0;
   const workspaceIdentity = String(
     opts.workspaceIdentity || opts.workspaceRoot || "workspace",
   );
@@ -204,29 +203,45 @@ function createArticleManagementSnapshot(options) {
     return fallback;
   }
 
-  async function get(input, retry) {
+  function cacheRevision() {
+    return typeof opts.getCacheRevision === "function"
+      ? opts.getCacheRevision()
+      : Number(getRevision()) || 0;
+  }
+
+  async function get(input) {
     const clientId = assertClientId(
       typeof input === "string" ? input : input && input.clientId,
     );
-    const revision = Number(getRevision()) || 0;
-    if (input && typeof input.search === "string" && input.search.trim()) {
-      searches.get(clientId)?.abort();
-      const search = new AbortController();
-      searches.set(clientId, search);
-      let snapshot, matchingArticleIds;
-      try {
-        snapshot = await get({ clientId });
-        matchingArticleIds = await opts.searchArticleIds(clientId, input.search, { signal: search.signal });
-      } finally { if (searches.get(clientId) === search) searches.delete(clientId); }
-      if (Number(getRevision()) !== snapshot.revision) {
-        if (retry) throw snapshotError("ARTICLE_MANAGEMENT_SNAPSHOT_STALE");
-        return get(input, true);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const version = cacheRevision();
+      const cacheKey = key(clientId, version);
+      const startedGeneration = generation;
+      let serialized = cache.get(cacheKey);
+      if (serialized === undefined) {
+        let pending = inFlight.get(cacheKey);
+        if (!pending) {
+          pending = Promise.resolve()
+            .then(() => build(clientId, cacheKey, version, startedGeneration))
+            .finally(() => {
+              if (inFlight.get(cacheKey) === pending) inFlight.delete(cacheKey);
+            });
+          inFlight.set(cacheKey, pending);
+        }
+        serialized = await pending;
       }
-      return { ...snapshot, matchingArticleIds };
+      if (serialized !== null && startedGeneration === generation && version === cacheRevision()) {
+        return { ...JSON.parse(serialized), revision: Number(getRevision()) || 0 };
+      }
     }
-    const cacheKey = key(clientId, typeof opts.getCacheRevision === "function" ? opts.getCacheRevision() : revision);
-    if (cache.has(cacheKey)) return { ...JSON.parse(cache.get(cacheKey)), revision };
+    throw snapshotError(
+      "ARTICLE_MANAGEMENT_SNAPSHOT_STALE",
+      "Article management data changed while loading",
+    );
+  }
 
+  async function build(clientId, cacheKey, version, startedGeneration) {
+    const revision = Number(getRevision()) || 0;
     const articles = await read(
       "listArticles",
       function () {
@@ -372,7 +387,30 @@ function createArticleManagementSnapshot(options) {
       attentionItems,
       removalTransactions: transactions,
     });
-    const workflowByArticle = lifecycle.byArticle;
+    const workflowByArticle = Object.fromEntries(
+      Object.entries(lifecycle.byArticle).map(([articleId, workflow]) => [articleId, {
+        version: workflow.version,
+        stage: workflow.stage,
+        label: workflow.label,
+        primaryAction: workflow.primaryAction,
+        allowedBulkActions: workflow.allowedBulkActions,
+        locks: {
+          canEdit: workflow.locks.canEdit,
+          canSubmit: workflow.locks.canSubmit,
+          canCancel: workflow.locks.canCancel,
+          canTrash: workflow.locks.canTrash,
+        },
+        operations: Object.fromEntries(["edit", "submit", "trash", "restore", "purge"].map(action => [action, {
+          allowed: workflow.operations[action].allowed,
+          reasonCodes: workflow.operations[action].reasonCodes,
+        }])),
+        reasonCodes: workflow.reasonCodes,
+        reasonMessage: workflow.reasonMessage,
+        attentionCount: workflow.attentionCount,
+        orderSummary: workflow.orderSummary,
+        publicationSummary: workflow.publicationSummary,
+      }]),
+    );
     const snapshot = {
       clientId,
       revision,
@@ -385,57 +423,26 @@ function createArticleManagementSnapshot(options) {
       lifecycleVersion: ARTICLE_LIFECYCLE_PROJECTION_VERSION,
       lifecycleCounts: lifecycle.counts,
     };
-    const finalRevision = Number(getRevision()) || 0;
-    if (finalRevision !== revision) {
-      if (retry)
-        throw snapshotError(
-          "ARTICLE_MANAGEMENT_SNAPSHOT_STALE",
-          "Article management data changed while loading",
-        );
-      return get(input, true);
-    }
-    // Store the existing JSON read model once; each caller still owns its copy.
+    if (generation !== startedGeneration || version !== cacheRevision()) return null;
     const serialized = JSON.stringify(snapshot);
-    // Keep one revision per client. Revisions are immutable read-model keys;
-    // retaining every revision would make a long-lived desktop process grow
-    // without bound after repeated writes.
+    // Cache one completed version per client; callers parse independent copies.
     const previousKey = latestCacheKeyByClient.get(clientId);
-    const previousRevision = latestCacheRevisionByClient.get(clientId);
-    if (previousKey && (previousRevision === undefined || revision >= previousRevision)) {
-      cache.delete(previousKey);
-    }
-    if (previousRevision === undefined || revision >= previousRevision) {
-      cache.set(cacheKey, serialized);
-      latestCacheKeyByClient.set(clientId, cacheKey);
-      latestCacheRevisionByClient.set(clientId, revision);
-    }
-    return JSON.parse(serialized);
+    if (previousKey) cache.delete(previousKey);
+    cache.set(cacheKey, serialized);
+    latestCacheKeyByClient.set(clientId, cacheKey);
+    return serialized;
   }
 
   function invalidate() {
-    searches.forEach(search => search.abort());
-    searches.clear();
+    generation += 1;
+    inFlight.clear();
     cache.clear();
     latestCacheKeyByClient.clear();
-    latestCacheRevisionByClient.clear();
   }
   function cacheSize() {
     return cache.size;
   }
-  async function getPublishedArchives(input) {
-    const clientId = assertClientId(input && input.clientId);
-    const articleId = assertClientId(input && input.articleId);
-    if (!publishedArchiveQueries || typeof publishedArchiveQueries.listPublishedArchives !== "function")
-      throw snapshotError("ARTICLE_MANAGEMENT_PUBLICATION_ARCHIVE_INVALID");
-    const archives = await publishedArchiveQueries.listPublishedArchives({ articleIds: [articleId] });
-    for (const archive of archives) {
-      if (archive.publicationEvidence.articleIdentityV1.clientId !== clientId ||
-          archive.publicationEvidence.articleIdentityV1.articleId !== articleId)
-        throw snapshotError("ARTICLE_MANAGEMENT_PUBLICATION_ARCHIVE_CLIENT_MISMATCH");
-    }
-    return { clientId, articleId, archives };
-  }
-  return { get, getPublishedArchives, invalidate, cacheSize };
+  return { get, invalidate, cacheSize };
 }
 
 module.exports = { createArticleManagementSnapshot };

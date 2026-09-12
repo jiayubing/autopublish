@@ -256,27 +256,6 @@ function createArticleStore(workspaceRoot, options) {
     });
   }
 
-  async function searchArticleIds(clientId, query, options = {}) {
-    const term = String(query || "").trim().toLowerCase();
-    const scope = policy.articleReadScope(clientId);
-    const ids = listArticleIds(clientId, scope);
-    if (!term) return ids;
-    const matches = [];
-    let deadline = performance.now() + 8;
-    for (const id of ids) {
-      if (options.signal && options.signal.aborted) throw storeError("ARTICLE_SEARCH_SUPERSEDED");
-      const article = readListedArticle(clientId, id, scope.filesFor(id));
-      const text = [article.title, article.content, article.platform, article.templateId,
-        article.templateSnapshot?.name || "", article.templateSnapshot?.scenario || "", article.templateSnapshot?.body || ""].join(" ");
-      if (!term || text.toLowerCase().includes(term)) matches.push(id);
-      if (performance.now() >= deadline) {
-        await new Promise(resolve => setImmediate(resolve));
-        deadline = performance.now() + 8;
-      }
-    }
-    return matches;
-  }
-
   async function listArticleSummariesAsync(clientId) {
     const scope = policy.articleReadScope(clientId);
     const result = [];
@@ -579,7 +558,6 @@ function createArticleStore(workspaceRoot, options) {
     getArticleSummary,
     listArticleSummaries,
     listArticleSummariesAsync,
-    searchArticleIds,
     moveArticleToTrash,
     restoreTrashedArticle,
     listTrashedArticles,

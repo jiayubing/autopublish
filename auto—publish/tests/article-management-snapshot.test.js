@@ -7,6 +7,155 @@ const {
 const {
   registerArticleManagementIpc,
 } = require("../desktop/ipc/article-management-ipc");
+const { projectArticleLifecycle } = require("../src/content/article-lifecycle-projection");
+
+function deferred() {
+  let resolve, reject;
+  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
+const nextTurn = () => new Promise(resolve => setImmediate(resolve));
+const sampleArticle = (clientId = "client-a", title = "A") => ({
+  id: `article-${clientId}`, clientId, title, content: "Body", status: "saved",
+});
+
+describe("article management concurrent reads", () => {
+  it("shares one cold build and gives every caller an independent result", async () => {
+    const gate = deferred();
+    let reads = 0;
+    const service = createArticleManagementSnapshot({
+      listArticles: () => { reads++; return gate.promise; },
+    });
+    const requests = Array.from({ length: 6 }, () => service.get("client-a"));
+    await nextTurn();
+    assert.equal(reads, 1);
+    gate.resolve([sampleArticle()]);
+    const results = await Promise.all(requests);
+    results[0].articles[0].title = "local edit";
+    results[0].workflowByArticle["article-client-a"].operations.edit.allowed = false;
+    assert.equal(results[1].articles[0].title, "A");
+    assert.equal(results[1].workflowByArticle["article-client-a"].operations.edit.allowed, true);
+    assert.deepEqual(await service.get("client-a"), results[1]);
+    assert.equal(reads, 1);
+  });
+
+  it("builds different clients independently even at the same version", async () => {
+    const gate = deferred();
+    const reads = [];
+    const service = createArticleManagementSnapshot({
+      listArticles: async client => { reads.push(client); await gate.promise; return [sampleArticle(client)]; },
+    });
+    const a = service.get("client-a"), b = service.get("client-b");
+    await nextTurn();
+    assert.deepEqual(reads.sort(), ["client-a", "client-b"]);
+    gate.resolve();
+    const [first, second] = await Promise.all([a, b]);
+    assert.equal(first.articles[0].clientId, "client-a");
+    assert.equal(second.articles[0].clientId, "client-b");
+  });
+
+  it("releases a failed shared build so a subsequent request can retry", async () => {
+    const gate = deferred();
+    let reads = 0;
+    const service = createArticleManagementSnapshot({
+      listArticles: () => { reads++; return reads === 1 ? gate.promise : [sampleArticle()]; },
+    });
+    const failed = Promise.allSettled([service.get("client-a"), service.get("client-a")]);
+    await nextTurn();
+    gate.reject(Object.assign(new Error("Synthetic read failure"), { code: "ARTICLE_READ_FAILED" }));
+    for (const result of await failed) {
+      assert.equal(result.status, "rejected");
+      assert.equal(result.reason.code, "ARTICLE_READ_FAILED");
+    }
+    assert.equal(service.cacheSize(), 0);
+    assert.equal((await service.get("client-a")).articles[0].title, "A");
+    assert.equal(reads, 2);
+  });
+
+  it("shares a build across source-only revisions and reports the current public revision", async () => {
+    let revision = 1, reads = 0;
+    const gate = deferred();
+    const service = createArticleManagementSnapshot({
+      getRevision: () => revision, getCacheRevision: () => 1,
+      listArticles: () => { reads++; return gate.promise; },
+    });
+    const a = service.get("client-a");
+    await nextTurn();
+    revision = 2;
+    const b = service.get("client-a");
+    gate.resolve([sampleArticle()]);
+    for (const result of await Promise.all([a, b])) assert.equal(result.revision, 2);
+    assert.equal(reads, 1);
+  });
+
+  for (const mode of ["version change", "explicit invalidation", "new version completes first"]) {
+    it(`discards late work after ${mode} without removing a newer shared build`, async () => {
+      let revision = 1, reads = 0;
+      const oldGate = deferred(), newGate = deferred();
+      const service = createArticleManagementSnapshot({
+        getRevision: () => revision,
+        listArticles: () => { reads++; return reads === 1 ? oldGate.promise : newGate.promise; },
+      });
+      const old = service.get("client-a");
+      await nextTurn();
+      if (mode === "explicit invalidation") service.invalidate();
+      else revision++;
+      const current = service.get("client-a");
+      await nextTurn();
+      if (mode === "new version completes first") {
+        newGate.resolve([sampleArticle("client-a", "current")]);
+        await current;
+      }
+      oldGate.resolve([sampleArticle("client-a", "stale")]);
+      await nextTurn();
+      const third = service.get("client-a");
+      await nextTurn();
+      assert.equal(reads, 2);
+      newGate.resolve([sampleArticle("client-a", "current")]);
+      for (const result of await Promise.all([old, current, third])) {
+        assert.equal(result.articles[0].title, "current");
+        assert.equal(result.revision, revision);
+      }
+      assert.equal(service.cacheSize(), 1);
+      assert.equal((await service.get("client-a")).articles[0].title, "current");
+      assert.equal(reads, 2);
+    });
+  }
+
+  it("bounds retries when the article read version changes on every build", async () => {
+    let revision = 1, reads = 0;
+    const service = createArticleManagementSnapshot({
+      getRevision: () => revision,
+      listArticles: () => { revision++; reads++; return [sampleArticle()]; },
+    });
+    await assert.rejects(service.get("client-a"), { code: "ARTICLE_MANAGEMENT_SNAPSHOT_STALE" });
+    assert.equal(reads, 2);
+    assert.equal(service.cacheSize(), 0);
+  });
+
+  it("omits internal decision metadata while preserving the lifecycle owner's decisions", async () => {
+    const article = sampleArticle();
+    for (const status of [null, "failed", "published"]) {
+      const publications = status ? [{ publicationId: "publication-a", articleId: article.id, status, targetKey: "platform:test" }] : [];
+      const expected = projectArticleLifecycle({ articles: [article], publications }).byArticle[article.id];
+      const service = createArticleManagementSnapshot({ listArticles: () => [article], listPublications: () => publications });
+      const actual = (await service.get("client-a")).workflowByArticle[article.id];
+      assert.equal(actual.stage, expected.stage);
+      for (const action of ["edit", "submit", "trash", "restore", "purge"]) {
+        assert.deepEqual(actual.operations[action], {
+          allowed: expected.operations[action].allowed,
+          reasonCodes: [...expected.operations[action].reasonCodes],
+        });
+        assert.ok(expected.operations[action].safeMetadata, "the authoritative lifecycle metadata remains intact");
+      }
+      assert.equal("targetFacts" in actual, false);
+      assert.equal("queue" in actual.operations, false);
+      assert.equal("retarget" in actual.operations, false);
+      assert.equal("canQueue" in actual.locks, false);
+      assert.ok(JSON.stringify(actual).length < JSON.stringify(expected).length * 0.7);
+    }
+  });
+});
 
 function createFixture() {
   let revision = 7;
@@ -155,6 +304,12 @@ describe("article management snapshot", function () {
     assert.equal(response.ok, true);
     assert.equal(response.data.clientId, "client-a");
     assert.equal("workspaceRoot" in response.data, false);
+    for (const item of response.data.workflowItems) {
+      assert.equal("targetFacts" in item.workflow, false);
+      for (const operation of Object.values(item.workflow.operations)) {
+        assert.equal("safeMetadata" in operation, false);
+      }
+    }
     const invalid = await handlers.get(
       "content:get-article-management-snapshot",
     )({}, { clientId: "../other" });

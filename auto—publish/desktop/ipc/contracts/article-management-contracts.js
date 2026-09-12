@@ -8,13 +8,9 @@ const {
   optionalField,
 } = require("./registry");
 const {
-  parsePublicationEvidence,
   parsePublicationEvidenceSummary,
   parsePublicationLocator,
 } = require("../../../src/domain/publication-evidence-contract");
-const {
-  parseTerminalTargetV1,
-} = require("../../../src/domain/article-lifecycle-terminal-contract");
 const {
   generatedArticle,
 } = require("./article-editor-contracts");
@@ -32,7 +28,6 @@ const {
   own,
   projectFields,
   text,
-  multiline,
   timestamp,
 } = require("./content-core-contract-shared");
 
@@ -80,25 +75,14 @@ const publicationRecord = exactObject({
   reasonCode: optionalField(nullableField(text(128))),
   reasonSummary: optionalField(nullableField(text(1000))),
 });
-const publicationEvidenceField = customField(function (value) {
-  return parsePublicationEvidence(value, { allowLegacy: true });
-});
 const publicationLocatorField = customField(function (value) {
   return parsePublicationLocator(value);
 });
-const terminalTargetField = customField(function (value) {
-  return parseTerminalTargetV1(value);
-});
-const publishedArchive = exactObject({
+const publishedArchiveSummary = exactObject({
   publicationId: id,
   attemptId: id,
-  publicationEvidence: publicationEvidenceField,
-  publicationLocator: publicationLocatorField,
-  terminalTargetV1: terminalTargetField,
-});
-const publishedArchiveSummary = exactObject({
-  ...publishedArchive.fields,
   publicationEvidence: customField(parsePublicationEvidenceSummary),
+  publicationLocator: publicationLocatorField,
 });
 const submissionPlatform = exactObject({
   id,
@@ -120,28 +104,9 @@ const orderSummary = exactObject({
   published: integerField({ min: 0, max: 10000 }),
   attention: integerField({ min: 0, max: 10000 }),
 });
-const targetFact = exactObject({
-  targetKey: text(500),
-  status: text(80),
-  canCancel: "boolean",
-  publicationId: optionalNullableText(200),
-  displayName: optionalNullableText(1000),
-  batchId: optionalNullableText(200),
-});
 const operationDecision = exactObject({
   allowed: "boolean",
   reasonCodes: arrayField(text(128), { max: 32 }),
-  safeMetadata: exactObject({
-    articleId: optionalField(id),
-    stage: optionalField(text(80)),
-    targetKeys: optionalField(arrayField(text(500), { max: 1000 })),
-    hasPublished: optionalField("boolean"),
-    hasActiveTarget: optionalField("boolean"),
-    hasUncertain: optionalField("boolean"),
-    isTrash: optionalField("boolean"),
-    attentionCount: optionalField(integerField({ min: 0, max: 10000 })),
-    orderStatus: optionalField(text(80)),
-  }),
 });
 const workflow = exactObject({
   version: optionalField(integerField({ min: 1, max: 100 })),
@@ -173,13 +138,11 @@ const workflow = exactObject({
   attentionCount: integerField({ min: 0, max: 10000 }),
   orderSummary,
   publicationSummary,
-  targetFacts: optionalField(arrayField(targetFact, { max: 1000 })),
 });
 const managementSnapshot = exactObject({
   clientId: id,
   revision: integerField({ min: 0 }),
   articles: arrayField(articleSummary, { max: 10000 }),
-  matchingArticleIds: optionalField(arrayField(id, { max: 10000 })),
   trash: arrayField(trashRecord, { max: 10000 }),
   publicationRecords: arrayField(publicationRecord, { max: 10000 }),
   publishedArchives: optionalField(
@@ -227,19 +190,11 @@ const publicationLinkErrors = Object.freeze({
 
 const articleManagementContracts = Object.freeze([
   contentContract({
-    capability: "content.getPublishedArticleArchives",
-    channel: "content:get-published-article-archives",
-    feature: "content", kind: "query",
-    request: exactObject({ clientId: id, articleId: id }),
-    success: exactObject({ clientId: id, articleId: id, archives: arrayField(publishedArchive, { max: 10000 }) }),
-    fromArgs: directArgs, toArgs: directInput,
-  }),
-  contentContract({
     capability: "content.getArticleManagementSnapshot",
     channel: "content:get-article-management-snapshot",
     feature: "content",
     kind: "query",
-    request: exactObject({ clientId: id, search: optionalField(multiline(1000)) }),
+    request: exactObject({ clientId: id }),
     success: managementSnapshot,
     fromArgs: directArgs,
     toArgs: directInput,
@@ -314,7 +269,6 @@ function projectPublishedArchive(value) {
     "attemptId",
     "publicationEvidence",
     "publicationLocator",
-    "terminalTargetV1",
   ]);
 }
 
@@ -343,17 +297,6 @@ function projectWorkflow(value) {
     : 0;
   const projectOperation = function (operation, fallbackAllowed) {
     const source = operation && typeof operation === "object" ? operation : {};
-    const metadata = projectFields(source.safeMetadata, [
-      "articleId",
-      "stage",
-      "targetKeys",
-      "hasPublished",
-      "hasActiveTarget",
-      "hasUncertain",
-      "isTrash",
-      "attentionCount",
-      "orderStatus",
-    ]);
     return {
       allowed:
         source.allowed === undefined
@@ -362,7 +305,6 @@ function projectWorkflow(value) {
       reasonCodes: Array.isArray(source.reasonCodes)
         ? source.reasonCodes.map((item) => String(item))
         : [],
-      safeMetadata: metadata,
     };
   };
   output.operations = {
@@ -412,23 +354,6 @@ function projectWorkflow(value) {
   output.publicationSummary = projectPublicationSummary(
     value && value.publicationSummary,
   );
-  if (
-    value &&
-    value.targetFacts &&
-    typeof value.targetFacts === "object" &&
-    !Array.isArray(value.targetFacts)
-  ) {
-    output.targetFacts = Object.values(value.targetFacts).map((item) =>
-      projectFields(item, [
-        "targetKey",
-        "status",
-        "canCancel",
-        "publicationId",
-        "displayName",
-        "batchId",
-      ]),
-    );
-  }
   return output;
 }
 
@@ -441,7 +366,6 @@ function projectManagementSnapshot(value) {
     articles: Array.isArray(snapshot.articles)
       ? snapshot.articles.map(projectArticleSummary)
       : [],
-    ...(Array.isArray(snapshot.matchingArticleIds) ? { matchingArticleIds: snapshot.matchingArticleIds } : {}),
     trash: Array.isArray(snapshot.trash)
       ? snapshot.trash.map(projectTrashRecord)
       : [],

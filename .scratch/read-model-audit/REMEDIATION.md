@@ -1,5 +1,7 @@
 # 读模型修复与有界复审
 
+> 历史记录：用户随后取消文章库搜索和已发布正文查看需求，当前行为及验证见 [SIMPLIFICATION-PLAN.md](SIMPLIFICATION-PLAN.md)。本文中的搜索与正文详情描述仅代表当时实现。
+
 基线：`8662e11dddfe43602b179c0afdbf38b4f11a2174`。用户在审计后授权实施；本次未 commit/push，证据绑定最终工作树而非虚构的新 HEAD。
 
 ## 实现

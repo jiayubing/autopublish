@@ -22,17 +22,6 @@ export interface ArticleWorkflowLocks {
 export interface ArticleOperation {
   allowed: boolean;
   reasonCodes: string[];
-  safeMetadata: {
-    articleId?: string;
-    stage?: string;
-    targetKeys?: string[];
-    hasPublished?: boolean;
-    hasActiveTarget?: boolean;
-    hasUncertain?: boolean;
-    isTrash?: boolean;
-    attentionCount?: number;
-    orderStatus?: string;
-  };
 }
 
 export interface ArticleOrderSummary {
@@ -63,14 +52,6 @@ export interface ArticleWorkflow {
   attentionCount: number;
   orderSummary: ArticleOrderSummary;
   publicationSummary?: PublicationHistorySummary;
-  targetFacts?: Array<{
-    targetKey: string;
-    status: string;
-    canCancel: boolean;
-    publicationId?: string | null;
-    displayName?: string | null;
-    batchId?: string | null;
-  }>;
 }
 
 export const ARTICLE_WORKFLOW_STAGES: Array<{ id: ArticleWorkflowStage; label: string }> = [

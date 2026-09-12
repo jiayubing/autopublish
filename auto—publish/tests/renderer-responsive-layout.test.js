@@ -792,11 +792,10 @@ describe("real renderer responsive layout", { concurrency: false }, () => {
     await assertHistoryLayout(1128, 527);
   });
 
-  it("keeps search text clear of the icon in library, orders and resources", async () => {
+  it("keeps search text clear of the icon in orders and resources", async () => {
     const page = await openRenderer(1280, 800);
     try {
       for (const [view, placeholder] of [
-        ["article-library", "筛选标题、平台或模板"],
         ["orders", "搜索文章标题、订单编号…"],
         ["resources", "搜索资源名称、编码…"],
       ]) {

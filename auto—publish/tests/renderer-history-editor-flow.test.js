@@ -132,7 +132,7 @@ function installDesktopFixture(page, fixture) {
       removalTransaction: null,
       removalPolls: 0,
       removalListeners: [],
-      calls: { saveArticle: [], submission: [], paidPreview: [], regularPreview: [], regularAdmission: [], removalRetries: 0, removalApply: [], permanentDelete: [] }
+      calls: { getArticleEditor: [], saveArticle: [], submission: [], paidPreview: [], regularPreview: [], regularAdmission: [], removalRetries: 0, removalApply: [], permanentDelete: [] }
     };
     const ok = (data) => Promise.resolve({ ok: true, data });
     const client = { id: "history-editor-fixture", name: "历史文章编辑测试客户", knowledgeFiles: [] };
@@ -194,7 +194,7 @@ function installDesktopFixture(page, fixture) {
       listClients: () => ok({ clients: [client, otherClient] }),
       getClientDetails: (clientId) => ok({ client: clientId === otherClient.id ? otherClient : client, research: [] }),
       listGeneratedArticles: () => ok({ articles: state.articles }),
-      getArticleManagementSnapshot: ({ search } = {}) => {
+      getArticleManagementSnapshot: () => {
         const workflowItems = state.articles.reduce((items, article) => { const workflow = workflowFor(article); if (workflow) items.push({ articleId: article.id, workflow }); return items; }, []);
         state.trash.forEach((entry) => workflowItems.push({ articleId: entry.articleId, workflow: workflowForTrash(entry) }));
         const lifecycleCounts = workflowItems.reduce((counts, item) => {
@@ -202,7 +202,7 @@ function installDesktopFixture(page, fixture) {
           counts.total += 1;
           return counts;
         }, { pending_submission: 0, needs_completion: 0, in_submission: 0, published: 0, trash: 0, total: 0 });
-        return ok({ clientId: client.id, revision: state.revision, articles: state.articles.map(({ content, materialSnapshots, researchSnapshots, templateSnapshot, ...article }) => ({ ...article, summaryVersion: 1, hasContent: Boolean(content.trim()), ...(templateSnapshot ? { templateSnapshot: { platform: templateSnapshot.platform, id: templateSnapshot.id, name: templateSnapshot.name, scenario: templateSnapshot.scenario } } : {}) })), ...(search ? { matchingArticleIds: state.articles.filter(article => `${article.title} ${article.content} ${article.platform} ${article.templateId} ${article.templateSnapshot?.name || ""} ${article.templateSnapshot?.scenario || ""} ${article.templateSnapshot?.body || ""}`.toLowerCase().includes(search.toLowerCase())).map(article => article.id) } : {}), trash: state.trash, publicationRecords: state.publicationRecords, submissionPlatforms: [{ id: "fixture-platform", displayName: "测试投稿平台", contentQueueImport: true }], workflowItems, lifecycleCounts });
+        return ok({ clientId: client.id, revision: state.revision, articles: state.articles.map(({ content, materialSnapshots, researchSnapshots, templateSnapshot, ...article }) => ({ ...article, summaryVersion: 1, hasContent: Boolean(content.trim()), ...(templateSnapshot ? { templateSnapshot: { platform: templateSnapshot.platform, id: templateSnapshot.id, name: templateSnapshot.name, scenario: templateSnapshot.scenario } } : {}) })), trash: state.trash, publicationRecords: state.publicationRecords, submissionPlatforms: [{ id: "fixture-platform", displayName: "测试投稿平台", contentQueueImport: true }], workflowItems, lifecycleCounts });
       },
       listSubmissionBatches: () => ok({ batches: [] }),
       listArticleTrash: () => ok({ trash: state.trash }),
@@ -217,6 +217,7 @@ function installDesktopFixture(page, fixture) {
       retryMaterial: () => ok({}),
       generateArticle: () => ok(state.articles[0]),
       getArticleEditor: ({ articleId }) => {
+        state.calls.getArticleEditor.push(articleId);
         const article = state.articles.find((item) => item.id === articleId);
         return ok({ article, editFingerprint: `fixture-edit-${articleId}` });
       },
@@ -393,7 +394,7 @@ function historyPane(page) {
 }
 
 describe("renderer history editor flow", { concurrency: false }, () => {
-  it("loads publication body only after opening details and recovers from a failed load", async () => {
+  it("shows publication details without fetching or rendering article body", async () => {
     const { page, fixture } = await openHistory();
     try {
       await page.evaluate(() => {
@@ -420,11 +421,7 @@ describe("renderer history editor flow", { concurrency: false }, () => {
           return result;
         };
         window.archiveReads = 0;
-        api.getPublishedArticleArchives = input => {
-          window.archiveReads++;
-          if (window.archiveReads === 1) return new Promise((_, reject) => { window.failArchiveRead = () => reject(new Error("fixture failure")); });
-          return Promise.resolve({ ok: true, data: { ...input, archives: [{ ...archive, publicationEvidence: { ...evidence, body: "不可变的历史投稿正文" } }] } });
-        };
+        api.getPublishedArticleArchives = () => { window.archiveReads++; throw new Error("Body reads are forbidden"); };
         state.revision++;
 
       });
@@ -434,60 +431,25 @@ describe("renderer history editor flow", { concurrency: false }, () => {
       await page.getByRole("button", { name: /测试发布目标/ }).click();
       assert.equal(await page.evaluate(() => window.archiveReads), 0);
       await page.getByRole("button", { name: "发布详情", exact: true }).click();
-      await page.getByText("投稿内容快照", { exact: true }).click();
-      await page.getByText("正在加载投稿正文…").waitFor();
-      await page.evaluate(() => window.failArchiveRead());
-      await page.getByRole("button", { name: "重试加载档案" }).click();
-      await page.getByText("不可变的历史投稿正文", { exact: true }).waitFor();
-      assert.equal(await page.evaluate(() => window.archiveReads), 2);
+      const dialog = page.getByRole("dialog");
+      await dialog.getByText("历史账号", { exact: true }).waitFor();
+      await dialog.getByText("投稿信息", { exact: true }).click();
+      await dialog.getByText("历史投稿标题", { exact: true }).waitFor();
+      assert.equal(await dialog.getByText("投稿正文", { exact: true }).count(), 0);
+      assert.equal(await page.evaluate(() => window.archiveReads), 0);
+      assert.equal(await page.getByLabel("文章标题", { exact: true }).count(), 0);
       await page.getByRole("button", { name: "关闭发布详情", exact: true }).last().click();
-      await page.evaluate(() => {
-        const original = window.desktopConsole.content.getPublishedArticleArchives;
-        window.desktopConsole.content.getPublishedArticleArchives = input => new Promise(resolve => {
-          window.finishLateArchive = () => original(input).then(resolve);
-        });
-      });
-      await page.getByRole("button", { name: "发布详情", exact: true }).click();
-      await page.waitForFunction(() => typeof window.finishLateArchive === "function");
-      await page.getByRole("button", { name: "关闭发布详情", exact: true }).last().click();
-      await page.evaluate(() => window.finishLateArchive());
-      assert.equal(await page.getByText("不可变的历史投稿正文", { exact: true }).count(), 0);
     } finally { await page.close(); }
   });
-  it("searches body text from summaries, reports failures and ignores a late prior search", async () => {
+  it("keeps batch and date filters without offering article search", async () => {
     const { page } = await openHistory();
     try {
-      const search = page.getByRole("textbox", { name: "筛选文章库" });
-      await page.evaluate(() => {
-        const content = window.desktopConsole.content;
-        const original = content.getArticleManagementSnapshot;
-        window.searchRequests = [];
-        content.getArticleManagementSnapshot = input => {
-          if (input.search) window.searchRequests.push(input.search);
-          if (input.search === "old-request") return new Promise(resolve => {
-            window.finishOldSearch = () => original({ ...input, search: "missing-article-token" }).then(resolve);
-          });
-          if (input.search === "error-request") return Promise.reject(new Error("fixture search failed"));
-          return original(input);
-        };
-      });
-      await search.fill("old-request");
-      await page.waitForFunction(() => typeof window.finishOldSearch === "function");
-      await page.getByText("正在搜索文章…").waitFor();
-      await search.fill("用于验证历史文章编辑器");
-      const group = page.getByRole("button", { name: /fixture-platform.*历史文章超长模板名称/ });
-      await group.waitFor();
-      await page.evaluate(() => window.finishOldSearch());
-      assert.equal(await group.isVisible(), true);
-      await search.fill("error-request");
-      await page.getByRole("alert").filter({ hasText: "文章搜索失败" }).waitFor();
-      await page.getByRole("button", { name: "重试搜索" }).click();
-      await page.waitForFunction(() => window.searchRequests.filter(query => query === "error-request").length === 2);
-      await search.fill("missing-article-token");
-      await page.getByText("正在搜索文章…").waitFor({ state: "hidden" });
-      assert.equal(await group.count(), 0);
-      await search.fill("");
-      await group.waitFor();
+      assert.equal(await page.getByRole("textbox", { name: "筛选文章库" }).count(), 0);
+      await page.getByRole("combobox", { name: "生成批次筛选" }).waitFor();
+      await page.getByLabel("文章创建起始日期", { exact: true }).fill("2099-01-01");
+      assert.equal(await page.getByRole("button", { name: /fixture-platform.*历史文章超长模板名称/ }).count(), 0);
+      await page.getByLabel("文章创建起始日期", { exact: true }).fill("");
+      await page.getByRole("button", { name: /fixture-platform.*历史文章超长模板名称/ }).waitFor();
     } finally { await page.close(); }
   });
   before(async () => {
@@ -545,8 +507,8 @@ describe("renderer history editor flow", { concurrency: false }, () => {
     const { page, fixture } = await openHistory();
     try {
       const pane = historyPane(page);
-      const filter = page.getByRole("textbox", { name: "筛选文章库" });
-      await filter.fill("编辑上下文");
+      const filter = page.getByRole("tab", { name: /^待投稿/ });
+      await filter.click();
       const group = page.getByRole("button", { name: /fixture-platform.*历史文章超长模板名称/ });
       await group.click();
       const checkbox = page.getByRole("checkbox", { name: `选择 ${fixture.selectedArticle.title}` });
@@ -562,7 +524,7 @@ describe("renderer history editor flow", { concurrency: false }, () => {
 
        await page.getByLabel("文章标题", { exact: true }).waitFor();
       assert.equal(await page.getByRole("heading", { name: "文章库" }).isVisible(), true);
-      assert.equal(await filter.inputValue(), "编辑上下文");
+      assert.equal(await filter.getAttribute("aria-selected"), "true");
       assert.equal(await checkbox.isChecked(), true);
       assert.equal(await sourceTitle.isVisible(), true);
       assert.equal(await page.getByText("选择客户资料与有效回答", { exact: true }).count(), 0, "opening history must not mount the generation source form");
@@ -570,7 +532,7 @@ describe("renderer history editor flow", { concurrency: false }, () => {
 
       await page.getByRole("button", { name: "关闭文章编辑器" }).click();
       assert.equal(await page.getByRole("heading", { name: "文章库" }).isVisible(), true);
-      assert.equal(await filter.inputValue(), "编辑上下文");
+      assert.equal(await filter.getAttribute("aria-selected"), "true");
       assert.equal(await checkbox.isChecked(), true);
       assert.equal(await sourceButton.evaluate((element) => document.activeElement === element), true, "closing restores focus to the source row");
       assert.ok(await pane.evaluate((element) => element.scrollTop > 0), "closing preserves the history scroll position");
@@ -582,7 +544,6 @@ describe("renderer history editor flow", { concurrency: false }, () => {
   it("fails closed when the authoritative workflow entry is missing", async () => {
     const { page, fixture } = await openHistory(1128, 527, { missingWorkflowArticleId: selectedArticleId });
     try {
-      await page.getByRole("textbox", { name: "筛选文章库" }).fill("编辑上下文");
       await page.getByRole("button", { name: /fixture-platform.*历史文章超长模板名称/ }).click();
       const sourceTitle = page.getByText(fixture.selectedArticle.title, { exact: true });
       const sourceButton = sourceTitle.locator("..");
@@ -603,7 +564,6 @@ describe("renderer history editor flow", { concurrency: false }, () => {
   it("confirms paid media only from the article-library intake after preflight", async () => {
     const { page, fixture } = await openHistory();
     try {
-      await page.getByRole("textbox", { name: "筛选文章库" }).fill("编辑上下文");
       await page.getByRole("button", { name: /fixture-platform.*历史文章超长模板名称/ }).click();
       await page.getByRole("checkbox", { name: `选择 ${fixture.selectedArticle.title}` }).check();
       await page.getByRole("button", { name: /发起投稿 \(1\)/ }).click();
@@ -636,7 +596,6 @@ describe("renderer history editor flow", { concurrency: false }, () => {
   it("shows an actionable empty state when no media are favorited", async () => {
     const { page, fixture } = await openHistory(1128, 527, { favoriteResources: [] });
     try {
-      await page.getByRole("textbox", { name: "筛选文章库" }).fill("编辑上下文");
       await page.getByRole("button", { name: /fixture-platform.*历史文章超长模板名称/ }).click();
       await page.getByRole("checkbox", { name: `选择 ${fixture.selectedArticle.title}` }).check();
       await page.getByRole("button", { name: /发起投稿 \(1\)/ }).click();
@@ -662,7 +621,6 @@ describe("renderer history editor flow", { concurrency: false }, () => {
     }));
     const { page, fixture } = await openHistory(1128, 527, { favoriteResources });
     try {
-      await page.getByRole("textbox", { name: "筛选文章库" }).fill("编辑上下文");
       await page.getByRole("button", { name: /fixture-platform.*历史文章超长模板名称/ }).click();
       await page.getByRole("checkbox", { name: `选择 ${fixture.selectedArticle.title}` }).check();
       await page.getByRole("button", { name: /发起投稿 \(1\)/ }).click();
@@ -686,7 +644,6 @@ describe("renderer history editor flow", { concurrency: false }, () => {
   it("keeps regular admission inside one cancelable ephemeral session", async () => {
     const { page, fixture } = await openHistory();
     try {
-      await page.getByRole("textbox", { name: "筛选文章库" }).fill("编辑上下文");
       await page.getByRole("button", { name: /fixture-platform.*历史文章超长模板名称/ }).click();
       await page.getByRole("checkbox", { name: `选择 ${fixture.selectedArticle.title}` }).check();
       await page.getByRole("button", { name: /发起投稿 \(1\)/ }).click();
@@ -716,7 +673,6 @@ describe("renderer history editor flow", { concurrency: false }, () => {
   it("invalidates a paid preflight when the target changes", async () => {
     const { page, fixture } = await openHistory();
     try {
-      await page.getByRole("textbox", { name: "筛选文章库" }).fill("编辑上下文");
       await page.getByRole("button", { name: /fixture-platform.*历史文章超长模板名称/ }).click();
       await page.getByRole("checkbox", { name: `选择 ${fixture.selectedArticle.title}` }).check();
       await page.getByRole("button", { name: /发起投稿 \(1\)/ }).click();
@@ -746,7 +702,6 @@ describe("renderer history editor flow", { concurrency: false }, () => {
   it("drops a late paid preflight when the client scope changes", async () => {
     const { page, fixture } = await openHistory(1128, 527, { delayedPaidPreview: true });
     try {
-      await page.getByRole("textbox", { name: "筛选文章库" }).fill("编辑上下文");
       await page.getByRole("button", { name: /fixture-platform.*历史文章超长模板名称/ }).click();
       await page.getByRole("checkbox", { name: `选择 ${fixture.selectedArticle.title}` }).check();
       await page.getByRole("button", { name: /发起投稿 \(1\)/ }).click();
@@ -769,11 +724,11 @@ describe("renderer history editor flow", { concurrency: false }, () => {
     }
   });
 
-  it("guards unsaved edits and keeps published articles read-only", async () => {
+  it("guards unsaved edits and opens only publication details for published articles", async () => {
     const { page, fixture } = await openHistory();
     try {
-      const filter = page.getByRole("textbox", { name: "筛选文章库" });
-      await filter.fill("编辑上下文");
+      const filter = page.getByRole("tab", { name: /^待投稿/ });
+      await filter.click();
       await page.getByRole("button", { name: /fixture-platform.*历史文章超长模板名称/ }).click();
       await page.getByText(fixture.selectedArticle.title, { exact: true }).click();
       const editorTitle = page.getByLabel("文章标题", { exact: true });
@@ -787,13 +742,13 @@ describe("renderer history editor flow", { concurrency: false }, () => {
       await page.getByRole("button", { name: "关闭文章编辑器" }).click();
       await page.getByRole("dialog").getByRole("button", { name: "放弃修改" }).click();
       assert.equal(await page.evaluate(() => window.__historyEditorFlow.calls.saveArticle.length), 0);
+      await page.getByRole("tab", { name: "已发布 (1)" }).click();
+      await page.getByRole("button", { name: /测试发布目标/ }).click();
+      const reads = await page.evaluate(() => window.__historyEditorFlow.calls.getArticleEditor.length);
       await page.getByText(fixture.publishedArticle.title, { exact: true }).click();
-      assert.equal(await page.getByLabel("文章标题", { exact: true }).isDisabled(), true);
-      await page.getByRole("button", { name: "关闭文章编辑器" }).click();
-      await page.getByText(fixture.publishedArticle.title, { exact: true })
-        .locator("xpath=ancestor::div[button[normalize-space()='发布详情']][1]")
-        .getByRole("button", { name: "发布详情" })
-        .click();
+      await page.getByRole("dialog", { name: /发布详情/ }).waitFor();
+      assert.equal(await page.getByLabel("文章标题", { exact: true }).count(), 0);
+      assert.equal(await page.evaluate(() => window.__historyEditorFlow.calls.getArticleEditor.length), reads);
       assert.equal(await page.getByRole("button", { name: "复制为新版本" }).count(), 0);
     } finally {
       await page.close();

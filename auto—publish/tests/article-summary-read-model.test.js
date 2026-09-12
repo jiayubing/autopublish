@@ -72,7 +72,6 @@ test("legacy cache rebuild, edits from another store, corrupt sources and search
   assert.throws(() => f.content.saveArticle({ ...f.article("a", 0), content: "   " }), { code: "ARTICLE_INVALID" });
   assert.equal(reopened.getArticleSummary("a", "a-0").hasContent, true);
   f.content.saveArticle(f.article("a", 0));
-  assert.deepEqual(await reopened.searchArticleIds("a", "body-only-search-token"), ["a-0"]);
   const bodyFile = f.reads.find(file => file.endsWith(".md"));
   fs.writeFileSync(bodyFile, "broken source pair");
   assert.throws(() => reopened.getArticleSummary("a", "a-0"), { code: "ARTICLE_INVALID" });
@@ -117,7 +116,6 @@ test("snapshot caches ignore source-only revisions, preserve public revision and
   const service = createArticleManagementSnapshot({
     getRevision: invalidation.getRevision, getCacheRevision: invalidation.getArticleReadRevision,
     listArticles: client => { lists++; return f.content.listArticleSummaries(client); },
-    searchArticleIds: f.content.searchArticleIds,
   });
   const initial = await service.get({ clientId: "a" });
   assert.equal("content" in initial.articles[0], false);
@@ -125,7 +123,6 @@ test("snapshot caches ignore source-only revisions, preserve public revision and
   const next = await service.get({ clientId: "a" });
   assert.equal(lists, 1);
   assert.equal(next.revision, invalidation.getRevision());
-  assert.deepEqual((await service.get({ clientId: "a", search: "body-only-search-token" })).matchingArticleIds, ["a-0"]);
   f.content.saveArticle({ ...f.article("a", 0), title: "New title" });
   invalidation.invalidate("ARTICLE_SAVED");
   assert.equal((await service.get({ clientId: "a" })).articles[0].title, "New title");
@@ -170,7 +167,7 @@ test("independent attention facts for one article share a single bounded summary
   assert.ok(f.reads[0].endsWith("a-0.summary"));
 });
 
-test("large summary and full-text queries yield to the event loop and cancel superseded work", async t => {
+test("large summary queries yield to the event loop", async t => {
   const f = fixture(t);
   for (let i = 0; i < 120; i++) f.content.createArticle(f.article("a", i, "searchable " + "x".repeat(8192)));
   let ticks = 0;
@@ -179,24 +176,16 @@ test("large summary and full-text queries yield to the event loop and cancel sup
     const summary = await f.open().listArticleSummariesAsync("a");
     assert.equal(summary.length, 120);
     assert.ok(ticks > 0, "summary reading must let timers run");
-    ticks = 0;
-    const found = await f.content.searchArticleIds("a", "searchable");
-    assert.equal(found.length, 120);
-    assert.ok(ticks > 0, "search must let timers run");
-    const controller = new AbortController();
-    const pending = f.content.searchArticleIds("a", "searchable", { signal: controller.signal });
-    controller.abort();
-    await assert.rejects(pending, { code: "ARTICLE_SEARCH_SUPERSEDED" });
   } finally { clearInterval(timer); }
 });
 
-test("a replacement client directory between search slices fails closed", async t => {
+test("a replacement client directory between summary slices fails closed", async t => {
   const f = fixture(t);
   for (let i = 0; i < 80; i++) f.content.createArticle(f.article("a", i));
   f.open().getArticleSummary("a", "a-0");
   const directory = path.dirname(f.reads.find(file => file.endsWith(".summary")));
   const moved = directory + "-original";
-  const pending = f.content.searchArticleIds("a", "body");
+  const pending = f.open().listArticleSummariesAsync("a");
   fs.renameSync(directory, moved);
   fs.mkdirSync(directory);
   await assert.rejects(pending, { code: "ARTICLE_PATH_OUT_OF_BOUNDS" });

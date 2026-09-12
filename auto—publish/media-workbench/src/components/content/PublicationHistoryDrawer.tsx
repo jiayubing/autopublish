@@ -1,9 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { AlertTriangle, ExternalLink, X } from "lucide-react";
 import { publishedTimeFactFromEvidence } from "../../article-history-logic";
 import { formatBeijingTime } from "../../time-format";
 import type {
-  PublicationArchiveEntry,
   PublicationEvidenceSummary,
   PublicationArchiveSummary,
   PublicationHistoryRecord,
@@ -20,8 +19,6 @@ interface PublicationHistoryDrawerProps {
   article: ArticleSummary | null;
   records: PublicationHistoryRecord[];
   archives?: PublicationArchiveSummary[];
-  workspaceScopeKey?: string;
-  loadArchives: (input: { clientId: string; articleId: string }) => Promise<{ archives: PublicationArchiveEntry[] } | import("../../types/content").ContentCommandStaleResult>;
   summary?: PublicationHistorySummary;
   onClose: () => void;
   onOpenPublicationUrl?: (record: PublicationHistoryRecord) => void;
@@ -138,8 +135,6 @@ function resultExplanation(
 export default function PublicationHistoryDrawer({
   article,
   records,
-  workspaceScopeKey,
-  loadArchives,
   archives = [],
   summary: snapshotSummary,
   onClose,
@@ -148,22 +143,6 @@ export default function PublicationHistoryDrawer({
   publicationUrlError,
   onOpenAttention,
 }: PublicationHistoryDrawerProps) {
-  const [retry, setRetry] = useState(0);
-  const [detail, setDetail] = useState<{ key: string; archives: PublicationArchiveEntry[]; error?: string } | null>(null);
-  const key = JSON.stringify([workspaceScopeKey, article?.clientId, article?.id]);
-  const hasArchives = archives.length > 0;
-  useEffect(() => {
-    setDetail(null);
-    if (!article || !hasArchives) return;
-    let current = true;
-    void Promise.resolve().then(() => loadArchives({ clientId: article.clientId, articleId: article.id })).then(result => {
-      if (!current) return;
-      if (!("archives" in result) || !archives.every(summary => result.archives.some(entry => entry.publicationId === summary.publicationId)))
-        throw new Error("PUBLICATION_ARCHIVE_UNAVAILABLE");
-      setDetail({ key, archives: result.archives });
-    }).catch(() => { if (current) setDetail({ key, archives: [], error: "发布档案加载失败，请重试。" }); });
-    return () => { current = false; };
-  }, [key, hasArchives, loadArchives, retry]);
   if (!article) return null;
   const summary = snapshotSummary || null;
   const summaryLabel = summary
@@ -246,7 +225,6 @@ export default function PublicationHistoryDrawer({
               (entry) => entry.publicationId === record.publicationId,
             );
             const evidence = archive?.publicationEvidence;
-            const fullEvidence = detail?.key === key ? detail.archives.find(entry => entry.publicationId === record.publicationId)?.publicationEvidence : null;
             const locator = archive?.publicationLocator;
             const remoteUrl = safeRemoteUrl(
               locator?.remoteUrl || evidence?.remoteUrl || attempt.remoteUrl,
@@ -353,7 +331,7 @@ export default function PublicationHistoryDrawer({
                 {evidence && (
                   <details className="mt-3 rounded border border-blue-100 bg-blue-50/40 p-3 text-xs">
                     <summary className="cursor-pointer font-semibold text-slate-800">
-                      投稿内容快照
+                      投稿信息
                     </summary>
                     <div className="mt-3 grid min-w-0 gap-2">
                       <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
@@ -371,22 +349,6 @@ export default function PublicationHistoryDrawer({
                                 "LEGACY_SUBMISSION_CONTENT_UNAVAILABLE",
                               )}
                         </span>
-                      </div>
-                      <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
-                        <span className="text-slate-400">投稿正文</span>
-                        {evidence.contentAvailable ? (
-                          <pre className="max-h-64 min-w-0 overflow-auto whitespace-pre-wrap break-words font-sans text-slate-700">
-                            {fullEvidence ? fullEvidence.body : detail?.key === key && detail.error ? (
-                              <span role="alert">{detail.error} <button type="button" onClick={() => setRetry(value => value + 1)}>重试加载档案</button></span>
-                            ) : <span role="status">正在加载投稿正文…</span>}
-                          </pre>
-                        ) : (
-                          <span className="min-w-0 break-words text-amber-700">
-                            {missingReasonLabel(
-                              "LEGACY_SUBMISSION_CONTENT_UNAVAILABLE",
-                            )}
-                          </span>
-                        )}
                       </div>
                       <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] gap-2">
                         <span className="text-slate-400">图片摘要</span>

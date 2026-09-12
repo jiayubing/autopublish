@@ -478,21 +478,20 @@ test("published archive query is read-only and covers regular accepted and paid 
   assert.equal(paid.evidence.resultCode, "PAID_PUBLISHED");
 });
 
-test("archive detail is client-scoped and retains full evidence validation", async t => {
+test("internal archive reads retain full evidence validation", async t => {
   const fixture = regularPublishedFixture();
   t.after(() => fixture.close());
-  const service = createArticleManagementSnapshot({ publishedArchiveQueries: fixture.transitionPorts.publishedArchiveQueries });
+  const queries = fixture.transitionPorts.publishedArchiveQueries;
   const ref = fixture.evidence.articleIdentityV1;
-  const result = await service.getPublishedArchives({ clientId: ref.clientId, articleId: ref.articleId });
-  assert.equal(result.archives[0].publicationEvidence.body, fixture.evidence.body);
-  await assert.rejects(service.getPublishedArchives({ clientId: "another-client", articleId: ref.articleId }), { code: "ARTICLE_MANAGEMENT_PUBLICATION_ARCHIVE_CLIENT_MISMATCH" });
+  const result = queries.listPublishedArchives({ articleIds: [ref.articleId] });
+  assert.equal(result[0].publicationEvidence.body, fixture.evidence.body);
   const db = new DatabaseSync(fixture.store.databasePath);
   try {
     const row = db.prepare("SELECT evidence_id,evidence_json FROM remote_evidence WHERE remote_id LIKE 'publication-success:%'").get();
     const damaged = JSON.parse(row.evidence_json);
     damaged.body += " tampered";
     db.prepare("UPDATE remote_evidence SET evidence_json=? WHERE evidence_id=?").run(JSON.stringify(damaged), row.evidence_id);
-    await assert.rejects(service.getPublishedArchives({ clientId: ref.clientId, articleId: ref.articleId }), { code: "PUBLICATION_SUCCESS_EVIDENCE_INVALID" });
+    assert.throws(() => queries.listPublishedArchives({ articleIds: [ref.articleId] }), { code: "PUBLICATION_SUCCESS_EVIDENCE_INVALID" });
   } finally { db.close(); }
 });
 
@@ -676,7 +675,28 @@ test("archive query and article-management snapshot preserve an empty client sta
   assert.deepEqual(snapshot.publishedArchives, []);
 });
 
-test("typed article-management summary omits the body and rejects sensitive extras", () => {
+test("management validates terminal identity before omitting it from display snapshots", async t => {
+  const fixture = regularPublishedFixture();
+  t.after(() => fixture.close());
+  const ref = fixture.evidence.articleIdentityV1;
+  const archive = fixture.transitionPorts.publishedArchiveQueries.listPublishedArchiveSummaries({ articleIds: [ref.articleId] })[0];
+  const service = createArticleManagementSnapshot({
+    listArticles: () => [{ id: ref.articleId, clientId: ref.clientId, title: "Published", content: "Body" }],
+    publishedArchiveQueries: { listPublishedArchiveSummaries: () => [archive] },
+  });
+  const snapshot = await service.get({ clientId: ref.clientId });
+  assert.equal("terminalTargetV1" in snapshot.publishedArchives[0], false);
+  assert.equal(archive.terminalTargetV1.terminalKind, "PUBLISHED");
+  const mismatched = JSON.parse(JSON.stringify(archive));
+  mismatched.terminalTargetV1.articleIdentityV1.clientId = "other-client";
+  const invalid = createArticleManagementSnapshot({
+    listArticles: () => [{ id: ref.articleId, clientId: ref.clientId, title: "Published", content: "Body" }],
+    publishedArchiveQueries: { listPublishedArchiveSummaries: () => [mismatched] },
+  });
+  await assert.rejects(invalid.get({ clientId: ref.clientId }), { code: "ARTICLE_MANAGEMENT_PUBLICATION_ARCHIVE_CLIENT_MISMATCH" });
+});
+
+test("typed article-management summary omits body and terminal facts and rejects sensitive extras", () => {
   const registry = createContractRegistry(articleManagementContracts);
   const contract = registry.byChannel("content:get-article-management-snapshot");
   const { body, ...evidence } = domain.parsePublicationEvidenceV1(evidenceFixture());
@@ -685,7 +705,6 @@ test("typed article-management summary omits the body and rejects sensitive extr
     attemptId: "attempt-22",
     publicationEvidence: evidence,
     publicationLocator: domain.projectPublicationSummaryLocator(evidence),
-    terminalTargetV1: domain.parseTerminalTargetV1(terminalFixture()),
   };
   const data = {
     clientId: "client-22",
@@ -700,6 +719,13 @@ test("typed article-management summary omits the body and rejects sensitive extr
   const encoded = registry.success(contract, data);
   assert.equal(body, "实际投稿正文");
   assert.equal("body" in encoded.data.publishedArchives[0].publicationEvidence, false);
+  assert.equal("terminalTargetV1" in encoded.data.publishedArchives[0], false);
+  assert.throws(
+    () => registry.success(contract, { ...data, publishedArchives: [{ ...archive,
+      terminalTargetV1: domain.parseTerminalTargetV1(terminalFixture()),
+    }] }),
+    { code: "IPC_UNKNOWN_FIELD" },
+  );
   assert.throws(
     () => registry.success(contract, Object.assign({}, data, {
       publishedArchives: [Object.assign({}, archive, { token: "secret" })],

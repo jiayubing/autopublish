@@ -375,7 +375,6 @@ test("public mutation and lifecycle seams freeze submission items, enforce one t
   assert.deepEqual(queuedSnapshot.workflowByArticle[first.id].locks, {
     canEdit: false,
     canSubmit: false,
-    canQueue: false,
     canCancel: true,
     canTrash: false,
   });
@@ -489,7 +488,6 @@ test("public regular submission preserves text-only evidence, first success, arc
   assert.deepEqual(publishedSnapshot.workflowByArticle[published.id].locks, {
     canEdit: false,
     canSubmit: false,
-    canQueue: false,
     canCancel: false,
     canTrash: false,
   });
@@ -531,7 +529,7 @@ test("public regular submission preserves text-only evidence, first success, arc
     false,
   );
   assert.equal(uncertainSnapshot.workflowByArticle[uncertain.id].locks.canSubmit, false);
-  assert.equal(uncertainSnapshot.workflowByArticle[uncertain.id].locks.canQueue, false);
+  assert.equal("canQueue" in uncertainSnapshot.workflowByArticle[uncertain.id].locks, false);
 
   const similarItems = [
     admitRegular(harness, similarA.id, profileFor(harness, "similar-a")),

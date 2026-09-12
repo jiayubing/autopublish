@@ -178,7 +178,7 @@ export interface PublicationArchiveEntry {
 }
 export interface PublicationArchiveSummary extends Omit<
   PublicationArchiveEntry,
-  "publicationEvidence"
+  "publicationEvidence" | "terminalTargetV1"
 > {
   publicationEvidence: PublicationEvidenceSummary;
 }
@@ -718,7 +718,6 @@ export interface ArticleManagementSnapshot {
   clientId: string;
   revision: number;
   articles: ArticleSummary[];
-  matchingArticleIds?: string[];
   trash: ArticleTrashRecord[];
   publicationRecords: PublicationHistoryRecord[];
   publishedArchives?: PublicationArchiveSummary[];
@@ -738,14 +737,6 @@ export interface ArticleManagementSnapshot {
       allowedBulkActions: string[];
       reasonCodes?: string[];
       reasonMessage?: string | null;
-      targetFacts?: Array<{
-        targetKey: string;
-        status: string;
-        canCancel: boolean;
-        publicationId?: string | null;
-        displayName?: string | null;
-        batchId?: string | null;
-      }>;
       locks: {
         canEdit: boolean;
         canSubmit: boolean;

@@ -1,0 +1,94 @@
+{
+  "head": "828ab1eff9bb137bbeed698d2bb0bb379f27e29f",
+  "files": [
+    {
+      "path": "auto—publish/desktop/ipc/article-management-ipc.js",
+      "sha256": "a11652cb8658a7585915afc50418ac8d53158b92e2280202971e5d2db6d1a834"
+    },
+    {
+      "path": "auto—publish/desktop/ipc/contracts/article-management-contracts.js",
+      "sha256": "3aec92e6a1d016d1fe73a1fe0d3adbe274f43f916a73194452b1f19a5593135a"
+    },
+    {
+      "path": "auto—publish/desktop/preload.js",
+      "sha256": "32584d81a73cb1f729517f89886ad0b083b0eecb77663a2c599e38020319fcc2"
+    },
+    {
+      "path": "auto—publish/desktop/services/article-management-snapshot.js",
+      "sha256": "d41be88e460a084c86bca9c245cb807b278eaca5074fc61ef622ce85d64a652c"
+    },
+    {
+      "path": "auto—publish/media-workbench/src/bridge/content.ts",
+      "sha256": "09956a2f87811e639c01827f9b31b726df94dc0953fc815849ba1c062eb5c5f9"
+    },
+    {
+      "path": "auto—publish/media-workbench/src/components/content/GeneratedArticlesView.tsx",
+      "sha256": "2f9af274c09a005f4e9c219b2045f8808bc6eece925aaf68c0553d1c3dfa38a7"
+    },
+    {
+      "path": "auto—publish/media-workbench/src/components/content/GeneratedArticlesView.types.ts",
+      "sha256": "b1c869d8eb1346b2af9c420dfb20bd59537cd73e3a0fe334d73004f67cbbd765"
+    },
+    {
+      "path": "auto—publish/media-workbench/src/components/content/PublicationHistoryDrawer.tsx",
+      "sha256": "bffa2b081d089ef9c619f0d0c6d59c742a9adc99b52d1608fbf2d4d7fcddd081"
+    },
+    {
+      "path": "auto—publish/media-workbench/src/features/content/article-management-feature.js",
+      "sha256": "266c6c5043b6c7a97d0a568342cb4ed5d1243585ced3810c815cb5bd9ab7c806"
+    },
+    {
+      "path": "auto—publish/media-workbench/src/features/content/content-workbench-feature.js",
+      "sha256": "795e6081bc55eeddb9375b31948a379381bdb194accbd5c69abb8a81ee2cd30e"
+    },
+    {
+      "path": "auto—publish/media-workbench/src/features/content/use-content-workbench-feature.ts",
+      "sha256": "b520126a5f0f9525109499c8b9bc738985fc17e8ddb373a3e1556ee1c065e088"
+    },
+    {
+      "path": "auto—publish/media-workbench/src/types/publication.ts",
+      "sha256": "de4cdb04a48582eb167650f6a03b661f008f231d0b9289be4902b39ef2572047"
+    },
+    {
+      "path": "auto—publish/src/content/article-store.js",
+      "sha256": "8de0025034d7fe81fec862ed8feedcf7ea977539f5bbbcbb51ff6eda3a42fe2c"
+    },
+    {
+      "path": "auto—publish/src/content/content-store.js",
+      "sha256": "642eb0ec972f06f6a4a1d91c218fc0c8c191c33f14d24838ee092ccdf8e1e583"
+    },
+    {
+      "path": "auto—publish/tests/article-lifecycle-ticket-22.test.js",
+      "sha256": "34b809af2c59718053d58ae247a4cf889bb36c1c84261004ddda8eac055f2289"
+    },
+    {
+      "path": "auto—publish/tests/article-summary-read-model.test.js",
+      "sha256": "36b3061d4b62b37e9bbea71b6e2a273342d0691bddc91834c58aad12adcfd487"
+    },
+    {
+      "path": "auto—publish/tests/fixtures/phase-06-production-ipc-contract-fixtures.js",
+      "sha256": "b46b8a0296c8cb2f74e9fa0213df4d1127ed96a959ceece5a67d5402a0917a62"
+    },
+    {
+      "path": "auto—publish/tests/phase-06-content-core-typed-ipc.test.js",
+      "sha256": "c96147277c5fd451ed7445ac44abcffa0c5f39e9ba8daf8ba667bb8e9ffab6e4"
+    },
+    {
+      "path": "auto—publish/tests/r5-generation-publication-integration.test.mjs",
+      "sha256": "670af09314a8869c947b5d11f93d19931f149c3cda1686c71c1b6e08f283f25d"
+    },
+    {
+      "path": "auto—publish/tests/renderer-history-editor-flow.test.js",
+      "sha256": "6db32640579bf54fceb13a16058a389367e450cdc03fb39e574f348e410dac57"
+    },
+    {
+      "path": "auto—publish/tests/renderer-publication-history.test.js",
+      "sha256": "8a1c2537037155b83fcccc8acbc5ac0743b118bd0b58b343247c6f990fbc9f67"
+    },
+    {
+      "path": "auto—publish/tests/renderer-responsive-layout.test.js",
+      "sha256": "6c39a6539011ced9c291310b138514894e4d4c80dbd961cd53c4f94dc0192217"
+    }
+  ],
+  "sha256": "a5c80b34c840640078380dfc36f06e966ffd4ac6f3e0807229aa60c11dcab472"
+}

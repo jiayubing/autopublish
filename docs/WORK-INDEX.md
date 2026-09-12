@@ -20,6 +20,10 @@
 
 ## 最近已完成的本地计划
 
+- [文章列表载荷与并发构建优化](../.scratch/read-model-audit/SNAPSHOT-PLAN.md)：完成；同版本请求合并，已发布快照载荷约减半。
+
+- [文章库产品简化](../.scratch/read-model-audit/SIMPLIFICATION-PLAN.md)：2026-09-12 完成；移除文章搜索和已发布正文查看，保留发布详情及内部证据校验。
+
 - [读模型后续性能优化](../.scratch/read-model-audit/FOLLOWUP-PLAN.md)：2026-09-12 完成；[测量与最终验证](../.scratch/read-model-audit/FOLLOWUP-RESULTS.md)。
 
 - [读模型与数据访问修复](../.scratch/read-model-audit/PLAN.md)：2026-09-12 完成；[修复与最终证据](../.scratch/read-model-audit/REMEDIATION.md)。
