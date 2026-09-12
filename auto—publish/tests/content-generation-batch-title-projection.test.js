@@ -60,14 +60,13 @@ describe("generation batch article title projection", function () {
       templateStore: {},
       contentStore: {
         saveArticle: (value) => value,
-        getArticle: (clientId, articleId) => {
-          assert.equal(clientId, "client-a");
-          assert.equal(articleId, "article-title-1");
-          return article;
+        getGenerationTaskArticleTitle: (taskId) => {
+          assert.equal(taskId, "task-title-1");
+          return article.title;
         },
         findByGenerationTaskId: () => ({ kind: "one", article }),
         resolveIdentities: () => {
-          throw new Error("direct article lookup should be preferred");
+          throw new Error("dedicated title lookup should be preferred");
         },
       },
       aiProviderService: {
@@ -96,6 +95,7 @@ describe("generation batch article title projection", function () {
   });
 
   it("keeps batch reads available when optional title lookup fails", async function () {
+    let titleLookups = 0;
     const persistedBatch = {
       id: "batch-title-fallback",
       status: "completed",
@@ -140,7 +140,9 @@ describe("generation batch article title projection", function () {
       templateStore: {},
       contentStore: {
         saveArticle: (value) => value,
-        findByGenerationTaskId: () => {
+        findByGenerationTaskId: () => null,
+        getGenerationTaskArticleTitle: () => {
+          titleLookups += 1;
           throw Object.assign(new Error("article read failed"), {
             code: "ARTICLE_STORE_READ_FAILED",
           });
@@ -160,6 +162,10 @@ describe("generation batch article title projection", function () {
       const projected = service.getBatch("batch-title-fallback");
       assert.equal(projected.tasks[0].articleId, "article-fallback");
       assert.equal(projected.tasks[0].articleTitle, undefined);
+      const listed = service.listBatches();
+      assert.equal(listed[0].tasks[0].articleId, "article-fallback");
+      assert.equal(listed[0].tasks[0].articleTitle, undefined);
+      assert.equal(titleLookups, 2);
     } finally {
       await service.dispose();
     }
