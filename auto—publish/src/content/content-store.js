@@ -60,6 +60,11 @@ function createContentStore(options) {
   function findByGenerationTaskId(id) { return getIdentityIndex().findByGenerationTaskId(id); }
   function findByGenerationOperationId(id) { return getIdentityIndex().findByGenerationOperationId(id); }
   function findByArticleId(id) { return getIdentityIndex().findByArticleId(id); }
+  function getGenerationTaskArticleTitle(id) {
+    const result = findByGenerationTaskId(id);
+    if (!result || result.kind !== "one" || !result.article) return null;
+    return typeof result.article.title === "string" ? result.article.title : null;
+  }
 
   const api = {
     snapshotArticle,
@@ -68,6 +73,7 @@ function createContentStore(options) {
     findByGenerationTaskId,
     findByGenerationOperationId,
     findByArticleId,
+    getGenerationTaskArticleTitle,
     createGenerationTaskIndex: createIdentityIndex,
     supportsIdempotentRemovalOperation: articleStore.supportsIdempotentRemovalOperation === true,
   };
