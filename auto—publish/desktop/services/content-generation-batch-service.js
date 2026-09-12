@@ -184,17 +184,22 @@ function createContentGenerationBatchService(options) {
 
   // Only mutate an owned projection, never the batch store's task objects.
   function projectBatchTitles(batch, reuseTitles) {
-    if (!batch || !Array.isArray(batch.tasks) || typeof contentStore.getArticle !== "function") return batch;
+    if (!batch || !Array.isArray(batch.tasks)) return batch;
     const cache = titleCache && batch.id === activeBatchId ? titleCache : null;
     batch.tasks.forEach(function(task) {
       if (!task || task.status !== "succeeded" || !task.articleId) return;
-      const key = JSON.stringify([task.clientId, task.articleId]);
+      const key = task.id;
       let title = null;
       if (reuseTitles && cache && cache.has(key)) {
         title = cache.get(key);
       } else {
         try {
-          const article = contentStore.getArticle(task.clientId, task.articleId);
+          const result = contentStore.findByGenerationTaskId(task.id);
+          const article = result && result.kind === "one"
+            ? result.article
+            : result && result.kind === undefined
+              ? result
+              : null;
           title = projectedArticleTitle(article && article.title);
         } catch (_) {
           // Titles are optional display data; an explicit refresh retries them.
@@ -208,7 +213,8 @@ function createContentGenerationBatchService(options) {
   }
 
   function enrichBatch(batch) {
-    // Public reads always refresh titles, including any active run's cache.
+    // ContentStore owns and refreshes generation identity projections, so this
+    // lookup avoids reopening article JSON/Markdown just to display a title.
     return projectBatchTitles(clone(batch), false);
   }
 
