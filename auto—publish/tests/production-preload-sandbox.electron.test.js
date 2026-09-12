@@ -551,22 +551,39 @@ suite("production preload sandbox boundary", { concurrency: false }, () => {
           }),
           true,
         );
-        assert.equal(
+        assert.deepEqual(
           await page.evaluate(async () => {
             const result =
               await window.desktopConsole?.content?.getArticleManagementSnapshot({ clientId: "畅途" });
-            return (
-              result?.ok === true &&
-              result.data?.articles?.[0]?.researchSnapshots?.[0]?.references?.[0]?.snippet?.length === 10000 &&
-              result.data?.publishedArchives?.[0]?.publicationEvidence
-                ?.remoteUrl ===
-                "https://publisher.example/article-published" &&
-              result.data?.workflowItems?.find(
+            const article = result?.data?.articles?.[0] || {};
+            const archive = result?.data?.publishedArchives?.[0] || {};
+            return {
+              ok: result?.ok,
+              errorCode: result?.error?.code || null,
+              summaryVersion: article.summaryVersion,
+              hasContent: article.hasContent,
+              hasBody: Object.hasOwn(article, "content"),
+              hasResearchBody: Object.hasOwn(article, "researchSnapshots"),
+              hasPublicationBody: Object.hasOwn(archive.publicationEvidence || {}, "body"),
+              hasTerminalFacts: Object.hasOwn(archive, "terminalTargetV1"),
+              remoteUrl: archive.publicationEvidence?.remoteUrl,
+              stage: result?.data?.workflowItems?.find(
                 (item) => item.articleId === "article-published",
-              )?.workflow?.stage === "published"
-            );
+              )?.workflow?.stage,
+            };
           }),
-          true,
+          {
+            ok: true,
+            errorCode: null,
+            summaryVersion: 1,
+            hasContent: true,
+            hasBody: false,
+            hasResearchBody: false,
+            hasPublicationBody: false,
+            hasTerminalFacts: false,
+            remoteUrl: "https://publisher.example/article-published",
+            stage: "published",
+          },
         );
         assert.equal(
           await page.evaluate(async () => {
