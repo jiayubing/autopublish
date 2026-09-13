@@ -334,6 +334,7 @@ export interface RegularQueueGroupSnapshot {
   manuallyPaused: boolean;
   current: RegularQueueGroupCurrentItem | null;
   remaining: RegularQueueGroupRemainingItem[];
+  remainingCount?: number;
   actions: {
     canStart: boolean;
     canPause: boolean;

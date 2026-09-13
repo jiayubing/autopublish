@@ -401,7 +401,8 @@ function registerContentSubmissionIpc(deps) {
   });
   deps.ipcMain.handle("content:pause-all-regular-queue-groups", function () {
     return wrap(function () {
-      return { items: workflow.regularQueueGroups.pauseAll().groups };
+      workflow.regularQueueGroups.pauseAll();
+      return { items: workflow.regularQueueGroups.list() };
     });
   });
   if (paidMedia) {

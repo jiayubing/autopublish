@@ -46,7 +46,15 @@ function createRegularQueueGroupQuery(options) {
     const requestedClientId = input && typeof input.clientId === "string"
       ? input.clientId
       : null;
-    const groups = groupTransitions.listRegularQueueGroupSnapshots({}) || [];
+    const request = {};
+    if (requestedClientId) request.clientId = requestedClientId;
+    if (input && input.page !== undefined) {
+      request.page = input.page;
+      request.pageSize = input.pageSize;
+    }
+    const raw = groupTransitions.listRegularQueueGroupSnapshots(request) || [];
+    const isPage = Boolean(raw && !Array.isArray(raw) && Array.isArray(raw.items));
+    const groups = isPage ? raw.items : raw;
     if (!Array.isArray(groups)) throw fail("REGULAR_QUEUE_GROUP_QUERY_INVALID");
     const clientsById = new Map();
 
@@ -115,7 +123,7 @@ function createRegularQueueGroupQuery(options) {
       });
     }
 
-    return Object.freeze(
+    const projected = Object.freeze(
       groups.map((group) => {
         if (!group || !Array.isArray(group.remaining))
           throw fail("REGULAR_QUEUE_GROUP_QUERY_INVALID");
@@ -145,6 +153,9 @@ function createRegularQueueGroupQuery(options) {
           : group.remaining;
         if (requestedClientId && !scopedCurrent && scopedRemaining.length === 0)
           return null;
+        const remainingCount = Number.isInteger(group.remainingCount)
+          ? group.remainingCount
+          : scopedRemaining.length;
         return Object.freeze({
           queueGroupId: group.queueGroupId,
           platformId: group.platformId,
@@ -157,6 +168,7 @@ function createRegularQueueGroupQuery(options) {
           manuallyPaused: group.manuallyPaused,
           current: scopedCurrent ? itemFor(scopedCurrent) : null,
           remaining: Object.freeze(scopedRemaining.map((item) => itemFor(item))),
+          remainingCount,
           actions: Object.freeze({
             canStart: group.actions && group.actions.canStart === true,
             canPause: group.actions && group.actions.canPause === true,
@@ -168,6 +180,24 @@ function createRegularQueueGroupQuery(options) {
         });
       }).filter(Boolean),
     );
+    if (!isPage) return projected;
+    if (
+      !Number.isSafeInteger(raw.total) ||
+      raw.total < projected.length ||
+      (Number.isInteger(raw.pageSize) && projected.length > raw.pageSize)
+    )
+      throw fail("REGULAR_QUEUE_GROUP_QUERY_INVALID");
+    return Object.freeze({
+      items: projected,
+      total: raw.total,
+      regularItems: Number.isInteger(raw.regularItems)
+        ? raw.regularItems
+        : projected.reduce(function (total, group) {
+            return total + (group.current ? 1 : 0) + group.remainingCount;
+          }, 0),
+      page: raw.page,
+      pageSize: raw.pageSize,
+    });
   }
 
   return Object.freeze({ listRegularQueueGroups });

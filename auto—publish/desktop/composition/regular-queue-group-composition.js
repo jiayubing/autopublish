@@ -22,9 +22,14 @@ function createRegularQueueGroupComposition(options) {
     randomUUID: value.randomUUID,
   });
   const startupSnapshot = orchestrator.initializePaused();
+  const inFlight = Array.isArray(startupSnapshot && startupSnapshot.inFlight)
+    ? startupSnapshot.inFlight
+    : Array.isArray(startupSnapshot && startupSnapshot.groups)
+      ? startupSnapshot.groups
+      : [];
   const orphanedOutcomes = Object.freeze(
     value.regularPlatformOutcomeService
-      ? startupSnapshot.groups
+      ? inFlight
           .filter(
             (group) =>
               group.current && group.current.phase === "remote_call_started",

@@ -309,9 +309,56 @@ function createPaidExecutionAggregate(context, activeTarget) {
     });
   }
 
+  function listPaidBatchIds(value) {
+    const params = [];
+    const filters = [];
+    const clientId =
+      value.clientId === undefined
+        ? null
+        : requiredText(value.clientId, 128, "PAID_EXECUTION_CLIENT_INVALID");
+    if (clientId) {
+      params.push(clientId);
+      filters.push(
+        "EXISTS (SELECT 1 FROM submission_items s WHERE s.batch_id=b.batch_id AND json_extract(s.payload_json,'$.clientId')=?)",
+      );
+      if (value.exclusiveClient === true) {
+        params.push(clientId);
+        filters.push(
+          "NOT EXISTS (SELECT 1 FROM submission_items s WHERE s.batch_id=b.batch_id AND json_extract(s.payload_json,'$.clientId') IS NOT NULL AND json_extract(s.payload_json,'$.clientId')!=?)",
+        );
+      }
+    }
+    if (value.canStartOnly === true) {
+      filters.push("b.pause_intent!='none'");
+      filters.push(
+        "NOT EXISTS (SELECT 1 FROM submission_items s WHERE s.batch_id=b.batch_id AND s.status IN ('claimed','remote_started'))",
+      );
+      filters.push(
+        "NOT EXISTS (SELECT 1 FROM submission_items s WHERE s.batch_id=b.batch_id AND s.status IN ('uncertain','blocked'))",
+      );
+      filters.push(
+        "EXISTS (SELECT 1 FROM submission_items s WHERE s.batch_id=b.batch_id AND s.status='queued')",
+      );
+    } else if (value.runnableOnly === true) {
+      filters.push("b.pause_intent='none'");
+    }
+    const where = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+    return Object.freeze({
+      ids: Object.freeze(
+        db
+          .prepare(
+            `SELECT b.batch_id FROM paid_submission_batches b ${where} ORDER BY b.created_at,b.batch_id`,
+          )
+          .all(...params)
+          .map((row) => row.batch_id),
+      ),
+    });
+  }
+
   function listPaidSubmissionBatchSnapshots(input) {
     open();
     const value = input || {};
+    if (value.idsOnly === true) return listPaidBatchIds(value);
     if (value.page !== undefined) return listPaidSubmissionBatchPage(value);
     const rows =
       value.batchId === undefined
@@ -374,11 +421,13 @@ function createPaidExecutionAggregate(context, activeTarget) {
                 "UPDATE paid_submission_batches SET pause_intent='system',updated_at=? WHERE pause_intent='none'",
               )
               .run(stamp).changes;
-      return Object.freeze({
+      const result = {
         mode,
         changedCount: changed,
-        batches: listPaidSubmissionBatchSnapshots({}),
-      });
+      };
+      if (mode === "start")
+        result.runnableBatchIds = listPaidBatchIds({ runnableOnly: true }).ids;
+      return Object.freeze(result);
     });
   }
 

@@ -9,6 +9,14 @@ const {
 const PLATFORM_ID = /^[a-z][a-z0-9-]{0,63}$/;
 const PAUSE_INTENTS = new Set(["none", "manual", "system"]);
 const PAUSE_REASON_CODE = /^[A-Z][A-Z0-9_]{0,127}$/;
+const PAGE_SIZE_MAX = 500;
+const REMAINING_PREVIEW_DEFAULT = 50;
+const REMAINING_PREVIEW_MAX = 500;
+const GROUP_FROM =
+  "FROM submission_queue_groups g LEFT JOIN submission_items s ON s.item_id=(SELECT q1.item_id FROM submission_queue_items q1 JOIN submission_items s1 ON s1.item_id=q1.item_id WHERE q1.queue_group_id=g.queue_group_id AND s1.status IN('claimed','remote_started') ORDER BY q1.position LIMIT 1) LEFT JOIN recovery_intents i ON i.attempt_id=json_extract(s.payload_json,'$.attemptId')";
+const GROUP_SELECT =
+  "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,json_extract(s.payload_json,'$.clientId') current_client_id,s.claim_until current_claim_until,json_extract(s.payload_json,'$.attemptId') current_attempt_id,json_extract(i.payload_json,'$.detail.phase') current_phase,(SELECT json_extract(i2.payload_json,'$.detail.lastGroupBlockedCode') FROM submission_queue_items q2 JOIN submission_items s2 ON s2.item_id=q2.item_id JOIN recovery_intents i2 ON i2.attempt_id=json_extract(s2.payload_json,'$.attemptId') WHERE q2.queue_group_id=g.queue_group_id AND json_extract(i2.payload_json,'$.detail.lastGroupBlockedCode') IS NOT NULL ORDER BY q2.position LIMIT 1) last_group_blocked_code " +
+  GROUP_FROM;
 
 function createRegularQueueRuntime(context) {
   const {
@@ -88,36 +96,138 @@ function createRegularQueueRuntime(context) {
     });
   }
 
+  function remainingPreviewLimit(value) {
+    if (value.remainingLimit === undefined) return REMAINING_PREVIEW_DEFAULT;
+    const limit = value.remainingLimit;
+    if (
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > REMAINING_PREVIEW_MAX
+    )
+      throw fail("OPERATIONAL_QUEUE_PAGE_INVALID");
+    return limit;
+  }
+
+  function clientIdValue(value) {
+    if (value.clientId === undefined) return null;
+    return requiredText(
+      value.clientId,
+      128,
+      "OPERATIONAL_QUEUE_CLIENT_INVALID",
+    );
+  }
+
+  function groupWhere(value, params) {
+    const clauses = [];
+    if (value.queueGroupId !== undefined) {
+      clauses.push("g.queue_group_id=?");
+      params.push(
+        requiredText(
+          value.queueGroupId,
+          128,
+          "OPERATIONAL_QUEUE_GROUP_ID_INVALID",
+        ),
+      );
+    }
+    const clientId = clientIdValue(value);
+    if (clientId) {
+      clauses.push(
+        "(json_extract(s.payload_json,'$.clientId')=? OR EXISTS (SELECT 1 FROM submission_queue_items q3 JOIN submission_items s3 ON s3.item_id=q3.item_id WHERE q3.queue_group_id=g.queue_group_id AND s3.status='queued' AND json_extract(s3.payload_json,'$.clientId')=?))",
+      );
+      params.push(clientId, clientId);
+    }
+    if (value.inFlightOnly === true) {
+      clauses.push("s.item_id IS NOT NULL");
+      clauses.push(
+        "json_extract(i.payload_json,'$.detail.phase')='remote_call_started'",
+      );
+    }
+    return clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+  }
+
+  function remainingWhere(value, params) {
+    const clauses = ["s.status='queued'"];
+    if (value.queueGroupId !== undefined) {
+      clauses.push("q.queue_group_id=?");
+      params.push(
+        requiredText(
+          value.queueGroupId,
+          128,
+          "OPERATIONAL_QUEUE_GROUP_ID_INVALID",
+        ),
+      );
+    }
+    if (Array.isArray(value.queueGroupIds)) {
+      if (!value.queueGroupIds.length) return null;
+      clauses.push(
+        `q.queue_group_id IN(${value.queueGroupIds.map(() => "?").join(",")})`,
+      );
+      params.push(...value.queueGroupIds);
+    }
+    const clientId = clientIdValue(value);
+    if (clientId) {
+      clauses.push("json_extract(s.payload_json,'$.clientId')=?");
+      params.push(clientId);
+    }
+    return clauses.join(" AND ");
+  }
+
   function regularQueueGroupRows(input) {
     const value = input || {};
     const params = [];
-    let where = "";
-    if (value.queueGroupId !== undefined) {
-      where = "WHERE g.queue_group_id=?";
-      params.push(
-        requiredText(
-          value.queueGroupId,
-          128,
-          "OPERATIONAL_QUEUE_GROUP_ID_INVALID",
-        ),
-      );
+    const where = groupWhere(value, params);
+    let limit = "";
+    if (value.limit !== undefined) {
+      limit = " LIMIT ? OFFSET ?";
+      params.push(value.limit, value.offset);
     }
     return db
       .prepare(
-        "SELECT g.*,s.item_id current_item_id,s.batch_id current_batch_id,s.article_id current_article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') current_article_title,json_extract(s.payload_json,'$.clientId') current_client_id,s.claim_until current_claim_until,json_extract(s.payload_json,'$.attemptId') current_attempt_id,json_extract(i.payload_json,'$.detail.phase') current_phase,(SELECT json_extract(i2.payload_json,'$.detail.lastGroupBlockedCode') FROM submission_queue_items q2 JOIN submission_items s2 ON s2.item_id=q2.item_id JOIN recovery_intents i2 ON i2.attempt_id=json_extract(s2.payload_json,'$.attemptId') WHERE q2.queue_group_id=g.queue_group_id AND json_extract(i2.payload_json,'$.detail.lastGroupBlockedCode') IS NOT NULL ORDER BY q2.position LIMIT 1) last_group_blocked_code FROM submission_queue_groups g LEFT JOIN submission_items s ON s.item_id=(SELECT q1.item_id FROM submission_queue_items q1 JOIN submission_items s1 ON s1.item_id=q1.item_id WHERE q1.queue_group_id=g.queue_group_id AND s1.status IN('claimed','remote_started') ORDER BY q1.position LIMIT 1) LEFT JOIN recovery_intents i ON i.attempt_id=json_extract(s.payload_json,'$.attemptId') " +
+        GROUP_SELECT +
+          " " +
           where +
-          " ORDER BY g.platform_id,g.account_profile_id,g.queue_group_id",
+          " ORDER BY g.platform_id,g.account_profile_id,g.queue_group_id" +
+          limit,
       )
       .all(...params);
   }
 
-  function regularQueueRemainingRows(input) {
+  function regularQueueRemainingPreview(input) {
     const value = input || {};
     const params = [];
-    let groupFilter = "";
+    const where = remainingWhere(value, params);
+    if (where === null) return { rows: [], counts: new Map() };
+    const counts = new Map();
+    for (const row of db
+      .prepare(
+        `SELECT q.queue_group_id,COUNT(*) remaining_count FROM submission_queue_items q JOIN submission_items s ON s.item_id=q.item_id WHERE ${where} GROUP BY q.queue_group_id`,
+      )
+      .all(...params))
+      counts.set(row.queue_group_id, row.remaining_count);
+    const rows = db
+      .prepare(
+        `SELECT queue_group_id,item_id,batch_id,article_id,article_title,client_id,attempt_id,position FROM (SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_id,json_extract(s.payload_json,'$.attemptId') attempt_id,q.position,ROW_NUMBER() OVER (PARTITION BY q.queue_group_id ORDER BY q.position) remaining_rank FROM submission_queue_items q JOIN submission_items s ON s.item_id=q.item_id WHERE ${where}) ranked WHERE remaining_rank<=?`,
+      )
+      .all(...params, remainingPreviewLimit(value));
+    return { rows, counts };
+  }
+
+  function regularQueueItemTotals(value) {
+    const remainingParams = [];
+    const remainingClause = remainingWhere(value, remainingParams);
+    const remainingCount =
+      remainingClause === null
+        ? 0
+        : db
+            .prepare(
+              `SELECT COUNT(*) total FROM submission_queue_items q JOIN submission_items s ON s.item_id=q.item_id WHERE ${remainingClause}`,
+            )
+            .get(...remainingParams).total;
+    const currentParams = [];
+    const currentClauses = ["s.item_id IS NOT NULL"];
     if (value.queueGroupId !== undefined) {
-      groupFilter = " AND q.queue_group_id=?";
-      params.push(
+      currentClauses.push("g.queue_group_id=?");
+      currentParams.push(
         requiredText(
           value.queueGroupId,
           128,
@@ -125,33 +235,46 @@ function createRegularQueueRuntime(context) {
         ),
       );
     }
-    return db
+    const clientId = clientIdValue(value);
+    if (clientId) {
+      currentClauses.push("json_extract(s.payload_json,'$.clientId')=?");
+      currentParams.push(clientId);
+    }
+    const currentCount = db
       .prepare(
-        "SELECT q.queue_group_id,q.item_id,s.batch_id,s.article_id,json_extract(s.payload_json,'$.publicationSnapshot.title') article_title,json_extract(s.payload_json,'$.clientId') client_id,json_extract(s.payload_json,'$.attemptId') attempt_id,q.position FROM submission_queue_items q JOIN submission_items s ON s.item_id=q.item_id WHERE s.status='queued'" +
-          groupFilter +
-          " ORDER BY q.queue_group_id,q.position LIMIT 20000",
+        `SELECT COUNT(*) total ${GROUP_FROM} WHERE ${currentClauses.join(" AND ")}`,
       )
-      .all(...params);
+      .get(...currentParams).total;
+    return remainingCount + currentCount;
   }
 
-  function regularQueueGroupSnapshot(row, remainingRows) {
+  function currentFromRow(row) {
+    if (!row || !row.current_item_id) return null;
+    return Object.freeze({
+      itemId: row.current_item_id,
+      batchId: row.current_batch_id,
+      articleId: row.current_article_id,
+      articleTitle: row.current_article_title,
+      clientId: row.current_client_id,
+      regularPublicationAttemptId: row.current_attempt_id,
+      phase: row.current_phase,
+      claimUntil: row.current_claim_until,
+    });
+  }
+
+  function regularQueueGroupSnapshot(row, remainingRows, remainingCount) {
     if (!row) return null;
-    const current = row.current_item_id
-      ? Object.freeze({
-          itemId: row.current_item_id,
-          batchId: row.current_batch_id,
-          articleId: row.current_article_id,
-          articleTitle: row.current_article_title,
-          clientId: row.current_client_id,
-          regularPublicationAttemptId: row.current_attempt_id,
-          phase: row.current_phase,
-          claimUntil: row.current_claim_until,
-        })
-      : null;
-    const remaining = (
-      remainingRows ||
-      regularQueueRemainingRows({ queueGroupId: row.queue_group_id })
-    ).map((item) =>
+    const current = currentFromRow(row);
+    let rows = remainingRows;
+    let count = remainingCount;
+    if (!Array.isArray(rows)) {
+      const preview = regularQueueRemainingPreview({
+        queueGroupId: row.queue_group_id,
+      });
+      rows = preview.rows;
+      count = preview.counts.get(row.queue_group_id) || 0;
+    }
+    const remaining = rows.map((item) =>
       Object.freeze({
         itemId: item.item_id,
         batchId: item.batch_id,
@@ -162,7 +285,8 @@ function createRegularQueueRuntime(context) {
         position: item.position,
       }),
     );
-    const hasWork = Boolean(current) || remaining.length > 0;
+    const queuedCount = Number.isInteger(count) ? count : remaining.length;
+    const hasWork = Boolean(current) || queuedCount > 0;
     const lastGroupBlockedCode = safePauseReasonCode(
       row.last_group_blocked_code,
     );
@@ -181,6 +305,7 @@ function createRegularQueueRuntime(context) {
       manuallyPaused: row.pause_intent === "manual",
       current,
       remaining: Object.freeze(remaining),
+      remainingCount: queuedCount,
       actions: Object.freeze({
         canStart: hasWork && row.pause_intent !== "none",
         canPause: hasWork && row.pause_intent === "none",
@@ -194,18 +319,96 @@ function createRegularQueueRuntime(context) {
     });
   }
 
-  function regularQueueGroupSnapshots(input) {
-    const groupRows = regularQueueGroupRows(input);
+  function remainingByGroupFromPreview(preview) {
     const remainingByGroup = new Map();
-    for (const item of regularQueueRemainingRows(input)) {
+    for (const item of preview.rows) {
       const rows = remainingByGroup.get(item.queue_group_id) || [];
       rows.push(item);
       remainingByGroup.set(item.queue_group_id, rows);
     }
+    return remainingByGroup;
+  }
+
+  function regularQueueGroupSnapshots(input) {
+    const groupRows = regularQueueGroupRows(input);
+    const preview = regularQueueRemainingPreview(input || {});
+    const remainingByGroup = remainingByGroupFromPreview(preview);
     return groupRows.map((row) =>
       regularQueueGroupSnapshot(
         row,
         remainingByGroup.get(row.queue_group_id) || [],
+        preview.counts.get(row.queue_group_id) || 0,
+      ),
+    );
+  }
+
+  function listRegularQueueGroupPage(value) {
+    const pageSize = value.pageSize === undefined ? 100 : value.pageSize;
+    const offset = (value.page - 1) * pageSize;
+    if (
+      !Number.isSafeInteger(value.page) ||
+      value.page < 1 ||
+      !Number.isSafeInteger(pageSize) ||
+      pageSize < 1 ||
+      pageSize > PAGE_SIZE_MAX ||
+      !Number.isSafeInteger(offset) ||
+      value.queueGroupId !== undefined
+    )
+      throw fail("OPERATIONAL_QUEUE_PAGE_INVALID");
+    const params = [];
+    const where = groupWhere(value, params);
+    const total = db
+      .prepare(`SELECT COUNT(*) total ${GROUP_FROM} ${where}`)
+      .get(...params).total;
+    const rows = regularQueueGroupRows(
+      Object.assign({}, value, { limit: pageSize, offset }),
+    );
+    const preview = regularQueueRemainingPreview(
+      Object.assign({}, value, {
+        queueGroupIds: rows.map((row) => row.queue_group_id),
+      }),
+    );
+    const remainingByGroup = remainingByGroupFromPreview(preview);
+    const items = rows.map((row) =>
+      regularQueueGroupSnapshot(
+        row,
+        remainingByGroup.get(row.queue_group_id) || [],
+        preview.counts.get(row.queue_group_id) || 0,
+      ),
+    );
+    return Object.freeze({
+      items: Object.freeze(items),
+      total,
+      regularItems: regularQueueItemTotals(value),
+      page: value.page,
+      pageSize,
+    });
+  }
+
+  function listRegularQueueGroupIds(value) {
+    const clauses = [];
+    if (value.runnableOnly === true) clauses.push("pause_intent='none'");
+    const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+    return Object.freeze({
+      ids: Object.freeze(
+        db
+          .prepare(
+            `SELECT queue_group_id FROM submission_queue_groups ${where} ORDER BY platform_id,account_profile_id,queue_group_id`,
+          )
+          .all()
+          .map((row) => row.queue_group_id),
+      ),
+    });
+  }
+
+  function listRegularQueueInFlight() {
+    return Object.freeze(
+      regularQueueGroupRows({ inFlightOnly: true }).map((row) =>
+        Object.freeze({
+          queueGroupId: row.queue_group_id,
+          pauseIntent: row.pause_intent,
+          current: currentFromRow(row),
+        }),
       ),
     );
   }
@@ -322,7 +525,12 @@ function createRegularQueueRuntime(context) {
 
   function listRegularQueueGroupSnapshots(input) {
     open();
-    return Object.freeze(regularQueueGroupSnapshots(input));
+    const value = input || {};
+    if (value.idsOnly === true) return listRegularQueueGroupIds(value);
+    if (value.inFlightOnly === true)
+      return Object.freeze({ inFlight: listRegularQueueInFlight() });
+    if (value.page !== undefined) return listRegularQueueGroupPage(value);
+    return Object.freeze(regularQueueGroupSnapshots(value));
   }
 
   function setRegularQueueGroupRunIntent(input) {
@@ -459,11 +667,16 @@ function createRegularQueueRuntime(context) {
               )
               .run(stamp).changes;
       regularQueueFault("after-global-run-intent", { mode, changed });
-      return Object.freeze({
+      const result = {
         mode,
         changedCount: changed,
-        groups: Object.freeze(regularQueueGroupSnapshots({})),
-      });
+      };
+      if (mode === "start")
+        result.runnableGroupIds = listRegularQueueGroupIds({
+          runnableOnly: true,
+        }).ids;
+      if (mode === "startup") result.inFlight = listRegularQueueInFlight();
+      return Object.freeze(result);
     });
   }
 

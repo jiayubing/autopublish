@@ -364,7 +364,7 @@ export default function RegularQueueGroupsPanel({
             )}
             <div className="mb-2 flex items-center justify-between gap-3">
               <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">
-                待执行 · {group.remaining.length}
+                待执行 · {group.remainingCount ?? group.remaining.length}
               </p>
             </div>
             <ol className="grid max-h-56 gap-1.5 overflow-y-auto pr-1">

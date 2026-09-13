@@ -1,6 +1,6 @@
 # 规模审计修复
 
-状态：BATCH_3_COMPLETE / OVERALL_PENDING。SA-01 / SA-02 / SA-04 已修复。本批关闭 SA-03 的付费页面截断与 SA-05 的投稿中心读取放大；普通队列、全局执行/启动读取和其余 SA-06/07 仍待后续批次，不宣称整个规模目标通过。
+状态：BATCH_4_COMPLETE / OVERALL_PENDING。SA-01 / SA-02 / SA-04 已修复；SA-03 付费页面与普通队列展示截断、SA-05 投稿中心付费读取、以及执行/启动全量快照（SA-03/07 执行链）已关闭。SA-06 宽失效与 SA-07 的 App 默认装载投稿中心 feature 仍待后续批次，不宣称整个规模目标通过。
 
 保持唯一 OperationalStore owner、FIFO、暂停/在途/不确定结果及发布证据校验；不修改真实数据库，不执行外部投稿。
 
@@ -81,3 +81,44 @@
 - 有界复核：仅检查本批查询diff、读取/执行消费者分离、分页计数、SQL载荷、客户和状态组合、错误页元数据与直接回归。结论为本批范围PASS；整体SA-03仍部分未闭合。没有新增writer、持久缓存或schema变更。
 - 未重复Electron打包/真实外部验收：本批未修改renderer或IPC外形；已通过真实typed IPC校验与现有桌面回归，不把此结果称为发布验收。
 - 最终累计源码/测试SHA256及本批探针hash：`r3-source-state.json`，基线HEAD仍为 `1e74583cf0ee2be02125c65298bf3b5579a8bca5`，代码未提交/推送。所有改动保留在工作树，用户 `pelican-bicycle.html` 未触碰。
+
+## 第四批：普通队列展示分页与执行/启动身份读取
+
+基线：干净 master `5ecbd3fd`。本批关闭投稿中心普通队列的静默 20000 截断、先全库再 JS 切片、以及全局 pause/start/startup 把完整 remaining / 付费正文当全集的问题。未改 schema、writer、FIFO、claim、uncertain 或成功证据校验；未把 LIMIT 改成更大静默常量。
+
+调查与 HEAD 对齐后的边界：
+
+- 展示：`listRegularQueueGroupSnapshots({ page, pageSize, clientId })` 在 OperationalStore 查询端分页并下推客户过滤；真实 `total` / `regularItems`；每组 `remainingCount` + 至多 50 条 remaining 预览。投稿中心不再对全库组数组 slice。
+- 执行：`startAll` / `pauseAll` / `initializePaused` 不再返回完整组/批次快照。普通队列 start 返回 `runnableGroupIds`，startup 返回 `inFlight`（仅 current/remote_call_started）；付费 start 返回 `runnableBatchIds`，`idsOnly` 枚举可运行批次。claim 仍按 FIFO 取头并读取完整 publicationSnapshot。
+- 非目标：App 默认同时安装投稿中心 feature（SA-07 页面装载）、订单/对账其他 20000 上限、SA-06 宽失效、未分页的 `listRegularQueueGroups` IPC（平台工作台，remaining 已有界）。
+
+实现 owner：
+
+- `operational-store-regular-queue-runtime`：组页、客户 WHERE、window remaining 预览、真实计数、全局 intent 身份返回。
+- `operational-store-paid-execution-aggregate`：`idsOnly` 身份枚举；`updateAllRunIntent` 不再组装完整批次正文。
+- `regular-queue-group-query` / `submission-center-snapshot`：把 page/clientId 下传到 store，用查询端 total/regularItems。
+- `regular-queue-group-orchestrator` / composition：startAll 用 runnable ids；startup orphan 只用 inFlight。
+- `paid-media-batch-orchestrator`：startAll 用 runnable ids，不再 `snapshot({})`。
+- IPC pause-all 改为 `list()`；合同增加可选 `remainingCount`。
+
+合成复测（probe 种子 + 当前查询/执行入口；临时库；Windows / Node v24.16.0）：
+
+| 场景 | 原审计 | 本批复测 |
+| --- | --- | --- |
+| 1000任务/10组 投稿中心首页 | 中位474ms，全量 remaining | 19.8ms，6 SQL，regularItems=1000，remaining 预览500 |
+| 10000任务/100组 首页/末页 | 中位8926ms | 首页45.8ms / 末页54.8ms，regularItems=10000，hasMore 正确 |
+| 单组10000任务 | >45秒（修 SA-02 后136ms 但仍全量 remaining） | 129.9ms，remaining 预览50，remainingCount=10000 |
+| 50000任务/500组 | >55秒且截断 20000 | 首页179ms / 末页343ms，regularItems=50000，6 SQL |
+| 50000组各1项 | 727ms，只返回20000项，后组变空 | 首页141ms，regularItems=50000，末页 remainingCount=1，startAll 50000 ids |
+| startup 暂停 | 1千 482ms；5万/500组 >55秒，返回完整快照 | 1千 1.3ms；5万/500组 120ms；5万组 69ms；无 groups/remaining |
+| startAll 身份 | 截断后漏跑 | 10/100/500/50000 ids，无完整快照 |
+
+5万组末页 ID 按 `account_profile_id` 字符串序（probe 使用未补零 `account-${g}`），不是分页错误；20003 组补零 fixture 的第 2001 页仍到达 `group-020000`。耗时为本机单次诊断，不是 SLA。
+
+最终验证：
+
+- `node --test tests/regular-queue-pagination.test.js tests/regular-queue-execution-startup-reads.test.js tests/phase-07-regular-queue.test.js tests/submission-center-snapshot.test.js tests/paid-batch-pagination.test.js tests/paid-media-batch-client-scope.test.js tests/regular-queue-group-orchestrator-read-scope.test.js tests/article-lifecycle-ticket-08.test.js tests/article-lifecycle-ticket-13.test.js tests/content-submission-ipc.test.js tests/regular-platform-acceptance.test.js tests/regular-queue-submission-interval.test.js tests/ticket-18-a-queue-image-count-persistence.test.js`：121/121，0 跳过。
+- `npm run typecheck:main`、`npm run lint`、`npm run format:check`、`git diff --check` 通过。
+- `npm run test:desktop-core`：291 文件；1687 通过。25 失败 + 54 取消全部是 renderer-harness 在本环境缺少 `media-workbench/node_modules` 导致 `npm --prefix media-workbench run build` 失败，不是本批队列/执行回归。补装 renderer 依赖后 `npm --prefix media-workbench run typecheck:strict` 通过。本批相关 node 定向测试 121/121。
+- 本批范围 PASS。仍未闭合：SA-06 缓存宽失效；SA-07 App 默认装载投稿中心；平台工作台 `listRegularQueueGroups` 仍无组分页（remaining 已有界）；订单/对账其他 20000 上限。
+- 未提交/推送。基线 HEAD `5ecbd3fd`。用户 `pelican-bicycle.html` 未触碰。无真实库或外部投稿。

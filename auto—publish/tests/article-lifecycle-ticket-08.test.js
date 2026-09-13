@@ -1297,18 +1297,20 @@ test("start all skips manually paused groups and pause all preserves the in-flig
     await new Promise((resolve) => setImmediate(resolve));
     assert.deepEqual(preparedGroups, [running.queueGroupId]);
     const paused = orchestrator.pauseAll();
+    assert.equal(paused.changedCount, 1);
+    const pausedGroups = current.transitions.listRegularQueueGroupSnapshots({});
     assert.equal(
-      paused.groups.find((group) => group.queueGroupId === running.queueGroupId)
+      pausedGroups.find((group) => group.queueGroupId === running.queueGroupId)
         .pauseIntent,
       "system",
     );
     assert.equal(
-      paused.groups.find((group) => group.queueGroupId === manual.queueGroupId)
+      pausedGroups.find((group) => group.queueGroupId === manual.queueGroupId)
         .pauseIntent,
       "manual",
     );
     assert.equal(
-      paused.groups.find((group) => group.queueGroupId === running.queueGroupId)
+      pausedGroups.find((group) => group.queueGroupId === running.queueGroupId)
         .current.itemId,
       running.itemId,
     );

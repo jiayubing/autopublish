@@ -599,10 +599,9 @@ test("pause-all, manual pause, start-all, and restart preserve operator intent",
       "pause test should reach its first remote call",
     );
     const pauseResult = runtime.composition.orchestrator.pauseAll();
+    assert.ok(pauseResult.changedCount >= 1);
     assert.equal(
-      pauseResult.groups.find(
-        (group) => group.queueGroupId === pending.items[0].queueGroupId,
-      ).pauseIntent,
+      findGroup(fixture, pending.items[0].queueGroupId).pauseIntent,
       "system",
     );
     gate.resolve();
@@ -655,9 +654,9 @@ test("pause-all, manual pause, start-all, and restart preserve operator intent",
     );
     const restarted = createQueueRuntime(fixture, restartFake.executor);
     assert.ok(
-      restarted.composition.startupSnapshot.groups.every(
-        (group) => group.pauseIntent !== "none",
-      ),
+      fixture.transitionPorts.regularQueueGroupTransitions
+        .listRegularQueueGroupSnapshots({})
+        .every((group) => group.pauseIntent !== "none"),
     );
     assert.equal(restartFake.calls.length, 0);
     assert.deepEqual(

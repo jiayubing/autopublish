@@ -161,6 +161,9 @@ function projectRegular(groups, clientId) {
       else projected.position = item.position;
       return projected;
     }
+    const remainingCount = Number.isInteger(group.remainingCount)
+      ? group.remainingCount
+      : remaining.length;
     return {
       queueGroupId: group.queueGroupId,
       platformId: group.platformId,
@@ -172,6 +175,7 @@ function projectRegular(groups, clientId) {
       pauseIntent: group.pauseIntent,
       current: projectItem(current, "current"),
       remaining: remaining.map(function (item) { return projectItem(item, "remaining"); }),
+      remainingCount,
       actions: group.actions,
       revision: group.revision,
       createdAt: group.createdAt,
@@ -264,7 +268,7 @@ function createSubmissionCenterSnapshot(options) {
     if (!Number.isSafeInteger(revisionBefore) || revisionBefore < 0)
       throw fail("SUBMISSION_CENTER_SNAPSHOT_INVALID");
     const settled = await Promise.allSettled([
-      Promise.resolve().then(() => opts.listRegularQueueGroups({ ...(clientId ? { clientId } : {}) })),
+      Promise.resolve().then(() => opts.listRegularQueueGroups({ page: queryPage.page, pageSize: queryPage.pageSize, ...(clientId ? { clientId } : {}) })),
       Promise.resolve().then(() => opts.listPaidMediaBatches({ page: queryPage.page, pageSize: queryPage.pageSize, ...(clientId ? { clientId } : {}) })),
       Promise.resolve().then(() => opts.listAttention({ ...(clientId ? { clientId } : {}) })),
     ]);
@@ -279,18 +283,24 @@ function createSubmissionCenterSnapshot(options) {
     const paidRaw = valueFor(1, "paid", { items: [] });
     const attentionRaw = valueFor(2, "attention", { items: [] });
     const revisionAfter = Number(opts.getRevision());
-    const regularGroups = projectRegular(regularRaw, clientId);
+    const regularIsPage = Boolean(regularRaw && !Array.isArray(regularRaw) && Object.prototype.hasOwnProperty.call(regularRaw, "total"));
+    const regularGroups = projectRegular(regularIsPage ? regularRaw.items : regularRaw, clientId);
     const paidBatches = projectPaid(paidRaw, clientId).filter(
       isPaidWorkbenchBatch,
     );
     const attentionItems = projectAttention(attentionRaw, clientId);
-    const regularItems = regularGroups.reduce(function (total, group) {
-      return total + (group.current ? 1 : 0) + group.remaining.length;
-    }, 0);
+    if (regularIsPage && (!Number.isSafeInteger(regularRaw.total) || regularRaw.total < regularGroups.length || regularGroups.length > queryPage.pageSize || regularRaw.page !== queryPage.page || regularRaw.pageSize !== queryPage.pageSize))
+      throw fail("SUBMISSION_CENTER_SNAPSHOT_INVALID");
+    const regularItems = regularIsPage && Number.isInteger(regularRaw.regularItems)
+      ? regularRaw.regularItems
+      : regularGroups.reduce(function (total, group) {
+          return total + (group.current ? 1 : 0) + (Number.isInteger(group.remainingCount) ? group.remainingCount : group.remaining.length);
+        }, 0);
     const paidIsPage = paidRaw && Object.prototype.hasOwnProperty.call(paidRaw, "total");
     if (paidIsPage && (!Number.isSafeInteger(paidRaw.total) || paidRaw.total < paidBatches.length || paidBatches.length > queryPage.pageSize || paidRaw.page !== queryPage.page || paidRaw.pageSize !== queryPage.pageSize))
       throw fail("SUBMISSION_CENTER_SNAPSHOT_INVALID");
     const paidBatchesCount = paidIsPage ? paidRaw.total : paidBatches.length;
+    const regularGroupCount = regularIsPage ? regularRaw.total : regularGroups.length;
     const totalCounts = {
       regularItems,
       paidBatches: paidBatchesCount,
@@ -299,7 +309,7 @@ function createSubmissionCenterSnapshot(options) {
     };
     const start = (queryPage.page - 1) * queryPage.pageSize;
     const end = start + queryPage.pageSize;
-    const regularPage = regularGroups.slice(start, end);
+    const regularPage = regularIsPage ? regularGroups : regularGroups.slice(start, end);
     const paidPage = paidIsPage ? paidBatches : paidBatches.slice(start, end);
     const attentionPage = attentionItems.slice(start, end);
     return {
@@ -315,7 +325,7 @@ function createSubmissionCenterSnapshot(options) {
         counts: totalCounts,
         page: queryPage.page,
         pageSize: queryPage.pageSize,
-        hasMore: end < Math.max(regularGroups.length, paidBatchesCount, attentionItems.length),
+        hasMore: end < Math.max(regularGroupCount, paidBatchesCount, attentionItems.length),
         failures,
       },
     };

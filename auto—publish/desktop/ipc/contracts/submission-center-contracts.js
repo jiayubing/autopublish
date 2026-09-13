@@ -51,6 +51,7 @@ const regularQueueGroupSnapshot = exactObject({
   pauseIntent: enumField(["none", "manual", "system"]),
   current: nullableField(regularCurrent),
   remaining: arrayField(regularRemaining, { max: 20000 }),
+  remainingCount: optionalField(count),
   actions: exactObject({
     canStart: "boolean",
     canPause: "boolean",

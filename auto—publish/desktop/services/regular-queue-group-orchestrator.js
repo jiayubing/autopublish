@@ -260,6 +260,12 @@ function createRegularQueueGroupOrchestrator(options) {
     }
   }
 
+  function queuedRemainingCount(group) {
+    if (!group) return 0;
+    if (Number.isInteger(group.remainingCount)) return group.remainingCount;
+    return Array.isArray(group.remaining) ? group.remaining.length : 0;
+  }
+
   function snapshot() {
     return transitions.listRegularQueueGroupSnapshots({});
   }
@@ -267,6 +273,24 @@ function createRegularQueueGroupOrchestrator(options) {
   function snapshotGroup(queueGroupId) {
     const groups = transitions.listRegularQueueGroupSnapshots({ queueGroupId });
     return Array.isArray(groups) ? groups[0] || null : null;
+  }
+
+  function runnableGroupIds(started) {
+    if (started && Array.isArray(started.runnableGroupIds))
+      return started.runnableGroupIds;
+    const listed = transitions.listRegularQueueGroupSnapshots({
+      idsOnly: true,
+      runnableOnly: true,
+    });
+    if (listed && Array.isArray(listed.ids)) return listed.ids;
+    const groups = Array.isArray(listed)
+      ? listed
+      : started && Array.isArray(started.groups)
+        ? started.groups
+        : [];
+    return groups
+      .filter((group) => group && group.pauseIntent === "none")
+      .map((group) => group.queueGroupId);
   }
 
   async function executeClaim(claim) {
@@ -428,7 +452,11 @@ function createRegularQueueGroupOrchestrator(options) {
               processed: Object.freeze(completed),
             });
           const latest = snapshotGroup(queueGroupId);
-          if (!shutdown.signal.aborted && latest && latest.remaining.length > 0)
+          if (
+            !shutdown.signal.aborted &&
+            latest &&
+            queuedRemainingCount(latest) > 0
+          )
             await waitForSubmissionInterval(intervalMs);
         }
       })
@@ -477,7 +505,7 @@ function createRegularQueueGroupOrchestrator(options) {
           if (
             latest &&
             latest.pauseIntent === "none" &&
-            latest.remaining.length > 0 &&
+            queuedRemainingCount(latest) > 0 &&
             !activeGroups.has(group.queueGroupId)
           ) {
             void runGroup(group.queueGroupId).catch(function () {
@@ -510,11 +538,8 @@ function createRegularQueueGroupOrchestrator(options) {
     const started = transitions.startAllRegularQueueGroups();
     if (started.changedCount > 0)
       notifyDataInvalidated("REGULAR_QUEUE_GROUP_RUN_INTENT_CHANGED");
-    const runnable = started.groups.filter(
-      (group) => group.pauseIntent === "none",
-    );
     const results = await Promise.all(
-      runnable.map((group) => runGroup(group.queueGroupId)),
+      runnableGroupIds(started).map((queueGroupId) => runGroup(queueGroupId)),
     );
     return Object.freeze({
       changedCount: started.changedCount,

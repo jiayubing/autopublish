@@ -133,6 +133,7 @@ const regularQueueGroupSnapshot = exactObject({
   manuallyPaused: "boolean",
   current: nullableField(regularQueueCurrentItem),
   remaining: arrayField(regularQueueRemainingItem, { max: 20000 }),
+  remainingCount: optionalField(count),
   actions: exactObject({
     canStart: "boolean",
     canPause: "boolean",

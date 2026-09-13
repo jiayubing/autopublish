@@ -179,6 +179,35 @@ function createPaidMediaBatchOrchestrator(options) {
     });
   }
 
+  function runnableBatchIds(input, started) {
+    if (started && Array.isArray(started.runnableBatchIds))
+      return started.runnableBatchIds;
+    const listed = transitions.listPaidSubmissionBatchSnapshots(
+      Object.assign({ idsOnly: true }, input || {}),
+    );
+    if (listed && Array.isArray(listed.ids)) return listed.ids;
+    const batches = Array.isArray(listed) ? listed : [];
+    if (input && input.canStartOnly === true && input.clientId) {
+      return batches
+        .filter(function (batch) {
+          return batchBelongsOnlyToClient(batch, input.clientId);
+        })
+        .filter(function (batch) {
+          return batch.actions && batch.actions.canStart === true;
+        })
+        .map(function (batch) {
+          return batch.batchId;
+        });
+    }
+    return batches
+      .filter(function (batch) {
+        return batch.pauseIntent === "none";
+      })
+      .map(function (batch) {
+        return batch.batchId;
+      });
+  }
+
   function initializePaused() {
     return transitions.pausePaidSubmissionBatchesOnStartup();
   }
@@ -392,14 +421,14 @@ function createPaidMediaBatchOrchestrator(options) {
           status: "paid_execution_busy",
           results: Object.freeze([]),
         });
-      const batches = snapshot({ clientId }).filter(function (batch) {
-        return batchBelongsOnlyToClient(batch, clientId);
-      });
       const results = [];
-      for (const batch of batches) {
+      for (const batchId of runnableBatchIds({
+        clientId,
+        exclusiveClient: true,
+        canStartOnly: true,
+      })) {
         if (disposed) break;
-        if (batch.actions && batch.actions.canStart === true)
-          results.push(await startBatch({ batchId: batch.batchId }));
+        results.push(await startBatch({ batchId }));
       }
       return Object.freeze({
         status:
@@ -409,13 +438,11 @@ function createPaidMediaBatchOrchestrator(options) {
         results: Object.freeze(results),
       });
     }
-    transitions.startAllPaidSubmissionBatches();
-    const batches = snapshot({});
+    const started = transitions.startAllPaidSubmissionBatches();
     const results = [];
-    for (const batch of batches) {
+    for (const batchId of runnableBatchIds({ runnableOnly: true }, started)) {
       if (disposed) break;
-      if (batch.pauseIntent === "none")
-        results.push(await runBatch(batch.batchId));
+      results.push(await runBatch(batchId));
     }
     return Object.freeze({ results: Object.freeze(results) });
   }
