@@ -250,6 +250,8 @@ test("paid workbench pages preserve terminal, paused, in-flight and attention fi
   });
   try {
     const all = value.store.listPaidSubmissionBatchSnapshots({});
+    const runtime = value.store.listPaidSubmissionBatchSnapshots({runtimeOnly:true});
+    assert.deepEqual(runtime.map(batch => [batch.batchId,batch.pauseIntent,batch.actions.canStart]),all.map(batch => [batch.batchId,batch.pauseIntent,batch.actions.canStart]));
     const expected = all.filter(
       (batch) =>
         batch.status === "needs_attention" ||

@@ -175,8 +175,9 @@ test("application persists and updates the common queue-group submission interva
       submissionIntervalSeconds: 3600,
       expectedRevision: liejuGroup.revision,
     });
+    assert.deepEqual(updated, { completed: true });
     assert.equal(
-      updated.find((item) => item.queueGroupId === liejuGroup.queueGroupId)
+      fixture.runtime.application.listRegularQueueGroups().find((item) => item.queueGroupId === liejuGroup.queueGroupId)
         .submissionIntervalSeconds,
       3600,
     );
@@ -243,7 +244,8 @@ test("18-B application admits only imageCount 0..5, preserves existing groups, a
         imageCount: 5,
         expectedRevision: before.revision,
       });
-    const saved = updated.find(
+    assert.deepEqual(updated, { completed: true });
+    const saved = fixture.runtime.application.listRegularQueueGroups().find(
       (item) => item.queueGroupId === before.queueGroupId,
     );
     assert.equal(saved.imageCount, 5);
@@ -370,7 +372,7 @@ test("18-B rereads a saved zero-to-nonzero update after restart and fails closed
   }
 });
 
-test("18-B IPC accepts only the closed image-count command and returns its refreshed snapshot", async () => {
+test("18-B IPC accepts only the closed image-count command and acknowledges the persisted update without returning a queue snapshot", async () => {
   const fixture = setup();
   try {
     fixture.runtime.contentStore.createArticle(article("ipc-image-count"));
@@ -400,8 +402,9 @@ test("18-B IPC accepts only the closed image-count command and returns its refre
       expectedRevision: before.revision,
     });
     assert.equal(response.ok, true);
+    assert.deepEqual(response.data, { completed: true });
     assert.equal(
-      response.data.items.find(
+      fixture.runtime.application.listRegularQueueGroups().find(
         (item) => item.queueGroupId === before.queueGroupId,
       ).imageCount,
       3,

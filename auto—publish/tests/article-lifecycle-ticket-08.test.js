@@ -1296,7 +1296,8 @@ test("start all skips manually paused groups and pause all preserves the in-flig
     const resultPromise = orchestrator.startAll();
     await new Promise((resolve) => setImmediate(resolve));
     assert.deepEqual(preparedGroups, [running.queueGroupId]);
-    const paused = orchestrator.pauseAll();
+    orchestrator.pauseAll();
+    const paused = { groups: orchestrator.snapshot() };
     assert.equal(
       paused.groups.find((group) => group.queueGroupId === running.queueGroupId)
         .pauseIntent,

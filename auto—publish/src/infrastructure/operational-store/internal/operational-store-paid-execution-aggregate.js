@@ -309,9 +309,52 @@ function createPaidExecutionAggregate(context, activeTarget) {
     });
   }
 
+  function listPaidRuntimeBatches(value) {
+    const params = [];
+    let scope = "";
+    if (value.clientId !== undefined) {
+      params.push(
+        requiredText(value.clientId, 128, "PAID_EXECUTION_CLIENT_INVALID"),
+      );
+      scope =
+        " WHERE EXISTS (SELECT 1 FROM submission_items s WHERE s.batch_id=b.batch_id AND json_extract(s.payload_json,'$.clientId')=?)";
+      if (value.exclusiveClient === true) {
+        params.push(params[0]);
+        scope +=
+          " AND NOT EXISTS (SELECT 1 FROM submission_items s WHERE s.batch_id=b.batch_id AND json_extract(s.payload_json,'$.clientId') IS NOT ?)";
+      }
+    }
+    return Object.freeze(
+      db
+        .prepare(
+          `SELECT b.batch_id,b.pause_intent,
+      EXISTS(SELECT 1 FROM submission_items s WHERE s.batch_id=b.batch_id AND s.status IN ('claimed','remote_started')) in_flight,
+      EXISTS(SELECT 1 FROM submission_items s WHERE s.batch_id=b.batch_id AND s.status IN ('uncertain','blocked')) needs_attention,
+      EXISTS(SELECT 1 FROM submission_items s WHERE s.batch_id=b.batch_id AND s.status NOT IN ('completed','failed','cancelled')) has_work
+      FROM paid_submission_batches b${scope} ORDER BY b.created_at,b.batch_id`,
+        )
+        .all(...params)
+        .map((row) =>
+          Object.freeze({
+            batchId: row.batch_id,
+            pauseIntent: row.pause_intent,
+            actions: Object.freeze({
+              canStart: Boolean(
+                row.has_work &&
+                !row.needs_attention &&
+                !row.in_flight &&
+                row.pause_intent !== "none",
+              ),
+            }),
+          }),
+        ),
+    );
+  }
+
   function listPaidSubmissionBatchSnapshots(input) {
     open();
     const value = input || {};
+    if (value.runtimeOnly === true) return listPaidRuntimeBatches(value);
     if (value.page !== undefined) return listPaidSubmissionBatchPage(value);
     const rows =
       value.batchId === undefined
@@ -377,7 +420,8 @@ function createPaidExecutionAggregate(context, activeTarget) {
       return Object.freeze({
         mode,
         changedCount: changed,
-        batches: listPaidSubmissionBatchSnapshots({}),
+        batches:
+          mode === "start" ? listPaidRuntimeBatches({}) : Object.freeze([]),
       });
     });
   }

@@ -14,7 +14,7 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
-it("returns the complete queue-group snapshot after pausing one group", async function () {
+it("acknowledges pausing one group without reading another queue snapshot", async function () {
   const handlers = new Map();
   const calls = [];
   const groups = [
@@ -26,7 +26,7 @@ it("returns the complete queue-group snapshot after pausing one group", async fu
     submissionMaintenance: {},
     submissionWorkflow: {
       regularQueueGroups: {
-        list: () => groups,
+        list: () => { throw new Error("Commands must not enumerate queues"); },
         start: async () => undefined,
         pause: (input) => calls.push(input),
         startAll: async () => undefined,
@@ -41,7 +41,7 @@ it("returns the complete queue-group snapshot after pausing one group", async fu
   );
 
   assert.deepEqual(calls, [{ queueGroupId: "group-a" }]);
-  assert.deepEqual(result, { ok: true, data: { items: groups } });
+  assert.deepEqual(result, { ok: true, data: { completed: true } });
 });
 
 it("validates and forwards the queue-group submission interval command", async function () {
@@ -53,7 +53,7 @@ it("validates and forwards the queue-group submission interval command", async f
     submissionMaintenance: {},
     submissionWorkflow: {
       regularQueueGroups: {
-        list: () => groups,
+        list: () => { throw new Error("Commands must not enumerate queues"); },
         updateSubmissionInterval: (input) => {
           calls.push(input);
           return groups;
@@ -73,7 +73,7 @@ it("validates and forwards the queue-group submission interval command", async f
   };
   const result = await handlers.get(channel)(null, input);
   assert.deepEqual(calls, [input]);
-  assert.deepEqual(result, { ok: true, data: { items: groups } });
+  assert.deepEqual(result, { ok: true, data: { completed: true } });
 
   const invalid = await handlers.get(channel)(null, {
     ...input,

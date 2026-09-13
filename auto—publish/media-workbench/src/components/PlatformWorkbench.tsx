@@ -1,3 +1,4 @@
+import { regularQueueGroupViews } from "../features/platform/platform-feature";
 import {
   ChevronLeft,
   ChevronRight,
@@ -121,19 +122,11 @@ export default function PlatformWorkbench({
     useState<ArticleAttentionItem | null>(null);
   const [attentionError, setAttentionError] = useState("");
   const [actionError, setActionError] = useState("");
-  const groups = center.data.regular.groups.map((group) => {
-    const labels = snapshot.regularQueueGroupViews.find(
-      (candidate) => candidate.queueGroupId === group.queueGroupId,
-    );
-    return {
-      ...labels,
-      ...group,
-      platformLabel: labels?.platformLabel || group.platformId,
-      accountLabel: labels?.accountLabel || group.accountProfileId,
-      showAccount: labels?.showAccount ?? true,
-      stateLabel: labels?.stateLabel || group.runState,
-    };
-  });
+  const groups = regularQueueGroupViews(
+    center.data.regular.groups,
+    snapshot.accountProfiles.items,
+    (platformId: string) => snapshot.queue.platforms.find((platform) => platform.id === platformId)?.displayName || platformId,
+  );
   const groupQuery = center.query;
   const commands = snapshot.commands;
   const residue = snapshot.residue;

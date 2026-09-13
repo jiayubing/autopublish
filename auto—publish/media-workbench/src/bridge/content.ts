@@ -222,23 +222,23 @@ type SubmissionContentApi = {
     queueGroupId: string;
     imageCount: number;
     expectedRevision: number;
-  }) => Promise<ContentIpcResponse<{ items: RegularQueueGroupSnapshot[] }>>;
+  }) => Promise<ContentIpcResponse<{ completed: true }>>;
   updateRegularQueueGroupSubmissionInterval: (input: {
     queueGroupId: string;
     submissionIntervalSeconds: number;
     expectedRevision: number;
-  }) => Promise<ContentIpcResponse<{ items: RegularQueueGroupSnapshot[] }>>;
+  }) => Promise<ContentIpcResponse<{ completed: true }>>;
   startRegularQueueGroup: (input: {
     queueGroupId: string;
-  }) => Promise<ContentIpcResponse<{ items: RegularQueueGroupSnapshot[] }>>;
+  }) => Promise<ContentIpcResponse<{ completed: true }>>;
   pauseRegularQueueGroup: (input: {
     queueGroupId: string;
-  }) => Promise<ContentIpcResponse<{ items: RegularQueueGroupSnapshot[] }>>;
+  }) => Promise<ContentIpcResponse<{ completed: true }>>;
   startAllRegularQueueGroups: () => Promise<
-    ContentIpcResponse<{ items: RegularQueueGroupSnapshot[] }>
+    ContentIpcResponse<{ completed: true }>
   >;
   pauseAllRegularQueueGroups: () => Promise<
-    ContentIpcResponse<{ items: RegularQueueGroupSnapshot[] }>
+    ContentIpcResponse<{ completed: true }>
   >;
 };
 
@@ -625,59 +625,55 @@ export async function updateRegularQueueGroupImageCount(input: {
   queueGroupId: string;
   imageCount: number;
   expectedRevision: number;
-}): Promise<RegularQueueGroupSnapshot[]> {
+}): Promise<void> {
   return callSubmission(
     (api) => requireBridgeMethod(api.updateRegularQueueGroupImageCount)(input),
     "regular queue group image-count update failed",
-    { map: (wire) => wire.items },
+    { map: () => undefined },
   );
 }
 export async function updateRegularQueueGroupSubmissionInterval(input: {
   queueGroupId: string;
   submissionIntervalSeconds: number;
   expectedRevision: number;
-}): Promise<RegularQueueGroupSnapshot[]> {
+}): Promise<void> {
   return callSubmission(
     (api) =>
       requireBridgeMethod(api.updateRegularQueueGroupSubmissionInterval)(input),
     "regular queue group submission-interval update failed",
-    { map: (wire) => wire.items },
+    { map: () => undefined },
   );
 }
 export async function startRegularQueueGroup(input: {
   queueGroupId: string;
-}): Promise<RegularQueueGroupSnapshot[]> {
+}): Promise<void> {
   return callSubmission(
     (api) => requireBridgeMethod(api.startRegularQueueGroup)(input),
     "regular queue group start failed",
-    { map: (wire) => wire.items },
+    { map: () => undefined },
   );
 }
 export async function pauseRegularQueueGroup(input: {
   queueGroupId: string;
-}): Promise<RegularQueueGroupSnapshot[]> {
+}): Promise<void> {
   return callSubmission(
     (api) => requireBridgeMethod(api.pauseRegularQueueGroup)(input),
     "regular queue group pause failed",
-    { map: (wire) => wire.items },
+    { map: () => undefined },
   );
 }
-export async function startAllRegularQueueGroups(): Promise<
-  RegularQueueGroupSnapshot[]
-> {
+export async function startAllRegularQueueGroups(): Promise<void> {
   return callSubmission(
     (api) => requireBridgeMethod(api.startAllRegularQueueGroups)(),
     "regular queue groups start failed",
-    { map: (wire) => wire.items },
+    { map: () => undefined },
   );
 }
-export async function pauseAllRegularQueueGroups(): Promise<
-  RegularQueueGroupSnapshot[]
-> {
+export async function pauseAllRegularQueueGroups(): Promise<void> {
   return callSubmission(
     (api) => requireBridgeMethod(api.pauseAllRegularQueueGroups)(),
     "regular queue groups pause failed",
-    { map: (wire) => wire.items },
+    { map: () => undefined },
   );
 }
 export async function previewPaidMediaPreflight(

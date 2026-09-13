@@ -332,8 +332,7 @@ test("admission keeps one target, groups by identity, and hides a sole account i
     platformFeature = module.createPlatformFeature(bridge);
     platformFeature.setScope({ workspaceRuntimeId: "ticket-25-c-runtime" });
     await platformFeature.refreshAccountProfiles("acceptance");
-    await platformFeature.refreshRegularQueueGroups("acceptance");
-    const views = platformFeature.getSnapshot().regularQueueGroupViews;
+    const views = module.regularQueueGroupViews(groupSnapshots(fixture),platformFeature.getSnapshot().accountProfiles.items,bridge.platformDisplayName);
     assert.equal(
       views.find((group) => group.queueGroupId === first.items[0].queueGroupId)
         .showAccount,
@@ -598,7 +597,8 @@ test("pause-all, manual pause, start-all, and restart preserve operator intent",
       () => fake.calls.some((call) => call.articleId === "pause-current"),
       "pause test should reach its first remote call",
     );
-    const pauseResult = runtime.composition.orchestrator.pauseAll();
+    runtime.composition.orchestrator.pauseAll();
+    const pauseResult = { groups: runtime.composition.orchestrator.snapshot() };
     assert.equal(
       pauseResult.groups.find(
         (group) => group.queueGroupId === pending.items[0].queueGroupId,

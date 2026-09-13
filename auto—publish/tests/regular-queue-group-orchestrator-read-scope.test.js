@@ -65,7 +65,7 @@ test("regular queue runner scopes execution reads to its queueGroupId", async ()
 
   const result = await orchestrator.startGroup({ queueGroupId: "group-a" });
   assert.equal(result.status, "idle");
-  assert.deepEqual(reads, [{ queueGroupId: "group-a" }]);
+  assert.deepEqual(reads, [{ queueGroupId: "group-a", runtimeOnly: true }]);
 
   reads.length = 0;
   const snapshot = orchestrator.snapshot();

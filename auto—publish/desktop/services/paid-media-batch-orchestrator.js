@@ -145,11 +145,6 @@ function batchMatchesClient(batch, clientId) {
   return batchClientIds(batch).has(clientId);
 }
 
-function batchBelongsOnlyToClient(batch, clientId) {
-  const clients = batchClientIds(batch);
-  return clients.size === 1 && clients.has(clientId);
-}
-
 function createPaidMediaBatchOrchestrator(options) {
   const value = options || {};
   const transitions = validateTransitions(value.paidExecutionTransitions);
@@ -392,9 +387,7 @@ function createPaidMediaBatchOrchestrator(options) {
           status: "paid_execution_busy",
           results: Object.freeze([]),
         });
-      const batches = snapshot({ clientId }).filter(function (batch) {
-        return batchBelongsOnlyToClient(batch, clientId);
-      });
+      const batches = transitions.listPaidSubmissionBatchSnapshots({ clientId, exclusiveClient: true, runtimeOnly: true });
       const results = [];
       for (const batch of batches) {
         if (disposed) break;
@@ -409,8 +402,8 @@ function createPaidMediaBatchOrchestrator(options) {
         results: Object.freeze(results),
       });
     }
-    transitions.startAllPaidSubmissionBatches();
-    const batches = snapshot({});
+    const started = transitions.startAllPaidSubmissionBatches();
+    const batches = started.batches;
     const results = [];
     for (const batch of batches) {
       if (disposed) break;

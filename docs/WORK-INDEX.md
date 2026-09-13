@@ -4,7 +4,7 @@
 
 ## 当前执行入口
 
-- [规模审计修复](../.scratch/scale-audit/REMEDIATION.md)：SA-01 / SA-02 / SA-04 及付费页面分页/摘要读取完成；普通队列、全局执行/启动与其余失效优化待后续批次。
+- [规模审计修复](../.scratch/scale-audit/REMEDIATION.md)：普通/付费投稿中心分页、全局调度摘要与启动恢复读取第四批已完成；剩余无页接口及其他聚合/失效优化见当前计划。
 
 关联功能合同：[客户生成任务化与并发](../.scratch/client-generation-tasks/CLIENT-GENERATION-TASKS-PLAN.md)，只在涉及其行为时读取。
 

@@ -265,7 +265,7 @@ function createRegularQueueGroupOrchestrator(options) {
   }
 
   function snapshotGroup(queueGroupId) {
-    const groups = transitions.listRegularQueueGroupSnapshots({ queueGroupId });
+    const groups = transitions.listRegularQueueGroupSnapshots({ queueGroupId, runtimeOnly: true });
     return Array.isArray(groups) ? groups[0] || null : null;
   }
 
@@ -446,6 +446,7 @@ function createRegularQueueGroupOrchestrator(options) {
   async function startGroup(input) {
     if (shutdown.signal.aborted) throw fail("REGULAR_QUEUE_DISPOSED");
     const group = transitions.setRegularQueueGroupRunIntent({
+      runtimeOnly: true,
       queueGroupId: input && input.queueGroupId,
       running: true,
     });
@@ -456,6 +457,7 @@ function createRegularQueueGroupOrchestrator(options) {
   function kickGroup(input) {
     if (shutdown.signal.aborted) throw fail("REGULAR_QUEUE_DISPOSED");
     const group = transitions.setRegularQueueGroupRunIntent({
+      runtimeOnly: true,
       queueGroupId: input && input.queueGroupId,
       running: true,
       preserveManualPause: true,
@@ -507,7 +509,7 @@ function createRegularQueueGroupOrchestrator(options) {
 
   async function startAll() {
     if (shutdown.signal.aborted) throw fail("REGULAR_QUEUE_DISPOSED");
-    const started = transitions.startAllRegularQueueGroups();
+    const started = transitions.startAllRegularQueueGroups({ runtimeOnly: true });
     if (started.changedCount > 0)
       notifyDataInvalidated("REGULAR_QUEUE_GROUP_RUN_INTENT_CHANGED");
     const runnable = started.groups.filter(
@@ -524,6 +526,7 @@ function createRegularQueueGroupOrchestrator(options) {
 
   function pauseGroup(input) {
     const group = transitions.setRegularQueueGroupRunIntent({
+      runtimeOnly: true,
       queueGroupId: input && input.queueGroupId,
       running: false,
     });
@@ -532,7 +535,7 @@ function createRegularQueueGroupOrchestrator(options) {
   }
 
   function pauseAll() {
-    const result = transitions.pauseAllRegularQueueGroups();
+    const result = transitions.pauseAllRegularQueueGroups({ runtimeOnly: true });
     if (result.changedCount > 0)
       notifyDataInvalidated("REGULAR_QUEUE_GROUP_RUN_INTENT_CHANGED");
     return result;

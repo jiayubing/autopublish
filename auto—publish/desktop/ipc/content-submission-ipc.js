@@ -357,11 +357,8 @@ function registerContentSubmissionIpc(deps) {
     "content:update-regular-queue-group-image-count",
     function (event, input) {
       return wrap(function () {
-        return {
-          items: workflow.regularQueueGroups.updateImageCount(
-            regularQueueGroupImageCountInput(input),
-          ),
-        };
+        workflow.regularQueueGroups.updateImageCount(regularQueueGroupImageCountInput(input));
+        return { completed: true };
       });
     },
   );
@@ -369,39 +366,33 @@ function registerContentSubmissionIpc(deps) {
     "content:update-regular-queue-group-submission-interval",
     function (event, input) {
       return wrap(function () {
-        return {
-          items: workflow.regularQueueGroups.updateSubmissionInterval(
-            regularQueueGroupSubmissionIntervalInput(input),
-          ),
-        };
+        workflow.regularQueueGroups.updateSubmissionInterval(regularQueueGroupSubmissionIntervalInput(input));
+        return { completed: true };
       });
     },
   );
   deps.ipcMain.handle("content:start-regular-queue-group", function (event, input) {
     return wrap(async function () {
       await workflow.regularQueueGroups.start(input);
-      return {
-        items: workflow.regularQueueGroups.list(),
-      };
+      return { completed: true };
     });
   });
   deps.ipcMain.handle("content:pause-regular-queue-group", function (event, input) {
     return wrap(function () {
       workflow.regularQueueGroups.pause(input);
-      return { items: workflow.regularQueueGroups.list() };
+      return { completed: true };
     });
   });
   deps.ipcMain.handle("content:start-all-regular-queue-groups", function () {
     return wrap(async function () {
       await workflow.regularQueueGroups.startAll();
-      return {
-        items: workflow.regularQueueGroups.list(),
-      };
+      return { completed: true };
     });
   });
   deps.ipcMain.handle("content:pause-all-regular-queue-groups", function () {
     return wrap(function () {
-      return { items: workflow.regularQueueGroups.pauseAll().groups };
+      workflow.regularQueueGroups.pauseAll();
+      return { completed: true };
     });
   });
   if (paidMedia) {

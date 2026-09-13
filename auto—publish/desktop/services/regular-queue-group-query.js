@@ -46,7 +46,9 @@ function createRegularQueueGroupQuery(options) {
     const requestedClientId = input && typeof input.clientId === "string"
       ? input.clientId
       : null;
-    const groups = groupTransitions.listRegularQueueGroupSnapshots({}) || [];
+    const raw = groupTransitions.listRegularQueueGroupSnapshots(input && input.page !== undefined ? input : {}) || [];
+    const paged = !Array.isArray(raw);
+    const groups = paged ? raw.groups : raw;
     if (!Array.isArray(groups)) throw fail("REGULAR_QUEUE_GROUP_QUERY_INVALID");
     const clientsById = new Map();
 
@@ -115,7 +117,7 @@ function createRegularQueueGroupQuery(options) {
       });
     }
 
-    return Object.freeze(
+    const mapped = Object.freeze(
       groups.map((group) => {
         if (!group || !Array.isArray(group.remaining))
           throw fail("REGULAR_QUEUE_GROUP_QUERY_INVALID");
@@ -168,6 +170,7 @@ function createRegularQueueGroupQuery(options) {
         });
       }).filter(Boolean),
     );
+    return paged ? Object.freeze({ ...raw, groups: mapped }) : mapped;
   }
 
   return Object.freeze({ listRegularQueueGroups });

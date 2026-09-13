@@ -23,49 +23,40 @@ function batch(batchId, clientIds) {
   };
 }
 
-function fixture(batches) {
-  const runIntentCalls = [];
-  const transitions = {
-    beginOrderCreationRemoteCall() {
-      throw new Error("unexpected remote call");
-    },
-    cancelRemainingPaidSubmissionBatchItems() {},
-    claimPaidSubmissionBatchItem() {
-      return null;
-    },
-    listPaidSubmissionBatchSnapshots() {
-      return batches;
-    },
-    pauseAllPaidSubmissionBatches() {},
-    pausePaidSubmissionBatchesOnStartup() {},
-    recordPaidOrderCreationArticleRejection() {},
-    recordPaidOrderCreationSuccess() {},
-    recordPaidOrderCreationSystemRejection() {},
-    recordPaidOrderCreationUncertain() {},
-    releasePaidOrderCreationClaim() {},
-    renewPaidOrderCreationClaim() {},
-    setPaidSubmissionBatchRunIntent(input) {
-      runIntentCalls.push(input);
-    },
-    startAllPaidSubmissionBatches() {},
+function fixture(t, batches) {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const {createOperationalStore} = require("../src/infrastructure/operational-store/operational-store");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(),"paid-client-scope-"));
+  const ports = {};
+  const store = createOperationalStore({workspaceRoot:root,transitionPorts:ports});
+  t.after(() => { store.close(); fs.rmSync(root,{recursive:true,force:true}); });
+  for (const row of batches) {
+    const refs = row.items.map(item => ({clientId:item.articleIdentityV1.clientId,articleId:item.articleIdentityV1.articleId}));
+    ports.paidAdmissionTransitions.admitPaidBatch({
+      batchId:row.batchId,articleCount:refs.length,
+      target:{kind:"media",mediaResourceId:"media-a"}, confirmationFingerprint:"b".repeat(64),
+      confirmation:{version:1,articleRefs:refs,mediaResourceId:"media-a",quotedPrice:1,confirmedAt:"2026-09-13T00:00:00.000Z"},
+      systemSubmissionCode:"system-a",quotedPrice:1,estimatedTotal:refs.length,
+      items:refs.map((ref,index)=>({...ref,articleRef:ref,batchId:row.batchId,itemId:`${row.batchId}-item-${index}`,publicationId:`${row.batchId}-publication-${index}`,attemptId:`${row.batchId}-attempt-${index}`,customerSnapshotV1:{version:1,clientId:ref.clientId,displayName:ref.clientId},publicationSnapshot:{articleId:ref.articleId,title:"Synthetic",body:"Synthetic body",fingerprint:"a".repeat(64)}})),
+    });
+  }
+  const runIntentCalls=[];
+  const transitions={...ports.paidExecutionTransitions,
+    claimPaidSubmissionBatchItem(){return null;},
+    setPaidSubmissionBatchRunIntent(input){runIntentCalls.push(input);return ports.paidExecutionTransitions.setPaidSubmissionBatchRunIntent(input);},
   };
-  const orchestrator = createPaidMediaBatchOrchestrator({
-    paidExecutionTransitions: transitions,
-    orderCreationPort: {
-      async createOrder() {
-        throw new Error("unexpected remote call");
-      },
-    },
-    randomUUID: () => "synthetic",
-  });
-  return { orchestrator, runIntentCalls };
+  const orchestrator=createPaidMediaBatchOrchestrator({paidExecutionTransitions:transitions,orderCreationPort:{createOrder(){throw new Error("No real orders");}}});
+  t.after(()=>orchestrator.dispose());
+  return {orchestrator,runIntentCalls};
 }
 
-test("client snapshot keeps valid mixed-client paid batches visible", () => {
+test("client snapshot keeps valid mixed-client paid batches visible", (t) => {
   const mixed = batch("mixed", ["client-a", "client-b"]);
   const onlyA = batch("only-a", ["client-a"]);
   const onlyB = batch("only-b", ["client-b"]);
-  const { orchestrator } = fixture([mixed, onlyA, onlyB]);
+  const { orchestrator } = fixture(t, [mixed, onlyA, onlyB]);
 
   assert.deepEqual(
     orchestrator.snapshot({ clientId: "client-a" }).map((item) => item.batchId),
@@ -77,11 +68,11 @@ test("client snapshot keeps valid mixed-client paid batches visible", () => {
   );
 });
 
-test("client-scoped start-all starts only batches fully owned by that client", async () => {
+test("client-scoped start-all starts only batches fully owned by that client", async (t) => {
   const mixed = batch("mixed", ["client-a", "client-b"]);
   const onlyA = batch("only-a", ["client-a"]);
   const onlyB = batch("only-b", ["client-b"]);
-  const { orchestrator, runIntentCalls } = fixture([mixed, onlyA, onlyB]);
+  const { orchestrator, runIntentCalls } = fixture(t, [mixed, onlyA, onlyB]);
 
   const result = await orchestrator.startAll({ clientId: "client-a" });
 
@@ -93,8 +84,8 @@ test("client-scoped start-all starts only batches fully owned by that client", a
   assert.deepEqual(runIntentCalls, [{ batchId: "only-a", running: true }]);
 });
 
-test("client-scoped start-all does not start a mixed-client batch by itself", async () => {
-  const { orchestrator, runIntentCalls } = fixture([
+test("client-scoped start-all does not start a mixed-client batch by itself", async (t) => {
+  const { orchestrator, runIntentCalls } = fixture(t, [
     batch("mixed", ["client-a", "client-b"]),
   ]);
 

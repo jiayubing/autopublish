@@ -264,7 +264,7 @@ function createSubmissionCenterSnapshot(options) {
     if (!Number.isSafeInteger(revisionBefore) || revisionBefore < 0)
       throw fail("SUBMISSION_CENTER_SNAPSHOT_INVALID");
     const settled = await Promise.allSettled([
-      Promise.resolve().then(() => opts.listRegularQueueGroups({ ...(clientId ? { clientId } : {}) })),
+      Promise.resolve().then(() => opts.listRegularQueueGroups({ page: queryPage.page, pageSize: queryPage.pageSize, ...(clientId ? { clientId } : {}) })),
       Promise.resolve().then(() => opts.listPaidMediaBatches({ page: queryPage.page, pageSize: queryPage.pageSize, ...(clientId ? { clientId } : {}) })),
       Promise.resolve().then(() => opts.listAttention({ ...(clientId ? { clientId } : {}) })),
     ]);
@@ -279,12 +279,18 @@ function createSubmissionCenterSnapshot(options) {
     const paidRaw = valueFor(1, "paid", { items: [] });
     const attentionRaw = valueFor(2, "attention", { items: [] });
     const revisionAfter = Number(opts.getRevision());
-    const regularGroups = projectRegular(regularRaw, clientId);
+    const regularIsPage = regularRaw && !Array.isArray(regularRaw);
+    const regularGroups = projectRegular(regularIsPage ? regularRaw.groups : regularRaw, clientId);
+    if (regularIsPage && (!Number.isSafeInteger(regularRaw.totalItems) || regularRaw.totalItems < 0 || !Number.isSafeInteger(regularRaw.totalSlots) || regularRaw.totalSlots < regularRaw.totalItems || regularGroups.length > queryPage.pageSize || regularRaw.page !== queryPage.page || regularRaw.pageSize !== queryPage.pageSize))
+      throw fail("SUBMISSION_CENTER_SNAPSHOT_INVALID");
+    const visibleRegularItems = regularGroups.reduce((total, group) => total + (group.current ? 1 : 0) + group.remaining.length, 0);
+    if (regularIsPage && (visibleRegularItems > queryPage.pageSize || regularRaw.totalItems < visibleRegularItems))
+      throw fail("SUBMISSION_CENTER_SNAPSHOT_INVALID");
     const paidBatches = projectPaid(paidRaw, clientId).filter(
       isPaidWorkbenchBatch,
     );
     const attentionItems = projectAttention(attentionRaw, clientId);
-    const regularItems = regularGroups.reduce(function (total, group) {
+    const regularItems = regularIsPage ? regularRaw.totalItems : regularGroups.reduce(function (total, group) {
       return total + (group.current ? 1 : 0) + group.remaining.length;
     }, 0);
     const paidIsPage = paidRaw && Object.prototype.hasOwnProperty.call(paidRaw, "total");
@@ -299,7 +305,7 @@ function createSubmissionCenterSnapshot(options) {
     };
     const start = (queryPage.page - 1) * queryPage.pageSize;
     const end = start + queryPage.pageSize;
-    const regularPage = regularGroups.slice(start, end);
+    const regularPage = regularIsPage ? regularGroups : regularGroups.slice(start, end);
     const paidPage = paidIsPage ? paidBatches : paidBatches.slice(start, end);
     const attentionPage = attentionItems.slice(start, end);
     return {
@@ -315,7 +321,7 @@ function createSubmissionCenterSnapshot(options) {
         counts: totalCounts,
         page: queryPage.page,
         pageSize: queryPage.pageSize,
-        hasMore: end < Math.max(regularGroups.length, paidBatchesCount, attentionItems.length),
+        hasMore: end < Math.max(regularIsPage ? regularRaw.totalSlots : regularGroups.length, paidBatchesCount, attentionItems.length),
         failures,
       },
     };

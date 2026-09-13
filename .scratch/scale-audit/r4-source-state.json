@@ -1,0 +1,166 @@
+{
+  "baseHead": "5ecbd3fdf5b47f4c2c9271baff8a948c40e0582e",
+  "createdAt": "2026-09-13T05:11:44.630617+00:00",
+  "status": "uncommitted",
+  "files": [
+    {
+      "path": ".scratch/scale-audit/REMEDIATION.md",
+      "sha256": "02d9ac1e70e560e4e152bb301d6ac4ec775460c1e8697aab6d6042ea674e0e4b"
+    },
+    {
+      "path": ".scratch/scale-audit/r4-probe.cjs",
+      "sha256": "26a325a63c95e2a98e6d2caf4bf0929807364639687dd5a5afb8c1fa25397a6e"
+    },
+    {
+      "path": "auto—publish/desktop/ipc/content-submission-ipc.js",
+      "sha256": "e51af7db6887861b8bc23219b589f2085efe25515f4da1bdaf7e217e0b4d850c"
+    },
+    {
+      "path": "auto—publish/desktop/ipc/contracts/submission-regular-contracts.js",
+      "sha256": "da84bf648c6444d4f2291e5140f633a117de9e12a422dc09690cb457548ecd28"
+    },
+    {
+      "path": "auto—publish/desktop/services/paid-media-batch-orchestrator.js",
+      "sha256": "1950942060a10da6c8340864224639f16f2f8ada9e451385341cf05bebe80afa"
+    },
+    {
+      "path": "auto—publish/desktop/services/regular-queue-application.js",
+      "sha256": "26eac057e2e917bd68ae4e1700911808c0a0fa08feb44025de3667255b8c6b2b"
+    },
+    {
+      "path": "auto—publish/desktop/services/regular-queue-group-orchestrator.js",
+      "sha256": "c5f30fc2514e690529c00ecbb6483b3069d75185550558e4aa7ed81182ea8e20"
+    },
+    {
+      "path": "auto—publish/desktop/services/regular-queue-group-query.js",
+      "sha256": "fbba4879dfdddb5ecb7b4b55f6a3de92ee7a2228c66d45805eee8bc59517aba1"
+    },
+    {
+      "path": "auto—publish/desktop/services/submission-center-snapshot.js",
+      "sha256": "3f017ed6fb58c491dff5057e9e7653f9beb3c5cd8380ccd4a54c33324017afac"
+    },
+    {
+      "path": "auto—publish/media-workbench/src/bridge/content.ts",
+      "sha256": "fb4f7ec586575114dda1582940bb132b3e31057e4c589069f0c938bc09d01bc6"
+    },
+    {
+      "path": "auto—publish/media-workbench/src/components/PlatformWorkbench.tsx",
+      "sha256": "8e141d8258a23c79f5f45cb6aeb9ee273df77516ab7c43774a7d2341b118f438"
+    },
+    {
+      "path": "auto—publish/media-workbench/src/components/RegularQueueGroupsPanel.tsx",
+      "sha256": "1aeb7e5faebe285130279ca9c5c58d71610065b3596f82014bef39fdfb5dbb11"
+    },
+    {
+      "path": "auto—publish/media-workbench/src/features/platform/platform-feature-context.tsx",
+      "sha256": "316cd954e501cbe40355325532f0bbd42535278937592889c73257ba85f8d7a0"
+    },
+    {
+      "path": "auto—publish/media-workbench/src/features/platform/platform-feature.js",
+      "sha256": "e278c91534e9746a250159f4895eae7b5357678e7add75609e1e782f08b30599"
+    },
+    {
+      "path": "auto—publish/src/infrastructure/operational-store/internal/operational-store-paid-execution-aggregate.js",
+      "sha256": "8630d7feb603a78bc0e29281636a3d182e330362cbfc9b5626d26fd20db75e1c"
+    },
+    {
+      "path": "auto—publish/src/infrastructure/operational-store/internal/operational-store-regular-queue-runtime.js",
+      "sha256": "3fbb4e1be4996420bbe34ef965268c05835e914e99f217bd2e5c7608e2b9c0a3"
+    },
+    {
+      "path": "auto—publish/tests/article-lifecycle-ticket-08.test.js",
+      "sha256": "b3873440aa0bba7651c552f8294d3f957ba20dd35b14ed5a1137e3473abe8142"
+    },
+    {
+      "path": "auto—publish/tests/content-submission-ipc.test.js",
+      "sha256": "9b7dacc6aa3e540455109379a4134acfd5fcb3c9e4061a8acb926a15650b0a12"
+    },
+    {
+      "path": "auto—publish/tests/fixtures/phase-06-production-ipc-contract-fixtures.js",
+      "sha256": "860c7c544ebcfcf18be46fdfad5c8771a133e8891a966d375abb308558f822b7"
+    },
+    {
+      "path": "auto—publish/tests/helpers/scale-queue-fixture.js",
+      "sha256": "a3307660569857470af172dbf34a969f85eaf1b8d425ab45ea94548f047dd2b1"
+    },
+    {
+      "path": "auto—publish/tests/paid-batch-pagination.test.js",
+      "sha256": "2ceb998a94bc0e25615cadd1a45a86a026a6ff4a79ec5a79d483628f3ce931d0"
+    },
+    {
+      "path": "auto—publish/tests/paid-media-batch-client-scope.test.js",
+      "sha256": "f8e8e69da531ba34d9319a8ba201ab2c0d6b80d3fc201fd49cd78da7f3427153"
+    },
+    {
+      "path": "auto—publish/tests/phase-07-regular-queue.test.js",
+      "sha256": "54612be9ac669182df1e7ec82f661ad10a69d7c821813bc7f624d9b4fb97c073"
+    },
+    {
+      "path": "auto—publish/tests/phase-08-platform-media-settings-workspace-renderer-slice.test.mjs",
+      "sha256": "c556a53be4ac1f95ea17d2352762d09520ee0a42a4d99e74a6ec5b29f03bb795"
+    },
+    {
+      "path": "auto—publish/tests/platform-feature-submission-interval.test.mjs",
+      "sha256": "e1503b0028b097d0eb5d1f53ab24cd54c55ee869e096a738c6f68e6a800790a2"
+    },
+    {
+      "path": "auto—publish/tests/regular-platform-acceptance.test.js",
+      "sha256": "64313247b7698eb147dd7c86307c4cc02ff628ec7825d9d9ad508fa93c4c7144"
+    },
+    {
+      "path": "auto—publish/tests/regular-queue-group-orchestrator-read-scope.test.js",
+      "sha256": "c19dc0ef7571489a6125c2d775c54873f6ae9d41cf3f77ab1077fcc2c6df3bc4"
+    },
+    {
+      "path": "auto—publish/tests/regular-queue-pagination.test.js",
+      "sha256": "284ba9b65474e94dc6e96b07c61c2a53c8e190c6e145a553fcba067c56f1f963"
+    },
+    {
+      "path": "auto—publish/tests/ticket-18-b-queue-image-config-surface.test.js",
+      "sha256": "662edc572c65ac9bc11bb96a952b78cead5d2d70aee5a7b2e88d9dc8388543fb"
+    },
+    {
+      "path": "docs/WORK-INDEX.md",
+      "sha256": "341523211a6205657a5360b2b0e1bdecb25d378b0f3f067ff940e5adb29142ea"
+    }
+  ],
+  "validation": [
+    {
+      "path": ".scratch/scale-audit/r4-final-desktop-tests.log",
+      "sha256": "ab7ebda26554c9ba26df7502f8967c5910bf360e9c860c8368c3f4227ae8425a"
+    },
+    {
+      "path": ".scratch/scale-audit/r4-final-bounded-tests.log",
+      "sha256": "95cca86a9758e8ab0917a6336a969cb0a592abba53fcb6fa20bf309f1ddeb0e9"
+    },
+    {
+      "path": ".scratch/scale-audit/r4-final-ipc-matrix.log",
+      "sha256": "e9604e0e42e647b2f8af92ee859429890a04cf06f8b27d8d7c500c47edcc5625"
+    },
+    {
+      "path": ".scratch/scale-audit/r4-final-lint.log",
+      "sha256": "4719207db1de39dff12b56ed1bd59ff8218ca692682c09a44d607bd309d59967"
+    },
+    {
+      "path": ".scratch/scale-audit/r4-typecheck-main.log",
+      "sha256": "ebbc142724f130b6a415fe941f24cc023094b14e865322902f3ad4fce01fbed6"
+    },
+    {
+      "path": ".scratch/scale-audit/r4-typecheck-bridge.log",
+      "sha256": "1bde7b67ab165f2ead21a7a73f10585f97084eb9dcbfdbeba2fc67dc001da18b"
+    },
+    {
+      "path": ".scratch/scale-audit/r4-build-renderer.log",
+      "sha256": "9f03cad5262b7ecf556431f32015fa1395b7469ecf527fc279af90685f0b4709"
+    },
+    {
+      "path": ".scratch/scale-audit/r4-build-preload.log",
+      "sha256": "8ff52cf6973ea30bb493a082f38437b6ef6c1b0b35ea469da64b5443f776f96c"
+    },
+    {
+      "path": ".scratch/scale-audit/r4-final-format-check.log",
+      "sha256": "3fec21cfbdb914e0d464a5df188435db8209a5222979e0b357fd0b9126378796"
+    }
+  ],
+  "note": "Full desktop 1782 passed before bounded paid runtime-contract cleanup; final 35-test targeted run binds final source. See REMEDIATION.md for exact evidence scope."
+}

@@ -259,7 +259,7 @@ export default function RegularQueueGroupsPanel({
   onUpdateSubmissionInterval,
   onRemove,
 }: {
-  groups: QueueGroupView[];
+  groups: readonly QueueGroupView[];
   loading: boolean;
   startBusy: boolean;
   pauseBusy: boolean;
@@ -364,17 +364,17 @@ export default function RegularQueueGroupsPanel({
             )}
             <div className="mb-2 flex items-center justify-between gap-3">
               <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">
-                待执行 · {group.remaining.length}
+                本页待执行 · {group.remaining.length}
               </p>
             </div>
             <ol className="grid max-h-56 gap-1.5 overflow-y-auto pr-1">
-              {group.remaining.map((item, index) => (
+              {group.remaining.map((item) => (
                 <li
                   key={item.itemId}
                   className="flex min-w-0 items-center gap-2 rounded-lg border border-transparent px-2 py-1.5 text-[11px] text-slate-600 hover:border-slate-100 hover:bg-slate-50"
                 >
                   <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-slate-100 font-mono text-[9px] text-slate-500">
-                    {index + 1}
+                    {item.position}
                   </span>
                   <span className="min-w-0 flex-1 truncate" title={articleLabel(item)}>
                     {articleLabel(item)}

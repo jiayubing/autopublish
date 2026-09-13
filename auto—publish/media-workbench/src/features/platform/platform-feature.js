@@ -86,7 +86,7 @@ function isAttentionItem(article) {
   return Boolean(article?.archiveErrorCode) || article?.sourceArticleState === 'missing' || article?.sourceArticleState === 'trashed';
 }
 
-function regularQueueGroupViews(items, profiles, platformDisplayName) {
+export function regularQueueGroupViews(items, profiles, platformDisplayName) {
   const profileList = Array.isArray(profiles) ? profiles : [];
   const countByPlatform = new Map();
   profileList.forEach((profile) => {
@@ -157,7 +157,6 @@ export function createPlatformFeature(bridge = {}) {
   const runQuery = createQueryIdentity({ feature: 'platform', query: 'run' });
   const residueQuery = createQueryIdentity({ feature: 'platform', query: 'queueResidue' });
   const accountProfileQuery = createQueryIdentity({ feature: 'platform', query: 'accountProfiles' });
-  const regularGroupQuery = createQueryIdentity({ feature: 'platform', query: 'regularQueueGroups' });
   const listeners = new Set();
   let disposed = false;
   let started = false;
@@ -172,19 +171,12 @@ export function createPlatformFeature(bridge = {}) {
     items: Object.freeze([]),
     query: Object.freeze({ loading: false, error: null }),
   });
-  let regularQueueGroups = Object.freeze({
-    items: Object.freeze([]),
-    query: Object.freeze({ loading: false, error: null }),
-  });
   let error = null;
   let terminalRevision = null;
   let residue = { phase: 'idle', cleanableCount: 0, reportedCount: 0, feedback: null };
   let snapshot;
 
   const publish = () => {
-    const displayNameFor = (platformId) =>
-      queue.platforms.find((platform) => platform.id === platformId)?.displayName ||
-      platformId;
     snapshot = Object.freeze({
       scope,
       queue,
@@ -192,12 +184,6 @@ export function createPlatformFeature(bridge = {}) {
       runQuery: runQueryState,
       loginByPlatformId,
       accountProfiles,
-      regularQueueGroups,
-      regularQueueGroupViews: regularQueueGroupViews(
-        regularQueueGroups.items,
-        accountProfiles.items,
-        displayNameFor,
-      ),
       error,
       terminalRevision,
       commands: Object.freeze(
@@ -285,17 +271,12 @@ export function createPlatformFeature(bridge = {}) {
       runQuery.setScope(scope);
       residueQuery.setScope(scope);
       accountProfileQuery.setScope(scope);
-      regularGroupQuery.setScope(scope);
       COMMAND_NAMES.forEach((name) => owners[name].invalidate());
       queue = EMPTY_QUEUE;
       run = IDLE_RUN;
       runQueryState = Object.freeze({ loading: false, error: null, reason: null });
       loginByPlatformId = Object.freeze({});
       accountProfiles = Object.freeze({
-        items: Object.freeze([]),
-        query: Object.freeze({ loading: false, error: null }),
-      });
-      regularQueueGroups = Object.freeze({
         items: Object.freeze([]),
         query: Object.freeze({ loading: false, error: null }),
       });
@@ -417,168 +398,69 @@ export function createPlatformFeature(bridge = {}) {
         throw value;
       }
     },
-    async refreshRegularQueueGroups(reason = 'manual') {
-      requireScope();
-      const token = regularGroupQuery.begin(undefined, reason);
-      regularQueueGroups = Object.freeze({
-        ...regularQueueGroups,
-        query: Object.freeze({ loading: true, error: null }),
-      });
-      publish();
-      try {
-        const items = await bridge.listRegularQueueGroups();
-        if (!regularGroupQuery.isCurrent(token)) return regularQueueGroups;
-        regularQueueGroups = Object.freeze({
-          items: Object.freeze(Array.isArray(items) ? [...items] : []),
-          query: Object.freeze({ loading: false, error: null }),
-        });
-        publish();
-        return regularQueueGroups;
-      } catch (value) {
-        if (!regularGroupQuery.isCurrent(token)) return regularQueueGroups;
-        regularQueueGroups = Object.freeze({
-          ...regularQueueGroups,
-          query: Object.freeze({
-            loading: false,
-            error: Object.freeze({
-              code: errorCode(value, 'REGULAR_QUEUE_GROUP_QUERY_FAILED'),
-              userMessage: message(value, '读取普通平台队列组失败'),
-            }),
-          }),
-        });
-        publish();
-        throw value;
-      }
-    },
     startGroup(queueGroupId) {
       if (owners.startGroup.getSnapshot().busy) return Promise.resolve({ ignored: true });
-      regularGroupQuery.invalidate();
       const pending = ownedCommand(
         owners.startGroup,
         { ...requireScope(), queueGroupId },
         () => bridge.startRegularQueueGroup({ queueGroupId }),
         '启动普通平台队列组失败',
-        (items) => {
-          regularGroupQuery.invalidate();
-          regularQueueGroups = Object.freeze({
-            items: Object.freeze(Array.isArray(items) ? [...items] : []),
-            query: Object.freeze({ loading: false, error: null }),
-          });
-        },
       );
-      void feature.refreshRegularQueueGroups('start-requested').catch(() => {
-        reportRefreshFailure(bridge, 'PLATFORM_REGULAR_GROUP_REFRESH_FAILED');
-      });
       return pending;
     },
     pauseGroup(queueGroupId) {
-      regularGroupQuery.invalidate();
       return ownedCommand(
         owners.pauseGroup,
         { ...requireScope(), queueGroupId },
         () => bridge.pauseRegularQueueGroup({ queueGroupId }),
         '暂停普通平台队列组失败',
-        (items) => {
-          regularGroupQuery.invalidate();
-          regularQueueGroups = Object.freeze({
-            items: Object.freeze(Array.isArray(items) ? [...items] : []),
-            query: Object.freeze({ loading: false, error: null }),
-          });
-        },
       );
     },
     startAllGroups() {
       if (owners.startAllGroups.getSnapshot().busy) return Promise.resolve({ ignored: true });
-      regularGroupQuery.invalidate();
       const pending = ownedCommand(
         owners.startAllGroups,
         requireScope(),
         () => bridge.startAllRegularQueueGroups(),
         '启动全部普通平台队列组失败',
-        (items) => {
-          regularGroupQuery.invalidate();
-          regularQueueGroups = Object.freeze({
-            items: Object.freeze(Array.isArray(items) ? [...items] : []),
-            query: Object.freeze({ loading: false, error: null }),
-          });
-        },
       );
-      void feature.refreshRegularQueueGroups('start-all-requested').catch(() => {
-        reportRefreshFailure(bridge, 'PLATFORM_REGULAR_GROUP_REFRESH_FAILED');
-      });
       return pending;
     },
     pauseAllGroups() {
-      regularGroupQuery.invalidate();
       return ownedCommand(
         owners.pauseAllGroups,
         requireScope(),
         () => bridge.pauseAllRegularQueueGroups(),
         '暂停全部普通平台队列组失败',
-        (items) => {
-          regularGroupQuery.invalidate();
-          regularQueueGroups = Object.freeze({
-            items: Object.freeze(Array.isArray(items) ? [...items] : []),
-            query: Object.freeze({ loading: false, error: null }),
-          });
-        },
       );
     },
     updateImageCount(input) {
       if (owners.updateImageCount.getSnapshot().busy)
         return Promise.resolve({ ignored: true });
-      regularGroupQuery.invalidate();
       return ownedCommand(
         owners.updateImageCount,
         { ...requireScope(), queueGroupId: input?.queueGroupId },
         () => bridge.updateRegularQueueGroupImageCount(input),
         '保存普通平台队列图片数量失败',
-        (items) => {
-          regularGroupQuery.invalidate();
-          regularQueueGroups = Object.freeze({
-            items: Object.freeze(Array.isArray(items) ? [...items] : []),
-            query: Object.freeze({ loading: false, error: null }),
-          });
-        },
       );
     },
     updateSubmissionInterval(input) {
       if (owners.updateSubmissionInterval.getSnapshot().busy)
         return Promise.resolve({ ignored: true });
-      regularGroupQuery.invalidate();
       return ownedCommand(
         owners.updateSubmissionInterval,
         { ...requireScope(), queueGroupId: input?.queueGroupId },
         () => bridge.updateRegularQueueGroupSubmissionInterval(input),
         '保存普通平台队列投稿间隔失败',
-        (items) => {
-          regularGroupQuery.invalidate();
-          regularQueueGroups = Object.freeze({
-            items: Object.freeze(Array.isArray(items) ? [...items] : []),
-            query: Object.freeze({ loading: false, error: null }),
-          });
-        },
       );
     },
     removePendingQueueItems(items) {
-      regularGroupQuery.invalidate();
       const pending = ownedCommand(
         owners.removePendingQueueItems,
         requireScope(),
         () => bridge.removePendingQueueItems({ items }),
         '移除普通平台队列项失败',
       );
-      void pending
-        .then(
-          (result) => {
-            if (result?.ignored) return undefined;
-            return feature.refreshRegularQueueGroups('queue-item-removed');
-          },
-          () => undefined,
-        )
-        .catch(() => {
-          reportRefreshFailure(bridge, 'PLATFORM_REGULAR_GROUP_REFRESH_FAILED');
-        });
       return pending;
     },
     pause(runId) {

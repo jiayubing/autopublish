@@ -1,6 +1,6 @@
 # 规模审计修复
 
-状态：BATCH_3_COMPLETE / OVERALL_PENDING。SA-01 / SA-02 / SA-04 已修复。本批关闭 SA-03 的付费页面截断与 SA-05 的投稿中心读取放大；普通队列、全局执行/启动读取和其余 SA-06/07 仍待后续批次，不宣称整个规模目标通过。
+状态：BATCH_4_COMPLETE / OVERALL_PENDING。SA-01 / SA-02 / SA-04 已修复；付费/普通投稿中心分页、全局调度摘要和启动恢复读取已实现。剩余非热路径无页接口与 SA-06/07 的失效/其他启动读取仍需后续处理，不宣称整个规模目标通过。
 
 保持唯一 OperationalStore owner、FIFO、暂停/在途/不确定结果及发布证据校验；不修改真实数据库，不执行外部投稿。
 
@@ -9,7 +9,7 @@
 ## 进展
 
 - 已读取审计及直接 owner；原组查询会为每条队列记录执行组级 blocked 子查询，然后在 JS 去重。
-- SA-03、SA-05～07：待实施，owner 与验收继续按 AUDIT.md。
+- SA-03、SA-05～07：按下文四批记录推进；第四批范围已闭合，其他查询/失效与无页接口清理仍有剩余。
 
 ## 第一批实现与有界复核
 
@@ -81,3 +81,49 @@
 - 有界复核：仅检查本批查询diff、读取/执行消费者分离、分页计数、SQL载荷、客户和状态组合、错误页元数据与直接回归。结论为本批范围PASS；整体SA-03仍部分未闭合。没有新增writer、持久缓存或schema变更。
 - 未重复Electron打包/真实外部验收：本批未修改renderer或IPC外形；已通过真实typed IPC校验与现有桌面回归，不把此结果称为发布验收。
 - 最终累计源码/测试SHA256及本批探针hash：`r3-source-state.json`，基线HEAD仍为 `1e74583cf0ee2be02125c65298bf3b5579a8bca5`，代码未提交/推送。所有改动保留在工作树，用户 `pelican-bicycle.html` 未触碰。
+
+
+## 第四批：普通队列分页、全局执行与启动读取
+
+基线已推进到 `5ecbd3fdf5b47f4c2c9271baff8a948c40e0582e`；第一至第三批现已在该基线中。本批只修改工作树，不提交或推送。
+
+- 普通投稿中心按**任务槽位**分页，而不是只分页组头：单组长队列也受 pageSize 约束；无任务的组占一个展示槽位，保留配置入口。沿用平台/账号/组及 position 的稳定顺序。当前任务只在其所在页返回，其他页仍保留整个组的运行状态与 actions；客户过滤在 SQL 内执行，总任务数与展示槽位分别计数。
+- 在既有 regular queue owner 内先 count/选择本页身份，再批量读取本页标题/身份及关联组；最多4次普通SQL，不进行逐组N+1调用，不加载正文。沿用原 DTO/IPC 数组边界。队列面板明确显示“本页待执行”，序号使用真实 position。
+- 执行中的单组状态查询只读取当前任务和首个 queued 摘要，避免每完成一项重新读整个 remaining。全局开始枚举无截断的轻量组身份；paid 全局开始复用 intent mutation 返回的调度摘要，客户范围开始通过 SQL 排除混合客户批次，不再先加载所有完整批次后过滤。
+- 启动仍由原 owner 统一 system pause；普通恢复只返回在途组及当前任务，沿用原远端已开始任务的 uncertain 恢复入口；付费启动没有完整批次结果消费者，停止生成这份列表。没有新增 writer、schema、缓存或自动重试。
+- 普通启动/暂停/设置六个 IPC 命令的结果统一为 `{completed:true}`；Renderer bridge 返回 void，状态继续通过投稿中心 invalidation 刷新。应用设置与运行 intent 的内部快照使用轻量范围；暂停全部无需查询结果列表。避免操作成功后再因超大返回列表导致 IPC 失败。
+- 删除 platform feature 中第二份 regular queue query/state；展示名称直接组合当前投稿中心页与账号/平台资料。保留原命令忙碌/错误状态，启动未完成时仍能由独立页面刷新获得暂停动作。没有引入新的投影 owner。
+
+### 容量和行为验证
+
+新 `tests/regular-queue-pagination.test.js` 使用正式 admission 模板复制合成临时 SQLite，验证外键后打开正式 store：单组20003条、多组20003条、跨20000末页/空页/客户页、真实typed IPC、固定SQL调用数/SQL结果无正文；另测全局/启动读取覆盖20003身份，以及前20000+目标手动暂停、排序最后目标可运行时两种真实 orchestrator 均能到达目标。claim/远端执行端为假端口，无真实发布或订单。
+
+既有 paid 24种状态/暂停组合增加 runtime摘要 canStart 与完整快照一致性对照。迁移命令测试通过独立读取验证持久状态，而非依赖命令附带快照；保留暂停/在途/FIFO/不确定结果与旧查询不可覆盖新状态的断言。
+
+| 合成规模（普通，每页10） | 首次页面 ms | 全页SQL次数（含空paid） | SQL结果字节 | 页面服务字节 |
+| --- | ---: | ---: | ---: | ---: |
+| 1000条 / 10组 | 39.7 | 6 | 3932 | 3194 |
+| 10000条 / 100组 | 245.0 | 6 | 3979 | 3241 |
+| 50000条 / 500组 | 1430.5 | 6 | 4019 | 3281 |
+| 50000条 / 50000组 | 320.3 | 6 | 8587 | 6807 |
+
+5万/500组后续换页/失效重读约184～241ms；第5000页有10条、hasMore=false，第5001页为空且total仍50000。冷IO/SQLite缓存与同时运行的测试影响单次结果，以上不作为SLA，且不宣称已消除主进程同步扫描。真实count/深页offset仍线性读取索引，新增分页降低的是返回行数、正文载荷与JS映射成本。
+
+全局调度：5万普通组身份约264ms、2次SQL、2.65MB（结果覆盖5万组）；5万paid批次摘要约715ms、2次SQL、结果3.84MB。启动：5万普通组/任务样本约245ms、2次SQL、无在途组所以返回0组；paid启动1次UPDATE、没有快照SELECT，样本约0.12ms（该样本手动暂停，未代表5万行状态写入耗时）。恢复语义由真实在途回归测试验证，不能用该空在途压测证明所有恢复场景。
+
+原始证据：`r4-probe.cjs`、`r4-center-*.jsonl`、`r4-runtime-*.jsonl`。均为既有合成临时库，未触碰真实用户内容库。探针不调用真实外部执行器。
+
+### 有界复核与剩余范围
+
+复核限定本批SQL、分页计数/顺序、命令返回合同及直接消费者、global intent/claim/startup恢复边界。通过减少读取范围修复，不改变手动暂停、FIFO、当前请求归属或不确定结果规则。
+
+本批关闭实际投稿中心与全局执行的20000截断链，以及普通单组执行/启动和paid全局/启动的全量快照读取。**整体SA-03/06/07不标全关闭**：既有显式无页列表/诊断接口仍受旧IPC或条目上限约束（如 paid 无页全快照20000、普通原始queue item列表20000），已不由本批界面/全局执行热路径调用；后续 owner 为 OperationalStore查询合同清理。attention等其他聚合的分页/失效、App其他启动加载归属后续SA-06/07。没有承诺无限容量或完整Electron启动性能达标。
+
+### 最终验证与证据
+
+- `npm run test:desktop-core`：290文件、1782/1782通过，0失败/跳过/todo，约221秒，见 `r4-final-desktop-tests.log`。较早首次运行10处失败均为命令返回合同/已退役Renderer快照的旧断言，已迁移到独立状态读取后通过；旧失败日志保留为 `r4-desktop-tests.log`。
+- 完整回归后，有界复核移除paid orchestrator中仅为旧测试桩保留的full-snapshot guard和全局结果fallback，改用单一runtime查询合同；客户范围测试现用真实临时OperationalStore覆盖混合客户批次。**1782项结果覆盖该收尾之前的代码，不冒称全部测试重新运行于收尾后的源码。** 收尾最终定向回归 `node --test tests/regular-queue-pagination.test.js tests/paid-media-batch-client-scope.test.js tests/paid-batch-pagination.test.js tests/article-lifecycle-ticket-13.test.js tests/submission-center-snapshot.test.js tests/regular-queue-group-orchestrator-read-scope.test.js`：35/35，0失败/跳过，见 `r4-final-bounded-tests.log`；覆盖最终global两种runner、client SQL筛选、startup、分页、claim及paid异常结果。没有再次扩大全仓审计。
+- 生产IPC fixture矩阵：6/6，见 `r4-final-ipc-matrix.log`，校验六个命令新返回合同及错误字段/版本拒绝。
+- 最终 `npm run lint`、`npm run typecheck:main`通过；Renderer/bridge typecheck、`npm run build:renderer`、`npm run build:preload`、format gate及`git diff --check`通过。收尾只涉及paid JS和对应测试，未再改Renderer/IPC/build输入。Renderer构建仍有既有chunk >500KB提示，不影响构建成功。
+- 源码/测试、probe与验证日志 SHA256见 `r4-source-state.json`。所有修改未stage、commit、merge或push；未修改schema或真实库。未运行Electron发布打包/真实登录发布：本轮为合成数据性能修复，桌面测试中的Renderer行为覆盖加载/空态/错误/忙碌与关键命令，构建成功不等同于安装包发布验收。
+- 有界复核结论：本批范围PASS，没有未关闭的本批P0/P1；上面明确登记的非热路径及SA-06/07剩余项不包含在完成声明中。
