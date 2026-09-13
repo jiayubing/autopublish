@@ -124,12 +124,18 @@ it("a lost session after sending is not reopened onto an unrelated conversation"
   assert.equal(opens, 1);
 });
 
-it("answer matching binds the acknowledged message and only normalizes whitespace", () => {
+it("answer matching binds the acknowledged message and normalizes display punctuation", () => {
   const snapshot = complete("expected");
   snapshot.messages.push({ messageId: "user-other", role: "user", text: QUESTION });
   snapshot.messages.push({ messageId: "answer-other", role: "assistant", text: "Unrelated later answer" });
   assert.equal(selectAnswerForQuestion(snapshot, " Synthetic\nquestion ", "user-expected").answerText, ANSWER);
   assert.throws(() => selectAnswerForQuestion(snapshot, QUESTION, "user-missing"), { code: "DOUBAO_QUESTION_NOT_FOUND" });
+
+  const rendered = { messages: [
+    { messageId: "user-rendered", role: "user", text: "膜天轮量子膜重庆全膜中心 (重庆店) 怎么样" },
+    { messageId: "answer-rendered", role: "assistant", text: ANSWER }
+  ] };
+  assert.equal(selectAnswerForQuestion(rendered, "膜天轮量子膜重庆全膜中心（重庆店）怎么样", "user-rendered").answerText, ANSWER);
 });
 
 for (const code of ["DOUBAO_TIMEOUT", "DOUBAO_PAGE_ERROR", "DOUBAO_SEND_FAILED", "DOUBAO_CONVERSATION_CHANGED", "DOUBAO_SEND_UNCERTAIN", "DOUBAO_RESUME_MISMATCH", "DOUBAO_SESSION_RESET_REQUIRED", "PLAYWRIGHT_SESSION_NOT_OPEN", "PLAYWRIGHT_EXEC_FAILED"]) {

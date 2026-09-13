@@ -21,6 +21,9 @@ const {
 const {
   createRegularPlatformPreparationPort,
 } = require("../desktop/services/regular-platform-preparation-port");
+const {
+  createRegularPlatformOutcomeService,
+} = require("../desktop/services/regular-platform-outcome-service");
 
 function deferred() {
   let resolve;
@@ -48,6 +51,7 @@ function fixture(options) {
     root,
     store,
     transitions: transitionPorts.regularQueueGroupTransitions,
+    outcomeTransitions: transitionPorts.regularOutcomeTransitions,
     admission: transitionPorts.regularQueueTransitions,
     clockState,
     close(remove = true) {
@@ -1372,6 +1376,58 @@ test("begin freezes complete evidence before submit and failures roll back witho
         .status,
       "queued",
     );
+  } finally {
+    current.close();
+  }
+});
+
+test("pre-remote boundary failure pauses the queue instead of leaving it running", async () => {
+  let armed = false;
+  const current = fixture({
+    fault(point) {
+      if (armed && point === "after-evidence-freeze") {
+        const error = new Error("synthetic pre-remote persistence fault");
+        error.code = "SYNTHETIC_PERSISTENCE_FAULT";
+        throw error;
+      }
+    },
+  });
+  let submissions = 0;
+  try {
+    const profile = addProfile(current, "toutiao");
+    const admitted = admit(current, {
+      articleId: "article-boundary-pause",
+      accountProfileId: profile.accountProfileId,
+    });
+    const orchestrator = createRegularQueueGroupOrchestrator({
+      regularQueueGroupTransitions: current.transitions,
+      regularPlatformOutcomeService: createRegularPlatformOutcomeService({
+        regularOutcomeTransitions: current.outcomeTransitions,
+      }),
+      platformSubmissionExecutor: executorFor(async (claim) =>
+        domain.createPreparedSubmission({
+          preparedSubmissionEvidenceV1: evidence(claim),
+          submitPreparedPublication: async () => {
+            submissions += 1;
+            return { status: "accepted" };
+          },
+        }),
+      ),
+    });
+
+    armed = true;
+    const result = await orchestrator.startGroup({
+      queueGroupId: admitted.queueGroupId,
+    });
+
+    assert.equal(result.observation.status, "group_blocked");
+    assert.equal(result.observation.errorCode, "REGULAR_PREPARATION_FAILED");
+    assert.equal(submissions, 0);
+    const snapshot = orchestrator.snapshot()[0];
+    assert.equal(snapshot.pauseIntent, "system");
+    assert.equal(snapshot.runState, "paused");
+    assert.equal(snapshot.current, null);
+    assert.equal(snapshot.remaining[0].itemId, admitted.itemId);
   } finally {
     current.close();
   }

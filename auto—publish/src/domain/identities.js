@@ -8,10 +8,10 @@ function domainError(code) {
   return error;
 }
 
-function createIdentity(kind, maxLength, pattern) {
+function createIdentity(kind, maxLength, pattern, preserveUnicode) {
   function parse(value) {
     if (typeof value !== "string") throw domainError("DOMAIN_ID_INVALID");
-    const normalized = value.normalize("NFKC").trim();
+    const normalized = (preserveUnicode ? value : value.normalize("NFKC")).trim();
     if (
       !normalized ||
       normalized === "." ||
@@ -40,7 +40,7 @@ function createIdentity(kind, maxLength, pattern) {
 
 module.exports = Object.freeze({
   ApplicationAccountId: createIdentity("ApplicationAccountId", 128),
-  ClientId: createIdentity("ClientId", 128, CLIENT_ID_PATTERN),
+  ClientId: createIdentity("ClientId", 128, CLIENT_ID_PATTERN, true),
   ArticleId: createIdentity("ArticleId", 128),
   PublicationId: createIdentity("PublicationId", 128),
   AttemptId: createIdentity("AttemptId", 128),

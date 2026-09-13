@@ -215,6 +215,10 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
   function snapshots(row) {
     const item = fromText(row.item_payload) || {};
     const target = fromText(row.target_json) || {};
+    const storedCustomerSnapshot = item.customerSnapshotV1 || {
+      version: 1,
+      displayName: item.clientId,
+    };
     const account =
       target.kind === "platform"
         ? db
@@ -225,11 +229,7 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
         : null;
     return {
       customerSnapshotV1: domain.parseCustomerSnapshotV1(
-        item.customerSnapshotV1 || {
-          version: 1,
-          clientId: item.clientId,
-          displayName: item.clientId,
-        },
+        Object.assign({}, storedCustomerSnapshot, { clientId: item.clientId }),
       ),
       targetSnapshotV1: domain.parseTargetSnapshotV1(
         item.targetSnapshotV1 || {

@@ -373,11 +373,29 @@ function createRegularQueueGroupOrchestrator(options) {
         }),
       });
     }
-    const boundary = transitions.beginRegularRemoteSubmission({
-      regularPublicationAttemptId: claim.regularPublicationAttemptId,
-      claimToken: claim.claimToken,
-      preparedSubmissionEvidenceV1: evidence,
-    });
+    let boundary;
+    try {
+      boundary = transitions.beginRegularRemoteSubmission({
+        regularPublicationAttemptId: claim.regularPublicationAttemptId,
+        claimToken: claim.claimToken,
+        preparedSubmissionEvidenceV1: evidence,
+      });
+    } catch (error) {
+      if (!outcomeService) throw error;
+      diagnose(
+        "REGULAR_PREPARATION_FAILED",
+        "begin-remote-submission",
+        error && error.code,
+      );
+      const preparationOutcome = recoverablePreparationOutcome(error);
+      return Object.freeze({
+        ...preparationOutcome,
+        transition: applyOutcome({
+          regularPublicationAttemptId: claim.regularPublicationAttemptId,
+          outcome: preparationOutcome,
+        }),
+      });
+    }
     if (!boundary.submitAuthorized)
       return Object.freeze({ status: "submission_already_started" });
     let observation;

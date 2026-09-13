@@ -8,6 +8,8 @@ const { chromium } = require("playwright");
 const { createDoubaoBrowserAdapter } = require("../src/content/doubao-browser-adapter");
 
 it("real DOM collection confirms a new user message and binds its answer in a long conversation", async (t) => {
+  const questionText = "膜天轮量子膜重庆全膜中心（重庆店）怎么样";
+  const renderedQuestionText = "膜天轮量子膜重庆全膜中心 (重庆店) 怎么样";
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "doubao-dom-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const browser = await chromium.launch({ headless: true });
@@ -28,7 +30,8 @@ it("real DOM collection confirms a new user message and binds its answer in a lo
       if (event.key !== "Enter") return;
       event.preventDefault();
       const question = document.querySelector("textarea").value;
-      for (const [id, role, text] of [["sent-question", "user", question], ["sent-answer", "assistant", "这是本题明确对应且完整的合成回答。"]]) {
+      const renderedQuestion = question.replace("（", " (").replace("）", ") ");
+      for (const [id, role, text] of [["sent-question", "user", renderedQuestion], ["sent-answer", "assistant", "这是本题明确对应且完整的合成回答。"]]) {
         const message = document.createElement("div");
         message.dataset.messageId = id; message.dataset.role = role; message.textContent = text;
         messages.append(message);
@@ -48,19 +51,19 @@ it("real DOM collection confirms a new user message and binds its answer in a lo
         if (input.action === "send-question") {
           acknowledgedId = result.questionMessageId;
           // A later identical manual question must not change this task's identity.
-          await page.evaluate(() => {
-            for (const [id, role, text] of [["later-question", "user", "测试问题"], ["later-answer", "assistant", "这是后来的另一轮回答，不应保存给本题。"]]) {
+          await page.evaluate((question) => {
+            for (const [id, role, text] of [["later-question", "user", question], ["later-answer", "assistant", "这是后来的另一轮回答，不应保存给本题。"]]) {
               const node = document.createElement("div");
               node.dataset.messageId = id; node.dataset.role = role; node.textContent = text;
               document.getElementById("messages").append(node);
             }
-          });
+          }, renderedQuestionText);
         }
         return result;
       }
     }
   });
-  assert.equal((await adapter.collect({ clientId: "synthetic", question: "测试问题" })).answerText, "这是本题明确对应且完整的合成回答。");
+  assert.equal((await adapter.collect({ clientId: "synthetic", question: questionText })).answerText, "这是本题明确对应且完整的合成回答。");
   assert.equal(acknowledgedId, "sent-question");
   assert.equal(await page.locator('[data-role="user"]').count(), 2);
   await page.setContent('<textarea></textarea><div role="dialog">请完成人机验证</div>');

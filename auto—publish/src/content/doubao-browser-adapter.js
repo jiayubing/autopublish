@@ -183,7 +183,7 @@ function sendQuestionScript(questionJson, expectedUrl, deadline) {
     "await assertSendAllowed();",
     "await input.press('Enter');",
     "var acknowledgement = await page.waitForFunction(function(value) {",
-    "  var normalize = function(text) { return String(text || '').trim().replace(/\\s+/g, ' '); };",
+    "  var normalize = function(text) { return String(text || '').normalize('NFKC').trim().replace(/\\s+/g, ' ').replace(/\\s*([()[\\]{}])\\s*/g, '$1'); };",
     "  var nodes = Array.from(document.querySelectorAll('[data-message-id]'));",
     "  for (var index = nodes.length - 1; index >= 0; index -= 1) {",
     "    var node = nodes[index];",

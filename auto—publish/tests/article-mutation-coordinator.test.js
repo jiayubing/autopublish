@@ -483,7 +483,7 @@ test("canonical article refs prevent delimiter collisions and reject unsafe iden
     canonicalArticleRefKey({ clientId: "ab", articleId: "c" }),
     canonicalArticleRefKey({ clientId: "a", articleId: "bc" }),
   );
-  assert.equal(
+  assert.notEqual(
     canonicalArticleRefKey({ clientId: "Ａ", articleId: " article-1 " }),
     canonicalArticleRefKey({ clientId: "A", articleId: "article-1" }),
   );

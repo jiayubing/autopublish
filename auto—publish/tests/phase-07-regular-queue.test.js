@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
+const domain = require("../src/domain");
 
 const {
   createRegularQueueApplication,
@@ -197,6 +198,39 @@ async function waitFor(predicate, message) {
   }
   assert.fail(message || "synthetic refresh condition was not reached");
 }
+
+test("persistent client identity characters survive claim and remote boundary", () => {
+  const fixture = makeFixture();
+  try {
+    const clientId = "65-郑州玉齿（定）";
+    const articleId = "article-fullwidth-client";
+    fixture.add(article(articleId, clientId));
+    const admitted = fixture.application.admitRegularQueueItems({
+      ...admissionInput(fixture, [ref(articleId, clientId)], "hepan"),
+      confirmed: true,
+    });
+    fixture.transitionPorts.regularQueueGroupTransitions.setRegularQueueGroupRunIntent({
+      queueGroupId: admitted.items[0].queueGroupId,
+      running: true,
+    });
+    const claim = fixture.transitionPorts.regularQueueGroupTransitions.claimRegularQueueGroupHead({
+      queueGroupId: admitted.items[0].queueGroupId,
+      claimToken: "claim-fullwidth-client",
+      leaseMs: 30000,
+    });
+
+    assert.equal(claim.articleIdentityV1.clientId, clientId);
+    const boundary = fixture.transitionPorts.regularQueueGroupTransitions.beginRegularRemoteSubmission({
+      regularPublicationAttemptId: claim.regularPublicationAttemptId,
+      claimToken: claim.claimToken,
+      preparedSubmissionEvidenceV1:
+        domain.createTextOnlyPreparedSubmissionEvidenceV1(claim),
+    });
+    assert.equal(boundary.submitAuthorized, true);
+  } finally {
+    fixture.close();
+  }
+});
 
 test("regular queue application enforces one platform/account and returns per-article preview results", () => {
   const fixture = makeFixture();

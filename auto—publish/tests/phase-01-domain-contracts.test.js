@@ -21,7 +21,7 @@ test("phase 1 identities normalize once, reject unsafe values, and retain nomina
   });
   assert.equal(domain.ArticleId.validate("article-01").ok, true);
   assert.equal(domain.ArticleId.validate("").ok, false);
-  assert.equal(domain.ClientId.parse("ＡＢＣ").value, "ABC");
+  assert.equal(domain.ClientId.parse("ＡＢＣ").value, "ＡＢＣ");
   assert.equal(article.kind, "ArticleId");
 });
 

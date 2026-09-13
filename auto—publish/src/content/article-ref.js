@@ -36,7 +36,7 @@ function normalizeArticleRef(value, code) {
 }
 
 function normalizedKeyPart(value) {
-  return String(value).normalize("NFKC").trim();
+  return String(value).trim();
 }
 
 function canonicalArticleRefKey(value) {

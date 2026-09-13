@@ -806,6 +806,74 @@ test("manual acceptance without a locator closes attention permanently across re
   }
 });
 
+test("manual acceptance repairs a legacy normalized customer snapshot identity", () => {
+  const f = fixture();
+  try {
+    const clientId = "65-郑州玉齿（定）";
+    const articleId = "article-legacy-customer-snapshot";
+    const target = {
+      kind: "platform",
+      platformId: "hepan",
+      accountProfileId: f.profile.accountProfileId,
+    };
+    const admitted = admitFixtureItem(f.queueTransitions, {
+      clientId,
+      articleId,
+      batchId: `batch-${articleId}`,
+      itemId: `item-${articleId}`,
+      publicationId: `publication-${articleId}`,
+      attemptId: `attempt-${articleId}`,
+      target,
+      publicationSnapshot: {
+        articleId,
+        title: `标题 ${articleId}`,
+        body: `正文 ${articleId}`,
+        fingerprint: "a".repeat(64),
+      },
+      customerSnapshotV1: {
+        version: 1,
+        clientId: "65-郑州玉齿(定)",
+        displayName: "郑州玉齿",
+      },
+    });
+    f.groupTransitions.setRegularQueueGroupRunIntent({
+      queueGroupId: admitted.queueGroupId,
+      running: true,
+    });
+    const claim = f.groupTransitions.claimRegularQueueGroupHead({
+      queueGroupId: admitted.queueGroupId,
+      claimToken: "claim-legacy-customer-snapshot",
+      leaseMs: 30000,
+    });
+    const evidence = domain.createTextOnlyPreparedSubmissionEvidenceV1(claim);
+    f.groupTransitions.beginRegularRemoteSubmission({
+      regularPublicationAttemptId: claim.regularPublicationAttemptId,
+      claimToken: claim.claimToken,
+      preparedSubmissionEvidenceV1: evidence,
+    });
+    f.transitions.recordRegularUncertain({
+      regularPublicationAttemptId: claim.regularPublicationAttemptId,
+      observation: { status: "uncertain", code: "REMOTE_RESULT_UNKNOWN" },
+    });
+    const confirmation = f.transitions.prepareRegularUncertainResolution({
+      regularPublicationAttemptId: claim.regularPublicationAttemptId,
+    });
+
+    f.transitions.confirmRegularAccepted({
+      regularPublicationAttemptId: claim.regularPublicationAttemptId,
+      confirmationToken: confirmation.confirmationToken,
+      manualPositiveEvidence: { observedAt: "2026-08-07T01:00:00.000Z" },
+    });
+
+    const archive = f.publishedArchiveQueries.listPublishedArchives({
+      articleIds: [articleId],
+    })[0];
+    assert.equal(archive.publicationEvidence.articleIdentityV1.clientId, clientId);
+  } finally {
+    f.close();
+  }
+});
+
 test("manual acceptance preserves optional remote ID and URL evidence", () => {
   const f = fixture();
   try {

@@ -8,6 +8,14 @@ function text(value) {
   return value == null ? "" : String(value);
 }
 
+function normalizeMessageText(value) {
+  return text(value)
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/\s*([()[\]{}])\s*/g, "$1");
+}
+
 function classifyPage(snapshot) {
   const page = snapshot && typeof snapshot === "object" ? snapshot : {};
   if (page.challenge === true) {
@@ -113,7 +121,7 @@ function findAnswerForQuestion(snapshot, question, questionMessageId) {
     const message = messages[index];
     if (message && message.role === "user" &&
         (!questionMessageId || message.messageId === questionMessageId) &&
-        text(message.text).trim().replace(/\s+/g, " ") === text(question).trim().replace(/\s+/g, " ")) {
+        normalizeMessageText(message.text) === normalizeMessageText(question)) {
       questionIndex = index;
       break;
     }

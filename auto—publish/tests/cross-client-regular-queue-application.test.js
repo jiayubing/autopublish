@@ -93,6 +93,19 @@ test("cross-client preview aggregates per-client admission facts", function () {
   assert.equal(result.idempotentCount, 0);
 });
 
+test("cross-client preview preserves persistent article identity characters", function () {
+  const base = createBaseApplication();
+  const application = createApplication(base);
+  const result = application.previewRegularQueueAdmission({
+    ...commonInput,
+    articleRefs: [articleRef("65-郑州玉齿（定）", "article-1")],
+  });
+
+  assert.equal(result.queueableCount, 1);
+  assert.equal(result.missingCount, 0);
+  assert.equal(result.items[0].articleRef.clientId, "65-郑州玉齿（定）");
+});
+
 test("multiple client admissions keep their real batch boundaries", function () {
   const base = createBaseApplication();
   const application = createApplication(base);
