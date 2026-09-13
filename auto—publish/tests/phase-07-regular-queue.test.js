@@ -545,31 +545,36 @@ test("regular queue removal invalidation refreshes cached article management fro
   }
 });
 
-test("regular admission invalidation refreshes the platform queue view with the new queue item", async () => {
-  const platformModule =
-    await import("../media-workbench/src/features/platform/platform-feature.js");
-  let platformFeature = null;
+test("regular admission invalidation refreshes the submission center current page", async () => {
+  const centerModule =
+    await import("../media-workbench/src/features/submission-center/submission-center-feature.js");
+  let centerFeature = null;
   const invalidation = createWorkspaceDataInvalidation({
     workspaceRuntimeId: "r2-platform-queue",
     sendToRenderer: (_channel, event) => {
-      if (event.scopes.includes("platformQueue") && platformFeature)
-        void platformFeature.refreshRegularQueueGroups(event.reasonCode);
+      if (event.scopes.includes("submissionCenter") && centerFeature)
+        void centerFeature.refresh(event.reasonCode);
     },
   });
   const fixture = makeFixture({
     onDataInvalidated: (reasonCode) => invalidation.invalidate(reasonCode),
   });
   try {
-    platformFeature = platformModule.createPlatformFeature({
-      platformDisplayName: (platformId) => platformId,
-      listAccountProfiles: async () => fixture.store.listAccountProfiles(),
-      listRegularQueueGroups: async () =>
-        fixture.application.listRegularQueueGroups(),
+    centerFeature = centerModule.createSubmissionCenterFeature({
+      getSnapshot: async () => ({
+        clientId: null,
+        revision: invalidation.getRevision(),
+        regular: { groups: fixture.application.listRegularQueueGroups() },
+        paid: { batches: [] },
+        attention: { items: [] },
+        counts: { total: 0 },
+        page: 1,
+        pageSize: 100,
+      }),
     });
-    platformFeature.setScope({ workspaceRuntimeId: "r2-platform-queue" });
-    await platformFeature.refreshAccountProfiles("initial");
-    await platformFeature.refreshRegularQueueGroups("initial");
-    assert.deepEqual(platformFeature.getSnapshot().regularQueueGroupViews, []);
+    centerFeature.setScope({ workspaceRuntimeId: "r2-platform-queue" });
+    await centerFeature.refresh("initial");
+    assert.deepEqual(centerFeature.getSnapshot().data.regular.groups, []);
 
     fixture.add(article("article-a"));
     const admitted = fixture.application.admitRegularQueueItems(
@@ -579,16 +584,16 @@ test("regular admission invalidation refreshes the platform queue view with the 
 
     await waitFor(
       () =>
-        platformFeature
+        centerFeature
           .getSnapshot()
-          .regularQueueGroupViews.some((group) =>
+          .data.regular.groups.some((group) =>
             group.remaining.some((item) => item.articleId === "article-a"),
           ),
-      "platform queue view should refresh after regular admission",
+      "submission center should refresh after regular admission",
     );
-    const view = platformFeature
+    const view = centerFeature
       .getSnapshot()
-      .regularQueueGroupViews.find((group) =>
+      .data.regular.groups.find((group) =>
         group.remaining.some((item) => item.articleId === "article-a"),
       );
     assert.equal(view.platformId, "toutiao");
@@ -597,7 +602,7 @@ test("regular admission invalidation refreshes the platform queue view with the 
       fixture.profiles.toutiao.accountProfileId,
     );
   } finally {
-    if (platformFeature) platformFeature.dispose();
+    if (centerFeature) centerFeature.dispose();
     fixture.close();
   }
 });

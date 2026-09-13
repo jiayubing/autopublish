@@ -259,7 +259,7 @@ function installDesktopFixture(page, fixture) {
           conflictCount: 0,
         });
       },
-      startRegularQueueGroup: () => ok({ items: [] }),
+      startRegularQueueGroup: () => ok({ completed: true }),
       previewPaidMediaPreflight: ({ articleRefs, mediaResourceId }) => {
         state.calls.paidPreview.push(mediaResourceId);
         const model = {

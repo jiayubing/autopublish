@@ -78,12 +78,12 @@ const content = {
   admitRegularQueueItems: mutation({}),
   previewPaidMediaPreflight: mutation({}),
   confirmPaidMediaBatch: mutation({}),
-  updateRegularQueueGroupImageCount: mutation({ items: [] }),
+  updateRegularQueueGroupImageCount: mutation({ completed: true }),
   removePendingQueueItems: mutation({}),
-  startRegularQueueGroup: mutation({ items: [] }),
-  pauseRegularQueueGroup: mutation({ items: [] }),
-  startAllRegularQueueGroups: mutation({ items: [] }),
-  pauseAllRegularQueueGroups: mutation({ items: [] }),
+  startRegularQueueGroup: mutation({ completed: true }),
+  pauseRegularQueueGroup: mutation({ completed: true }),
+  startAllRegularQueueGroups: mutation({ completed: true }),
+  pauseAllRegularQueueGroups: mutation({ completed: true }),
 };
 contextBridge.exposeInMainWorld("desktopConsole", {
   auth: {

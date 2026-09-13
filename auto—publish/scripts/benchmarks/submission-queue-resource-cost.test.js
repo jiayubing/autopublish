@@ -131,14 +131,13 @@ it("measures overlapping renderer refresh requests without remote transport", as
   const { createPlatformFeature } = await import(pathToFileURL(path.join(__dirname, "../../media-workbench/src/features/platform/platform-feature.js")));
   const { createSubmissionCenterFeature } = await import(pathToFileURL(path.join(__dirname, "../../media-workbench/src/features/submission-center/submission-center-feature.js")));
   const { createWorkspaceCoordinator } = await import(pathToFileURL(path.join(__dirname, "../../media-workbench/src/features/workspace/workspace-coordinator.js")));
-  const counts = { catalog: 0, accounts: 0, groups: 0, submissionCenter: 0 };
+  const counts = { catalog: 0, accounts: 0, submissionCenter: 0 };
   let release;
   let latestRevision = 0;
   const gate = new Promise((resolve) => { release = resolve; });
   const platform = createPlatformFeature({
     async loadQueue() { counts.catalog++; await gate; return { queue: [], platforms: [] }; },
     async listAccountProfiles() { counts.accounts++; await gate; return []; },
-    async listRegularQueueGroups() { counts.groups++; await gate; return []; },
   });
   const center = createSubmissionCenterFeature({ async getSnapshot() { counts.submissionCenter++; const revision = latestRevision; await gate; return { clientId: null, revision }; } });
   platform.setScope({ workspaceRuntimeId: "synthetic-cost" });
@@ -146,7 +145,7 @@ it("measures overlapping renderer refresh requests without remote transport", as
   let consume;
   const coordinator = createWorkspaceCoordinator({ subscribe(listener) { consume = listener; return () => {}; } });
   coordinator.register("platformQueue", (event) => event.workspaceRuntimeId
-    ? Promise.all([platform.refreshQueue(event.kind), platform.refreshAccountProfiles(event.kind), platform.refreshRegularQueueGroups(event.kind)]) : undefined);
+    ? Promise.all([platform.refreshQueue(event.kind), platform.refreshAccountProfiles(event.kind)]) : undefined);
   coordinator.register("submissionCenter", (event) => event.workspaceRuntimeId ? center.refresh(event.kind) : undefined);
   coordinator.start();
   for (let revision = 1; revision <= 50; revision++) {
@@ -156,7 +155,7 @@ it("measures overlapping renderer refresh requests without remote transport", as
   release();
   await new Promise(setImmediate);
   assert.equal(center.getSnapshot().data.revision, 50);
-  assert.deepEqual(counts, { catalog: 2, accounts: 2, groups: 2, submissionCenter: 2 });
+  assert.deepEqual(counts, { catalog: 2, accounts: 2, submissionCenter: 2 });
   console.log("SUBMISSION_REFRESH_BURST " + JSON.stringify({ events: 50, ...counts }));
   coordinator.dispose();
   platform.dispose();

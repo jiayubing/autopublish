@@ -332,8 +332,11 @@ test("admission keeps one target, groups by identity, and hides a sole account i
     platformFeature = module.createPlatformFeature(bridge);
     platformFeature.setScope({ workspaceRuntimeId: "ticket-25-c-runtime" });
     await platformFeature.refreshAccountProfiles("acceptance");
-    await platformFeature.refreshRegularQueueGroups("acceptance");
-    const views = platformFeature.getSnapshot().regularQueueGroupViews;
+    const views = module.regularQueueGroupViews(
+      groupSnapshots(fixture),
+      platformFeature.getSnapshot().accountProfiles.items,
+      bridge.platformDisplayName,
+    );
     assert.equal(
       views.find((group) => group.queueGroupId === first.items[0].queueGroupId)
         .showAccount,

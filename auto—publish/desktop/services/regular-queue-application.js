@@ -408,6 +408,7 @@ function createRegularQueueApplication(options) {
     const request = imageCountUpdateFrom(input);
     const groups = groupTransitions.listRegularQueueGroupSnapshots({
       queueGroupId: request.queueGroupId,
+      remainingLimit: 1,
     });
     const group = Array.isArray(groups) ? groups[0] : null;
     if (
@@ -418,7 +419,7 @@ function createRegularQueueApplication(options) {
       throw fail("REGULAR_QUEUE_IMAGE_PUBLISHING_UNSUPPORTED");
     groupImageCountTransitions.setRegularQueueGroupImageCount(request);
     notifyDataInvalidated("REGULAR_QUEUE_GROUP_IMAGE_COUNT_UPDATED");
-    return listRegularQueueGroups();
+    return Object.freeze({ completed: true });
   }
 
   function updateRegularQueueGroupSubmissionInterval(input) {
@@ -433,7 +434,7 @@ function createRegularQueueApplication(options) {
       request,
     );
     notifyDataInvalidated("REGULAR_QUEUE_GROUP_SUBMISSION_INTERVAL_UPDATED");
-    return listRegularQueueGroups();
+    return Object.freeze({ completed: true });
   }
 
   return Object.freeze({

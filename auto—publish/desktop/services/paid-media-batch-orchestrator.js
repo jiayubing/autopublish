@@ -146,8 +146,15 @@ function batchMatchesClient(batch, clientId) {
 }
 
 function batchBelongsOnlyToClient(batch, clientId) {
-  const clients = batchClientIds(batch);
-  return clients.size === 1 && clients.has(clientId);
+  const items = Array.isArray(batch && batch.items) ? batch.items : [];
+  if (!items.length) return false;
+  return items.every(function (item) {
+    return (
+      item &&
+      item.articleIdentityV1 &&
+      item.articleIdentityV1.clientId === clientId
+    );
+  });
 }
 
 function createPaidMediaBatchOrchestrator(options) {

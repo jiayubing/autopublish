@@ -24,9 +24,7 @@ function createRegularQueueGroupComposition(options) {
   const startupSnapshot = orchestrator.initializePaused();
   const inFlight = Array.isArray(startupSnapshot && startupSnapshot.inFlight)
     ? startupSnapshot.inFlight
-    : Array.isArray(startupSnapshot && startupSnapshot.groups)
-      ? startupSnapshot.groups
-      : [];
+    : [];
   const orphanedOutcomes = Object.freeze(
     value.regularPlatformOutcomeService
       ? inFlight

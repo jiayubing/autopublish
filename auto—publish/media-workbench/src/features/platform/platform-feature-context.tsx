@@ -13,7 +13,6 @@ import { useWorkspaceScope } from '../workspace/workspace-coordinator-context';
 import { reportRuntimeDiagnostic } from '../workspace/runtime-diagnostic-sink';
 import { bindAccountProfile, confirmAccountProfile, deleteAccountProfile, listAccountProfiles } from '../../bridge/account-profile';
 import {
-  listRegularQueueGroups,
   updateRegularQueueGroupImageCount,
   updateRegularQueueGroupSubmissionInterval,
   removePendingQueueItems,
@@ -39,7 +38,6 @@ function createProductionPlatformFeature(): PlatformFeature {
     confirmAccountProfile,
     bindAccountProfile,
     deleteAccountProfile,
-    listRegularQueueGroups,
     updateRegularQueueGroupImageCount,
     updateRegularQueueGroupSubmissionInterval,
     removePendingQueueItems,
@@ -63,8 +61,6 @@ export function PlatformFeatureProvider({ children }: { children: ReactNode }) {
       reportRuntimeDiagnostic('PLATFORM_QUEUE_REFRESH_FAILED', 'platform-event');
     }), feature.refreshAccountProfiles(event.kind).catch(() => {
       reportRuntimeDiagnostic('PLATFORM_ACCOUNT_PROFILE_REFRESH_FAILED', 'platform-event');
-    }), feature.refreshRegularQueueGroups(event.kind).catch(() => {
-      reportRuntimeDiagnostic('PLATFORM_REGULAR_GROUP_REFRESH_FAILED', 'platform-event');
     })]);
   });
 

@@ -546,3 +546,132 @@ test("paid orchestrator startAll uses runnable ids instead of a 20000-truncated 
   );
   await orchestrator.dispose();
 });
+
+test("startup composition ignores legacy groups snapshots and only recovers remote_call_started inFlight", async () => {
+  const orphans = [];
+  const composition = createRegularQueueGroupComposition({
+    regularQueueGroupTransitions: {
+      beginRegularRemoteSubmission() {
+        return { submitAuthorized: true };
+      },
+      claimRegularQueueGroupHead() {
+        return null;
+      },
+      listRegularQueueGroupSnapshots() {
+        return [];
+      },
+      pauseAllRegularQueueGroups() {
+        return { changedCount: 0 };
+      },
+      pauseRegularQueueGroupsOnStartup() {
+        return {
+          changedCount: 1,
+          groups: [
+            {
+              current: {
+                phase: "remote_call_started",
+                regularPublicationAttemptId: "attempt-legacy-group",
+              },
+            },
+          ],
+        };
+      },
+      renewRegularQueueGroupClaim() {
+        return { renewed: true };
+      },
+      setRegularQueueGroupRunIntent() {
+        return {};
+      },
+      startAllRegularQueueGroups() {
+        return { changedCount: 0, runnableGroupIds: [] };
+      },
+    },
+    platformSubmissionExecutor: {
+      async preparePlatformSubmission() {
+        throw new Error("startup must not execute remaining work");
+      },
+    },
+    regularPlatformOutcomeService: {
+      applyRegularOutcome() {},
+      markOrphanedRegularAttemptUncertain(input) {
+        orphans.push(input);
+      },
+    },
+  });
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(composition.startupSnapshot, "inFlight"),
+    false,
+  );
+  assert.deepEqual(orphans, []);
+  await composition.orchestrator.dispose();
+});
+
+test("startup composition recovers only inFlight remote_call_started and skips claimed work", async () => {
+  const orphans = [];
+  const composition = createRegularQueueGroupComposition({
+    regularQueueGroupTransitions: {
+      beginRegularRemoteSubmission() {
+        return { submitAuthorized: true };
+      },
+      claimRegularQueueGroupHead() {
+        return null;
+      },
+      listRegularQueueGroupSnapshots() {
+        return [];
+      },
+      pauseAllRegularQueueGroups() {
+        return { changedCount: 0 };
+      },
+      pauseRegularQueueGroupsOnStartup() {
+        return {
+          changedCount: 2,
+          inFlight: [
+            {
+              current: {
+                phase: "remote_call_started",
+                regularPublicationAttemptId: "attempt-remote",
+              },
+            },
+            {
+              current: {
+                phase: "claimed",
+                regularPublicationAttemptId: "attempt-claimed",
+              },
+            },
+            {
+              current: {
+                phase: "prepared",
+                regularPublicationAttemptId: "attempt-prepared",
+              },
+            },
+          ],
+        };
+      },
+      renewRegularQueueGroupClaim() {
+        return { renewed: true };
+      },
+      setRegularQueueGroupRunIntent() {
+        return {};
+      },
+      startAllRegularQueueGroups() {
+        return { changedCount: 0, runnableGroupIds: [] };
+      },
+    },
+    platformSubmissionExecutor: {
+      async preparePlatformSubmission() {
+        throw new Error("startup must not execute remaining work");
+      },
+    },
+    regularPlatformOutcomeService: {
+      applyRegularOutcome() {},
+      markOrphanedRegularAttemptUncertain(input) {
+        orphans.push(input);
+      },
+    },
+  });
+  assert.deepEqual(
+    orphans.map((item) => item.regularPublicationAttemptId),
+    ["attempt-remote"],
+  );
+  await composition.orchestrator.dispose();
+});

@@ -120,5 +120,17 @@
 - `node --test tests/regular-queue-pagination.test.js tests/regular-queue-execution-startup-reads.test.js tests/phase-07-regular-queue.test.js tests/submission-center-snapshot.test.js tests/paid-batch-pagination.test.js tests/paid-media-batch-client-scope.test.js tests/regular-queue-group-orchestrator-read-scope.test.js tests/article-lifecycle-ticket-08.test.js tests/article-lifecycle-ticket-13.test.js tests/content-submission-ipc.test.js tests/regular-platform-acceptance.test.js tests/regular-queue-submission-interval.test.js tests/ticket-18-a-queue-image-count-persistence.test.js`：121/121，0 跳过。
 - `npm run typecheck:main`、`npm run lint`、`npm run format:check`、`git diff --check` 通过。
 - `npm run test:desktop-core`：291 文件；1687 通过。25 失败 + 54 取消全部是 renderer-harness 在本环境缺少 `media-workbench/node_modules` 导致 `npm --prefix media-workbench run build` 失败，不是本批队列/执行回归。补装 renderer 依赖后 `npm --prefix media-workbench run typecheck:strict` 通过。本批相关 node 定向测试 121/121。
-- 本批范围 PASS。仍未闭合：SA-06 缓存宽失效；SA-07 App 默认装载投稿中心；平台工作台 `listRegularQueueGroups` 仍无组分页（remaining 已有界）；订单/对账其他 20000 上限。
+- 本批范围 PASS。仍未闭合：SA-06 缓存宽失效；SA-07 App 默认装载投稿中心；订单/对账其他 20000 上限。
 - 未提交/推送。基线 HEAD `5ecbd3fd`。用户 `pelican-bicycle.html` 未触碰。无真实库或外部投稿。
+
+## 第四批收尾：command/query 分离与唯一展示 owner
+
+在 Grok 组分页 + 50 remaining preview 主体上吸收 Codex 的 IPC / Renderer 状态管理，不移植 task-slot pagination。
+
+- 六个普通队列 command 成功只返回 `{ completed: true }`；IPC 不再为构造返回值枚举队列；bridge 映射为 `Promise<void>`。
+- 删除 Platform Feature 第二份 `regularQueueGroups` / `refreshRegularQueueGroups` owner。展示数据唯一来自 SubmissionCenter 当前页，标签在前端纯投影。
+- UI：序号用 `item.position`；`remainingCount > remaining.length` 时提示当前只是 preview。
+- startup composition 删除 `groups` fallback，只接受 `inFlight`；uncertain 仍仅 `remote_call_started`。
+- exclusive client SQL/JS 拒绝 null clientId 与 mixed-client batch，不改变正常单客户路径。
+
+验证：`npm run test:desktop-core` 291 文件、1793/1793；`typecheck:main` / renderer / bridge、`lint`、`format:check`、`build:renderer`、`build:preload`、`git diff --check` 通过。未 merge。

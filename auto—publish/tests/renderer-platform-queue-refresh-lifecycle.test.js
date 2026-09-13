@@ -26,6 +26,7 @@ function installDesktopFixture(page) {
       submissionIntervalUpdates: [],
       imageUpdateFailure: false,
       pendingImageUpdate: null,
+      remainingPreview: null,
       queueRevision: 0,
       invalidationListeners: [],
       authStateListeners: [],
@@ -47,7 +48,10 @@ function installDesktopFixture(page) {
         pauseIntent: "manual",
         manuallyPaused: true,
         current: null,
-        remaining: [],
+        remaining: state.remainingPreview?.items || [],
+        remainingCount:
+          state.remainingPreview?.count ??
+          (state.remainingPreview?.items || []).length,
         actions: { canStart: true, canPause: false, reasonCode: null },
         revision: state.queueRevision,
         createdAt: "2026-08-15T00:00:00.000Z",
@@ -93,7 +97,7 @@ function installDesktopFixture(page) {
           state.imagePublishingSupported === true;
         next[0].revision = state.queueRevision;
         state.currentGroup = next[0];
-        return response({ items: next });
+        return response({ completed: true });
       };
       if (!state.imageUpdatePending) return update();
       return new Promise((resolve) => {
@@ -109,7 +113,7 @@ function installDesktopFixture(page) {
         state.imagePublishingSupported === true;
       next[0].revision = state.queueRevision;
       state.currentGroup = next[0];
-      return response({ items: next });
+      return response({ completed: true });
     };
     const response = (data) => Promise.resolve({ ok: true, data });
     const authState = {
@@ -228,10 +232,10 @@ function installDesktopFixture(page) {
       listRegularQueueGroups: () => response({ items: groupData() }),
       updateRegularQueueGroupImageCount: updateImageCount,
       updateRegularQueueGroupSubmissionInterval: updateSubmissionInterval,
-      startRegularQueueGroup: () => response([]),
-      pauseRegularQueueGroup: () => response([]),
-      startAllRegularQueueGroups: () => response([]),
-      pauseAllRegularQueueGroups: () => response([]),
+      startRegularQueueGroup: () => response({ completed: true }),
+      pauseRegularQueueGroup: () => response({ completed: true }),
+      startAllRegularQueueGroups: () => response({ completed: true }),
+      pauseAllRegularQueueGroups: () => response({ completed: true }),
       listSubmissionBatches: () => response([]),
       listArticleTrash: () => response([]),
       listResearch: () => response([]),
@@ -383,6 +387,9 @@ function installDesktopFixture(page) {
       },
       getSubmissionIntervalUpdates() {
         return state.submissionIntervalUpdates;
+      },
+      setRemainingPreview(items, count) {
+        state.remainingPreview = { items, count };
       },
     };
     window.desktopConsole = {
@@ -703,6 +710,47 @@ describe("renderer platform queue lifecycle", { concurrency: false }, () => {
       await page.getByRole('status').filter({hasText:'投稿间隔已保存。'}).waitFor();
       assert.deepEqual(await page.evaluate(()=>window.__platformQueueLifecycle.getSubmissionIntervalUpdates()),[45]);
     } finally { await page.close(); }
+  });
+
+  it("shows real remaining positions and a preview notice when remainingCount exceeds the window", async () => {
+    const page = await browser.newPage({
+      viewport: { width: 1200, height: 800 },
+    });
+    page.setDefaultTimeout(10000);
+    await installDesktopFixture(page);
+    await page.addInitScript(() => {
+      window.__platformQueueLifecycle.setRemainingPreview(
+        [
+          {
+            itemId: "item-51",
+            batchId: "batch-a",
+            articleId: "article-51",
+            articleRef: { clientId: "client-a", articleId: "article-51" },
+            articleSummary: { title: "第51篇", customerName: "客户 A" },
+            regularPublicationAttemptId: "attempt-51",
+            position: 51,
+          },
+          {
+            itemId: "item-52",
+            batchId: "batch-a",
+            articleId: "article-52",
+            articleRef: { clientId: "client-a", articleId: "article-52" },
+            articleSummary: { title: "第52篇", customerName: "客户 A" },
+            regularPublicationAttemptId: "attempt-52",
+            position: 52,
+          },
+        ],
+        386,
+      );
+    });
+    await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
+    await page.getByText("数据已就绪").waitFor();
+    await page.locator("#nav-item-submission-center").click();
+    await page.getByRole("heading", { name: "普通平台队列" }).waitFor();
+    await page.getByText("当前展示前 2 条，共 386 条待执行").waitFor();
+    assert.equal(await page.getByText("51", { exact: true }).count(), 1);
+    assert.equal(await page.getByText("52", { exact: true }).count(), 1);
+    await page.close();
   });
 
 });

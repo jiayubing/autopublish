@@ -14,25 +14,37 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
-it("returns the complete queue-group snapshot after pausing one group", async function () {
+function forbiddenQueueList() {
+  throw new Error("Commands must not enumerate queues");
+}
+
+function registerRegularQueueCommands(regularQueueGroups) {
   const handlers = new Map();
-  const calls = [];
-  const groups = [
-    { queueGroupId: "group-a" },
-    { queueGroupId: "group-b" },
-  ];
   registerContentSubmissionIpc({
     ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
     submissionMaintenance: {},
     submissionWorkflow: {
-      regularQueueGroups: {
-        list: () => groups,
-        start: async () => undefined,
-        pause: (input) => calls.push(input),
-        startAll: async () => undefined,
-        pauseAll: () => ({ groups }),
-      },
+      regularQueueGroups: Object.assign(
+        {
+          list: forbiddenQueueList,
+          start: async () => undefined,
+          pause: () => undefined,
+          startAll: async () => undefined,
+          pauseAll: () => undefined,
+          updateImageCount: () => undefined,
+          updateSubmissionInterval: () => undefined,
+        },
+        regularQueueGroups,
+      ),
     },
+  });
+  return handlers;
+}
+
+it("acknowledges pausing one group without reading another queue snapshot", async function () {
+  const calls = [];
+  const handlers = registerRegularQueueCommands({
+    pause: (input) => calls.push(input),
   });
 
   const result = await handlers.get("content:pause-regular-queue-group")(
@@ -41,28 +53,14 @@ it("returns the complete queue-group snapshot after pausing one group", async fu
   );
 
   assert.deepEqual(calls, [{ queueGroupId: "group-a" }]);
-  assert.deepEqual(result, { ok: true, data: { items: groups } });
+  assert.deepEqual(result, { ok: true, data: { completed: true } });
 });
 
 it("validates and forwards the queue-group submission interval command", async function () {
-  const handlers = new Map();
   const calls = [];
-  const groups = [{ queueGroupId: "group-a", submissionIntervalSeconds: 45 }];
-  registerContentSubmissionIpc({
-    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
-    submissionMaintenance: {},
-    submissionWorkflow: {
-      regularQueueGroups: {
-        list: () => groups,
-        updateSubmissionInterval: (input) => {
-          calls.push(input);
-          return groups;
-        },
-        start: async () => undefined,
-        pause: () => undefined,
-        startAll: async () => undefined,
-        pauseAll: () => ({ groups }),
-      },
+  const handlers = registerRegularQueueCommands({
+    updateSubmissionInterval: (input) => {
+      calls.push(input);
     },
   });
   const channel = "content:update-regular-queue-group-submission-interval";
@@ -73,7 +71,7 @@ it("validates and forwards the queue-group submission interval command", async f
   };
   const result = await handlers.get(channel)(null, input);
   assert.deepEqual(calls, [input]);
-  assert.deepEqual(result, { ok: true, data: { items: groups } });
+  assert.deepEqual(result, { ok: true, data: { completed: true } });
 
   const invalid = await handlers.get(channel)(null, {
     ...input,
@@ -82,6 +80,84 @@ it("validates and forwards the queue-group submission interval command", async f
   assert.equal(invalid.ok, false);
   assert.equal(invalid.error.code, "REGULAR_QUEUE_CONFIG_INVALID");
 });
+
+it("completes regular queue commands with completed:true even when list enumeration is forbidden", async function () {
+  const calls = [];
+  const handlers = registerRegularQueueCommands({
+    start: async (input) => {
+      calls.push(["start", input]);
+    },
+    pause: (input) => {
+      calls.push(["pause", input]);
+    },
+    startAll: async () => {
+      calls.push(["startAll"]);
+    },
+    pauseAll: () => {
+      calls.push(["pauseAll"]);
+    },
+    updateImageCount: (input) => {
+      calls.push(["updateImageCount", input]);
+    },
+    updateSubmissionInterval: (input) => {
+      calls.push(["updateSubmissionInterval", input]);
+    },
+  });
+  const completed = { ok: true, data: { completed: true } };
+  const imageInput = {
+    queueGroupId: "group-a",
+    imageCount: 3,
+    expectedRevision: 2,
+  };
+  const intervalInput = {
+    queueGroupId: "group-a",
+    submissionIntervalSeconds: 45,
+    expectedRevision: 2,
+  };
+
+  assert.deepEqual(
+    await handlers.get("content:start-regular-queue-group")(null, {
+      queueGroupId: "group-a",
+    }),
+    completed,
+  );
+  assert.deepEqual(
+    await handlers.get("content:pause-regular-queue-group")(null, {
+      queueGroupId: "group-a",
+    }),
+    completed,
+  );
+  assert.deepEqual(
+    await handlers.get("content:update-regular-queue-group-image-count")(
+      null,
+      imageInput,
+    ),
+    completed,
+  );
+  assert.deepEqual(
+    await handlers.get(
+      "content:update-regular-queue-group-submission-interval",
+    )(null, intervalInput),
+    completed,
+  );
+  assert.deepEqual(
+    await handlers.get("content:start-all-regular-queue-groups")(),
+    completed,
+  );
+  assert.deepEqual(
+    await handlers.get("content:pause-all-regular-queue-groups")(),
+    completed,
+  );
+  assert.deepEqual(calls, [
+    ["start", { queueGroupId: "group-a" }],
+    ["pause", { queueGroupId: "group-a" }],
+    ["updateImageCount", imageInput],
+    ["updateSubmissionInterval", intervalInput],
+    ["startAll"],
+    ["pauseAll"],
+  ]);
+});
+
 it("does not register the retired submission batch cancellation capability", async function () {
   const handlers = new Map();
   registerContentSubmissionIpc({

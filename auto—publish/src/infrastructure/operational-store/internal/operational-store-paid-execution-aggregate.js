@@ -324,7 +324,7 @@ function createPaidExecutionAggregate(context, activeTarget) {
       if (value.exclusiveClient === true) {
         params.push(clientId);
         filters.push(
-          "NOT EXISTS (SELECT 1 FROM submission_items s WHERE s.batch_id=b.batch_id AND json_extract(s.payload_json,'$.clientId') IS NOT NULL AND json_extract(s.payload_json,'$.clientId')!=?)",
+          "NOT EXISTS (SELECT 1 FROM submission_items s WHERE s.batch_id=b.batch_id AND (json_extract(s.payload_json,'$.clientId') IS NULL OR json_extract(s.payload_json,'$.clientId')!=?))",
         );
       }
     }
