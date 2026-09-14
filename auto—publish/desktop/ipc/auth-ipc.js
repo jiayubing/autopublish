@@ -26,30 +26,44 @@ function registerAuthIpc(deps) {
   if (!ipcMain || typeof ipcMain.handle !== "function" || !service) throw new Error("Auth IPC dependencies are required");
 
   function broadcast() { sendToRenderer("auth-state-changed", service.getState()); }
-  async function broadcastStateAfterRuntime(state) {
-    if (
-      state &&
-      state.authenticated &&
-      typeof options.onAuthenticated === "function"
-    ) {
-      try {
-        await options.onAuthenticated();
-      } catch (_) {
-        reportDiagnostic({
-          code: "AUTH_RUNTIME_START_FAILED",
-          module: "auth-ipc",
-          category: "lifecycle",
-          operationId: "auth-state-broadcast",
-          metadata: { action: "runtime-start", outcome: "failed" },
+  function reportRuntimeLifecycleFailure(code, action) {
+    reportDiagnostic({
+      code,
+      module: "auth-ipc",
+      category: "lifecycle",
+      operationId: "auth-state-broadcast",
+      metadata: { action, outcome: "failed" },
+    });
+  }
+  function kickRuntime(state) {
+    if (state && state.authenticated === true) {
+      if (typeof options.onAuthenticated === "function") {
+        void Promise.resolve(options.onAuthenticated()).catch(() => {
+          reportRuntimeLifecycleFailure(
+            "AUTH_RUNTIME_START_FAILED",
+            "runtime-start",
+          );
         });
-        return;
       }
+      return;
     }
+    if (typeof options.onUnauthenticated === "function") {
+      void Promise.resolve(options.onUnauthenticated()).catch(() => {
+        reportRuntimeLifecycleFailure(
+          "AUTH_RUNTIME_DISPOSE_FAILED",
+          "runtime-dispose",
+        );
+      });
+    }
+  }
+  function publishAuth(state) {
+    kickRuntime(state);
     broadcast();
+    return state;
   }
   if (typeof service.onStateChanged === "function")
     service.onStateChanged((state) => {
-      void broadcastStateAfterRuntime(state);
+      publishAuth(state);
     });
 
   ipcMain.handle("auth:get-state", async function(event, input) {
@@ -57,8 +71,7 @@ function registerAuthIpc(deps) {
       if (input !== undefined) safeInput(input);
       if (typeof service.initialize === "function") await service.initialize();
       const state = service.getState();
-      if (state && state.authenticated && typeof options.onAuthenticated === "function") await options.onAuthenticated();
-      broadcast();
+      publishAuth(state);
       return ok(state);
     } catch (error) { return authFailure(error); }
   });
@@ -69,8 +82,7 @@ function registerAuthIpc(deps) {
         const error = new Error("Authentication input is invalid"); error.code = "AUTH_INPUT_INVALID"; throw error;
       }
       const state = await service.login(value.loginName, value.password);
-      if (typeof options.onAuthenticated === "function") await options.onAuthenticated();
-      broadcast();
+      publishAuth(state || service.getState());
       return ok(state || service.getState());
     } catch (error) { return authFailure(error); }
   });
@@ -81,8 +93,7 @@ function registerAuthIpc(deps) {
         const error = new Error("Authentication input is invalid"); error.code = "AUTH_INPUT_INVALID"; throw error;
       }
       const state = await service.changePassword(value.loginName, value.currentPassword, value.newPassword);
-      if (typeof options.onAuthenticated === "function") await options.onAuthenticated();
-      broadcast();
+      publishAuth(state || service.getState());
       return ok(state || service.getState());
     } catch (error) { return authFailure(error); }
   });
@@ -90,8 +101,7 @@ function registerAuthIpc(deps) {
     try {
       if (input !== undefined) safeInput(input);
       const state = await service.refresh();
-      if (typeof options.onAuthenticated === "function") await options.onAuthenticated();
-      broadcast();
+      publishAuth(state || service.getState());
       return ok(state || service.getState());
     } catch (error) { return authFailure(error); }
   });
@@ -99,7 +109,7 @@ function registerAuthIpc(deps) {
     try {
       if (input !== undefined) safeInput(input);
       const state = await service.logout();
-      broadcast();
+      publishAuth(state || service.getState());
       return ok(state || service.getState());
     } catch (error) { return authFailure(error); }
   });

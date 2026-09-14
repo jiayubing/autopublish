@@ -34,16 +34,28 @@ function safeErrorCode(value) {
     : null;
 }
 
-function rendererWorkspaceState(value) {
+function rendererWorkspaceState(value, runtimePhase) {
   const source =
     value && typeof value === "object" && !Array.isArray(value) ? value : {};
   const configured =
     typeof source.workspacePath === "string" && source.workspacePath.length > 0;
-  const rawState = STATE_VALUES.has(source.state)
+  let rawState = STATE_VALUES.has(source.state)
     ? source.state
     : configured
       ? "ready"
       : "selection_required";
+  let errorCode = safeErrorCode(source);
+  let label = configured ? "工作区已配置" : "尚未配置工作区";
+  if (rawState === "ready") {
+    if (runtimePhase === "starting" || runtimePhase === "idle") {
+      rawState = "checking";
+      label = "正在启动工作区";
+    } else if (runtimePhase === "failed") {
+      rawState = "invalid";
+      label = "工作区启动失败";
+      errorCode = errorCode || "WORKSPACE_OPEN_FAILED";
+    }
+  }
   const kind =
     source.selection && selectionLabel(source.selection.kind)
       ? source.selection.kind
@@ -56,10 +68,10 @@ function rendererWorkspaceState(value) {
     state: rawState,
     configured,
     environmentManaged: source.envOverride === true,
-    label: configured ? "工作区已配置" : "尚未配置工作区",
+    label,
     selection:
       kind && token ? { token, kind, label: selectionLabel(kind) } : null,
-    errorCode: safeErrorCode(source),
+    errorCode,
     changed: typeof source.changed === "boolean" ? source.changed : null,
   };
 }
@@ -107,6 +119,25 @@ function registerWorkspaceBootstrapIpc(deps) {
     throw new Error("Workspace bootstrap IPC dependencies are required");
   }
   const pickDirectory = createDialogPicker(showOpenDialog, service);
+  const getRuntimePhase =
+    typeof options.getRuntimePhase === "function"
+      ? options.getRuntimePhase
+      : function () {
+          return "idle";
+        };
+  const ensureRuntime =
+    typeof options.ensureRuntime === "function"
+      ? options.ensureRuntime
+      : async function () {};
+
+  async function presentState(state) {
+    try {
+      await ensureRuntime();
+    } catch (_) {
+      // Runtime start failures stay on the workspace bootstrap projection.
+    }
+    return rendererWorkspaceState(state, getRuntimePhase());
+  }
 
   const typedIpcMain = createTypedIpcMain(ipcMain, requireAuthenticated);
   for (const channel of BOOTSTRAP_CHANNELS) {
@@ -118,23 +149,23 @@ function registerWorkspaceBootstrapIpc(deps) {
   const registeredChannels = [];
   try {
     typedIpcMain.handle("workspace:get-bootstrap-state", async function () {
-      return rendererWorkspaceState(await service.getBootstrapState());
+      return presentState(await service.getBootstrapState());
     });
     registeredChannels.push("workspace:get-bootstrap-state");
     typedIpcMain.handle("workspace:choose-directory", async function () {
-      return rendererWorkspaceState(await service.chooseDirectory(await pickDirectory()));
+      return presentState(await service.chooseDirectory(await pickDirectory()));
     });
     registeredChannels.push("workspace:choose-directory");
     typedIpcMain.handle("workspace:confirm-selection", async function (event, payload) {
-      return rendererWorkspaceState(await service.confirmSelection({ token: payload.token }));
+      return presentState(await service.confirmSelection({ token: payload.token }));
     });
     registeredChannels.push("workspace:confirm-selection");
     typedIpcMain.handle("workspace:cancel-selection", async function () {
-      return rendererWorkspaceState(await service.cancelSelection());
+      return presentState(await service.cancelSelection());
     });
     registeredChannels.push("workspace:cancel-selection");
     typedIpcMain.handle("workspace:get-current", async function () {
-      return rendererWorkspaceState(await service.getCurrent());
+      return presentState(await service.getCurrent());
     });
     registeredChannels.push("workspace:get-current");
     typedIpcMain.handle("workspace:open-current", async function () {
@@ -143,7 +174,7 @@ function registerWorkspaceBootstrapIpc(deps) {
     });
     registeredChannels.push("workspace:open-current");
     typedIpcMain.handle("workspace:request-switch", async function () {
-      return rendererWorkspaceState(await service.requestSwitch(await pickDirectory()));
+      return presentState(await service.requestSwitch(await pickDirectory()));
     });
     registeredChannels.push("workspace:request-switch");
   } catch (error) {
