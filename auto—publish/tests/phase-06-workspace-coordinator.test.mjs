@@ -197,6 +197,48 @@ test("workspace coordinator gives attention and media one initial refresh per re
   coordinator.dispose();
 });
 
+test("overlapping page registrations replace the previous owner instead of throwing", () => {
+  let consume;
+  const firstOwner = [];
+  const secondOwner = [];
+  const coordinator = createWorkspaceCoordinator({
+    subscribe: (listener) => {
+      consume = listener;
+      return () => {};
+    },
+  });
+  coordinator.start();
+  coordinator.initialize({
+    workspaceRuntimeId: "runtime-overlap",
+    revision: 1,
+  });
+  const unregisterFirst = coordinator.register("contentSources", (input) => {
+    firstOwner.push(input.kind);
+  });
+  const unregisterSecond = coordinator.register("contentSources", (input) => {
+    secondOwner.push(input.kind);
+  });
+  consume(
+    event({
+      workspaceRuntimeId: "runtime-overlap",
+      revision: 2,
+      scopes: ["contentSources"],
+    }),
+  );
+  unregisterFirst();
+  consume(
+    event({
+      workspaceRuntimeId: "runtime-overlap",
+      revision: 3,
+      scopes: ["contentSources"],
+    }),
+  );
+  assert.deepEqual(firstOwner, ["initial"]);
+  assert.deepEqual(secondOwner, ["initial", "invalidation", "invalidation"]);
+  unregisterSecond();
+  coordinator.dispose();
+});
+
 test("workspace coordinator consumes the production-parsed ARTICLE_SAVED event", () => {
   let rawListener;
   const refreshes = [];

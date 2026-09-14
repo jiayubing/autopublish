@@ -221,8 +221,7 @@ export function createWorkspaceCoordinator(options = {}) {
       if (disposed) throw new Error("Workspace coordinator is disposed");
       if (!KNOWN_SCOPE_SET.has(scope) || typeof listener !== "function")
         throw new TypeError("Workspace scope registration is invalid");
-      if (registrations.has(scope))
-        throw new Error(`Workspace scope already has an owner: ${scope}`);
+      // Entering pages may register before the exiting page unregisters.
       registrations.set(scope, listener);
       publishSnapshot();
       if (started && workspaceRuntimeId)

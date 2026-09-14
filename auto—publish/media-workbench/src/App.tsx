@@ -465,7 +465,7 @@ function AppContent() {
 
         <main className="app-workspace relative min-h-0 flex-1 select-none overflow-y-auto p-3 sm:p-5 lg:p-6">
           <div className="app-page-frame h-full">
-            <AnimatePresence mode="sync">
+            <AnimatePresence mode="wait">
               {currentView === "content-production" && (
                 <motion.div
                   key="content-production-view"
