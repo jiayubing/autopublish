@@ -42,10 +42,10 @@ function registerAuthIpc(deps) {
           operationId: "auth-state-broadcast",
           metadata: { action: "runtime-start", outcome: "failed" },
         });
-        return;
       }
     }
     broadcast();
+    return state;
   }
   if (typeof service.onStateChanged === "function")
     service.onStateChanged((state) => {
@@ -53,47 +53,46 @@ function registerAuthIpc(deps) {
     });
 
   ipcMain.handle("auth:get-state", async function(event, input) {
+    let state;
     try {
       if (input !== undefined) safeInput(input);
       if (typeof service.initialize === "function") await service.initialize();
-      const state = service.getState();
-      if (state && state.authenticated && typeof options.onAuthenticated === "function") await options.onAuthenticated();
-      broadcast();
-      return ok(state);
+      state = service.getState();
     } catch (error) { return authFailure(error); }
+    return ok(await broadcastStateAfterRuntime(state));
   });
   ipcMain.handle("auth:login", async function(event, input) {
+    let state;
     try {
       const value = safeInput(input);
       if (typeof value.loginName !== "string" || typeof value.password !== "string") {
         const error = new Error("Authentication input is invalid"); error.code = "AUTH_INPUT_INVALID"; throw error;
       }
-      const state = await service.login(value.loginName, value.password);
-      if (typeof options.onAuthenticated === "function") await options.onAuthenticated();
-      broadcast();
-      return ok(state || service.getState());
+      state = await service.login(value.loginName, value.password);
+      state = state || service.getState();
     } catch (error) { return authFailure(error); }
+    return ok(await broadcastStateAfterRuntime(state));
   });
   ipcMain.handle("auth:change-password", async function(event, input) {
+    let state;
     try {
       const value = safeInput(input);
       if (typeof value.loginName !== "string" || typeof value.currentPassword !== "string" || typeof value.newPassword !== "string") {
         const error = new Error("Authentication input is invalid"); error.code = "AUTH_INPUT_INVALID"; throw error;
       }
-      const state = await service.changePassword(value.loginName, value.currentPassword, value.newPassword);
-      if (typeof options.onAuthenticated === "function") await options.onAuthenticated();
-      broadcast();
-      return ok(state || service.getState());
+      state = await service.changePassword(value.loginName, value.currentPassword, value.newPassword);
+      state = state || service.getState();
     } catch (error) { return authFailure(error); }
+    return ok(await broadcastStateAfterRuntime(state));
   });
   ipcMain.handle("auth:refresh", async function(event, input) {
+    let state;
     try {
       if (input !== undefined) safeInput(input);
-      const state = await service.refresh();
-      if (typeof options.onAuthenticated === "function") await options.onAuthenticated();
-      broadcast();
-      return ok(state || service.getState());
+      state = await service.refresh();
+      state = state || service.getState();
     } catch (error) { return authFailure(error); }
+    return ok(await broadcastStateAfterRuntime(state));
   });
   ipcMain.handle("auth:logout", async function(event, input) {
     try {
