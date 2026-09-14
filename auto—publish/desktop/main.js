@@ -363,8 +363,7 @@ function createAuthenticatedIpcMain() {
 
 async function activateAuthenticatedRuntime() {
   const runtimeState = authenticatedRuntime.getState();
-  if (runtimeState.phase === "running" || runtimeState.phase === "starting")
-    return;
+  if (runtimeState.phase === "running") return;
   const workspace = initializeWorkspaceBootstrap();
   runtimeContext = workspace;
   const bootstrapState = workspace.service.bootstrap();
@@ -374,6 +373,8 @@ async function activateAuthenticatedRuntime() {
     typeof bootstrapState.workspacePath === "string" &&
     bootstrapState.workspacePath.trim() !== ""
   ) {
+    // start() joins an in-flight startPromise, so authenticated IPC callers
+    // wait until workspace startup (including migration confirmation) finishes.
     await authenticatedRuntime.start(bootstrapState);
   }
 }
