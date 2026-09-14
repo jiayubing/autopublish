@@ -13,11 +13,25 @@ const REASON_CODE = /^[A-Za-z0-9._:-]{1,128}$/;
 
 export async function loadWorkspaceRuntimeIdentityWithRetry(
   loader,
-  /** @type {{ signal?: AbortSignal, maxAttempts?: number, delayMs?: number }} */
-  { signal, maxAttempts = 5, delayMs = 100 } = {},
+  /** @type {{ signal?: AbortSignal, maxAttempts?: number, delayMs?: number, isAvailable?: () => boolean | Promise<boolean> }} */
+  { signal, maxAttempts = 5, delayMs = 100, isAvailable } = {},
 ) {
   if (typeof loader !== "function")
     throw new TypeError("Workspace runtime identity loader is required");
+  if (typeof isAvailable === "function") {
+    let available = false;
+    try {
+      available = Boolean(await isAvailable());
+    } catch (error) {
+      if (error?.name === "AbortError") throw error;
+      available = false;
+    }
+    if (!available) {
+      const error = new Error("Workspace runtime identity is unavailable");
+      error.code = "WORKSPACE_RUNTIME_IDENTITY_UNAVAILABLE";
+      throw error;
+    }
+  }
   const attempts = Number.isSafeInteger(maxAttempts) && maxAttempts > 0 ? maxAttempts : 1;
   const waitMs = Number.isFinite(delayMs) && delayMs >= 0 ? delayMs : 0;
   let lastError;
@@ -211,18 +225,12 @@ export function createWorkspaceCoordinator(options = {}) {
         throw new Error(`Workspace scope already has an owner: ${scope}`);
       registrations.set(scope, listener);
       publishSnapshot();
-      if (started)
-        notify(
-          scope,
-          "initial",
-          workspaceRuntimeId
-            ? {
-                workspaceRuntimeId,
-                revision: lastRevision,
-                reasonCode: "WORKSPACE_IDENTITY_SYNC",
-              }
-            : null,
-        );
+      if (started && workspaceRuntimeId)
+        notify(scope, "initial", {
+          workspaceRuntimeId,
+          revision: lastRevision,
+          reasonCode: "WORKSPACE_IDENTITY_SYNC",
+        });
       return () => {
         if (registrations.get(scope) === listener) {
           registrations.delete(scope);
@@ -260,7 +268,9 @@ export function createWorkspaceCoordinator(options = {}) {
       const kind =
         workspaceRuntimeId && workspaceRuntimeId !== identity.workspaceRuntimeId
           ? "runtime-switch"
-          : "identity";
+          : workspaceRuntimeId
+            ? "identity"
+            : "initial";
       workspaceRuntimeId = identity.workspaceRuntimeId;
       lastRevision = identity.revision;
       refreshAll(kind, {
@@ -275,7 +285,12 @@ export function createWorkspaceCoordinator(options = {}) {
       if (disposed || started) return;
       started = true;
       unsubscribe = transportSubscribe(consume);
-      refreshAll("initial", null);
+      if (workspaceRuntimeId)
+        refreshAll("initial", {
+          workspaceRuntimeId,
+          revision: lastRevision,
+          reasonCode: "WORKSPACE_IDENTITY_SYNC",
+        });
     },
     stop,
     getSnapshot() {

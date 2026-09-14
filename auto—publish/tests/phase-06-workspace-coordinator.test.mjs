@@ -132,6 +132,14 @@ test("workspace coordinator owns one transport and handles revision/runtime life
     calls.push(["orders", input.kind, input.revision]),
   );
   coordinator.start();
+  assert.equal(calls.filter((entry) => entry[1] === "initial").length, 0);
+  assert.equal(
+    coordinator.initialize({
+      workspaceRuntimeId: "runtime-a",
+      revision: 0,
+    }),
+    true,
+  );
   assert.equal(calls.filter((entry) => entry[1] === "initial").length, 2);
 
   rawListener(event());
@@ -168,6 +176,14 @@ test("workspace coordinator gives attention and media one initial refresh per re
   );
   coordinator.register("orders", (input) => calls.push(["orders", input.kind]));
   coordinator.start();
+  assert.deepEqual(calls, []);
+  assert.equal(
+    coordinator.initialize({
+      workspaceRuntimeId: "runtime-a",
+      revision: 0,
+    }),
+    true,
+  );
 
   assert.deepEqual(calls, [
     ["articleAttention", "initial"],
@@ -279,6 +295,7 @@ test("workspace coordinator publishes the queried runtime identity before later 
   coordinator.register("contentSources", (input) => refreshes.push(input));
   coordinator.subscribe(() => snapshots.push(coordinator.getSnapshot()));
   coordinator.start();
+  assert.equal(refreshes.length, 0);
   assert.equal(
     coordinator.initialize({
       workspaceRuntimeId: "runtime-query-1",
@@ -286,6 +303,8 @@ test("workspace coordinator publishes the queried runtime identity before later 
     }),
     true,
   );
+  assert.equal(refreshes.length, 1);
+  assert.equal(refreshes[0].kind, "initial");
   assert.deepEqual(coordinator.getSnapshot(), {
     workspaceRuntimeId: "runtime-query-1",
     lastRevision: 4,
@@ -308,7 +327,7 @@ test("workspace coordinator scopes platform commands from a delayed runtime-read
   });
   coordinator.register("platformQueue", (input) => refreshes.push(input));
   coordinator.start();
-  assert.equal(refreshes.at(-1).workspaceRuntimeId, null);
+  assert.equal(refreshes.length, 0);
 
   rawListener(event({
     workspaceRuntimeId: "runtime-delayed-ready",
@@ -353,6 +372,31 @@ test("workspace coordinator replays a runtime identity when a scope registers af
   ]);
 });
 
+test("one bootstrap produces one effective refresh instead of initial then identity", () => {
+  const refreshes = [];
+  const coordinator = createWorkspaceCoordinator({ subscribe: () => () => {} });
+  coordinator.register("mediaWorkbench", (input) => refreshes.push(input.kind));
+  coordinator.start();
+  assert.deepEqual(refreshes, []);
+  assert.equal(
+    coordinator.initialize({
+      workspaceRuntimeId: "runtime-bootstrap",
+      revision: 1,
+    }),
+    true,
+  );
+  assert.deepEqual(refreshes, ["initial"]);
+  assert.equal(
+    coordinator.initialize({
+      workspaceRuntimeId: "runtime-bootstrap",
+      revision: 1,
+    }),
+    false,
+  );
+  assert.deepEqual(refreshes, ["initial"]);
+  coordinator.dispose();
+});
+
 test("runtime identity retry recovers from a transient IPC failure", async () => {
   let calls = 0;
   const identity = await loadWorkspaceRuntimeIdentityWithRetry(
@@ -368,6 +412,31 @@ test("runtime identity retry recovers from a transient IPC failure", async () =>
     workspaceRuntimeId: "runtime-recovered",
     revision: 0,
   });
+});
+
+test("runtime identity does not back off when the runtime cannot exist", async () => {
+  let loaderCalls = 0;
+  let availableCalls = 0;
+  await assert.rejects(
+    () =>
+      loadWorkspaceRuntimeIdentityWithRetry(
+        async () => {
+          loaderCalls += 1;
+          return { workspaceRuntimeId: "runtime-should-not-load", revision: 0 };
+        },
+        {
+          maxAttempts: 5,
+          delayMs: 20,
+          isAvailable: async () => {
+            availableCalls += 1;
+            return false;
+          },
+        },
+      ),
+    (error) => error.code === "WORKSPACE_RUNTIME_IDENTITY_UNAVAILABLE",
+  );
+  assert.equal(loaderCalls, 0);
+  assert.equal(availableCalls, 1);
 });
 
 test("workspace coordinator replays a StrictMode effect without losing its transport", () => {
@@ -411,7 +480,7 @@ test("workspace coordinator replays a StrictMode effect without losing its trans
   rawListener(event({ scopes: ["orders"] }));
   assert.deepEqual(
     refreshes.map((input) => input.kind),
-    ["initial", "initial", "invalidation"],
+    ["invalidation"],
   );
   assert.equal(refreshes.at(-1).revision, 1);
 
