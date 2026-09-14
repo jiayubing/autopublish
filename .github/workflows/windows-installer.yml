@@ -1,3 +1,4 @@
+# Temporary PR packaging trigger for #56; remove before merge.
 name: Windows Installer
 
 on:
