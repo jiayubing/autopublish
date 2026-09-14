@@ -127,6 +127,20 @@ describe("auth and workspace startup decoupling", function () {
       dispose: async () => {},
     });
     await assert.rejects(() => runtime.start({ workspacePath: "fixture" }));
+    assert.equal(
+      rendererWorkspaceState(
+        { state: "ready", workspacePath: "C:\\workspace" },
+        "idle",
+      ).state,
+      "ready",
+    );
+    assert.equal(
+      rendererWorkspaceState(
+        { state: "ready", workspacePath: "C:\\workspace" },
+        "starting",
+      ).state,
+      "checking",
+    );
     assert.deepEqual(
       rendererWorkspaceState(
         { state: "ready", workspacePath: "C:\\workspace" },

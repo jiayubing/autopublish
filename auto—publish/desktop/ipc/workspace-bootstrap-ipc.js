@@ -47,7 +47,7 @@ function rendererWorkspaceState(value, runtimePhase) {
   let errorCode = safeErrorCode(source);
   let label = configured ? "工作区已配置" : "尚未配置工作区";
   if (rawState === "ready") {
-    if (runtimePhase === "starting" || runtimePhase === "idle") {
+    if (runtimePhase === "starting") {
       rawState = "checking";
       label = "正在启动工作区";
     } else if (runtimePhase === "failed") {
@@ -130,12 +130,21 @@ function registerWorkspaceBootstrapIpc(deps) {
       ? options.ensureRuntime
       : async function () {};
 
-  async function presentState(state) {
+  async function awaitRuntime() {
     try {
       await ensureRuntime();
     } catch (_) {
       // Runtime start failures stay on the workspace bootstrap projection.
     }
+  }
+
+  async function presentLoadedState(loadState) {
+    await awaitRuntime();
+    return rendererWorkspaceState(await loadState(), getRuntimePhase());
+  }
+
+  async function presentCommandState(state) {
+    await awaitRuntime();
     return rendererWorkspaceState(state, getRuntimePhase());
   }
 
@@ -149,23 +158,27 @@ function registerWorkspaceBootstrapIpc(deps) {
   const registeredChannels = [];
   try {
     typedIpcMain.handle("workspace:get-bootstrap-state", async function () {
-      return presentState(await service.getBootstrapState());
+      return presentLoadedState(() => service.getBootstrapState());
     });
     registeredChannels.push("workspace:get-bootstrap-state");
     typedIpcMain.handle("workspace:choose-directory", async function () {
-      return presentState(await service.chooseDirectory(await pickDirectory()));
+      return presentCommandState(
+        await service.chooseDirectory(await pickDirectory()),
+      );
     });
     registeredChannels.push("workspace:choose-directory");
     typedIpcMain.handle("workspace:confirm-selection", async function (event, payload) {
-      return presentState(await service.confirmSelection({ token: payload.token }));
+      return presentCommandState(
+        await service.confirmSelection({ token: payload.token }),
+      );
     });
     registeredChannels.push("workspace:confirm-selection");
     typedIpcMain.handle("workspace:cancel-selection", async function () {
-      return presentState(await service.cancelSelection());
+      return presentCommandState(await service.cancelSelection());
     });
     registeredChannels.push("workspace:cancel-selection");
     typedIpcMain.handle("workspace:get-current", async function () {
-      return presentState(await service.getCurrent());
+      return presentLoadedState(() => service.getCurrent());
     });
     registeredChannels.push("workspace:get-current");
     typedIpcMain.handle("workspace:open-current", async function () {
@@ -174,7 +187,9 @@ function registerWorkspaceBootstrapIpc(deps) {
     });
     registeredChannels.push("workspace:open-current");
     typedIpcMain.handle("workspace:request-switch", async function () {
-      return presentState(await service.requestSwitch(await pickDirectory()));
+      return presentCommandState(
+        await service.requestSwitch(await pickDirectory()),
+      );
     });
     registeredChannels.push("workspace:request-switch");
   } catch (error) {
