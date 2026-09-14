@@ -9,7 +9,10 @@ export function useMediaBalance() {
   if (!featureRef.current)
     featureRef.current = createMediaBalanceFeature({ getBalance });
   const feature = featureRef.current;
-  useEffect(() => () => feature.dispose(), [feature]);
+  useEffect(() => {
+    void feature.refresh("workspace-ready");
+    return () => feature.dispose();
+  }, [feature]);
   return {
     snapshot: useSyncExternalStore(
       feature.subscribe,

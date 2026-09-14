@@ -285,6 +285,13 @@ describe("startup page-owned loads", () => {
       "utf8",
     );
     assert.match(sidebar, /useMediaBalance/);
+    const balanceHook = readFileSync(
+      join(root, "../media-workbench/src/features/media/use-media-balance.ts"),
+      "utf8",
+    );
+    assert.match(balanceHook, /feature\.refresh\("workspace-ready"\)/);
+    assert.doesNotMatch(app, /readinessQueries/);
+    assert.doesNotMatch(app, /mediaSnapshot\.balance/);
     const libraryBlock = app.slice(
       app.indexOf("function ArticleLibraryPage"),
       app.indexOf("function SubmissionCenterPage"),
