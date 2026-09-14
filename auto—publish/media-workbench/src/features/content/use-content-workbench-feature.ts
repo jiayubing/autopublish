@@ -64,9 +64,17 @@ import {
   useWorkspaceRuntimeIdentity,
   useWorkspaceScope,
 } from "../workspace/workspace-coordinator-context";
-import { createContentWorkbenchFeature } from "./content-workbench-feature.js";
+import {
+  createContentWorkbenchFeature,
+  loadContentWorkbenchPage,
+} from "./content-workbench-feature.js";
 
-export function useContentWorkbenchFeature() {
+export type ContentWorkbenchPage = "library" | "production" | "shell";
+
+export function useContentWorkbenchFeature(options?: {
+  page?: ContentWorkbenchPage;
+}) {
+  const page = options?.page || "library";
   const workspace = useWorkspaceRuntimeIdentity();
   const featureRef = useRef<ReturnType<
     typeof createContentWorkbenchFeature
@@ -141,24 +149,21 @@ export function useContentWorkbenchFeature() {
     });
   }
   const feature = featureRef.current;
+  const pageRef = useRef(page);
+  pageRef.current = page;
   useEffect(() => {
     if (!workspace.workspaceRuntimeId) return;
     feature.setScope({ workspaceRuntimeId: workspace.workspaceRuntimeId });
-    void feature.refresh("initial");
-    void feature.refreshClientGroups("initial");
-    void feature.refreshDoubaoQueue("initial");
-  }, [feature, workspace.workspaceRuntimeId]);
+    void loadContentWorkbenchPage(feature, page, "initial");
+  }, [feature, page, workspace.workspaceRuntimeId]);
   useWorkspaceScope("contentSources", (event) => {
     if (!event.workspaceRuntimeId) return;
     feature.setScope({ workspaceRuntimeId: event.workspaceRuntimeId });
-    if (!["initial", "identity", "runtime-switch"].includes(event.kind)) {
-      void feature.refreshContentSources(event.kind);
-      void feature.refreshClientGroups(event.kind);
-      void feature.refreshDoubaoQueue(event.kind);
-    }
+    if (!["initial", "identity", "runtime-switch"].includes(event.kind))
+      return loadContentWorkbenchPage(feature, pageRef.current, event.kind);
   });
   useWorkspaceScope("articleManagement", (event) => {
-    if (!event.workspaceRuntimeId) return;
+    if (!event.workspaceRuntimeId || pageRef.current !== "library") return;
     feature.setScope({ workspaceRuntimeId: event.workspaceRuntimeId });
     // The removal transaction event is the authoritative management refresh
     // owner.  The paired workspace invalidation still refreshes attention and
@@ -180,7 +185,8 @@ export function useContentWorkbenchFeature() {
     getClientDetails: getContentClientDetails,
     production: feature.production,
     library: feature.library,
-    refresh: (reason = "manual") => feature.refresh(reason),
+    refresh: (reason = "manual") =>
+      loadContentWorkbenchPage(feature, pageRef.current, reason),
     refreshClientData: (reason = "manual") => feature.refreshClientData(reason),
     refreshManagement: feature.refreshManagement,
     refreshClientGroups: feature.refreshClientGroups,

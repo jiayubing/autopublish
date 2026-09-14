@@ -10,8 +10,17 @@ describe("renderer platform cross-page progress contract", function() {
   it("mounts one platform provider and shares platform plus submission-center projections", function() {
     assert.match(read("App.tsx"), /PlatformFeatureProvider/);
     assert.match(read("components/PlatformWorkbench.tsx"), /usePlatformFeature/);
+    assert.match(read("App.tsx"), /function SubmissionCenterPage/);
     assert.match(read("App.tsx"), /useSubmissionCenterFeature/);
     assert.match(read("App.tsx"), /submissionCenter=\{submissionCenter\}/);
+    assert.match(
+      read("App.tsx"),
+      /useContentWorkbenchFeature\(\{ page: "library" \}\)/,
+    );
+    assert.doesNotMatch(
+      read("App.tsx"),
+      /function AppContent\([\s\S]*useSubmissionCenterFeature/,
+    );
     assert.doesNotMatch(read("App.tsx"), /PlatformTaskProvider|WorkspaceDataProvider/);
     assert.doesNotMatch(read("components/PlatformWorkbench.tsx"), /usePlatformTask|usePlatformQueue/);
     assert.doesNotMatch(read("components/Sidebar.tsx"), /usePlatformTask|usePlatformQueue/);

@@ -75,7 +75,10 @@ describe("Phase 06 media feature", () => {
         calls.push(["removeFromPool", resourceId]);
         return { removed: true };
       },
-      getBalance: async () => 80,
+      getBalance: async () => {
+        calls.push(["getBalance"]);
+        return 80;
+      },
 
 
       getOrders: async () => [],
@@ -94,6 +97,12 @@ describe("Phase 06 media feature", () => {
     assert.equal("articles" in feature.getSnapshot(), false);
     assert.equal("drafts" in feature.getSnapshot(), false);
     assert.equal(feature.getSnapshot().pool.pageSize, 50);
+    assert.equal(
+      calls.some((item) => item[0] === "getBalance"),
+      false,
+    );
+    assert.equal(feature.getSnapshot().balance.value, 0);
+    await feature.refreshBalance("initial");
     assert.equal(feature.getSnapshot().balance.value, 80);
     assert.equal(typeof feature.openArticle, "undefined");
     assert.equal(typeof feature.saveDraft, "undefined");

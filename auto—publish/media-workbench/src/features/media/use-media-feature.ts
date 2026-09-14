@@ -24,7 +24,10 @@ import {
 import { useWorkspaceScope } from "../workspace/workspace-coordinator-context";
 import { createMediaFeature } from "./media-feature.js";
 
-export function useMediaFeature() {
+export type MediaFeatureSurface = "resources" | "orders";
+
+export function useMediaFeature(options?: { surface?: MediaFeatureSurface }) {
+  const surface = options?.surface || "resources";
   const featureRef = useRef<ReturnType<typeof createMediaFeature> | null>(null);
   if (!featureRef.current) {
     featureRef.current = createMediaFeature({
@@ -52,27 +55,13 @@ export function useMediaFeature() {
   }
   const feature = featureRef.current;
   useWorkspaceScope("mediaWorkbench", (event) => {
-    if (!event.workspaceRuntimeId) return;
+    if (surface !== "resources" || !event.workspaceRuntimeId) return;
     feature.setScope({ workspaceRuntimeId: event.workspaceRuntimeId });
-    if (
-      event.kind === "initial" ||
-      event.kind === "identity" ||
-      event.kind === "runtime-switch"
-    ) {
-      void feature.refresh(event.kind);
-      return;
-    }
     void feature.refreshWorkbench(event.kind);
   });
   useWorkspaceScope("orders", (event) => {
-    if (!event.workspaceRuntimeId) return;
+    if (surface !== "orders" || !event.workspaceRuntimeId) return;
     feature.setScope({ workspaceRuntimeId: event.workspaceRuntimeId });
-    if (
-      event.kind === "initial" ||
-      event.kind === "identity" ||
-      event.kind === "runtime-switch"
-    )
-      return;
     void feature.refreshOrders(event.kind);
   });
   useEffect(() => () => feature.dispose(), [feature]);

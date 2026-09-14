@@ -150,12 +150,11 @@ export function createContentWorkbenchFeature(adapters = {}) {
       return false;
     syncManagementScope();
     const hasSelectedClient = Boolean(sources.getSnapshot().selectedClientId);
-    const [clientResult, researchResult, managementResult] = await Promise.all([
-      hasSelectedClient ? sources.refreshClientData(reason) : true,
-      sources.refreshResearchIndex(reason),
+    const [groupsResult, managementResult] = await Promise.all([
+      sources.refreshClientGroups(reason),
       hasSelectedClient ? management.refreshManagement(reason) : true,
     ]);
-    return clientResult && researchResult && managementResult;
+    return groupsResult && managementResult;
   };
   const refreshProduction = async (reason = "manual") => {
     if (!(await sources.refreshSources(reason, { refreshFallbackData: false })))
@@ -166,6 +165,11 @@ export function createContentWorkbenchFeature(adapters = {}) {
       sources.refreshResearchIndex(reason),
     ]);
     return clientResult && researchResult;
+  };
+  const refreshShell = async (reason = "manual") => {
+    if (!(await sources.refreshSources(reason, { refreshFallbackData: false })))
+      return false;
+    return sources.refreshClientGroups(reason);
   };
   const projectBoundary = (kind) => {
     const boundary = {
@@ -285,6 +289,7 @@ export function createContentWorkbenchFeature(adapters = {}) {
     refreshClientData: sources.refreshClientData,
     refreshResearchIndex: sources.refreshResearchIndex,
     refreshManagement: management.refreshManagement,
+    refreshShell,
     refreshPaidMediaBatches: paidMediaExecution.refresh,
     refreshDoubaoQueue: sources.refreshDoubaoQueue,
     async selectClient(clientId) {
@@ -316,4 +321,24 @@ export function createContentWorkbenchFeature(adapters = {}) {
       listeners.clear();
     },
   });
+}
+
+export async function loadContentWorkbenchPage(
+  feature,
+  page,
+  reason = "initial",
+) {
+  if (!feature || typeof feature.library?.refresh !== "function")
+    throw new TypeError("Content workbench feature is required");
+  if (page === "library") return feature.library.refresh(reason);
+  if (page === "production") {
+    const main = await feature.production.refresh(reason);
+    await Promise.all([
+      feature.refreshClientGroups(reason),
+      feature.refreshDoubaoQueue(reason),
+    ]);
+    return main;
+  }
+  if (page === "shell") return feature.refreshShell(reason);
+  throw new TypeError("Content workbench page is invalid");
 }

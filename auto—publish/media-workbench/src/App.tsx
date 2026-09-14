@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import type { ViewMode } from "./types/view";
 import Sidebar from "./components/Sidebar";
 import ContentWorkbench from "./components/ContentWorkbench";
@@ -16,6 +16,15 @@ import { useContentWorkbenchFeature } from "./features/content/use-content-workb
 import { SettingsFeatureProvider } from "./features/settings/settings-context";
 import { useSubmissionCenterFeature } from "./features/submission-center/use-submission-center-feature";
 import type { ArticleLibraryNavigationIntent } from "./article-library-navigation";
+import { getPoolPage } from "./bridge/media";
+import { DEFAULT_RESOURCE_PAGE_SIZE } from "./features/media/media-feature.js";
+import type { FavoriteMediaPage } from "./components/content/GeneratedArticlesView.types";
+import {
+  articleLibraryBadgeCount,
+  ordersBadgeCount,
+  submissionCenterBadgeCount,
+} from "./features/navigation-badges.js";
+import type { NavigationBadges } from "./components/Sidebar";
 
 const LAST_VIEW_KEY = "auto-publish:last-main-view";
 const VIEW_MODES: ViewMode[] = [
@@ -35,7 +44,18 @@ const VIEW_LABELS: Record<ViewMode, string> = {
   settings: "设置",
 };
 
+const EMPTY_FAVORITE_MEDIA_PAGE: FavoriteMediaPage = {
+  items: [],
+  total: 0,
+  page: 1,
+  totalPages: 0,
+  hasPrev: false,
+  hasNext: false,
+  loading: false,
+};
+
 type MainNavigationGuard = (action: () => void) => void;
+type PageReadiness = { loading: boolean; error: boolean };
 
 function loadLastView(): ViewMode {
   if (typeof localStorage === "undefined") return "article-library";
@@ -73,6 +93,233 @@ export function WorkspaceScopedConfirmationHost({
   );
 }
 
+function ContentProductionPage({
+  onOpenArticleLibrary,
+  onOpenOrders,
+  onReadinessChange,
+}: {
+  onOpenArticleLibrary: (intent?: ArticleLibraryNavigationIntent) => void;
+  onOpenOrders: () => void;
+  onReadinessChange: (readiness: PageReadiness) => void;
+}) {
+  const content = useContentWorkbenchFeature({ page: "production" });
+  useEffect(() => {
+    onReadinessChange({
+      loading:
+        !content.snapshot.scope || Boolean(content.snapshot.query.loading),
+      error: Boolean(content.snapshot.query.error),
+    });
+  }, [
+    content.snapshot.query.error,
+    content.snapshot.query.loading,
+    content.snapshot.scope,
+    onReadinessChange,
+  ]);
+  return (
+    <ContentWorkbench
+      content={content.production}
+      mode="production"
+      onOpenArticleLibrary={onOpenArticleLibrary}
+      onOpenOrders={onOpenOrders}
+    />
+  );
+}
+
+function ArticleLibraryPage({
+  articleIntent,
+  onArticleIntentConsumed,
+  onOpenArticleLibrary,
+  onOpenOrders,
+  onOpenAttention,
+  onMainNavigationGuardChange,
+  onBadgeChange,
+  onReadinessChange,
+}: {
+  articleIntent?: ArticleLibraryNavigationIntent | null;
+  onArticleIntentConsumed: () => void;
+  onOpenArticleLibrary: (intent?: ArticleLibraryNavigationIntent) => void;
+  onOpenOrders: () => void;
+  onOpenAttention: () => void;
+  onMainNavigationGuardChange: (guard: MainNavigationGuard | null) => void;
+  onBadgeChange: (count: number) => void;
+  onReadinessChange: (readiness: PageReadiness) => void;
+}) {
+  const content = useContentWorkbenchFeature({ page: "library" });
+  const [favoriteMediaPage, setFavoriteMediaPage] = useState(
+    EMPTY_FAVORITE_MEDIA_PAGE,
+  );
+  useEffect(() => {
+    onBadgeChange(articleLibraryBadgeCount(content.snapshot.management));
+  }, [content.snapshot.management, onBadgeChange]);
+  useEffect(() => {
+    onReadinessChange({
+      loading:
+        !content.snapshot.scope ||
+        Boolean(content.snapshot.query.loading) ||
+        Boolean(content.snapshot.managementQuery.loading),
+      error: Boolean(
+        content.snapshot.query.error || content.snapshot.managementQuery.error,
+      ),
+    });
+  }, [
+    content.snapshot.managementQuery.error,
+    content.snapshot.managementQuery.loading,
+    content.snapshot.query.error,
+    content.snapshot.query.loading,
+    content.snapshot.scope,
+    onReadinessChange,
+  ]);
+
+  async function loadFavoriteMediaPage(page: number) {
+    setFavoriteMediaPage((current) => ({
+      ...current,
+      page,
+      loading: true,
+      errorMessage: undefined,
+    }));
+    try {
+      const result = await getPoolPage({
+        page,
+        pageSize: DEFAULT_RESOURCE_PAGE_SIZE,
+        resourceIds: [],
+      });
+      setFavoriteMediaPage({
+        items: result.items,
+        total: result.total,
+        page: result.page,
+        totalPages: result.totalPages,
+        hasPrev: result.hasPrev,
+        hasNext: result.hasNext,
+        loading: false,
+      });
+    } catch (_) {
+      setFavoriteMediaPage((current) => ({
+        ...current,
+        loading: false,
+        errorMessage: "无法加载收藏媒体。",
+      }));
+    }
+  }
+
+  return (
+    <ContentWorkbench
+      content={content.library}
+      mode="library"
+      favoriteMediaPage={favoriteMediaPage}
+      onFavoriteMediaPageChange={(page) => {
+        void loadFavoriteMediaPage(page);
+      }}
+      articleIntent={articleIntent}
+      onArticleIntentConsumed={onArticleIntentConsumed}
+      onOpenArticleLibrary={onOpenArticleLibrary}
+      onOpenOrders={onOpenOrders}
+      onOpenAttention={onOpenAttention}
+      onMainNavigationGuardChange={onMainNavigationGuardChange}
+    />
+  );
+}
+
+function SubmissionCenterPage({
+  initialSection,
+  onOpenArticleLibrary,
+  onOpenOrders,
+  onBadgeChange,
+  onReadinessChange,
+}: {
+  initialSection: "regular" | "paid" | "attention";
+  onOpenArticleLibrary: (intent?: ArticleLibraryNavigationIntent) => void;
+  onOpenOrders: () => void;
+  onBadgeChange: (count: number) => void;
+  onReadinessChange: (readiness: PageReadiness) => void;
+}) {
+  const content = useContentWorkbenchFeature({ page: "shell" });
+  const submissionCenter = useSubmissionCenterFeature();
+  useEffect(() => {
+    onBadgeChange(
+      submissionCenterBadgeCount(submissionCenter.snapshot.data.counts),
+    );
+  }, [onBadgeChange, submissionCenter.snapshot.data.counts]);
+  useEffect(() => {
+    onReadinessChange({
+      loading:
+        !submissionCenter.snapshot.scope ||
+        Boolean(submissionCenter.snapshot.query.loading) ||
+        Boolean(content.snapshot.query.loading),
+      error: Boolean(
+        submissionCenter.snapshot.query.error || content.snapshot.query.error,
+      ),
+    });
+  }, [
+    content.snapshot.query.error,
+    content.snapshot.query.loading,
+    onReadinessChange,
+    submissionCenter.snapshot.query.error,
+    submissionCenter.snapshot.query.loading,
+    submissionCenter.snapshot.scope,
+  ]);
+  return (
+    <PlatformWorkbench
+      content={content}
+      submissionCenter={submissionCenter}
+      initialSection={initialSection}
+      onOpenArticleLibrary={onOpenArticleLibrary}
+      onOpenOrders={onOpenOrders}
+    />
+  );
+}
+
+function OrdersRoute({
+  onBadgeChange,
+  onReadinessChange,
+}: {
+  onBadgeChange: (count: number) => void;
+  onReadinessChange: (readiness: PageReadiness) => void;
+}) {
+  const { snapshot, feature } = useMediaFeature({ surface: "orders" });
+  useEffect(() => {
+    onBadgeChange(ordersBadgeCount(snapshot.orders.items));
+  }, [onBadgeChange, snapshot.orders.items]);
+  useEffect(() => {
+    onReadinessChange({
+      loading: !snapshot.scope || Boolean(snapshot.orders.query.loading),
+      error: Boolean(snapshot.orders.query.error),
+    });
+  }, [
+    onReadinessChange,
+    snapshot.orders.query.error,
+    snapshot.orders.query.loading,
+    snapshot.scope,
+  ]);
+  return <OrdersPage snapshot={snapshot} feature={feature} />;
+}
+
+function ResourcesRoute({
+  onReadinessChange,
+}: {
+  onReadinessChange: (readiness: PageReadiness) => void;
+}) {
+  const { snapshot, feature } = useMediaFeature({ surface: "resources" });
+  useEffect(() => {
+    onReadinessChange({
+      loading:
+        !snapshot.scope ||
+        Boolean(snapshot.resources.query.loading) ||
+        Boolean(snapshot.pool.query.loading),
+      error: Boolean(
+        snapshot.resources.query.error || snapshot.pool.query.error,
+      ),
+    });
+  }, [
+    onReadinessChange,
+    snapshot.pool.query.error,
+    snapshot.pool.query.loading,
+    snapshot.resources.query.error,
+    snapshot.resources.query.loading,
+    snapshot.scope,
+  ]);
+  return <ResourceLibraryPage snapshot={snapshot} feature={feature} />;
+}
+
 function AppContent() {
   const [currentView, setCurrentView] = useState<ViewMode>(loadLastView);
   const [submissionCenterSection, setSubmissionCenterSection] = useState<
@@ -82,58 +329,25 @@ function AppContent() {
     useState<ArticleLibraryNavigationIntent | null>(null);
   const [articleLibraryNavigationGuard, setArticleLibraryNavigationGuard] =
     useState<MainNavigationGuard | null>(null);
-  const { snapshot: mediaSnapshot, feature: mediaFeature } = useMediaFeature();
-  const content = useContentWorkbenchFeature();
-  const submissionCenter = useSubmissionCenterFeature();
-  const orders = mediaSnapshot.orders.items;
-  const balance = mediaSnapshot.balance.value;
-  const readinessQueries = [
-    mediaSnapshot.resources.query,
-    mediaSnapshot.pool.query,
-    mediaSnapshot.balance.query,
-    mediaSnapshot.orders.query,
-    content.snapshot.query,
-    content.snapshot.managementQuery,
-    submissionCenter.snapshot.query,
-  ];
-  const dataLoading =
-    !mediaSnapshot.scope || readinessQueries.some((query) => query.loading);
-  const dataUnavailable =
-    !dataLoading && readinessQueries.some((query) => Boolean(query.error));
-  const isCheckingBalance = mediaSnapshot.commands.checkBalance.busy;
-  const navigationBadges = useMemo(() => {
-    const lifecycleCount =
-      content.snapshot.management.lifecycleCounts?.needs_completion;
-    const articleLibrary =
-      typeof lifecycleCount === "number"
-        ? lifecycleCount
-        : Object.values(content.snapshot.management.workflowByArticle).filter(
-            (workflow) =>
-              Boolean(
-                workflow &&
-                  typeof workflow === "object" &&
-                  "stage" in workflow &&
-                  workflow.stage === "needs_completion",
-              ),
-          ).length;
-    const orderAttention = orders.filter(
-      (order) =>
-        Boolean(order.anomaly) ||
-        Boolean(order.cancellation?.manualResolutionRequired),
-    ).length;
-    return {
-      articleLibrary,
-      submissionCenter: submissionCenter.snapshot.data.counts.attentionItems,
-      orders: orderAttention,
-    };
-  }, [
-    content.snapshot,
-    orders,
-    submissionCenter.snapshot.data.counts.attentionItems,
-  ]);
+  const [badges, setBadges] = useState<NavigationBadges>({
+    articleLibrary: 0,
+    submissionCenter: 0,
+    orders: 0,
+  });
+  const [pageReadiness, setPageReadiness] = useState<PageReadiness>({
+    loading: true,
+    error: false,
+  });
 
   useEffect(() => {
     rememberLastView(currentView);
+  }, [currentView]);
+
+  useEffect(() => {
+    setPageReadiness({
+      loading: currentView !== "settings",
+      error: false,
+    });
   }, [currentView]);
 
   const registerArticleLibraryNavigationGuard = useCallback(
@@ -142,6 +356,30 @@ function AppContent() {
     },
     [],
   );
+
+  const reportReadiness = useCallback((readiness: PageReadiness) => {
+    setPageReadiness(readiness);
+  }, []);
+
+  const reportArticleLibraryBadge = useCallback((count: number) => {
+    setBadges((current) =>
+      current.articleLibrary === count
+        ? current
+        : { ...current, articleLibrary: count },
+    );
+  }, []);
+  const reportSubmissionCenterBadge = useCallback((count: number) => {
+    setBadges((current) =>
+      current.submissionCenter === count
+        ? current
+        : { ...current, submissionCenter: count },
+    );
+  }, []);
+  const reportOrdersBadge = useCallback((count: number) => {
+    setBadges((current) =>
+      current.orders === count ? current : { ...current, orders: count },
+    );
+  }, []);
 
   function runMainNavigation(view: ViewMode, action: () => void) {
     if (view === currentView) {
@@ -175,18 +413,15 @@ function AppContent() {
   }
 
   const consumeArticleLibraryIntent = () => setArticleLibraryIntent(null);
+  const dataLoading = pageReadiness.loading;
+  const dataUnavailable = !dataLoading && pageReadiness.error;
 
   return (
     <div className="app-shell flex h-full w-full overflow-hidden">
       <Sidebar
         currentView={currentView}
         onViewChange={changeView}
-        balance={balance}
-        onCheckBalance={() => {
-          void mediaFeature.checkBalance();
-        }}
-        isCheckingBalance={isCheckingBalance}
-        badges={navigationBadges}
+        badges={badges}
       />
 
       <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -240,11 +475,10 @@ function AppContent() {
                   transition={{ duration: 0.14 }}
                   className="h-full"
                 >
-                  <ContentWorkbench
-                    content={content.production}
-                    mode="production"
+                  <ContentProductionPage
                     onOpenArticleLibrary={openArticleLibrary}
                     onOpenOrders={() => changeView("orders")}
+                    onReadinessChange={reportReadiness}
                   />
                 </motion.div>
               )}
@@ -258,10 +492,7 @@ function AppContent() {
                   transition={{ duration: 0.14 }}
                   className="mx-auto h-full w-full max-w-6xl"
                 >
-                  <ResourceLibraryPage
-                    snapshot={mediaSnapshot}
-                    feature={mediaFeature}
-                  />
+                  <ResourcesRoute onReadinessChange={reportReadiness} />
                 </motion.div>
               )}
 
@@ -274,23 +505,7 @@ function AppContent() {
                   transition={{ duration: 0.14 }}
                   className="h-full"
                 >
-                  <ContentWorkbench
-                    content={content.library}
-                    mode="library"
-                    favoriteMediaPage={{
-                      items: mediaSnapshot.pool.items,
-                      total: mediaSnapshot.pool.total,
-                      page: mediaSnapshot.pool.page,
-                      totalPages: mediaSnapshot.pool.totalPages,
-                      hasPrev: mediaSnapshot.pool.hasPrev,
-                      hasNext: mediaSnapshot.pool.hasNext,
-                      loading: mediaSnapshot.pool.query.loading,
-                      errorMessage:
-                        mediaSnapshot.pool.query.error?.userMessage,
-                    }}
-                    onFavoriteMediaPageChange={(page) => {
-                      void mediaFeature.loadPoolPage(page, "manual");
-                    }}
+                  <ArticleLibraryPage
                     articleIntent={articleLibraryIntent}
                     onArticleIntentConsumed={consumeArticleLibraryIntent}
                     onOpenArticleLibrary={openArticleLibrary}
@@ -299,6 +514,8 @@ function AppContent() {
                     onMainNavigationGuardChange={
                       registerArticleLibraryNavigationGuard
                     }
+                    onBadgeChange={reportArticleLibraryBadge}
+                    onReadinessChange={reportReadiness}
                   />
                 </motion.div>
               )}
@@ -312,12 +529,12 @@ function AppContent() {
                   transition={{ duration: 0.14 }}
                   className="h-full"
                 >
-                  <PlatformWorkbench
-                    content={content}
-                    submissionCenter={submissionCenter}
+                  <SubmissionCenterPage
                     initialSection={submissionCenterSection}
                     onOpenArticleLibrary={openArticleLibrary}
                     onOpenOrders={() => changeView("orders")}
+                    onBadgeChange={reportSubmissionCenterBadge}
+                    onReadinessChange={reportReadiness}
                   />
                 </motion.div>
               )}
@@ -331,7 +548,10 @@ function AppContent() {
                   transition={{ duration: 0.14 }}
                   className="mx-auto h-full w-full max-w-7xl"
                 >
-                  <OrdersPage snapshot={mediaSnapshot} feature={mediaFeature} />
+                  <OrdersRoute
+                    onBadgeChange={reportOrdersBadge}
+                    onReadinessChange={reportReadiness}
+                  />
                 </motion.div>
               )}
 

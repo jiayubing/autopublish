@@ -41,10 +41,15 @@ test("streamlined product flow keeps batch results truthful and production navig
   assert.match(workbench, /auto-publish:selected-client/);
   assert.match(app, /auto-publish:last-main-view/);
 
-  assert.match(app, /lifecycleCounts\?\.needs_completion/);
-  assert.match(app, /counts\.attentionItems/);
-  assert.match(app, /order\.anomaly/);
-  assert.match(app, /manualResolutionRequired/);
+  assert.match(app, /articleLibraryBadgeCount/);
+  assert.match(app, /submissionCenterBadgeCount/);
+  assert.match(app, /ordersBadgeCount/);
+  assert.match(app, /function ArticleLibraryPage/);
+  assert.doesNotMatch(app, /useMediaFeature\(\)/);
+  assert.doesNotMatch(
+    app,
+    /useContentWorkbenchFeature\(\)/,
+  );
   assert.doesNotMatch(
     app,
     /submissionCenter:\s*submissionCenter\.snapshot\.data\.counts\.total/,
