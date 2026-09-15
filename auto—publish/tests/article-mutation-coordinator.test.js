@@ -132,14 +132,6 @@ function removalServiceFor(fixture) {
     workspaceRoot: fixture.root,
     contentStore: fixture.contentStore,
     mutationCoordinator: fixture.coordinator,
-    articleRemovalImpactQuery: {
-      previewArticleRemovalImpact() {
-        return {
-          canCommit: true,
-          blockedItems: [],
-        };
-      },
-    },
   });
 }
 
@@ -404,6 +396,170 @@ test("lifecycle projection exposes one operation decision matrix for runtime fac
   });
   assert.equal(unrelatedRemoval.operations.edit.allowed, true);
   assert.equal(unrelatedRemoval.operations.trash.allowed, true);
+});
+
+test("trash preview and mutation commit share the lifecycle projection decision", () => {
+  const cases = [
+    ["no facts", () => ({}), true],
+    [
+      "queued submission",
+      (articleId) => ({
+        submissionItems: [{
+          articleId,
+          targetKey: "platform:toutiao",
+          status: "queued",
+        }],
+      }),
+      false,
+      "ARTICLE_OPERATION_FROZEN",
+    ],
+    [
+      "uncertain publication",
+      (articleId) => ({
+        publications: [{
+          articleId,
+          targetKey: "platform:toutiao",
+          status: "uncertain",
+        }],
+      }),
+      false,
+      "PUBLICATION_UNCERTAIN",
+    ],
+    [
+      "published article",
+      (articleId) => ({
+        publications: [{
+          articleId,
+          targetKey: "platform:toutiao",
+          status: "published",
+        }],
+      }),
+      false,
+      "ARTICLE_PUBLISHED_IMMUTABLE",
+    ],
+    [
+      "failed submission",
+      (articleId) => ({
+        submissionItems: [{
+          articleId,
+          targetKey: "platform:toutiao",
+          status: "failed",
+        }],
+      }),
+      true,
+    ],
+    [
+      "cancelled submission",
+      (articleId) => ({
+        submissionItems: [{
+          articleId,
+          targetKey: "platform:toutiao",
+          status: "cancelled",
+        }],
+      }),
+      true,
+    ],
+    [
+      "active website-media order",
+      (articleId) => ({
+        orders: [{
+          articleId,
+          orderId: "order-active",
+          mediaResourceId: "media-active",
+          supplierStatusCode: "1",
+        }],
+      }),
+      false,
+      "ARTICLE_OPERATION_FROZEN",
+    ],
+    [
+      "missing media order",
+      (articleId) => ({
+        submissionItems: [{
+          articleId,
+          targetKey: "media-resource:missing",
+          status: "queued",
+        }],
+      }),
+      false,
+      "MEDIA_ORDER_MISSING",
+    ],
+    [
+      "unknown publication status",
+      (articleId) => ({
+        publications: [{
+          articleId,
+          targetKey: "platform:toutiao",
+          status: "provider_future_state",
+        }],
+      }),
+      false,
+      "PUBLICATION_STATUS_UNKNOWN",
+    ],
+    [
+      "unknown submission status",
+      (articleId) => ({
+        submissionItems: [{
+          articleId,
+          targetKey: "platform:toutiao",
+          status: "provider_future_state",
+        }],
+      }),
+      false,
+      "SUBMISSION_STATUS_UNKNOWN",
+    ],
+    [
+      "unknown order status",
+      (articleId) => ({
+        orders: [{
+          articleId,
+          orderId: "order-unknown",
+          supplierStatusCode: "7",
+        }],
+      }),
+      false,
+      "ORDER_STATUS_UNKNOWN",
+    ],
+  ];
+
+  for (const [name, factsForCase, expectedAllowed, expectedCode] of cases) {
+    const fixture = makeFixture();
+    try {
+      const current = article("matrix-" + name.replace(/[^a-z0-9]+/gi, "-"));
+      const ref = { clientId: current.clientId, articleId: current.id };
+      fixture.add(current);
+      fixture.setFacts(factsForCase(current.id));
+      const preview = fixture.coordinator.previewTrashEligibility({
+        articleRefs: [ref],
+      });
+      assert.equal(preview.items.length, 1, name);
+      const eligibility = preview.items[0];
+      assert.equal(eligibility.allowed, expectedAllowed, name);
+      if (expectedCode) assert.equal(eligibility.reasonCodes[0], expectedCode, name);
+
+      let committed = true;
+      try {
+        fixture.coordinator.executeArticleRemovalTransaction({
+          selections: [ref],
+          selection: ref,
+          operationId: "matrix-remove",
+          tombstone: tombstoneFor(current, "matrix-remove"),
+          expectedFingerprint: fingerprintArticle(current),
+        });
+      } catch (error) {
+        committed = false;
+        assert.equal(error.code, expectedCode, name);
+      }
+      assert.equal(committed, eligibility.allowed, name);
+      assert.equal(
+        fixture.contentStore.isArticleTrashed(current.clientId, current.id),
+        expectedAllowed,
+        name,
+      );
+    } finally {
+      fixture.close();
+    }
+  }
 });
 
 test("regular admission canonicalizes duplicates and maps active or explicit conflicts", () => {
@@ -706,14 +862,6 @@ test("removal release uncertainty becomes repairable and is excluded from automa
       workspaceRoot: fixture.root,
       contentStore: fixture.contentStore,
       mutationCoordinator: coordinator,
-      articleRemovalImpactQuery: {
-        previewArticleRemovalImpact() {
-          return {
-            canCommit: true,
-            blockedItems: [],
-          };
-        },
-      },
     });
     const input = {
       selections: [{ clientId: "client-a", articleId: "article-1" }],

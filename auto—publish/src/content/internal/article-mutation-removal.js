@@ -10,6 +10,34 @@ function createArticleMutationRemoval(kernel) {
   const articleRemovalTransitionPort =
     kernel.ports.articleRemovalTransitionPort;
 
+  function previewTrashEligibility(input) {
+    const refs = transitionRefs(input);
+    return kernel.withArticleSet(refs, function (session) {
+      const articles = refs.map(function (ref) {
+        return session.readArticle(ref);
+      });
+      const facts = kernel.factsFor(refs);
+      const lifecycleFacts = Object.assign({}, facts, {
+        removalTransactions: [],
+      });
+      const items = articles.map(function (article, index) {
+        const workflow = kernel.workflowFor(
+          article,
+          [refs[index]],
+          lifecycleFacts,
+        );
+        const operation = workflow.operations.trash;
+        return Object.freeze({
+          articleRef: refs[index],
+          allowed: operation.allowed,
+          reasonCodes: operation.reasonCodes,
+          safeMetadata: operation.safeMetadata,
+        });
+      });
+      return Object.freeze({ items: Object.freeze(items) });
+    });
+  }
+
   function executeArticleRemovalTransaction(input) {
     const request = input || {};
     const selections =
@@ -356,6 +384,7 @@ function createArticleMutationRemoval(kernel) {
   }
 
   return Object.freeze({
+    previewTrashEligibility,
     executeArticleRemovalTransaction,
     assertTrashedArticleMutationAllowed,
     restoreArticles,

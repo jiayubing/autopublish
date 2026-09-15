@@ -114,7 +114,6 @@ async function createContentProductionComposition(options) {
         articleMutationCoordinator: value.articleMutationCoordinator,
         articleRemovalTransactionStore: value.articleRemovalTransactionStore,
         articleRemovalTransitionPort: value.articleRemovalTransitionPort,
-        articleRemovalImpactQuery: value.articleRemovalImpactQuery,
         onArticleRemovalTransaction: function (transaction) {
           const eventContract = productionIpcRegistry.byChannel(
             "content:article-removal-transaction",

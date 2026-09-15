@@ -38,31 +38,32 @@ function fixture(options) {
     status: "generated",
   };
 
-  const submissionService = {
-    previewArticleRemovalImpact: () => ({
-      blockedItems: blockedItems.slice(),
-      queuedToCancel: [
-        { clientId: "c-1", articleId: "a-1", batchId: "legacy-batch" },
-      ],
+  const mutationCoordinator = {
+    previewTrashEligibility: ({ articleRefs }) => ({
+      items: articleRefs.map((ref) => {
+        const matching = blockedItems.filter(
+          (item) =>
+            item.articleId === ref.articleId &&
+            (!item.clientId || item.clientId === ref.clientId),
+        );
+        return {
+          articleRef: ref,
+          allowed: matching.length === 0,
+          reasonCodes: matching.map((item) => item.reasonCode),
+          safeMetadata: {
+            stage: (matching[0] && matching[0].status) || "in_submission",
+          },
+        };
+      }),
     }),
-    cancelArticleSubmissionItem: () => {
-      queueMutationCalls += 1;
-      throw new Error("legacy queue mutation must not be called");
-    },
-    cancelPaidOrder: () => {
-      queueMutationCalls += 1;
-      throw new Error("paid cancellation must not be called");
-    },
-    cancelOrder: () => {
-      queueMutationCalls += 1;
-      throw new Error("order cancellation must not be called");
-    },
   };
 
   const contentStore = {
     snapshotArticle: (current) => JSON.parse(JSON.stringify(current)),
-    getArticle: () => {
+    getArticle: (clientId, articleId) => {
       if (readError) throw Object.assign(new Error("article read failed"), { code: readError });
+      if (clientId !== article.clientId || articleId !== article.id)
+        throw Object.assign(new Error("article missing"), { code: "ARTICLE_NOT_FOUND" });
       if (trashed) throw Object.assign(new Error("article missing"), { code: "ARTICLE_NOT_FOUND" });
       return article;
     },
@@ -100,7 +101,7 @@ function fixture(options) {
 
   const service = createArticleRemovalService({
     contentStore,
-    articleRemovalImpactQuery: submissionService,
+    mutationCoordinator,
     transactionStore: store,
     now: () => time,
     recoveryBackoffMs: 1,
@@ -115,7 +116,7 @@ function fixture(options) {
     service,
     article,
     contentStore,
-    articleRemovalImpactQuery: submissionService,
+    mutationCoordinator,
     setNow: (next) => { time = next; },
     setBlocked: (next) => { blockedItems = next || []; },
     setReadError: (next) => { readError = next || null; },
@@ -189,6 +190,60 @@ it("removal preview exposes only blocked facts and never creates queue actions",
   assert.equal(Object.hasOwn(transaction, "queueActions"), false);
   assert.equal(Object.hasOwn(transaction, "queueCursor"), false);
   assert.equal(Object.hasOwn(transaction, "queueResults"), false);
+});
+
+it("maps lifecycle preview decisions to safe blockers and preserves missing article behavior", (t) => {
+  const f = fixture({
+    blockedItems: [{
+      clientId: "c-1",
+      articleId: "a-1",
+      reasonCode: "PUBLICATION_UNCERTAIN",
+      status: "in_submission",
+      publicationId: "must-not-cross-the-seam",
+    }],
+  });
+  t.after(f.cleanup);
+  const preview = f.service.previewArticleRemovalImpact({
+    selections: [
+      { clientId: "c-1", articleId: "a-1" },
+      { clientId: "c-1", articleId: "missing" },
+    ],
+  });
+  assert.deepEqual(preview.blockedItems, [
+    {
+      clientId: "c-1",
+      articleId: "missing",
+      reasonCode: "ARTICLE_NOT_FOUND",
+      source: "article",
+    },
+    {
+      clientId: "c-1",
+      articleId: "a-1",
+      reasonCode: "PUBLICATION_UNCERTAIN",
+      source: "article_lifecycle",
+      status: "in_submission",
+    },
+  ]);
+  assert.equal(preview.canCommit, false);
+});
+
+it("keeps an open removal transaction as an additional preview blocker", (t) => {
+  const f = fixture({ moveError: "IO_DOWN" });
+  t.after(f.cleanup);
+  const first = begin(f).result;
+  assert.equal(first.status, "pending_auto_recovery");
+  const preview = f.service.previewArticleRemovalImpact({
+    selections: [{ clientId: "c-1", articleId: "a-1" }],
+  });
+  assert.equal(
+    preview.blockedItems.some(
+      (item) =>
+        item.source === "removal_transaction" &&
+        item.reasonCode === "ARTICLE_REMOVAL_OPERATION_IN_FLIGHT",
+    ),
+    true,
+  );
+  assert.equal(preview.canCommit, false);
 });
 
 it("revalidates active facts before moving and keeps the article unchanged", (t) => {
@@ -269,7 +324,16 @@ it("moves only the completed prefix when a later article changes", (t) => {
   });
   const service = createArticleRemovalService({
     contentStore,
-    articleRemovalImpactQuery: { previewArticleRemovalImpact: () => ({ blockedItems: [] }) },
+    mutationCoordinator: {
+      previewTrashEligibility: ({ articleRefs }) => ({
+        items: articleRefs.map((articleRef) => ({
+          articleRef,
+          allowed: true,
+          reasonCodes: [],
+          safeMetadata: { stage: "pending_submission" },
+        })),
+      }),
+    },
     transactionStore: store,
     now: () => "2026-07-25T00:00:00.000Z",
     runnerId: "runner-many",
@@ -412,7 +476,7 @@ it("permits only one runner to execute a claimed transaction", (t) => {
   t.after(f.cleanup);
   const other = createArticleRemovalService({
     contentStore: f.contentStore,
-    articleRemovalImpactQuery: f.articleRemovalImpactQuery,
+    mutationCoordinator: f.mutationCoordinator,
     transactionStore: f.store,
     now: () => "2026-07-25T00:00:00.000Z",
     runnerId: "runner-b",

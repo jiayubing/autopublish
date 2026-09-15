@@ -369,12 +369,6 @@ async function createWorkspaceRuntimeComposition(deps) {
         },
       ),
     );
-    const articleRemovalImpactQuery =
-      require("../services/article-submission-removal-coordinator").createArticleSubmissionRemovalCoordinator(
-        {
-          lifecycleFacts: publicationRecoveryComposition.operationalStore,
-        },
-      );
     submissionMaintenance.recoverPreparedBatches();
 
     const contentProductionComposition = ownService(
@@ -391,7 +385,6 @@ async function createWorkspaceRuntimeComposition(deps) {
             contentLifecycleComposition.articleRemovalTransactionStore,
           articleRemovalTransitionPort:
             contentLifecycleComposition.articleRemovalTransitionPort,
-          articleRemovalImpactQuery,
           onDataInvalidated: invalidation.invalidate,
           sendToRenderer,
           runtimeDiagnosticsService: runtime.diagnosticsService,

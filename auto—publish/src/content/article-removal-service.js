@@ -29,14 +29,16 @@ function createArticleRemovalService(options) {
       "ARTICLE_REMOVAL_SERVICE_INVALID",
       "Content store is required",
     );
-  if (!opts.articleRemovalImpactQuery)
+  if (
+    !opts.mutationCoordinator ||
+    typeof opts.mutationCoordinator.previewTrashEligibility !== "function"
+  )
     throw removalError(
       "ARTICLE_REMOVAL_SERVICE_INVALID",
-      "Article removal impact query is required",
+      "Article mutation coordinator is required",
     );
   const contentStore = opts.contentStore;
-  const articleRemovalImpactQuery = opts.articleRemovalImpactQuery;
-  const mutationCoordinator = opts.mutationCoordinator || null;
+  const mutationCoordinator = opts.mutationCoordinator;
   const transactionStore =
     opts.transactionStore ||
     createArticleRemovalTransactionStore({
@@ -369,24 +371,35 @@ function createArticleRemovalService(options) {
   }
 
   function buildImpact(items) {
-    if (
-      typeof articleRemovalImpactQuery.previewArticleRemovalImpact !==
-      "function"
-    )
-      throw removalError(
-        "ARTICLE_REMOVAL_PREVIEW_UNAVAILABLE",
-        "Article removal preview is unavailable",
-      );
-    const impact = articleRemovalImpactQuery.previewArticleRemovalImpact({
-      selections: items,
+    if (!items.length) return { blockedItems: [] };
+    const eligibility = mutationCoordinator.previewTrashEligibility({
+      articleRefs: items,
     });
-    if (!impact || !Array.isArray(impact.blockedItems))
+    if (!eligibility || !Array.isArray(eligibility.items))
       throw removalError(
         "ARTICLE_REMOVAL_PREVIEW_UNAVAILABLE",
         "Article removal preview is unavailable",
       );
+    const blockedItems = [];
+    eligibility.items.forEach(function (item) {
+      if (!item || item.allowed === true) return;
+      const articleRef = item.articleRef || {};
+      const safeMetadata = item.safeMetadata || {};
+      const reasonCodes = Array.isArray(item.reasonCodes)
+        ? item.reasonCodes
+        : [];
+      reasonCodes.forEach(function (reasonCode) {
+        blockedItems.push({
+          clientId: articleRef.clientId,
+          articleId: articleRef.articleId,
+          reasonCode,
+          source: "article_lifecycle",
+          status: safeMetadata.stage,
+        });
+      });
+    });
     return {
-      blockedItems: impact.blockedItems.map(safeImpactItem),
+      blockedItems,
     };
   }
 
@@ -514,8 +527,8 @@ function createArticleRemovalService(options) {
     );
   }
 
-  function removalImpact(items, excludedTransactionId) {
-    const impact = buildImpact(items);
+  function removalImpact(items, excludedTransactionId, lifecycleItems) {
+    const impact = buildImpact(lifecycleItems || items);
     const openTransaction = findOpenTransaction(items, excludedTransactionId);
     const blockedItems = impact.blockedItems.slice();
     if (openTransaction) {
@@ -559,7 +572,10 @@ function createArticleRemovalService(options) {
         state: "available",
       };
     });
-    const impact = removalImpact(items);
+    const availableItems = items.filter(function (_item, index) {
+      return !articles[index].missing;
+    });
+    const impact = removalImpact(items, undefined, availableItems);
     blockedItems.push(...impact.blockedItems);
     const binding = {
       selections: items,
@@ -628,7 +644,14 @@ function createArticleRemovalService(options) {
         state: article.missing ? "missing" : "available",
       };
     });
-    const currentImpact = removalImpact(value.binding.selections);
+    const lifecycleItems = value.binding.selections.filter(function (_item, index) {
+      return !currentArticles[index].missing;
+    });
+    const currentImpact = removalImpact(
+      value.binding.selections,
+      undefined,
+      lifecycleItems,
+    );
     const currentBinding = {
       selections: value.binding.selections,
       articles: currentArticles,
@@ -860,7 +883,14 @@ function createArticleRemovalService(options) {
           "LEGACY_CONTENT_FINGERPRINT_REQUIRED",
         ),
       };
-    const impact = removalImpact(transaction.selections, transaction.id);
+    const lifecycleItems = transaction.selections.filter(function (item) {
+      return !articleFor(item, mutationPort).missing;
+    });
+    const impact = removalImpact(
+      transaction.selections,
+      transaction.id,
+      lifecycleItems,
+    );
     if (impact.blockedItems.length)
       return {
         ok: false,

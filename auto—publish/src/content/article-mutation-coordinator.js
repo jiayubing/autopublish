@@ -37,6 +37,7 @@ function createArticleMutationCoordinator(options) {
     admitRegularQueueItems: admission.admitRegularQueueItems,
     admitPaidBatch: admission.admitPaidBatch,
     removePendingQueueItems: admission.removePendingQueueItems,
+    previewTrashEligibility: removal.previewTrashEligibility,
     executeArticleRemovalTransaction: removal.executeArticleRemovalTransaction,
     assertTrashedArticleMutationAllowed:
       removal.assertTrashedArticleMutationAllowed,
