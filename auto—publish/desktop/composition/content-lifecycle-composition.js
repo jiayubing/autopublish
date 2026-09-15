@@ -32,7 +32,6 @@ function createContentLifecycleComposition(options) {
       workspaceRoot: value.workspaceRoot,
       now: value.clock,
     });
-  const articleRemovalTransitionPort = { execute: null };
   const articleMutationCoordinator = createArticleMutationCoordinator({
     articleStore: contentStore,
     contentStore,
@@ -46,14 +45,12 @@ function createContentLifecycleComposition(options) {
     paidAdmissionTransitions: value.paidAdmissionTransitions,
     systemSubmissionCodeProvider: value.systemSubmissionCodeProvider,
     removalTransactionStore: articleRemovalTransactionStore,
-    articleRemovalTransitionPort,
     clock: value.clock,
   });
   return {
     contentStore,
     articleMutationCoordinator,
     articleRemovalTransactionStore,
-    articleRemovalTransitionPort,
   };
 }
 

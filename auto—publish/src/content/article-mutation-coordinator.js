@@ -45,8 +45,6 @@ function createArticleMutationCoordinator(options) {
     permanentlyDeleteArticles: removal.permanentlyDeleteArticles,
     restoreTrashedArticle: removal.restoreTrashedArticle,
     permanentlyDeleteTrashedArticle: removal.permanentlyDeleteTrashedArticle,
-    supportsArticleRemovalTransaction:
-      removal.supportsArticleRemovalTransaction,
   });
 }
 

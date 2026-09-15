@@ -10,6 +10,7 @@ const test = require("node:test");
 
 const domain = require("../src/domain");
 const { createArticleStore } = require("../src/content/article-store");
+const { createArticleRemovalTransactionStore } = require("../src/content/article-removal-transaction-store");
 const {
   createContentStore,
   fingerprintArticle,
@@ -75,6 +76,7 @@ function createHarness(options) {
     articleStore,
     contentStore,
     lifecycleFacts,
+    removalTransactionStore: createArticleRemovalTransactionStore({ workspaceRoot: root }),
     publicationTransitions: transitionPorts.publicationTransitions,
     regularQueueTransitions: transitionPorts.regularQueueTransitions,
     paidAdmissionTransitions: transitionPorts.paidAdmissionTransitions,

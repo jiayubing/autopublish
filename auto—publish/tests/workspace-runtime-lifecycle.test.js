@@ -334,6 +334,28 @@ it("article management reads only the newly started workspace when client ids ov
   }
 });
 
+it("workspace startup completes an interrupted local trash batch before becoming available", async function() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "workspace-trash-recovery-"));
+  const workspace = path.join(root, "workspace");
+  fs.mkdirSync(workspace);
+  const { fixture, article } = require("./helpers/article-removal-fixture");
+  const pending = fixture({ root: workspace, fileFault(point) {
+    if (point === "after-trash-json") throw Object.assign(new Error("Synthetic I/O failure"), { code: "EIO" });
+  } });
+  pending.store.saveArticle(article());
+  assert.equal(pending.commit().status, "needs_repair");
+  const runtime = createWorkspaceRuntime(workspaceRuntimeOptions(root));
+  try {
+    await runtime.start({ workspacePath: workspace });
+    const reopened = fixture({ root: workspace });
+    assert.equal(reopened.store.isArticleTrashed("client", "a"), true);
+    assert.deepEqual(reopened.intents.list(), []);
+  } finally {
+    await runtime.dispose();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 it("workspace startup recovers stranded publication intents before becoming available", async function() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "workspace-runtime-publication-recovery-"));
   const workspace = path.join(root, "workspace");

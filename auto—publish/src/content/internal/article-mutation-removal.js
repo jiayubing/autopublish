@@ -1,19 +1,29 @@
 "use strict";
 
-const { snapshotArticle } = require("../content-store");
+const { snapshotArticle, fingerprintArticle } = require("../content-store");
 const {
   trashedArticleMutationBlockReason,
 } = require("../article-lifecycle-projection");
-const { canonicalArticleRefs, normalizeArticleRef } = require("../article-ref");
+const {
+  canonicalArticleRefKey,
+  canonicalArticleRefs,
+  normalizeArticleRef,
+} = require("../article-ref");
+
+const {
+  titleSnapshot,
+  tombstoneReferences,
+} = require("../article-removal-plan");
+const { reportDiagnostic } = require("../../diagnostics/diagnostic-producer");
 
 function createArticleMutationRemoval(kernel) {
-  const articleRemovalTransitionPort =
-    kernel.ports.articleRemovalTransitionPort;
+  const transactionStore = kernel.ports.removalTransactionStore;
 
   function previewTrashEligibility(input) {
     const refs = transitionRefs(input);
     return kernel.withArticleSet(refs, function (session) {
       const articles = refs.map(function (ref) {
+        if (session.isArticleTrashed(ref)) return null;
         return session.readArticle(ref);
       });
       const facts = kernel.factsFor(refs);
@@ -21,6 +31,18 @@ function createArticleMutationRemoval(kernel) {
         removalTransactions: [],
       });
       const items = articles.map(function (article, index) {
+        if (!article) {
+          const tombstone = session.getTrashedTombstone(refs[index]);
+          return Object.freeze({
+            articleRef: refs[index],
+            allowed: true,
+            reasonCodes: [],
+            trashed: true,
+            contentFingerprint: tombstone.contentFingerprint,
+            titleSnapshot: tombstone.titleSnapshot,
+            operationId: tombstone.operationId,
+          });
+        }
         const workflow = kernel.workflowFor(
           article,
           [refs[index]],
@@ -29,6 +51,9 @@ function createArticleMutationRemoval(kernel) {
         const operation = workflow.operations.trash;
         return Object.freeze({
           articleRef: refs[index],
+          contentFingerprint: fingerprintArticle(article),
+          titleSnapshot: article.title,
+          trashed: false,
           allowed: operation.allowed,
           reasonCodes: operation.reasonCodes,
           safeMetadata: operation.safeMetadata,
@@ -40,135 +65,96 @@ function createArticleMutationRemoval(kernel) {
 
   function executeArticleRemovalTransaction(input) {
     const request = input || {};
-    const selections =
-      request.selections || (request.selection ? [request.selection] : []);
-    const ordered = canonicalArticleRefs(selections);
-    if (
-      request.transaction &&
-      articleRemovalTransitionPort &&
-      typeof articleRemovalTransitionPort.execute === "function"
-    ) {
+    const ordered = canonicalArticleRefs(request.selections);
+    if (!request.transaction || !transactionStore)
+      throw kernel.mutationError("ARTICLE_REMOVAL_UNAVAILABLE");
+    let committed;
+    try {
       return kernel.withArticleSet(ordered, function (session, markSideEffect) {
-        const articles = ordered.map(function (ref) {
-          try {
-            return session.readArticle(ref);
-          } catch (error) {
-            if (error && error.code === "ARTICLE_NOT_FOUND") return null;
-            throw error;
-          }
-        });
+        let current = request.transaction;
+        if (current.resume) {
+          current = transactionStore.get(current.id);
+          if (!current) return { ...request.transaction, status: "committed" };
+        }
+        const keys = new Set(ordered.map(canonicalArticleRefKey));
+        const other = transactionStore
+          .list()
+          .some(
+            (value) =>
+              value.id !== current.id &&
+              value.selections.some((ref) =>
+                keys.has(canonicalArticleRefKey(ref)),
+              ),
+          );
+        if (other)
+          throw kernel.mutationError("ARTICLE_REMOVAL_OPERATION_IN_FLIGHT");
         const facts = kernel.factsFor(ordered);
-        articles.forEach(function (article, index) {
-          if (!article) {
-            const ref = ordered[index];
-            if (session.isArticleTrashed(ref)) return;
-            throw kernel.mutationError(
-              "ARTICLE_NOT_FOUND",
-              "Article was not found",
-            );
+        const ownFacts = Object.assign({}, facts, {
+          removalTransactions: (facts.removalTransactions || []).filter(
+            (value) => (value.id || value.transactionId) !== current.id,
+          ),
+        });
+        const prepared = current.selections.map((ref, index) => {
+          const expected = current.articles[index];
+          // Tombstone reads reconcile an interrupted file move before examining JSON.
+          if (session.isArticleTrashed(ref)) {
+            const tombstone = session.getTrashedTombstone(ref);
+            if (
+              tombstone.operationId !== expected.operationId ||
+              tombstone.contentFingerprint !== expected.contentFingerprint
+            )
+              throw kernel.mutationError("ARTICLE_REMOVAL_OPERATION_CONFLICT");
+            return { ref, tombstone };
           }
+          if (expected.operationId !== current.id + "-" + index)
+            throw kernel.mutationError("ARTICLE_REMOVAL_OPERATION_CONFLICT");
+          const article = session.readArticle(ref);
           kernel.assertAllowed(
-            kernel.workflowFor(article, [ordered[index]], facts),
+            kernel.workflowFor(article, [ref], ownFacts),
             "trash",
           );
+          if (fingerprintArticle(article) !== expected.contentFingerprint)
+            throw kernel.mutationError("ARTICLE_REMOVAL_CONTENT_CHANGED");
+          return { ref, article, expected };
         });
-        const mutationPort = Object.freeze({
-          refs: Object.freeze(ordered.slice()),
-          readArticle: function (ref) {
-            return session.readArticle(ref);
-          },
-          isArticleTrashed: function (ref) {
-            return session.isArticleTrashed(ref);
-          },
-          getTrashedTombstone: function (ref) {
-            return session.getTrashedTombstone(ref);
-          },
-          moveArticleToTrash: function (
-            ref,
-            tombstone,
-            operationId,
-            expectedFingerprint,
-          ) {
-            markSideEffect();
-            return session.moveArticleToTrash(
-              ref,
-              tombstone,
-              operationId,
-              expectedFingerprint,
-            );
-          },
-          markSideEffect,
-        });
-        return articleRemovalTransitionPort.execute({
-          transaction: request.transaction,
-          requireRevalidation: request.requireRevalidation === true,
-          articles: Object.freeze(articles),
-          facts,
-          mutation: mutationPort,
-        });
-      });
-    }
-    const selected = normalizeArticleRef(request.selection || selections[0]);
-    return kernel.withArticleSet(ordered, function (session, markSideEffect) {
-      const articles = ordered.map(function (ref) {
-        try {
-          return session.readArticle(ref);
-        } catch (error) {
-          if (error && error.code === "ARTICLE_NOT_FOUND") return null;
-          throw error;
-        }
-      });
-      const current = articles.find(function (article) {
-        return (
-          article &&
-          article.clientId === selected.clientId &&
-          article.id === selected.articleId
-        );
-      });
-      if (!current) {
-        if (
-          typeof session.isArticleTrashed === "function" &&
-          session.isArticleTrashed(selected)
-        ) {
-          return Object.freeze({ idempotent: true, articleRef: selected });
-        }
-        throw kernel.mutationError(
-          "ARTICLE_NOT_FOUND",
-          "Article was not found",
-        );
-      }
-      const facts = kernel.factsFor(ordered);
-      articles.forEach(function (article, index) {
-        if (!article) {
-          const ref = ordered[index];
-          if (
-            typeof session.isArticleTrashed === "function" &&
-            session.isArticleTrashed(ref)
-          )
-            return;
-          throw kernel.mutationError(
-            "ARTICLE_NOT_FOUND",
-            "Article was not found",
+        // One durable batch intent; per-article progress belongs to ArticleStore.
+        if (!request.transaction.resume) transactionStore.save(current);
+        for (const item of prepared) {
+          if (item.tombstone) continue;
+          markSideEffect();
+          session.moveArticleToTrash(
+            item.ref,
+            {
+              version: 1,
+              deletedAt: current.createdAt,
+              clientId: item.ref.clientId,
+              articleId: item.ref.articleId,
+              status: item.article.status,
+              references: tombstoneReferences(item.article),
+              titleSnapshot: titleSnapshot(item.article),
+              contentFingerprint: item.expected.contentFingerprint,
+              operationId: item.expected.operationId,
+            },
+            item.expected.operationId,
+            item.expected.contentFingerprint,
           );
         }
-        kernel.assertAllowed(
-          kernel.workflowFor(article, [ordered[index]], facts),
-          "trash",
-        );
+        // Remove the intent before releasing locks so restore cannot race a replay.
+        transactionStore.remove(current.id);
+        committed = { ...current, status: "committed" };
+        return committed;
       });
-      kernel.assertAllowed(
-        kernel.workflowFor(current, [selected], facts),
-        "trash",
-      );
-      const moved = session.moveArticleToTrash(
-        selected,
-        request.tombstone,
-        request.operationId,
-        request.expectedFingerprint,
-      );
-      markSideEffect();
-      return Object.freeze({ articleRef: selected, tombstone: moved });
-    });
+    } catch (error) {
+      if (!committed) throw error;
+      reportDiagnostic({
+        code: "ARTICLE_REMOVAL_CLEANUP_FAILED",
+        module: "article-mutation-removal",
+        category: "storage",
+        operationId: committed.id,
+        metadata: { outcome: "committed-cleanup-failed" },
+      });
+      return committed;
+    }
   }
 
   function assertTrashedMutationAllowed(
@@ -391,12 +377,6 @@ function createArticleMutationRemoval(kernel) {
     permanentlyDeleteArticles,
     restoreTrashedArticle,
     permanentlyDeleteTrashedArticle,
-    supportsArticleRemovalTransaction: function () {
-      return Boolean(
-        articleRemovalTransitionPort &&
-        typeof articleRemovalTransitionPort.execute === "function",
-      );
-    },
   });
 }
 

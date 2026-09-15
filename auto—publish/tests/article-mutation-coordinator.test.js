@@ -14,6 +14,7 @@ const {
   createArticleMutationCoordinator,
 } = require("../src/content/article-mutation-coordinator");
 const { createArticleStore } = require("../src/content/article-store");
+const { createArticleRemovalTransactionStore } = require("../src/content/article-removal-transaction-store");
 const {
   createArticleTrashService,
 } = require("../src/content/article-trash-service");
@@ -91,6 +92,7 @@ function makeFixture(options) {
     articleStore,
     contentStore,
     operationalStore,
+    removalTransactionStore: createArticleRemovalTransactionStore({ workspaceRoot: root }),
     regularQueueTransitions: value.regularQueueTransitions,
   });
   return {
@@ -528,6 +530,8 @@ test("trash preview and mutation commit share the lifecycle projection decision"
       const current = article("matrix-" + name.replace(/[^a-z0-9]+/gi, "-"));
       const ref = { clientId: current.clientId, articleId: current.id };
       fixture.add(current);
+      const service = removalServiceFor(fixture);
+      const confirmedPreview = service.previewArticleRemovalImpact({ selections: [ref] });
       fixture.setFacts(factsForCase(current.id));
       const preview = fixture.coordinator.previewTrashEligibility({
         articleRefs: [ref],
@@ -539,12 +543,10 @@ test("trash preview and mutation commit share the lifecycle projection decision"
 
       let committed = true;
       try {
-        fixture.coordinator.executeArticleRemovalTransaction({
+        service.trashArticles({
           selections: [ref],
-          selection: ref,
-          operationId: "matrix-remove",
-          tombstone: tombstoneFor(current, "matrix-remove"),
-          expectedFingerprint: fingerprintArticle(current),
+          token: confirmedPreview.token,
+          confirmed: true,
         });
       } catch (error) {
         committed = false;
@@ -699,26 +701,19 @@ test("public batch trashArticles consumes the coordinator article-set lock in ca
   }
 });
 
-test("already trashed article removal is idempotent inside the held mutation session", () => {
+test("already trashed article removal is idempotent through the public use case", () => {
   const fixture = makeFixture();
   try {
     const original = article("article-1");
     fixture.add(original);
-    const input = {
-      selections: [{ clientId: "client-a", articleId: "article-1" }],
-      selection: { clientId: "client-a", articleId: "article-1" },
-      operationId: "remove-1",
-      tombstone: tombstoneFor(original, "remove-1"),
-      expectedFingerprint: fingerprintArticle(original),
-    };
-    fixture.coordinator.executeArticleRemovalTransaction(input);
-    assert.deepEqual(
-      fixture.coordinator.executeArticleRemovalTransaction(input),
-      {
-        idempotent: true,
-        articleRef: { clientId: "client-a", articleId: "article-1" },
-      },
-    );
+    const service = removalServiceFor(fixture);
+    const input = { selections: [{ clientId: "client-a", articleId: "article-1" }] };
+    const first = service.previewArticleRemovalImpact(input);
+    service.trashArticles({ ...input, token: first.token, confirmed: true });
+    const tombstone = fixture.contentStore.getTrashedTombstone("client-a", "article-1");
+    const second = service.previewArticleRemovalImpact(input);
+    assert.equal(service.trashArticles({ ...input, token: second.token, confirmed: true }).status, "committed");
+    assert.deepEqual(fixture.contentStore.getTrashedTombstone("client-a", "article-1"), tombstone);
   } finally {
     fixture.close();
   }
@@ -747,18 +742,16 @@ test("a failed second acquisition releases the first article lock before any mov
     const second = article("article-2");
     fixture.add(first);
     fixture.add(second);
+    const service = removalServiceFor(fixture);
+    const preview = service.previewArticleRemovalImpact({ selections: [
+      { clientId: "client-a", articleId: "article-2" },
+      { clientId: "client-a", articleId: "article-1" },
+    ] });
     armed = true;
     assert.throws(
       () =>
-        fixture.coordinator.executeArticleRemovalTransaction({
-          selections: [
-            { clientId: "client-a", articleId: "article-2" },
-            { clientId: "client-a", articleId: "article-1" },
-          ],
-          selection: { clientId: "client-a", articleId: "article-1" },
-          operationId: "remove-1",
-          tombstone: tombstoneFor(first, "remove-1"),
-          expectedFingerprint: fingerprintArticle(first),
+        service.trashArticles({
+          selections: preview.selections, token: preview.token, confirmed: true,
         }),
       { code: "ARTICLE_MUTATION_BUSY" },
     );
@@ -831,7 +824,7 @@ test("a committed save with lock release failure is reported as manual-check unc
   }
 });
 
-test("removal release uncertainty becomes repairable and is excluded from automatic recovery", () => {
+test("removal completion is known before lock cleanup and never replays after a cleanup failure", () => {
   let failRelease = false;
   let moveCalls = 0;
   const fixture = makeFixture({
@@ -870,8 +863,8 @@ test("removal release uncertainty becomes repairable and is excluded from automa
     const result = service.trashArticles(
       Object.assign({}, input, { token: preview.token, confirmed: true }),
     );
-    assert.equal(result.status, "needs_repair");
-    assert.equal(result.errorCode, "ARTICLE_MUTATION_RESULT_UNCERTAIN");
+    assert.equal(result.status, "committed");
+    assert.equal(result.errorCode, null);
     assert.equal(moveCalls, 1);
     assert.equal(
       fixture.contentStore.isArticleTrashed("client-a", "article-1"),
@@ -880,7 +873,7 @@ test("removal release uncertainty becomes repairable and is excluded from automa
     assert.deepEqual(service.recoverPendingRemovals(), []);
     assert.equal(
       service.getArticleRemovalTransaction(result.transactionId).status,
-      "needs_repair",
+      "committed",
     );
   } finally {
     fixture.close();

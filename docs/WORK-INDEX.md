@@ -20,6 +20,8 @@
 
 ## 最近已完成的本地计划
 
+- [文章删除事务简化](ARTICLE-TRASH-SIMPLIFICATION.md)：移除重复状态机、租约和后台恢复，保留最小批量意图与 ArticleStore 文件恢复；验证证据见该文档。
+
 - [规模化架构与性能审计：第一轮](../.scratch/scale-audit/AUDIT.md)：初始7项发现；后续修复状态以当前修复计划为准。
 
 - [文章列表载荷与并发构建优化](../.scratch/read-model-audit/SNAPSHOT-PLAN.md)：完成；同版本请求合并，已发布快照载荷约减半。

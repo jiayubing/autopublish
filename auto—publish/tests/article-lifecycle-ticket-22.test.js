@@ -759,6 +759,7 @@ function mutationFixture() {
   };
   const operationalStore = { listArticleLifecycleFacts: () => facts };
   const coordinator = createArticleMutationCoordinator({
+    removalTransactionStore: require("../src/content/article-removal-transaction-store").createArticleRemovalTransactionStore({ workspaceRoot: root }),
     articleStore,
     contentStore,
     operationalStore,

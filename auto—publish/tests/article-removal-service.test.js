@@ -1,760 +1,397 @@
-"use strict";
-
-const { it } = require("node:test");
+const { test } = require("node:test");
 const assert = require("node:assert/strict");
-const crypto = require("node:crypto");
 const fs = require("node:fs");
-const os = require("node:os");
 const path = require("node:path");
-const { createArticleRemovalService } = require("../src/content/article-removal-service");
-const { createArticleRemovalTransactionStore } = require("../src/content/article-removal-transaction-store");
-const { transactionFingerprint, fingerprint } = require("../src/content/article-removal-plan");
+const { spawnSync } = require("node:child_process");
+const { fixture, article } = require("./helpers/article-removal-fixture");
 
-function hash(value) {
-  return crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex");
-}
-
-function fixture(options) {
-  const value = options || {};
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "article-removal-"));
-  const store = createArticleRemovalTransactionStore({
-    workspaceRoot: root,
-    createId: value.createId || (() => "tx-1"),
-  });
-  let time = "2026-07-25T00:00:00.000Z";
-  let blockedItems = value.blockedItems || [];
-  let readError = null;
-  let moveError = value.moveError || null;
-  let trashed = false;
-  let tombstone = null;
-  let moveCalls = 0;
-  let moveEffects = 0;
-  let queueMutationCalls = 0;
-  const article = {
-    clientId: "c-1",
-    id: "a-1",
-    title: "Title",
-    content: "body",
-    status: "generated",
+test("file move failure before its first effect leaves JSON intact and allows explicit retry", () => {
+  let fail = true;
+  const io = Object.create(fs);
+  io.renameSync = (from, to) => {
+    if (
+      fail &&
+      to.includes(path.sep + "article-trash" + path.sep) &&
+      to.endsWith("a.json")
+    )
+      throw Object.assign(new Error("Synthetic disk failure"), { code: "EIO" });
+    return fs.renameSync(from, to);
   };
-  const additionalArticles = new Map(
-    (value.additionalArticleIds || []).map((articleId) => [
-      articleId,
-      {
-        clientId: "c-1",
-        id: articleId,
-        title: `Title ${articleId}`,
-        content: `body ${articleId}`,
-        status: "generated",
-      },
-    ]),
-  );
-
-  const mutationCoordinator = {
-    previewTrashEligibility: ({ articleRefs }) => ({
-      items: articleRefs.map((ref) => {
-        const matching = blockedItems.filter(
-          (item) =>
-            item.articleId === ref.articleId &&
-            (!item.clientId || item.clientId === ref.clientId),
-        );
-        return {
-          articleRef: ref,
-          allowed: matching.length === 0,
-          reasonCodes: matching.map((item) => item.reasonCode),
-          safeMetadata: {
-            stage: (matching[0] && matching[0].status) || "in_submission",
-          },
-        };
-      }),
-    }),
-  };
-
-  const contentStore = {
-    snapshotArticle: (current) => JSON.parse(JSON.stringify(current)),
-    getArticle: (clientId, articleId) => {
-      if (readError) throw Object.assign(new Error("article read failed"), { code: readError });
-      const current =
-        articleId === article.id ? article : additionalArticles.get(articleId);
-      if (clientId !== article.clientId || !current)
-        throw Object.assign(new Error("article missing"), { code: "ARTICLE_NOT_FOUND" });
-      if (trashed) throw Object.assign(new Error("article missing"), { code: "ARTICLE_NOT_FOUND" });
-      return current;
-    },
-    fingerprintArticle: (current) => hash(current),
-    isArticleTrashed: () => trashed,
-    getTrashedTombstone: () => {
-      if (!trashed) throw Object.assign(new Error("article missing"), { code: "ARTICLE_NOT_FOUND" });
-      return tombstone;
-    },
-    supportsIdempotentRemovalOperation: true,
-    moveArticleToTrash: (clientId, articleId, nextTombstone, operationId, expectedFingerprint) => {
-      moveCalls += 1;
-      if (value.mutateInsideMove) {
-        article.content = "changed inside move";
-        value.mutateInsideMove = false;
-      }
-      if (value.moveAfterEffect) {
-        trashed = true;
-        tombstone = Object.assign({}, nextTombstone, { operationId });
-        moveEffects += 1;
-        value.moveAfterEffect = false;
-        throw Object.assign(new Error("move result uncertain"), { code: "EIO" });
-      }
-      if (expectedFingerprint && expectedFingerprint !== hash(article))
-        throw Object.assign(new Error("article changed"), { code: "ARTICLE_REMOVAL_CONTENT_CHANGED" });
-      if (moveError) throw Object.assign(new Error("move failed"), { code: moveError });
-      if (!trashed) {
-        trashed = true;
-        tombstone = Object.assign({}, nextTombstone, { operationId });
-        moveEffects += 1;
-      }
-      return tombstone;
-    },
-  };
-
-  const service = createArticleRemovalService({
-    contentStore,
-    mutationCoordinator,
-    transactionStore: store,
-    now: () => time,
-    recoveryBackoffMs: 1,
-    maxRecoveryAttempts: value.maxRecoveryAttempts || 2,
-    runnerId: value.runnerId || "runner-a",
-    afterArticleMove: value.afterArticleMove,
-  });
-
-  return {
-    root,
-    store,
-    service,
-    article,
-    contentStore,
-    mutationCoordinator,
-    setNow: (next) => { time = next; },
-    setBlocked: (next) => { blockedItems = next || []; },
-    setReadError: (next) => { readError = next || null; },
-    setMoveError: (next) => { moveError = next || null; },
-    setTrashed: (next, nextTombstone) => {
-      trashed = next === true;
-      tombstone = nextTombstone || tombstone;
-    },
-    setMoveAfterEffect: (next) => { value.moveAfterEffect = next === true; },
-    calls: () => ({ moveCalls, moveEffects, queueMutationCalls }),
-    cleanup: () => fs.rmSync(root, { recursive: true, force: true }),
-  };
-}
-
-function begin(fixtureValue, selections) {
-  const preview = fixtureValue.service.previewArticleRemovalImpact({
-    selections: selections || [{ clientId: "c-1", articleId: "a-1" }],
-  });
-  return {
-    preview,
-    result: fixtureValue.service.applyArticleRemovalImpact({
-      confirmed: true,
-      token: preview.token,
-    }),
-  };
-}
-
-function seedLegacyTransaction(fixtureValue, overrides) {
-  const article = fixtureValue.article;
-  const selections = [{ clientId: article.clientId, articleId: article.id }];
-  const createdAt = "2026-07-25T00:00:00.000Z";
-  const transaction = Object.assign(
-    {
-      version: 1,
-      id: "legacy-1",
-      kind: "article-removal",
-      status: "pending_auto_recovery",
-      phase: "queue-actions",
-      createdAt,
-      updatedAt: createdAt,
-      selections,
-      articles: [{ clientId: article.clientId, articleId: article.id, titleSnapshot: article.title }],
-      contentArticleFingerprints: [hash(article)],
-      contentFingerprint: fingerprint([article]),
-      fingerprint: transactionFingerprint(selections),
-      queueActions: [{ clientId: article.clientId, articleId: article.id, batchId: "legacy-batch" }],
-      queueCursor: 1,
-      queueResults: [{ status: "completed" }],
-      revision: 0,
-    },
-    overrides || {},
-  );
-  fixtureValue.store.save(transaction);
-  return transaction;
-}
-
-function seedOpenTransaction(fixtureValue, selections, overrides) {
-  const value = overrides || {};
-  return seedLegacyTransaction(
-    fixtureValue,
-    Object.assign(
-      {
-        id: value.id || "open-transaction",
-        status: "pending_auto_recovery",
-        phase: "articles",
-        legacyQueueMigration: "completed",
-        selections,
-        articles: selections.map((item) => ({
-          clientId: item.clientId,
-          articleId: item.articleId,
-          titleSnapshot:
-            item.articleId === fixtureValue.article.id
-              ? fixtureValue.article.title
-              : `Title ${item.articleId}`,
-        })),
-        contentArticleFingerprints: selections.map((item) =>
-          item.articleId === fixtureValue.article.id
-            ? hash(fixtureValue.article)
-            : `fingerprint-${item.articleId}`,
-        ),
-        contentFingerprint: `content-${value.id || "open-transaction"}`,
-        fingerprint: transactionFingerprint(selections),
-      },
-      value,
-    ),
-  );
-}
-
-it("removal preview exposes only blocked facts and never creates queue actions", (t) => {
-  const f = fixture();
-  t.after(f.cleanup);
-  const preview = f.service.previewArticleRemovalImpact({
-    selections: [{ clientId: "c-1", articleId: "a-1" }],
-  });
-  assert.equal(preview.canCommit, true);
-  assert.deepEqual(preview.blockedItems, []);
-  assert.equal(Object.hasOwn(preview, "queuedToCancel"), false);
-  const { result } = begin(f);
-  assert.equal(result.status, "committed");
-  assert.equal(f.calls().queueMutationCalls, 0);
-  const transaction = f.store.get(result.transactionId);
-  assert.equal(transaction.version, 2);
-  assert.equal(Object.hasOwn(transaction, "queueActions"), false);
-  assert.equal(Object.hasOwn(transaction, "queueCursor"), false);
-  assert.equal(Object.hasOwn(transaction, "queueResults"), false);
-});
-
-it("maps lifecycle preview decisions to safe blockers and preserves missing article behavior", (t) => {
-  const f = fixture({
-    blockedItems: [{
-      clientId: "c-1",
-      articleId: "a-1",
-      reasonCode: "PUBLICATION_UNCERTAIN",
-      status: "in_submission",
-      publicationId: "must-not-cross-the-seam",
-    }],
-  });
-  t.after(f.cleanup);
-  const preview = f.service.previewArticleRemovalImpact({
-    selections: [
-      { clientId: "c-1", articleId: "a-1" },
-      { clientId: "c-1", articleId: "missing" },
-    ],
-  });
-  assert.deepEqual(preview.blockedItems, [
-    {
-      clientId: "c-1",
-      articleId: "missing",
-      reasonCode: "ARTICLE_NOT_FOUND",
-      source: "article",
-    },
-    {
-      clientId: "c-1",
-      articleId: "a-1",
-      reasonCode: "PUBLICATION_UNCERTAIN",
-      source: "article_lifecycle",
-      status: "in_submission",
-    },
-  ]);
-  assert.equal(preview.canCommit, false);
-});
-
-it("keeps an open removal transaction as an additional preview blocker", (t) => {
-  const f = fixture({ moveError: "IO_DOWN" });
-  t.after(f.cleanup);
-  const first = begin(f).result;
-  assert.equal(first.status, "pending_auto_recovery");
-  const preview = f.service.previewArticleRemovalImpact({
-    selections: [{ clientId: "c-1", articleId: "a-1" }],
-  });
-  assert.equal(
-    preview.blockedItems.some(
-      (item) =>
-        item.source === "removal_transaction" &&
-        item.reasonCode === "ARTICLE_REMOVAL_OPERATION_IN_FLIGHT",
-    ),
-    true,
-  );
-  assert.equal(preview.canCommit, false);
-});
-
-it("reuses an exact duplicate transaction without treating overlap as reuse", (t) => {
-  const f = fixture({ additionalArticleIds: ["a-2"] });
-  t.after(f.cleanup);
-  const selections = [
-    { clientId: "c-1", articleId: "a-1" },
-    { clientId: "c-1", articleId: "a-2" },
-  ];
-  seedOpenTransaction(f, selections, { id: "exact-ab" });
-  const preview = f.service.previewArticleRemovalImpact({
-    selections: selections.slice().reverse(),
-  });
-  assert.equal(preview.canCommit, false);
-  const result = f.service.applyArticleRemovalImpact({
-    confirmed: true,
-    token: preview.token,
-  });
-  assert.equal(result.transactionId, "exact-ab");
-  assert.equal(result.reused, true);
-  assert.equal(f.store.list().length, 1);
-});
-
-it("rejects a non-exact overlapping transaction instead of reusing it", (t) => {
-  const f = fixture();
-  t.after(f.cleanup);
-  const existingSelections = [
-    { clientId: "c-1", articleId: "a-1" },
-    { clientId: "c-1", articleId: "a-2" },
-  ];
-  seedOpenTransaction(f, existingSelections, { id: "pending-ab" });
-  const preview = f.service.previewArticleRemovalImpact({
-    selections: [{ clientId: "c-1", articleId: "a-1" }],
-  });
-  assert.equal(preview.canCommit, false);
-  assert.throws(
-    () =>
-      f.service.applyArticleRemovalImpact({
+  const f = fixture({ fs: io });
+  try {
+    f.store.saveArticle(article());
+    const result = f.commit();
+    assert.equal(result.status, "needs_repair");
+    assert.deepEqual(f.store.getArticle("client", "a"), article());
+    assert.equal(f.store.listTrashedArticles("client").length, 0);
+    fail = false;
+    assert.equal(
+      f.service.retryArticleRemovalTransaction({
+        transactionId: result.transactionId,
         confirmed: true,
-        token: preview.token,
-      }),
-    { code: "ARTICLE_REMOVAL_OPERATION_IN_FLIGHT" },
-  );
-  assert.equal(f.store.list().length, 1);
+      }).status,
+      "committed",
+    );
+  } finally {
+    f.close();
+  }
 });
 
-it("rejects a non-exact overlap across a different requested selection", (t) => {
-  const f = fixture({ additionalArticleIds: ["a-2", "a-3"] });
-  t.after(f.cleanup);
-  const existingSelections = [
-    { clientId: "c-1", articleId: "a-1" },
-    { clientId: "c-1", articleId: "a-2" },
-  ];
-  seedOpenTransaction(f, existingSelections, { id: "pending-ab" });
-  const preview = f.service.previewArticleRemovalImpact({
-    selections: [
-      { clientId: "c-1", articleId: "a-2" },
-      { clientId: "c-1", articleId: "a-3" },
-    ],
-  });
-  assert.equal(preview.canCommit, false);
-  assert.throws(
-    () =>
-      f.service.applyArticleRemovalImpact({
-        confirmed: true,
-        token: preview.token,
-      }),
-    { code: "ARTICLE_REMOVAL_OPERATION_IN_FLIGHT" },
-  );
-  assert.equal(f.store.list().length, 1);
-});
-
-it("blocks a needs_repair transaction when its selections overlap the preview", (t) => {
+test("batch trash, duplicate requests, restore and permanent delete preserve content and identity", () => {
   const f = fixture();
-  t.after(f.cleanup);
-  const existingSelections = [
-    { clientId: "c-1", articleId: "a-1" },
-    { clientId: "c-1", articleId: "a-2" },
-  ];
-  seedLegacyTransaction(f, {
-    id: "repair-ab",
-    status: "needs_repair",
-    phase: "needs_repair",
-    legacyQueueMigration: "completed",
-    selections: existingSelections,
-    articles: existingSelections.map((item) => ({
-      clientId: item.clientId,
-      articleId: item.articleId,
-      titleSnapshot: item.articleId === "a-1" ? f.article.title : "Title B",
-    })),
-    contentArticleFingerprints: [hash(f.article), "fingerprint-b"],
-    contentFingerprint: "content-ab",
-    fingerprint: transactionFingerprint(existingSelections),
-  });
-  const preview = f.service.previewArticleRemovalImpact({
-    selections: [{ clientId: "c-1", articleId: "a-1" }],
-  });
-  assert.equal(preview.canCommit, false);
-  assert.deepEqual(
-    preview.blockedItems.filter((item) => item.source === "removal_transaction"),
-    [
-      {
-        clientId: "c-1",
-        articleId: "a-1",
-        reasonCode: "REMOVAL_REPAIR_REQUIRED",
-        source: "removal_transaction",
-        status: "needs_repair",
-      },
-    ],
-  );
-  assert.throws(
-    () =>
-      f.service.applyArticleRemovalImpact({
-        confirmed: true,
-        token: preview.token,
-      }),
-    { code: "REMOVAL_REPAIR_REQUIRED" },
-  );
+  try {
+    f.store.saveArticle(article("a"));
+    f.store.saveArticle(article("b"));
+    const p = f.preview(["b", "a"]);
+    assert.equal(f.commit(p).status, "committed");
+    assert.throws(() => f.commit(p), { code: "ARTICLE_TRASH_PREVIEW_EXPIRED" });
+    const before = f.store.getTrashedTombstone("client", "a");
+    assert.equal(f.commit(f.preview()).status, "committed");
+    assert.deepEqual(f.store.getTrashedTombstone("client", "a"), before);
+    assert.equal(f.store.listTrashedArticles("client").length, 2);
+    assert.deepEqual(f.intents.list(), []);
+    f.service.restoreArticle({ clientId: "client", articleId: "a" });
+    assert.deepEqual(f.store.getArticle("client", "a"), article());
+    const confirmation = f.service.preparePermanentDelete({
+      clientId: "client",
+      articleId: "b",
+    });
+    f.service.permanentlyDeleteArticle({
+      ...confirmation,
+      clientId: "client",
+      articleId: "b",
+    });
+    assert.equal(
+      f.store.getTrashedTombstone("client", "b").permanentlyDeleted,
+      true,
+    );
+    assert.throws(() =>
+      f.service.restoreArticle({ clientId: "client", articleId: "b" }),
+    );
+  } finally {
+    f.close();
+  }
 });
 
-it("does not let the current transaction block its own revalidation", (t) => {
-  const f = fixture();
-  t.after(f.cleanup);
-  const existingSelections = [
-    { clientId: "c-1", articleId: "a-1" },
-    { clientId: "c-1", articleId: "a-2" },
-  ];
-  seedLegacyTransaction(f, {
-    id: "repair-ab",
-    status: "needs_repair",
-    phase: "needs_repair",
-    legacyQueueMigration: "completed",
-    selections: existingSelections,
-    articles: existingSelections.map((item) => ({
-      clientId: item.clientId,
-      articleId: item.articleId,
-      titleSnapshot: item.articleId === "a-1" ? f.article.title : "Title B",
-    })),
-    contentArticleFingerprints: [hash(f.article), "fingerprint-b"],
-    contentFingerprint: "content-ab",
-    fingerprint: transactionFingerprint(existingSelections),
-  });
-  const result = f.service.retryArticleRemovalTransaction({
-    transactionId: "repair-ab",
-    confirmed: true,
-  });
-  assert.equal(result.status, "needs_repair");
-  assert.equal(result.errorCode, "ARTICLE_REMOVAL_CONTENT_CHANGED");
-});
-
-it("allows a preview with no article overlap with an open transaction", (t) => {
-  const f = fixture();
-  t.after(f.cleanup);
-  const existingSelections = [
-    { clientId: "c-1", articleId: "a-2" },
-    { clientId: "c-1", articleId: "a-3" },
-  ];
-  seedLegacyTransaction(f, {
-    id: "pending-bc",
-    status: "pending_auto_recovery",
-    phase: "articles",
-    legacyQueueMigration: "completed",
-    selections: existingSelections,
-    fingerprint: transactionFingerprint(existingSelections),
-  });
-  const preview = f.service.previewArticleRemovalImpact({
-    selections: [{ clientId: "c-1", articleId: "a-1" }],
-  });
-  assert.equal(preview.canCommit, true);
-  assert.equal(
-    preview.blockedItems.some((item) => item.source === "removal_transaction"),
-    false,
-  );
-  const result = f.service.applyArticleRemovalImpact({
-    confirmed: true,
-    token: preview.token,
-  });
-  assert.equal(result.status, "committed");
-  assert.equal(result.reused, undefined);
-  assert.deepEqual(f.store.get(result.transactionId).selections, [
-    { clientId: "c-1", articleId: "a-1" },
-  ]);
-});
-
-it("revalidates active facts before moving and keeps the article unchanged", (t) => {
-  const f = fixture({ moveError: "IO_DOWN" });
-  t.after(f.cleanup);
-  const started = begin(f).result;
-  f.setBlocked([{ clientId: "c-1", articleId: "a-1", reasonCode: "PUBLICATION_UNCERTAIN" }]);
-  const retried = f.service.retryArticleRemovalTransaction({
-    transactionId: started.transactionId,
-    confirmed: true,
-  });
-  assert.equal(retried.status, "needs_repair");
-  assert.equal(retried.errorCode, "ARTICLE_REMOVAL_BLOCKED");
-  assert.equal(f.calls().moveEffects, 0);
-});
-
-it("detects content identity changes after intent and before the durable move", (t) => {
-  const f = fixture();
-  t.after(f.cleanup);
-  const originalCompare = f.store.compareAndUpdate;
-  let changed = false;
-  f.store.compareAndUpdate = (id, revision, updater) => {
-    const result = originalCompare(id, revision, updater);
-    if (!changed && result && result.claimToken) {
-      changed = true;
-      f.article.remark = "changed after intent";
+test("lifecycle is rechecked after preview, and any blocked article prevents the entire batch", () => {
+  for (const status of ["reserved", "uncertain", "published"]) {
+    const f = fixture();
+    try {
+      f.store.saveArticle(article());
+      f.store.saveArticle(article("b"));
+      const p = f.preview(["a", "b"]);
+      f.setFacts({
+        publications: [{ clientId: "client", articleId: "b", status }],
+      });
+      assert.equal(f.preview(["a", "b"]).canCommit, false);
+      assert.throws(() => f.commit(p));
+      assert.equal(f.store.listTrashedArticles("client").length, 0);
+      assert.equal(f.store.listArticles("client").length, 2);
+      assert.deepEqual(f.intents.list(), []);
+    } finally {
+      f.close();
     }
-    return result;
-  };
-  const result = begin(f).result;
-  assert.equal(result.status, "needs_repair");
-  assert.equal(result.errorCode, "ARTICLE_REMOVAL_CONTENT_CHANGED");
-  assert.equal(f.calls().moveEffects, 0);
+  }
 });
 
-it("records a move fault for bounded recovery and commits after the fault is cleared", (t) => {
-  const f = fixture({ moveError: "IO_DOWN" });
-  t.after(f.cleanup);
-  const first = begin(f).result;
-  assert.equal(first.status, "pending_auto_recovery");
-  assert.equal(f.store.get(first.transactionId).retryCount, 1);
-  f.setMoveError(null);
-  f.setNow("2026-07-25T00:01:00.000Z");
-  const recovered = f.service.recoverPendingRemovals();
-  assert.equal(recovered[0].status, "committed");
-  assert.equal(f.calls().moveEffects, 1);
-});
-
-it("moves only the completed prefix when a later article changes", (t) => {
+test("stale content confirmation cannot delete an edited article", () => {
   const f = fixture();
-  t.after(f.cleanup);
-  const articles = new Map([
-    ["a-1", { clientId: "c-1", id: "a-1", title: "One", content: "one", status: "generated" }],
-    ["a-2", { clientId: "c-1", id: "a-2", title: "Two", content: "two", status: "generated" }],
-  ]);
-  const trashed = new Set();
-  const moved = [];
-  const contentStore = {
-    snapshotArticle: (article) => JSON.parse(JSON.stringify(article)),
-    getArticle: (_clientId, articleId) => {
-      if (trashed.has(articleId)) throw Object.assign(new Error("missing"), { code: "ARTICLE_NOT_FOUND" });
-      return articles.get(articleId);
-    },
-    fingerprintArticle: hash,
-    isArticleTrashed: (_clientId, articleId) => trashed.has(articleId),
-    getTrashedTombstone: (_clientId, articleId) => {
-      if (!trashed.has(articleId)) throw Object.assign(new Error("missing"), { code: "ARTICLE_NOT_FOUND" });
-      return { clientId: "c-1", articleId, operationId: "known" };
-    },
-    moveArticleToTrash: (_clientId, articleId) => {
-      trashed.add(articleId);
-      moved.push(articleId);
-    },
-  };
-  const store = createArticleRemovalTransactionStore({
-    workspaceRoot: f.root,
-    createId: () => "tx-many",
-  });
-  const service = createArticleRemovalService({
-    contentStore,
-    mutationCoordinator: {
-      previewTrashEligibility: ({ articleRefs }) => ({
-        items: articleRefs.map((articleRef) => ({
-          articleRef,
-          allowed: true,
-          reasonCodes: [],
-          safeMetadata: { stage: "pending_submission" },
-        })),
-      }),
-    },
-    transactionStore: store,
-    now: () => "2026-07-25T00:00:00.000Z",
-    runnerId: "runner-many",
-    afterArticleMove: (_item, index) => {
-      if (index === 0) articles.get("a-2").remark = "changed after first move";
+  try {
+    f.store.saveArticle(article());
+    const p = f.preview();
+    f.store.saveArticle({ ...article(), content: "Changed after preview" });
+    assert.throws(() => f.commit(p), {
+      code: "ARTICLE_REMOVAL_CONTENT_CHANGED",
+    });
+    assert.equal(
+      f.store.getArticle("client", "a").content,
+      "Changed after preview",
+    );
+    assert.deepEqual(f.intents.list(), []);
+  } finally {
+    f.close();
+  }
+});
+
+test("intent write failure occurs before any article move", () => {
+  const f = fixture({
+    atomicWriter: {
+      write() {
+        throw Object.assign(new Error("write failed"), { code: "EIO" });
+      },
     },
   });
-  const preview = service.previewArticleRemovalImpact({
-    selections: [
-      { clientId: "c-1", articleId: "a-1" },
-      { clientId: "c-1", articleId: "a-2" },
-    ],
-  });
-  const result = service.applyArticleRemovalImpact({ confirmed: true, token: preview.token });
-  assert.equal(result.status, "needs_repair");
-  assert.deepEqual(moved, ["a-1"]);
-  assert.equal(store.get(result.transactionId).articleCursor, 1);
+  try {
+    f.store.saveArticle(article());
+    assert.throws(() => f.commit(), { code: "EIO" });
+    assert.deepEqual(f.store.getArticle("client", "a"), article());
+    assert.deepEqual(f.intents.list(), []);
+  } finally {
+    f.close();
+  }
 });
 
-it("does not repeat a durable move when the postcondition is already present", (t) => {
-  const f = fixture({ moveAfterEffect: true });
-  t.after(f.cleanup);
-  const first = begin(f).result;
-  assert.equal(first.status, "pending_auto_recovery");
-  f.setNow("2026-07-25T00:01:00.000Z");
-  const recovered = f.service.recoverPendingRemovals();
-  assert.equal(recovered[0].status, "committed");
-  assert.equal(f.calls().moveCalls, 1);
-  assert.equal(f.calls().moveEffects, 1);
-});
-
-it("reconciles an article active operation using the same operation identity", (t) => {
-  const f = fixture({ moveError: "IO_DOWN" });
-  t.after(f.cleanup);
-  const started = begin(f).result;
-  const transaction = f.store.get(started.transactionId);
-  transaction.activeOperation = {
-    operationId: `${transaction.id}:article:0`,
-    kind: "article",
-    cursor: 0,
-    owner: "runner-old",
-    clientId: "c-1",
-    articleId: "a-1",
-  };
-  f.store.save(transaction);
-  f.setMoveError(null);
-  const result = f.service.retryArticleRemovalTransaction({
-    transactionId: started.transactionId,
-    confirmed: true,
-  });
-  assert.equal(result.status, "committed");
-  assert.equal(f.calls().moveEffects, 1);
-});
-
-it("migrates a completed legacy queue-action transaction once and resumes article removal", (t) => {
-  const f = fixture();
-  t.after(f.cleanup);
-  seedLegacyTransaction(f, {
-    fingerprint: fingerprint({
-      selections: ["c-1\0a-1"],
-      actions: [{
-        clientId: "c-1",
-        articleId: "a-1",
-        batchId: "legacy-batch",
-        publicationId: null,
-        targetPlatformId: null,
-        attemptId: null,
-        action: "cancel",
-      }],
-    }),
-  });
-  const recovered = f.service.recoverPendingRemovals();
-  assert.equal(recovered.length, 1);
-  assert.equal(recovered[0].status, "committed");
-  const transaction = f.store.get("legacy-1");
-  assert.equal(transaction.legacyQueueMigration, "completed");
-  assert.equal(transaction.legacyQueueMigrationCode, "LEGACY_QUEUE_ACTIONS_RETIRED");
-  assert.equal(transaction.fingerprint, transactionFingerprint(transaction.selections));
-  assert.equal(Object.hasOwn(transaction, "queueActions"), false);
-  assert.equal(Object.hasOwn(transaction, "queueCursor"), false);
-  assert.equal(Object.hasOwn(transaction, "queueResults"), false);
-  assert.equal(f.calls().queueMutationCalls, 0);
-  assert.equal(f.calls().moveEffects, 1);
-});
-
-it("retires an unproven legacy queue action into needs_repair without executing it", (t) => {
-  const f = fixture();
-  t.after(f.cleanup);
-  seedLegacyTransaction(f, {
-    activeOperation: {
-      operationId: "legacy-1:queue:0",
-      kind: "queue",
-      cursor: 0,
-      owner: "runner-old",
-      clientId: "c-1",
-      articleId: "a-1",
+test("partial batch failure keeps one intent, blocks overlapping requests, and explicit retry completes it", () => {
+  let armed = true;
+  const f = fixture({
+    fileFault(point, detail) {
+      if (
+        armed &&
+        point === "after-trash-json" &&
+        detail.source.json.endsWith("b.json")
+      ) {
+        throw Object.assign(new Error("disk failed"), { code: "EIO" });
+      }
     },
-    queueCursor: 0,
-    queueResults: [],
   });
-  f.service.recoverPendingRemovals();
-  const migrated = f.store.get("legacy-1");
-  assert.equal(migrated.status, "needs_repair");
-  assert.equal(migrated.phase, "needs_repair");
-  assert.equal(migrated.errorCode, "ARTICLE_REMOVAL_LEGACY_QUEUE_ACTION");
-  assert.equal(migrated.resolutionCode, "LEGACY_QUEUE_ACTIONS_REQUIRE_MANUAL_REPAIR");
-  assert.equal(Object.hasOwn(migrated, "queueActions"), false);
-  assert.equal(Object.hasOwn(migrated, "queueCursor"), false);
-  assert.equal(Object.hasOwn(migrated, "queueResults"), false);
-  assert.equal(f.calls().moveEffects, 0);
-  const retry = f.service.retryArticleRemovalTransaction({ transactionId: "legacy-1", confirmed: true });
-  assert.equal(retry.status, "needs_repair");
-  assert.equal(f.calls().queueMutationCalls, 0);
+  try {
+    f.store.saveArticle(article());
+    f.store.saveArticle(article("b"));
+    f.store.saveArticle(article("c"));
+    const result = f.commit(f.preview(["a", "b"]));
+    assert.equal(result.status, "needs_repair");
+    assert.equal(f.store.isArticleTrashed("client", "a"), true);
+    assert.deepEqual(f.store.getArticle("client", "b"), article("b"));
+    const overlap = f.preview(["b", "c"]);
+    assert.equal(overlap.canCommit, false);
+    assert.equal(
+      overlap.openTransactionId,
+      undefined,
+      "overlap must not offer to retry a different batch",
+    );
+    assert.throws(() => f.commit(overlap), {
+      code: "ARTICLE_TRASH_PREVIEW_STALE",
+    });
+    assert.throws(() =>
+      f.service.restoreArticle({ clientId: "client", articleId: "a" }),
+    );
+    assert.equal(f.intents.list().length, 1);
+    armed = false;
+    assert.equal(
+      f.service.retryArticleRemovalTransaction({
+        transactionId: result.transactionId,
+        confirmed: true,
+      }).status,
+      "committed",
+    );
+    assert.equal(f.store.listTrashedArticles("client").length, 2);
+    assert.equal(f.store.getArticle("client", "c").id, "c");
+    assert.deepEqual(f.intents.list(), []);
+  } finally {
+    f.close();
+  }
 });
 
-it("fails closed for a transaction without durable content identity", (t) => {
-  const f = fixture();
-  t.after(f.cleanup);
-  f.store.save({
-    id: "tx-missing-fingerprint",
-    version: 2,
-    kind: "article-removal",
-    status: "pending_auto_recovery",
-    phase: "articles",
-    createdAt: "2026-07-25T00:00:00.000Z",
-    updatedAt: "2026-07-25T00:00:00.000Z",
-    selections: [{ clientId: "c-1", articleId: "a-1" }],
-    articles: [{ clientId: "c-1", articleId: "a-1" }],
-    revision: 0,
-  });
-  f.service.recoverPendingRemovals();
-  const transaction = f.store.get("tx-missing-fingerprint");
-  assert.equal(transaction.status, "needs_repair");
-  assert.equal(transaction.errorCode, "ARTICLE_REMOVAL_CONTENT_FINGERPRINT_MISSING");
-  assert.equal(f.calls().moveEffects, 0);
-});
-
-it("permits only one runner to execute a claimed transaction", (t) => {
-  const f = fixture({ runnerId: "runner-a" });
-  t.after(f.cleanup);
-  const other = createArticleRemovalService({
-    contentStore: f.contentStore,
-    mutationCoordinator: f.mutationCoordinator,
-    transactionStore: f.store,
-    now: () => "2026-07-25T00:00:00.000Z",
-    runnerId: "runner-b",
-  });
-  seedLegacyTransaction(f, {
-    version: 2,
-    phase: "articles",
-    queueActions: undefined,
-    queueCursor: undefined,
-    queueResults: undefined,
-    legacyQueueMigration: "completed",
-  });
-  let competing = null;
-  const move = f.contentStore.moveArticleToTrash;
-  f.contentStore.moveArticleToTrash = (...args) => {
-    competing = other.recoverPendingRemovals();
-    return move(...args);
-  };
-  const recovered = f.service.recoverPendingRemovals();
-  assert.equal(recovered[0].status, "committed");
-  assert.equal(competing.length, 1);
-  assert.equal(competing[0].status, "pending_auto_recovery");
-  assert.equal(f.calls().moveEffects, 1);
-});
-
-it("records persistence faults without losing a legal article phase", (t) => {
-  const f = fixture();
-  t.after(f.cleanup);
-  const originalCompare = f.store.compareAndUpdate;
-  let checkpoints = 0;
-  f.store.compareAndUpdate = (id, revision, updater) => {
-    checkpoints += 1;
-    if (checkpoints === 2) throw Object.assign(new Error("disk"), { code: "EIO" });
-    return originalCompare(id, revision, updater);
-  };
-  const result = begin(f).result;
-  const transaction = f.store.get(result.transactionId);
-  assert.equal(transaction.status, "pending_auto_recovery");
-  assert.equal(transaction.phase, "articles");
-  assert.equal(transaction.retryCount, 1);
-  assert.equal(transaction.resolutionCode, "PERSISTENCE_RETRY_REQUIRED");
-});
-
-it("surfaces read faults during preview and never starts a transaction", (t) => {
-  const f = fixture();
-  t.after(f.cleanup);
-  f.setReadError("IO_DOWN");
-  assert.throws(
-    () => f.service.previewArticleRemovalImpact({ selections: [{ clientId: "c-1", articleId: "a-1" }] }),
-    { code: "IO_DOWN" },
+for (const point of ["after-trash-json", "after-trash-tombstone"]) {
+  test(
+    "process exit at " +
+      point +
+      " recovers a partially completed batch on reopen",
+    () => {
+      const f = fixture();
+      try {
+        f.store.saveArticle(article());
+        f.store.saveArticle(article("b"));
+        const child = spawnSync(
+          process.execPath,
+          [
+            "-e",
+            'const { fixture } = require(process.argv[1]); const f = fixture({ root: process.argv[2], fileFault(point, detail) { if (point === process.argv[3] && detail.source.json.endsWith("b.json")) process.exit(97); } }); f.commit(f.preview(["a", "b"]));',
+            path.join(__dirname, "helpers/article-removal-fixture.js"),
+            f.root,
+            point,
+          ],
+          { encoding: "utf8" },
+        );
+        assert.equal(child.status, 97, child.stderr);
+        const reopened = fixture({ root: f.root });
+        assert.equal(
+          reopened.service.recoverPendingRemovals()[0].status,
+          "committed",
+        );
+        assert.deepEqual(reopened.store.listArticles("client"), []);
+        assert.deepEqual(
+          reopened.store
+            .listTrashedArticles("client")
+            .map((t) => t.articleId)
+            .sort(),
+          ["a", "b"],
+        );
+        assert.deepEqual(reopened.service.recoverPendingRemovals(), []);
+        reopened.service.restoreArticle({ clientId: "client", articleId: "a" });
+        assert.deepEqual(reopened.store.getArticle("client", "a"), article());
+        assert.deepEqual(
+          fixture({ root: f.root }).service.recoverPendingRemovals(),
+          [],
+        );
+      } finally {
+        f.close();
+      }
+    },
   );
-  assert.deepEqual(f.store.list(), []);
+}
+
+test("two service instances with stale previews cannot overwrite the first deletion", () => {
+  const f = fixture();
+  try {
+    f.store.saveArticle(article());
+    const second = fixture({ root: f.root });
+    const firstPreview = f.preview();
+    const secondPreview = second.preview();
+    f.commit(firstPreview);
+    const tombstone = f.store.getTrashedTombstone("client", "a");
+    assert.throws(() => second.commit(secondPreview), {
+      code: "ARTICLE_REMOVAL_OPERATION_CONFLICT",
+    });
+    assert.deepEqual(
+      second.store.getTrashedTombstone("client", "a"),
+      tombstone,
+    );
+    assert.deepEqual(second.intents.list(), []);
+  } finally {
+    f.close();
+  }
+});
+
+test("an interrupted file effect with rollback failure is reconciled by ArticleStore before retry", () => {
+  let fail = true;
+  let rollbackFailed = false;
+  const io = Object.create(fs);
+  io.renameSync = (from, to) => {
+    if (
+      fail &&
+      from.includes(path.sep + "article-trash" + path.sep) &&
+      to.endsWith("a.json")
+    ) {
+      rollbackFailed = true;
+      throw Object.assign(new Error("rollback failed"), { code: "EIO" });
+    }
+    return fs.renameSync(from, to);
+  };
+  const f = fixture({
+    fs: io,
+    fileFault(point) {
+      if (fail && point === "after-trash-json")
+        throw Object.assign(new Error("move failed"), { code: "EIO" });
+    },
+  });
+  try {
+    f.store.saveArticle(article());
+    const result = f.commit();
+    assert.equal(result.status, "needs_repair");
+    assert.equal(rollbackFailed, true);
+    fail = false;
+    assert.equal(
+      f.service.retryArticleRemovalTransaction({
+        transactionId: result.transactionId,
+        confirmed: true,
+      }).status,
+      "committed",
+    );
+    assert.equal(f.store.isArticleTrashed("client", "a"), true);
+  } finally {
+    f.close();
+  }
+});
+
+test("restoring an already-trashed article invalidates a prior duplicate-trash preview", () => {
+  const f = fixture();
+  try {
+    f.store.saveArticle(article());
+    f.commit();
+    const stale = f.preview();
+    f.service.restoreArticle({ clientId: "client", articleId: "a" });
+    assert.throws(() => f.commit(stale), {
+      code: "ARTICLE_REMOVAL_OPERATION_CONFLICT",
+    });
+    assert.deepEqual(f.store.getArticle("client", "a"), article());
+  } finally {
+    f.close();
+  }
+});
+
+test("a second process cannot advance removal while the first holds the article lock", () => {
+  let root;
+  let checked = false;
+  const f = fixture({
+    fileFault(point) {
+      if (point !== "after-trash-json") return;
+      const child = spawnSync(
+        process.execPath,
+        [
+          "-e",
+          'const { fixture } = require(process.argv[1]); const f = fixture({ root: process.argv[2] }); try { f.commit(); process.exit(2); } catch (error) { if (error.code !== "ARTICLE_MUTATION_BUSY") throw error; }',
+          path.join(__dirname, "helpers/article-removal-fixture.js"),
+          root,
+        ],
+        { encoding: "utf8", timeout: 10000 },
+      );
+      assert.equal(child.status, 0, child.stderr);
+      checked = true;
+    },
+  });
+  root = f.root;
+  try {
+    f.store.saveArticle(article());
+    assert.equal(f.commit().status, "committed");
+    assert.equal(checked, true);
+    assert.equal(f.store.listTrashedArticles("client").length, 1);
+    assert.deepEqual(f.intents.list(), []);
+  } finally {
+    f.close();
+  }
+});
+
+test("restart recovery rechecks publication facts and does not delete a newly frozen article", () => {
+  let fail = true;
+  const f = fixture({
+    fileFault(point) {
+      if (fail && point === "after-trash-json")
+        throw Object.assign(new Error("failed"), { code: "EIO" });
+    },
+  });
+  try {
+    f.store.saveArticle(article());
+    assert.equal(f.commit().status, "needs_repair");
+    fail = false;
+    const reopened = fixture({ root: f.root });
+    reopened.setFacts({
+      publications: [
+        { clientId: "client", articleId: "a", status: "published" },
+      ],
+    });
+    const result = reopened.service.recoverPendingRemovals()[0];
+    assert.equal(result.status, "needs_repair");
+    assert.equal(result.errorCode, "ARTICLE_PUBLISHED_IMMUTABLE");
+    assert.deepEqual(reopened.store.getArticle("client", "a"), article());
+    assert.equal(reopened.store.listTrashedArticles("client").length, 0);
+  } finally {
+    f.close();
+  }
+});
+
+test("retired queue transaction files are left untouched and never replayed", () => {
+  const f = fixture();
+  try {
+    f.store.saveArticle(article());
+    const file = path.join(
+      f.root,
+      ".autopublish",
+      "article-removal-transactions",
+      "removal-old.json",
+    );
+    const legacy = JSON.stringify({
+      version: 2,
+      id: "old",
+      phase: "queue-actions",
+      queueActions: ["never replay"],
+    });
+    fs.writeFileSync(file, legacy);
+    assert.deepEqual(f.service.recoverPendingRemovals(), []);
+    assert.equal(fs.readFileSync(file, "utf8"), legacy);
+    assert.deepEqual(f.store.getArticle("client", "a"), article());
+    assert.equal(f.commit().status, "committed");
+  } finally {
+    f.close();
+  }
 });

@@ -9,8 +9,6 @@
     "tests/article-single-success-target.test.js",
     "tests/article-mutation-coordinator.test.js",
     "tests/article-removal-service.test.js",
-    "tests/article-removal-transaction-store.test.js",
-    "tests/article-removal-recovery-scheduler.test.js",
     "tests/article-attention-policy.test.js",
     "tests/article-attention-query.test.js",
     "tests/article-management-snapshot.test.js",
