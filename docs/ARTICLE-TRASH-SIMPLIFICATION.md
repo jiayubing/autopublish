@@ -115,3 +115,48 @@ restore/purge 中断及目录 junction 边界；这些也被最终 integration �
 → ArticleStore（JSON/墓碑及文件恢复日志）`。
 
 本阶段结束；未 push、未创建 PR、未 merge。不继续其他架构优化。
+
+## 最终收尾与 master 同步（2026-09-16）
+
+本节更新上一节的本地交接状态；不重新审计删除架构。
+最新 master 与 merge-base：`24997f20365aab7b045422f1ab810a6334d16ffc`。
+最终源码/测试提交：`2374ee8e2f7ff377d6b7ed9db04bc3b8849ac608`。
+
+修复 preview 读取缺失文章时整批抛错：仅在 `session.readArticle` 边界捕获
+`ARTICLE_NOT_FOUND`，返回 allowed=false、对应 reasonCodes 与空 safeMetadata。
+service 沿用现有 blockedItems 映射及 source=article_lifecycle，整批不可提交，
+其他文章仍返回自身结果；真实文章的权限和 metadata 仍来自 canonical projection。
+损坏 JSON、EIO、EACCES 与 unexpected read error 继续按 ArticleStore 原有错误向上传播。
+新增六项公共行为回归；修复前 missing/mixed 两项失败，其他四项通过。
+本轮 bounded 检查仅覆盖该修复、直接 service 映射与回归，无 blocking finding。
+
+执行 `git rebase origin/master`；因 PR #60 squash 重复，显式 skip
+`987f6f74`、`25adbfb3`，Git 自动 drop `37412cf3`。
+已验证 `37412cf3` 与 master 文件树相同，rebase 前后最终文件树相同，
+`git range-diff 37412cf3..ce0ebccb origin/master..2374ee8e` 三项均为等价提交。
+master 基线后的 diff 仅包含本阶段简化、文档和 preview 修复；
+没有重新删除 article-submission-removal-coordinator，也没有修改 canonical projection。
+未恢复 removal cursor/state/scheduler/lease/claim/CAS/retry-backoff。
+
+最终验证环境 Windows / Node v24.16.0，工作目录 `auto—publish/`：
+
+| 实际命令 | 结果 |
+| --- | --- |
+| `node --test tests/article-removal-service.test.js tests/article-mutation-coordinator.test.js tests/article-trash-management-refresh.test.js tests/workspace-runtime-lifecycle.test.js` | PASS 50/50（rebase 前；range-diff 证实内容相同） |
+| `npm test` | PASS 59 文件，593/593，0 skipped/todo，21.038 秒 |
+| `npm run test:integration` | PASS 223 文件，1,166/1,166，0 skipped/todo，167.982 秒 |
+| `node --test tests/article-lifecycle-ticket-23-a.test.js tests/article-lifecycle-ticket-23-b.test.js tests/article-lifecycle-ticket-23-c.test.js tests/article-lifecycle-ticket-23-d.test.js` | PASS 41/41 |
+| `npm run lint` | PASS |
+| `npm run typecheck:main` | PASS |
+| `npm run typecheck:renderer` | PASS |
+| `npm run typecheck:bridge` | PASS |
+| `git diff --check` | PASS |
+
+core/integration 覆盖 preview/apply、批量/部分失败、进程崩溃、启动恢复、
+重复请求、restore/purge、needs_repair、lifecycle blocked 与 IPC/content integration。
+原生结果在 `build/test-results/{core,integration}-timings.json`，
+输出在 `build/test-results/trash-final-{core,integration}.log`（均不提交）。
+之后只提交本文档 evidence，不改变已验证源码、测试或 gate。
+用户原有 pelican-bicycle.html 删除与未跟踪 work/ 经 scoped stash/pop 完整保留。
+按本轮授权推送工作分支并准备 PR，不 merge，不运行 installer/release 或真实外部操作。
+崩溃证据仍仅覆盖进程异常退出，不扩展为断电/硬件故障保证。
