@@ -189,6 +189,204 @@ test("regular queue waits for the configured interval before the next article", 
   }
 });
 
+test("uncertain removes only its item from the runnable FIFO and lets later articles continue", async () => {
+  const f = fixture();
+  const waits = [];
+  const submissions = [];
+  let confirmation;
+  try {
+    const first = admitQueued(f, "article-uncertain-first", 1);
+    const second = admitQueued(f, "article-uncertain-second");
+    const third = admitQueued(f, "article-uncertain-third");
+    const outcomeService = createRegularPlatformOutcomeService({
+      regularOutcomeTransitions: f.transitions,
+      clock: () => new Date("2026-08-07T01:00:00.000Z"),
+    });
+    const orchestrator = createRegularQueueGroupOrchestrator({
+      regularQueueGroupTransitions: f.groupTransitions,
+      regularPlatformOutcomeService: outcomeService,
+      wait: async (intervalMs) => {
+        waits.push(intervalMs);
+        if (!confirmation) {
+          const afterUncertain = f.groupTransitions.listRegularQueueGroupSnapshots({
+            queueGroupId: first.queueGroupId,
+          })[0];
+          assert.equal(afterUncertain.current, null);
+          assert.deepEqual(
+            afterUncertain.remaining.map((item) => item.articleId),
+            [second.articleId, third.articleId],
+          );
+          confirmation = f.transitions.prepareRegularUncertainResolution({
+            regularPublicationAttemptId: first.attemptId,
+          });
+        }
+      },
+      platformSubmissionExecutor: {
+        async preparePlatformSubmission(claim) {
+          return domain.createPreparedSubmission({
+            preparedSubmissionEvidenceV1:
+              domain.createTextOnlyPreparedSubmissionEvidenceV1(claim),
+            async submitPreparedPublication() {
+              const articleId = claim.articleIdentityV1.articleId;
+              submissions.push(articleId);
+              return articleId === first.articleId
+                ? { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" }
+                : { status: "accepted", remoteId: `remote-${articleId}` };
+            },
+          });
+        },
+      },
+    });
+
+    const result = await orchestrator.startGroup({
+      queueGroupId: first.queueGroupId,
+    });
+
+    assert.deepEqual(submissions, [
+      first.articleId,
+      second.articleId,
+      third.articleId,
+    ]);
+    assert.deepEqual(
+      result.processed.map((item) => item.observation.status),
+      ["uncertain", "accepted", "accepted"],
+    );
+    assert.deepEqual(waits, [1000, 1000]);
+    assert.ok(confirmation);
+
+    const uncertain = f.transitions.getRegularOutcomeSnapshot({
+      regularPublicationAttemptId: first.attemptId,
+    });
+    assert.equal(uncertain.intentState, "manual_check");
+    assert.equal(uncertain.itemStatus, "uncertain");
+    assert.equal(uncertain.queueGroupId, null);
+    assert.equal(uncertain.pauseIntent, null);
+    assert.equal(
+      f.store.getSubmissionBatch(first.batchId).status,
+      "failed",
+    );
+    assert.equal(
+      f.store.getSubmissionBatch(second.batchId).status,
+      "completed",
+    );
+    assert.equal(
+      f.store.getSubmissionBatch(third.batchId).status,
+      "completed",
+    );
+    assert.deepEqual(
+      f.store.listSubmissionQueueItems({
+        queueGroupId: first.queueGroupId,
+      }),
+      [],
+    );
+    const group = f.groupTransitions.listRegularQueueGroupSnapshots({
+      queueGroupId: first.queueGroupId,
+    })[0];
+    assert.equal(group.pauseIntent, "none");
+    assert.equal(group.current, null);
+    assert.equal(group.remaining.length, 0);
+
+    const repeated = await orchestrator.startGroup({
+      queueGroupId: first.queueGroupId,
+    });
+    assert.equal(repeated.status, "idle");
+    assert.deepEqual(submissions, [
+      first.articleId,
+      second.articleId,
+      third.articleId,
+    ]);
+
+    const resolved = f.transitions.confirmRegularAccepted({
+      regularPublicationAttemptId: first.attemptId,
+      confirmationToken: confirmation.confirmationToken,
+      manualPositiveEvidence: {
+        observedAt: "2026-08-07T01:00:00.000Z",
+      },
+    });
+    assert.equal(resolved.status, "published");
+    assert.equal(f.store.getSubmissionBatch(first.batchId).status, "completed");
+  } finally {
+    f.close();
+  }
+});
+
+test("uncertain remains non-runnable after application restart and queue recovery", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "regular-outcome-uncertain-restart-"));
+  let first;
+  let reopened;
+  const submissions = [];
+  try {
+    first = fixture({ workspaceRoot: root, removeWorkspaceRoot: false });
+    const admitted = admitForOrchestrator(first, "article-uncertain-restart");
+    const outcomeService = createRegularPlatformOutcomeService({
+      regularOutcomeTransitions: first.transitions,
+      clock: () => new Date("2026-08-07T01:00:00.000Z"),
+    });
+    const composition = createRegularQueueGroupComposition({
+      regularQueueGroupTransitions: first.groupTransitions,
+      regularPlatformOutcomeService: outcomeService,
+      platformSubmissionExecutor: {
+        async preparePlatformSubmission(claim) {
+          return domain.createPreparedSubmission({
+            preparedSubmissionEvidenceV1:
+              domain.createTextOnlyPreparedSubmissionEvidenceV1(claim),
+            async submitPreparedPublication() {
+              submissions.push(claim.articleIdentityV1.articleId);
+              return { status: "uncertain", errorCode: "REMOTE_RESULT_UNKNOWN" };
+            },
+          });
+        },
+      },
+    });
+
+    const result = await composition.orchestrator.startGroup({
+      queueGroupId: admitted.queueGroupId,
+    });
+    assert.equal(result.observation.status, "uncertain");
+    assert.deepEqual(submissions, [admitted.articleId]);
+    assert.equal(
+      first.store.listSubmissionQueueItems({
+        queueGroupId: admitted.queueGroupId,
+      }).length,
+      0,
+    );
+    first.close();
+    first = null;
+
+    reopened = fixture({ workspaceRoot: root, removeWorkspaceRoot: false });
+    const reopenedOutcomeService = createRegularPlatformOutcomeService({
+      regularOutcomeTransitions: reopened.transitions,
+      clock: () => new Date("2026-08-07T01:00:00.000Z"),
+    });
+    const recovered = createRegularQueueGroupComposition({
+      regularQueueGroupTransitions: reopened.groupTransitions,
+      regularPlatformOutcomeService: reopenedOutcomeService,
+      platformSubmissionExecutor: {
+        async preparePlatformSubmission() {
+          throw new Error("uncertain article must not be submitted after restart");
+        },
+      },
+    });
+    assert.equal(recovered.orphanedOutcomes.length, 0);
+    const resumed = await recovered.orchestrator.startGroup({
+      queueGroupId: admitted.queueGroupId,
+    });
+    assert.equal(resumed.status, "idle");
+    assert.deepEqual(submissions, [admitted.articleId]);
+    const snapshot = reopened.transitions.getRegularOutcomeSnapshot({
+      regularPublicationAttemptId: admitted.attemptId,
+    });
+    assert.equal(snapshot.itemStatus, "uncertain");
+    assert.equal(snapshot.intentState, "manual_check");
+    assert.equal(snapshot.queueGroupId, null);
+    assert.equal(snapshot.pauseIntent, null);
+  } finally {
+    if (first) first.close();
+    if (reopened) reopened.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("pausing during the interval prevents the next article from being claimed", async () => {
   const f = fixture();
   let releaseWait;
@@ -699,7 +897,7 @@ test("other attempt evidence cannot affect repeated or concurrent publication su
   }
 });
 
-test("uncertain pauses only its group and supports the two bound resolutions", () => {
+test("uncertain freezes only its article and supports accepted manual resolution", () => {
   const f = fixture();
   try {
     const prepared = f.prepare();
@@ -716,7 +914,19 @@ test("uncertain pauses only its group and supports the two bound resolutions", (
     });
     assert.equal(uncertain.intentState, "manual_check");
     assert.equal(uncertain.itemStatus, "uncertain");
-    assert.equal(uncertain.pauseIntent, "system");
+    assert.equal(uncertain.queueGroupId, null);
+    assert.equal(uncertain.pauseIntent, null);
+    assert.equal(
+      f.store.listSubmissionQueueItems({
+        queueGroupId: prepared.admitted.queueGroupId,
+      }).length,
+      0,
+    );
+    assert.equal(f.store.getSubmissionBatch(prepared.admitted.batchId).status, "failed");
+    assert.equal(
+      f.groupTransitions.listRegularQueueGroupSnapshots({})[0].pauseIntent,
+      "none",
+    );
     const confirmation = f.transitions.prepareRegularUncertainResolution({
       regularPublicationAttemptId: prepared.claim.regularPublicationAttemptId,
     });
@@ -869,6 +1079,48 @@ test("manual acceptance repairs a legacy normalized customer snapshot identity",
       articleIds: [articleId],
     })[0];
     assert.equal(archive.publicationEvidence.articleIdentityV1.clientId, clientId);
+  } finally {
+    f.close();
+  }
+});
+
+test("uncertain supports idempotent not-accepted manual resolution after leaving the FIFO", () => {
+  const f = fixture();
+  try {
+    const prepared = f.prepare("article-manual-not-accepted");
+    const attemptId = prepared.claim.regularPublicationAttemptId;
+    f.transitions.recordRegularUncertain({
+      regularPublicationAttemptId: attemptId,
+      observation: {
+        status: "uncertain",
+        code: "REMOTE_RESULT_UNKNOWN",
+        observedAt: "2026-08-07T01:00:02.000Z",
+      },
+    });
+    const confirmation = f.transitions.prepareRegularUncertainResolution({
+      regularPublicationAttemptId: attemptId,
+    });
+    const command = {
+      regularPublicationAttemptId: attemptId,
+      confirmationToken: confirmation.confirmationToken,
+      manualNegativeEvidence: {
+        reasonCode: "OPERATOR_VERIFIED_NOT_ACCEPTED",
+        observedAt: "2026-08-07T01:00:00.000Z",
+      },
+    };
+    const resolved = f.transitions.confirmRegularNotAccepted(command);
+    assert.equal(resolved.status, "not_accepted");
+    assert.equal(resolved.idempotent, false);
+    const repeated = f.transitions.confirmRegularNotAccepted(command);
+    assert.equal(repeated.status, "not_accepted");
+    assert.equal(repeated.idempotent, true);
+    const final = f.transitions.getRegularOutcomeSnapshot({
+      regularPublicationAttemptId: attemptId,
+    });
+    assert.equal(final.itemStatus, "failed");
+    assert.equal(final.publicationStatus, "failed");
+    assert.equal(final.queueGroupId, null);
+    assert.equal(f.store.getSubmissionBatch(prepared.admitted.batchId).status, "failed");
   } finally {
     f.close();
   }
@@ -1278,6 +1530,13 @@ for (const outcome of ["article_rejected", "group_blocked", "uncertain"]) {
       assert.equal(snapshot.publicationStatus, "remote_started");
       assert.equal(snapshot.itemStatus, "remote_started");
       assert.equal(snapshot.observation, null);
+      if (outcome === "uncertain")
+        assert.equal(
+          f.store.listSubmissionQueueItems({
+            queueGroupId: prepared.admitted.queueGroupId,
+          }).length,
+          1,
+        );
     } finally {
       f.close();
     }
@@ -1575,7 +1834,7 @@ test("orchestrator distinguishes transport failure before and after submission-s
       regularPublicationAttemptId: admitted.attemptId,
     });
     assert.equal(snapshot.publicationStatus, "uncertain");
-    assert.equal(snapshot.pauseIntent, "system");
+    assert.equal(snapshot.pauseIntent, null);
   } finally {
     after.close();
   }
@@ -1680,7 +1939,7 @@ test("outcome commit failure becomes uncertain in the current process without re
     assert.equal(snapshot.itemStatus, "uncertain");
     assert.equal(snapshot.activeTargetState, "uncertain");
     assert.equal(snapshot.intentState, "manual_check");
-    assert.equal(snapshot.pauseIntent, "system");
+    assert.equal(snapshot.pauseIntent, null);
     assert.equal(snapshot.observation.code, "REGULAR_ORPHANED_REMOTE_ATTEMPT");
     assert.equal(
       createArticleAttentionQuery({ operationalStore: f.store }).list({
