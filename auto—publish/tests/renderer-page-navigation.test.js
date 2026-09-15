@@ -263,7 +263,7 @@ describe("renderer page navigation", { concurrency: false }, function () {
       timeout: 15000,
     });
     await page.waitForFunction(
-      () => window.__contentReadCounts.management > 0,
+      () => window.__contentReadCounts.listClients > 0,
       null,
       { timeout: 15000 },
     );
@@ -271,6 +271,16 @@ describe("renderer page navigation", { concurrency: false }, function () {
     const initialCounts = await page.evaluate(() => ({
       ...window.__contentReadCounts,
     }));
+    assert.equal(
+      initialCounts.listClients,
+      1,
+      "article-library should hydrate content sources exactly once on first visit",
+    );
+    assert.equal(
+      initialCounts.management,
+      0,
+      "article management should stay lazy when there is no selected client",
+    );
 
     await page.locator("#nav-item-content-production").click();
     await page.getByText("内容生产", { exact: true }).first().waitFor({
@@ -284,6 +294,11 @@ describe("renderer page navigation", { concurrency: false }, function () {
     const afterProductionCounts = await page.evaluate(() => ({
       ...window.__contentReadCounts,
     }));
+    assert.equal(
+      afterProductionCounts.listClients,
+      initialCounts.listClients + 1,
+      "content-production should hydrate content sources exactly once on first visit",
+    );
 
     await page.locator("#nav-item-article-library").click();
     await page.getByText("文章库", { exact: true }).first().waitFor({
