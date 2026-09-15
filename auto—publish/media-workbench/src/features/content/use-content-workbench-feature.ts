@@ -64,9 +64,17 @@ import {
   useWorkspaceRuntimeIdentity,
   useWorkspaceScope,
 } from "../workspace/workspace-coordinator-context";
-import { createContentWorkbenchFeature } from "./content-workbench-feature.js";
+import {
+  createContentWorkbenchFeature,
+  loadContentWorkbenchPage,
+} from "./content-workbench-feature.js";
 
-export function useContentWorkbenchFeature() {
+export type ContentWorkbenchPage = "library" | "production" | "shell";
+
+export function useContentWorkbenchFeature(options?: {
+  page?: ContentWorkbenchPage | null;
+}) {
+  const page = options && "page" in options ? options.page ?? null : "library";
   const workspace = useWorkspaceRuntimeIdentity();
   const featureRef = useRef<ReturnType<
     typeof createContentWorkbenchFeature
@@ -141,35 +149,99 @@ export function useContentWorkbenchFeature() {
     });
   }
   const feature = featureRef.current;
+  const pageRef = useRef<ContentWorkbenchPage | null>(page);
+  pageRef.current = page;
+  const hydrationRuntimeRef = useRef<string | null>(null);
+  const hydratedPagesRef = useRef<Set<ContentWorkbenchPage>>(new Set());
+  const hydrationRequestsRef = useRef<
+    Map<ContentWorkbenchPage, Promise<boolean>>
+  >(new Map());
+
+  const alignHydrationRuntime = (workspaceRuntimeId: string | null) => {
+    if (hydrationRuntimeRef.current === workspaceRuntimeId) return;
+    hydrationRuntimeRef.current = workspaceRuntimeId;
+    hydratedPagesRef.current.clear();
+    hydrationRequestsRef.current.clear();
+  };
+
+  const hydratePage = (
+    targetPage: ContentWorkbenchPage,
+    reason = "initial",
+  ): Promise<boolean> => {
+    const workspaceRuntimeId = hydrationRuntimeRef.current;
+    if (!workspaceRuntimeId) return Promise.resolve(false);
+    if (reason === "initial" && hydratedPagesRef.current.has(targetPage))
+      return Promise.resolve(true);
+    if (reason === "initial") {
+      const existing = hydrationRequestsRef.current.get(targetPage);
+      if (existing) return existing;
+    }
+
+    let request: Promise<boolean>;
+    request = Promise.resolve(
+      loadContentWorkbenchPage(feature, targetPage, reason),
+    )
+      .then((result) => {
+        if (
+          result !== false &&
+          hydrationRuntimeRef.current === workspaceRuntimeId
+        )
+          hydratedPagesRef.current.add(targetPage);
+        return result !== false;
+      })
+      .finally(() => {
+        if (hydrationRequestsRef.current.get(targetPage) === request)
+          hydrationRequestsRef.current.delete(targetPage);
+      });
+    if (reason === "initial")
+      hydrationRequestsRef.current.set(targetPage, request);
+    return request;
+  };
+
   useEffect(() => {
-    if (!workspace.workspaceRuntimeId) return;
-    feature.setScope({ workspaceRuntimeId: workspace.workspaceRuntimeId });
-    void feature.refresh("initial");
-    void feature.refreshClientGroups("initial");
-    void feature.refreshDoubaoQueue("initial");
-  }, [feature, workspace.workspaceRuntimeId]);
+    const workspaceRuntimeId = workspace.workspaceRuntimeId || null;
+    alignHydrationRuntime(workspaceRuntimeId);
+    if (!workspaceRuntimeId || !page) return;
+    feature.setScope({ workspaceRuntimeId });
+    void hydratePage(page, "initial");
+  }, [feature, page, workspace.workspaceRuntimeId]);
   useWorkspaceScope("contentSources", (event) => {
     if (!event.workspaceRuntimeId) return;
+    alignHydrationRuntime(event.workspaceRuntimeId);
     feature.setScope({ workspaceRuntimeId: event.workspaceRuntimeId });
-    if (!["initial", "identity", "runtime-switch"].includes(event.kind)) {
-      void feature.refreshContentSources(event.kind);
-      void feature.refreshClientGroups(event.kind);
-      void feature.refreshDoubaoQueue(event.kind);
-    }
+    if (["initial", "identity", "runtime-switch"].includes(event.kind)) return;
+    hydratedPagesRef.current.clear();
+    if (!pageRef.current) return;
+    return hydratePage(pageRef.current, event.kind);
   });
   useWorkspaceScope("articleManagement", (event) => {
     if (!event.workspaceRuntimeId) return;
+    alignHydrationRuntime(event.workspaceRuntimeId);
     feature.setScope({ workspaceRuntimeId: event.workspaceRuntimeId });
+    if (["initial", "identity", "runtime-switch"].includes(event.kind)) return;
+    if (pageRef.current !== "library") {
+      hydratedPagesRef.current.delete("library");
+      return;
+    }
     // The removal transaction event is the authoritative management refresh
     // owner.  The paired workspace invalidation still refreshes attention and
     // platform consumers, but must not issue a second management query.
-    if (
-      !["initial", "identity", "runtime-switch"].includes(event.kind) &&
-      event.reasonCode !== "ARTICLE_REMOVAL_TRANSACTION_CHANGED"
-    )
-      return feature.refreshManagement(event.kind);
+    if (event.reasonCode === "ARTICLE_REMOVAL_TRANSACTION_CHANGED") return;
+    const wasHydrated = hydratedPagesRef.current.has("library");
+    return Promise.resolve(feature.refreshManagement(event.kind)).then((result) => {
+      if (result === false) hydratedPagesRef.current.delete("library");
+      else if (wasHydrated) hydratedPagesRef.current.add("library");
+      return result;
+    });
   });
-  useEffect(() => () => feature.dispose(), [feature]);
+  useEffect(
+    () => () => {
+      hydratedPagesRef.current.clear();
+      hydrationRequestsRef.current.clear();
+      feature.dispose();
+    },
+    [feature],
+  );
   const snapshot = useSyncExternalStore(
     feature.subscribe,
     feature.getSnapshot,
@@ -180,7 +252,8 @@ export function useContentWorkbenchFeature() {
     getClientDetails: getContentClientDetails,
     production: feature.production,
     library: feature.library,
-    refresh: (reason = "manual") => feature.refresh(reason),
+    refresh: (reason = "manual") =>
+      pageRef.current ? hydratePage(pageRef.current, reason) : Promise.resolve(false),
     refreshClientData: (reason = "manual") => feature.refreshClientData(reason),
     refreshManagement: feature.refreshManagement,
     refreshClientGroups: feature.refreshClientGroups,

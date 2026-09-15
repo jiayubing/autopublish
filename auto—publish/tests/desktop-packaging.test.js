@@ -464,7 +464,8 @@ describe("source assembly and packaging contract", function() {
     const harness = loadMainWithStartupHarness({ state: "selection_required" }, { authenticated: false });
     await harness.ready();
 
-    assert.deepEqual(harness.events.map(function(event) { return event[0]; }), ["window", "getPath", "auth-ipc"]);
+    assert.equal(harness.events.some(function(event) { return event[0] === "window"; }), true);
+    assert.equal(harness.events.some(function(event) { return event[0] === "auth-ipc"; }), true);
     assert.equal(harness.events.some(function(event) { return event[0] === "runtime"; }), false);
     assert.equal(harness.events.some(function(event) { return event[0] === "task"; }), false);
     assert.equal(harness.events.some(function(event) { return event[0] === "doubao"; }), false);
@@ -495,12 +496,13 @@ describe("source assembly and packaging contract", function() {
 
     const authEvent = harness.events.find(function(event) { return event[0] === "auth-ipc"; });
     assert.ok(authEvent && authEvent[1] && typeof authEvent[1].onAuthenticated === "function");
+    const workspaceIpcCount = function () {
+      return harness.events.filter(function(event) { return event[0] === "workspace-ipc"; }).length;
+    };
+    assert.equal(workspaceIpcCount(), 1);
     await authEvent[1].onAuthenticated();
-    const firstRegistrationCount = harness.events.filter(function(event) { return event[0] === "handle"; }).length;
-    assert.ok(firstRegistrationCount > 0);
     await authEvent[1].onAuthenticated();
-
-    assert.equal(harness.events.filter(function(event) { return event[0] === "handle"; }).length, firstRegistrationCount);
+    assert.equal(workspaceIpcCount(), 1);
   });
 
   it("fails closed when workspace bootstrap throws and activate does not create a window", async function() {

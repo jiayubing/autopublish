@@ -12,6 +12,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { motion } from "motion/react";
+import { useMediaBalance } from "../features/media/use-media-balance";
 
 export interface NavigationBadges {
   articleLibrary: number;
@@ -57,21 +58,36 @@ const NAVIGATION_ITEMS: readonly SidebarNavigationItem[] = [
 interface SidebarProps {
   currentView: ViewMode;
   onViewChange: (view: ViewMode) => void;
-  balance: number;
-  onCheckBalance: () => void;
-  isCheckingBalance: boolean;
   badges: NavigationBadges;
+}
+
+function formatBalanceValue(value: number) {
+  return value.toLocaleString("zh-CN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 export default function Sidebar({
   currentView,
   onViewChange,
-  balance,
-  onCheckBalance,
-  isCheckingBalance,
   badges,
 }: SidebarProps) {
   const [showWalletDetails, setShowWalletDetails] = useState(false);
+  const balance = useMediaBalance();
+  const balanceSnapshot = balance.snapshot;
+  const isCheckingBalance = balanceSnapshot.status === "loading";
+  const balanceLabel =
+    balanceSnapshot.status === "loading"
+      ? "..."
+      : balanceSnapshot.status === "ready" &&
+          typeof balanceSnapshot.value === "number"
+        ? formatBalanceValue(balanceSnapshot.value)
+        : balanceSnapshot.status === "notConfigured"
+          ? "未配置"
+          : balanceSnapshot.status === "error"
+            ? "不可用"
+            : "—";
 
   return (
     <aside
@@ -179,7 +195,7 @@ export default function Sidebar({
               id="checkBalanceBtn"
               onClick={(event) => {
                 event.stopPropagation();
-                onCheckBalance();
+                void balance.refresh("manual");
               }}
               disabled={isCheckingBalance}
               className="rounded-md p-1 text-slate-500 transition-colors hover:bg-white/[0.06] hover:text-blue-300 disabled:opacity-50"
@@ -196,12 +212,7 @@ export default function Sidebar({
           <div className="flex items-baseline gap-1">
             <span className="text-[10px] font-semibold text-slate-500">¥</span>
             <span className="font-mono text-base font-bold tracking-tight text-slate-100">
-              {isCheckingBalance
-                ? "..."
-                : balance.toLocaleString("zh-CN", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
+              {balanceLabel}
             </span>
           </div>
           {showWalletDetails && (

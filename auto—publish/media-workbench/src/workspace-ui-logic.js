@@ -33,7 +33,11 @@ export function getWorkspaceErrorMessage(error) {
 
 export function getBootstrapView(state) {
   if (state?.state === 'checking') {
-    return { kind: 'checking', mountsApp: false, text: '正在检查工作区…' };
+    return {
+      kind: 'checking',
+      mountsApp: false,
+      text: state?.label === '正在启动工作区' ? '正在启动工作区…' : '正在检查工作区…',
+    };
   }
   if (state?.state === 'ready') {
     return { kind: 'app', mountsApp: true, text: '' };

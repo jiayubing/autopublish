@@ -8,7 +8,7 @@ export default function WorkspaceBootstrapGate() {
   const { snapshot } = useWorkspaceFeature();
   const state = snapshot.bootstrap.data || { state: "checking" };
   const view = getBootstrapView(state);
-  if (view.kind === "checking") {
+  if (view.kind === "checking" || snapshot.bootstrap.query.loading) {
     return (
       <div className="min-h-screen flex items-center justify-center text-slate-600">
         {view.text}

@@ -7,6 +7,7 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 import {
+  getWorkspaceBootstrapState,
   getWorkspaceRuntimeIdentity,
   onWorkspaceDataInvalidated,
   onWorkspaceInvalidationDiagnostic,
@@ -54,7 +55,13 @@ export function WorkspaceCoordinatorProvider({
     const abortController = new AbortController();
     loadWorkspaceRuntimeIdentityWithRetry(
       getWorkspaceRuntimeIdentity,
-      { signal: abortController.signal },
+      {
+        signal: abortController.signal,
+        isAvailable: async () => {
+          const bootstrap = await getWorkspaceBootstrapState();
+          return bootstrap.state === "ready";
+        },
+      },
     )
       .then((identity) => {
         coordinator.initialize(identity);

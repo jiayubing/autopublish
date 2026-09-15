@@ -157,6 +157,44 @@ describe("workspace bootstrap IPC", function () {
     assert.deepEqual(selected, ["D:\\selected-workspace"]);
   });
 
+  it("re-reads bootstrap state after ensureRuntime instead of returning the pre-start snapshot", async function () {
+    const handlers = new Map();
+    let started = false;
+    const reads = [];
+    registerWorkspaceBootstrapIpc({
+      ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
+      requireAuthenticated: async () => {},
+      workspaceBootstrapService: {
+        getBootstrapState() {
+          const state = started
+            ? { state: "ready", workspacePath: "C:\\private-workspace" }
+            : { state: "checking" };
+          reads.push(state.state);
+          return state;
+        },
+        chooseDirectory() {},
+        confirmSelection() {},
+        cancelSelection() {},
+        getCurrent() {},
+        openCurrent() {},
+        requestSwitch() {},
+      },
+      showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+      ensureRuntime: async () => {
+        started = true;
+      },
+      getRuntimePhase: () => (started ? "running" : "idle"),
+    });
+
+    const result = await handlers.get("workspace:get-bootstrap-state")(
+      {},
+      emptyRequest,
+    );
+    assert.equal(result.ok, true);
+    assert.equal(result.data.state, "ready");
+    assert.deepEqual(reads, ["ready"]);
+  });
+
   it("rejects workspace bootstrap before authentication without calling the service", async function () {
     const handlers = new Map();
     let serviceCalls = 0;

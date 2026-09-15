@@ -510,15 +510,11 @@ export function createMediaFeature(adapters = {}) {
     async refresh(reason = "manual") {
       await Promise.all([
         loadResourcePage(1, reason),
-        refreshBalance(reason),
         refreshOrders(reason),
       ]);
     },
     async refreshWorkbench(reason = "manual") {
-      await Promise.all([
-        loadResourcePage(1, reason),
-        refreshBalance(reason),
-      ]);
+      await loadResourcePage(1, reason);
     },
     loadResourcePage,
     loadPoolPage,

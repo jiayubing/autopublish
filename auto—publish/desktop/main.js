@@ -340,6 +340,10 @@ function initializeWorkspaceBootstrap() {
     requireAuthenticated: authService && authService.requireAuthenticated,
     dialog: dialog,
     workspaceBootstrapService: workspaceBootstrapService,
+    getRuntimePhase: function () {
+      return authenticatedRuntime.getState().phase;
+    },
+    ensureRuntime: activateAuthenticatedRuntime,
   });
   workspaceBootstrap = {
     service: workspaceBootstrapService,
@@ -405,7 +409,9 @@ function initializeAuth() {
     authService: authService,
     sendToRenderer: sendToRenderer,
     onAuthenticated: activateAuthenticatedRuntime,
+    onUnauthenticated: disposeRuntime,
   });
+  initializeWorkspaceBootstrap();
   void authService
     .initialize()
     .then(function (state) {
