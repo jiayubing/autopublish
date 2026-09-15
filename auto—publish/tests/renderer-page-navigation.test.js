@@ -12,7 +12,7 @@ describe("renderer page navigation", { concurrency: false }, function () {
 
   after(closeRenderer);
 
-  it("switches from article-library to content-production without a coordinator owner crash", async function () {
+  it("switches pages without coordinator crashes or reloading hydrated content pages", async function () {
     const page = await browser.newPage();
     const pageErrors = [];
     page.on("pageerror", (error) => {
@@ -49,6 +49,10 @@ describe("renderer page navigation", { concurrency: false }, function () {
       };
       const stub = (value) => new Proxy(value, handler);
       localStorage.setItem("auto-publish:last-main-view", "article-library");
+      window.__contentReadCounts = {
+        listClients: 0,
+        management: 0,
+      };
       window.desktopConsole = {
         auth: {
           getState: () =>
@@ -86,7 +90,10 @@ describe("renderer page navigation", { concurrency: false }, function () {
           onInvalidationDiagnostic: () => () => {},
         },
         content: stub({
-          listClients: () => ok({ clients: [] }),
+          listClients: () => {
+            window.__contentReadCounts.listClients += 1;
+            return ok({ clients: [] });
+          },
           listTemplateCatalog: () =>
             ok({
               revision: "nav",
@@ -96,8 +103,9 @@ describe("renderer page navigation", { concurrency: false }, function () {
             }),
           getClientGroups: () =>
             ok({ revision: 0, groups: [], memberships: [] }),
-          getArticleManagementSnapshot: () =>
-            ok({
+          getArticleManagementSnapshot: () => {
+            window.__contentReadCounts.management += 1;
+            return ok({
               clientId: "",
               revision: 0,
               articles: [],
@@ -106,7 +114,8 @@ describe("renderer page navigation", { concurrency: false }, function () {
               submissionPlatforms: [],
               workflowByArticle: {},
               lifecycleCounts: {},
-            }),
+            });
+          },
           getSubmissionCenterSnapshot: () =>
             ok({
               schemaVersion: 1,
@@ -253,9 +262,45 @@ describe("renderer page navigation", { concurrency: false }, function () {
     await page.getByText("文章库", { exact: true }).first().waitFor({
       timeout: 15000,
     });
+    await page.waitForFunction(
+      () => window.__contentReadCounts.management > 0,
+      null,
+      { timeout: 15000 },
+    );
+
+    const initialCounts = await page.evaluate(() => ({
+      ...window.__contentReadCounts,
+    }));
+
+    await page.locator("#nav-item-content-production").click();
+    await page.getByText("内容生产", { exact: true }).first().waitFor({
+      timeout: 15000,
+    });
+    await page.waitForFunction(
+      (count) => window.__contentReadCounts.listClients > count,
+      initialCounts.listClients,
+      { timeout: 15000 },
+    );
+    const afterProductionCounts = await page.evaluate(() => ({
+      ...window.__contentReadCounts,
+    }));
+
+    await page.locator("#nav-item-article-library").click();
+    await page.getByText("文章库", { exact: true }).first().waitFor({
+      timeout: 15000,
+    });
+    await page.evaluate(
+      () =>
+        new Promise((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(resolve)),
+        ),
+    );
+    const afterLibraryReturnCounts = await page.evaluate(() => ({
+      ...window.__contentReadCounts,
+    }));
+    assert.deepEqual(afterLibraryReturnCounts, afterProductionCounts);
+
     const views = [
-      ["content-production", "内容生产"],
-      ["article-library", "文章库"],
       ["submission-center", "投稿中心"],
       ["resources", "媒体资源"],
       ["settings", "设置"],
@@ -268,6 +313,22 @@ describe("renderer page navigation", { concurrency: false }, function () {
         timeout: 15000,
       });
     }
+    await page.evaluate(
+      () =>
+        new Promise((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(resolve)),
+        ),
+    );
+    const finalCounts = await page.evaluate(() => ({
+      ...window.__contentReadCounts,
+    }));
+    assert.equal(finalCounts.management, afterProductionCounts.management);
+    assert.equal(
+      finalCounts.listClients,
+      afterProductionCounts.listClients + 1,
+      "submission-center should hydrate once; revisiting production/library must not reload",
+    );
+
     const ownerCrash = pageErrors.filter((message) =>
       message.includes("already has an owner"),
     );
