@@ -54,7 +54,7 @@ test("scoped titles and summaries never enumerate another client or load bodies 
   assert.equal(reopened.getArticle("a", "a-0").content.length, 16384);
 });
 
-test("legacy cache rebuild, edits from another store, corrupt sources and search preserve source semantics", async t => {
+test("canonical JSON cache rebuild and edits from another store preserve source semantics", async t => {
   const f = fixture(t);
   f.content.createArticle(f.article("a", 0));
   // Locate the derived file from observed public summary reads, independent of workspace layout.
@@ -66,14 +66,15 @@ test("legacy cache rebuild, edits from another store, corrupt sources and search
   f.reads.length = 0;
   const reopened = f.open();
   assert.equal(reopened.getArticleSummary("a", "a-0").hasContent, true);
-  assert.equal(f.reads.filter(file => file.endsWith(".md")).length, 1);
+  assert.equal(f.reads.filter(file => file.endsWith(".json")).length, 1);
+  assert.equal(f.reads.filter(file => file.endsWith(".md")).length, 0);
   f.content.saveArticle({ ...f.article("a", 0), title: "Updated" });
   assert.equal(reopened.getArticleSummary("a", "a-0").title, "Updated");
   assert.throws(() => f.content.saveArticle({ ...f.article("a", 0), content: "   " }), { code: "ARTICLE_INVALID" });
   assert.equal(reopened.getArticleSummary("a", "a-0").hasContent, true);
   f.content.saveArticle(f.article("a", 0));
-  const bodyFile = f.reads.find(file => file.endsWith(".md"));
-  fs.writeFileSync(bodyFile, "broken source pair");
+  const sourceFile = cachedPath.replace(/\.summary$/, ".json");
+  fs.writeFileSync(sourceFile, "broken source JSON");
   assert.throws(() => reopened.getArticleSummary("a", "a-0"), { code: "ARTICLE_INVALID" });
 });
 

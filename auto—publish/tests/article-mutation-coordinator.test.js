@@ -186,12 +186,11 @@ test("existing article save uses opaque fingerprint CAS and returns the next tok
       path.join(fixture.root, "generated", "client-a", "article-1.json"),
       "utf8",
     );
-    const markdown = fs.readFileSync(
-      path.join(fixture.root, "generated", "client-a", "article-1.md"),
-      "utf8",
-    );
     assert.doesNotMatch(json, /editFingerprint|renderer-must-not-persist/);
-    assert.doesNotMatch(markdown, /editFingerprint|renderer-must-not-persist/);
+    assert.equal(
+      fs.existsSync(path.join(fixture.root, "generated", "client-a", "article-1.md")),
+      false,
+    );
   } finally {
     fixture.close();
   }

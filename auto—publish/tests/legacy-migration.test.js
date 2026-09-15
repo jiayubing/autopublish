@@ -81,6 +81,21 @@ describe("legacy GEO migration", function() {
     assert.deepStrictEqual(snapshot(sourceRoot), sourceBefore);
   });
 
+  it("does not treat a generated markdown-only artifact as an existing article", function() {
+    const generatedDirectory = path.join(workspaceRoot, "generated", "travel-client");
+    fs.mkdirSync(generatedDirectory, { recursive: true });
+    const legacyMarkdown = path.join(generatedDirectory, "legacy-article-8.md");
+    fs.writeFileSync(legacyMarkdown, "legacy unmanaged article\n");
+
+    assert.equal(migrator().dryRun().articlesImported, 1);
+    assert.equal(migrator().migrate().articlesImported, 1);
+    assert.equal(fs.existsSync(legacyMarkdown), true);
+    assert.equal(
+      fs.existsSync(path.join(generatedDirectory, "legacy-article-8.json")),
+      true,
+    );
+  });
+
   it("matches only the exact search query after removing a UTF-8 BOM", function() {
     assert.equal(migrator().dryRun().researchImported, 1);
     fs.writeFileSync(path.join(sourceRoot, "clients", "travel-client", "search_query.txt"), " Shanghai hotels ");

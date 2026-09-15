@@ -21,33 +21,6 @@ function createArticleFileTransaction(options) {
     throw makeError(code, message, cause);
   }
 
-  function reportCleanup(operation, error) {
-    reportDiagnostic({
-      code: "ARTICLE_FILE_CLEANUP_FAILED",
-      module: "article-file-transaction",
-      category: "storage",
-      operationId: "article-file-transaction",
-      metadata: {
-        operation: operation,
-        phase: "cleanup",
-        outcome: "best-effort-failed",
-        errorCode: error && /^[A-Z][A-Z0-9_]{1,127}$/.test(error.code || "")
-          ? error.code
-          : "ARTICLE_FILE_CLEANUP_FAILED"
-      }
-    });
-  }
-
-  function tryRemove(filename, operation) {
-    try {
-      removeRegularFile(filename);
-      return true;
-    } catch (error) {
-      reportCleanup(operation, error);
-      return false;
-    }
-  }
-
   function exists(filename) {
     try {
       fsApi.lstatSync(filename);
@@ -76,6 +49,33 @@ function createArticleFileTransaction(options) {
     fsApi.unlinkSync(filename);
   }
 
+  function reportCleanup(operation, error) {
+    reportDiagnostic({
+      code: "ARTICLE_FILE_CLEANUP_FAILED",
+      module: "article-file-transaction",
+      category: "storage",
+      operationId: "article-file-transaction",
+      metadata: {
+        operation: operation,
+        phase: "cleanup",
+        outcome: "best-effort-failed",
+        errorCode: error && /^[A-Z][A-Z0-9_]{1,127}$/.test(error.code || "")
+          ? error.code
+          : "ARTICLE_FILE_CLEANUP_FAILED",
+      },
+    });
+  }
+
+  function tryRemove(filename, operation) {
+    try {
+      removeRegularFile(filename);
+      return true;
+    } catch (error) {
+      reportCleanup(operation, error);
+      return false;
+    }
+  }
+
   function writeTemporary(filename, contents, suffix) {
     const temporary =
       filename +
@@ -87,17 +87,22 @@ function createArticleFileTransaction(options) {
       (suffix || crypto.randomUUID());
     let operationError = null;
     try {
-      fsApi.writeFileSync(temporary, contents, "utf8");
+      fsApi.writeFileSync(temporary, contents, {
+        encoding: "utf8",
+        flag: "wx",
+      });
       const descriptor = fsApi.openSync(temporary, "r");
       try {
         try {
           fsApi.fsyncSync(descriptor);
         } catch (error) {
-          if (error.code !== "EPERM" && error.code !== "EINVAL") operationError = error;
+          if (error.code !== "EPERM" && error.code !== "EINVAL")
+            operationError = error;
         }
       } finally {
-        try { fsApi.closeSync(descriptor); }
-        catch (error) {
+        try {
+          fsApi.closeSync(descriptor);
+        } catch (error) {
           if (operationError) reportCleanup("temporary-close", error);
           else operationError = error;
         }
@@ -106,21 +111,13 @@ function createArticleFileTransaction(options) {
       assertRegularFile(temporary);
       return temporary;
     } catch (error) {
-      try { if (exists(temporary)) fsApi.unlinkSync(temporary); }
-      catch (cleanupError) { reportCleanup("temporary-write", cleanupError); }
+      try {
+        if (exists(temporary)) fsApi.unlinkSync(temporary);
+      } catch (cleanupError) {
+        reportCleanup("temporary-write", cleanupError);
+      }
       throw error;
     }
-  }
-
-  function transactionFiles(files) {
-    return {
-      journal: path.join(
-        files.directory,
-        path.basename(files.json, ".json") + ".journal",
-      ),
-      jsonBackup: files.json + ".backup",
-      markdownBackup: files.markdown + ".backup",
-    };
   }
 
   function validTemporaryName(name, target) {
@@ -131,116 +128,12 @@ function createArticleFileTransaction(options) {
     );
   }
 
-  function recoverArticlePair(files) {
-    const transaction = transactionFiles(files);
-    if (!exists(transaction.journal)) return;
-    assertRegularFile(transaction.journal);
-    let journal;
-    try {
-      journal = JSON.parse(fsApi.readFileSync(transaction.journal, "utf8"));
-    } catch (error) {
-      fail("ARTICLE_INVALID", "Article transaction journal is invalid", error);
-    }
-    if (
-      !journal ||
-      journal.version !== 1 ||
-      !validTemporaryName(journal.temporaryJson, files.json) ||
-      !validTemporaryName(journal.temporaryMarkdown, files.markdown)
-    ) {
-      fail("ARTICLE_INVALID", "Article transaction journal is invalid");
-    }
-    const hasBackups =
-      exists(transaction.jsonBackup) && exists(transaction.markdownBackup);
-    if (hasBackups) {
-      assertRegularFile(transaction.jsonBackup);
-      assertRegularFile(transaction.markdownBackup);
-      removeRegularFile(files.json);
-      removeRegularFile(files.markdown);
-      fsApi.renameSync(transaction.jsonBackup, files.json);
-      fsApi.renameSync(transaction.markdownBackup, files.markdown);
-    } else if (!exists(files.json) || !exists(files.markdown)) {
-      const temporaryJson = path.join(files.directory, journal.temporaryJson);
-      const temporaryMarkdown = path.join(
-        files.directory,
-        journal.temporaryMarkdown,
-      );
-      if (
-        (!exists(temporaryJson) && !exists(files.json)) ||
-        (!exists(temporaryMarkdown) && !exists(files.markdown))
-      ) {
-        fail("ARTICLE_INVALID", "Article files are incomplete");
-      }
-      if (exists(temporaryJson)) {
-        assertRegularFile(temporaryJson);
-        removeRegularFile(files.json);
-        fsApi.renameSync(temporaryJson, files.json);
-      }
-      if (exists(temporaryMarkdown)) {
-        assertRegularFile(temporaryMarkdown);
-        removeRegularFile(files.markdown);
-        fsApi.renameSync(temporaryMarkdown, files.markdown);
-      }
-    }
-    removeRegularFile(path.join(files.directory, journal.temporaryJson));
-    removeRegularFile(path.join(files.directory, journal.temporaryMarkdown));
-    removeRegularFile(transaction.jsonBackup);
-    removeRegularFile(transaction.markdownBackup);
-    removeRegularFile(transaction.journal);
-  }
-
-  function replaceArticlePair(files, jsonContents, markdownContents) {
-    let temporaryMarkdown = null;
-    let temporaryJson = null;
-    try {
-      temporaryMarkdown = writeTemporary(files.markdown, markdownContents);
-      temporaryJson = writeTemporary(files.json, jsonContents);
-    } catch (error) {
-      if (temporaryMarkdown) tryRemove(temporaryMarkdown, "article-pair-markdown-temp");
-      if (temporaryJson) tryRemove(temporaryJson, "article-pair-json-temp");
-      throw error;
-    }
-    const transaction = transactionFiles(files);
-    let operationError = null;
-    try {
-      fsApi.writeFileSync(
-        transaction.journal,
-        JSON.stringify({
-          version: 1,
-          temporaryJson: path.basename(temporaryJson),
-          temporaryMarkdown: path.basename(temporaryMarkdown),
-        }) + "\n",
-        "utf8",
-      );
-      assertRegularFile(transaction.journal);
-      fault("after-article-journal", { files: files });
-      if (exists(files.markdown)) {
-        assertRegularFile(files.markdown);
-        fsApi.renameSync(files.markdown, transaction.markdownBackup);
-      }
-      fault("after-article-markdown-backup", { files: files });
-      if (exists(files.json)) {
-        assertRegularFile(files.json);
-        fsApi.renameSync(files.json, transaction.jsonBackup);
-      }
-      fault("after-article-json-backup", { files: files });
-      fsApi.renameSync(temporaryMarkdown, files.markdown);
-      fault("after-article-markdown-install", { files: files });
-      fsApi.renameSync(temporaryJson, files.json);
-      fault("after-article-json-install", { files: files });
-      removeRegularFile(transaction.markdownBackup);
-      removeRegularFile(transaction.jsonBackup);
-      removeRegularFile(transaction.journal);
-    } catch (error) {
-      operationError = error;
-      throw error;
-    } finally {
-      if (!exists(transaction.journal)) {
-        const markdownClean = tryRemove(temporaryMarkdown, "article-pair-markdown-temp");
-        const jsonClean = tryRemove(temporaryJson, "article-pair-json-temp");
-        if (!operationError && (!markdownClean || !jsonClean))
-          fail("ARTICLE_FILE_TRANSACTION_INCOMPLETE", "Article file cleanup needs recovery");
-      }
-    }
+  function articleJsonTransactionFiles(files) {
+    const stem = path.basename(files.json, ".json");
+    return {
+      journal: path.join(files.directory, stem + ".journal"),
+      backup: files.json + ".backup",
+    };
   }
 
   function transactionJournal(files) {
@@ -266,8 +159,11 @@ function createArticleFileTransaction(options) {
       operationError = error;
       throw error;
     } finally {
-      if (!tryRemove(temporary, "journal-temp" ) && !operationError)
-        fail("ARTICLE_FILE_TRANSACTION_INCOMPLETE", "Article journal cleanup needs recovery");
+      if (!tryRemove(temporary, "journal-temp") && !operationError)
+        fail(
+          "ARTICLE_FILE_TRANSACTION_INCOMPLETE",
+          "Article journal cleanup needs recovery",
+        );
     }
   }
 
@@ -275,12 +171,12 @@ function createArticleFileTransaction(options) {
     removeRegularFile(filename);
   }
 
-  function readJournal(filename) {
+  function readJournal(filename, message) {
     assertRegularFile(filename);
     try {
       return JSON.parse(fsApi.readFileSync(filename, "utf8"));
     } catch (error) {
-      fail("ARTICLE_INVALID", "Article trash journal is invalid", error);
+      fail("ARTICLE_INVALID", message, error);
     }
   }
 
@@ -296,6 +192,112 @@ function createArticleFileTransaction(options) {
       }
     }
     return rollbackError;
+  }
+
+  function recoverArticleJson(files) {
+    const transaction = articleJsonTransactionFiles(files);
+    if (!exists(transaction.journal)) {
+      if (exists(files.json)) {
+        assertRegularFile(files.json);
+        if (exists(transaction.backup)) removeRegularFile(transaction.backup);
+      } else if (exists(transaction.backup)) {
+        assertRegularFile(transaction.backup);
+        fsApi.renameSync(transaction.backup, files.json);
+      }
+      return;
+    }
+
+    const journal = readJournal(
+      transaction.journal,
+      "Article transaction journal is invalid",
+    );
+    const currentJournal =
+      journal &&
+      journal.version === 2 &&
+      journal.kind === "article-json-replace";
+    const legacyJournal =
+      journal &&
+      journal.version === 1 &&
+      validTemporaryName(journal.temporaryJson, files.json);
+    if (!currentJournal && !legacyJournal)
+      fail("ARTICLE_INVALID", "Article transaction journal is invalid");
+
+    if (
+      currentJournal &&
+      (journal.backup !== path.basename(transaction.backup) ||
+        !validTemporaryName(journal.temporaryJson, files.json))
+    )
+      fail("ARTICLE_INVALID", "Article transaction journal is invalid");
+
+    const temporary = path.join(files.directory, journal.temporaryJson);
+    const hasJson = exists(files.json);
+    const hasTemporary = exists(temporary);
+    const hasBackup = exists(transaction.backup);
+
+    if (hasJson) {
+      assertRegularFile(files.json);
+      if (hasTemporary) removeRegularFile(temporary);
+      if (hasBackup) removeRegularFile(transaction.backup);
+    } else if (hasBackup) {
+      assertRegularFile(transaction.backup);
+      if (hasTemporary) removeRegularFile(temporary);
+      fsApi.renameSync(transaction.backup, files.json);
+    } else if (hasTemporary) {
+      assertRegularFile(temporary);
+      fsApi.renameSync(temporary, files.json);
+    } else {
+      fail("ARTICLE_INVALID", "Article transaction is incomplete");
+    }
+    clearJournal(transaction.journal);
+  }
+
+  function replaceArticleJson(files, jsonContents) {
+    const transaction = articleJsonTransactionFiles(files);
+    let temporary = null;
+    let terminalInstalled = false;
+    try {
+      recoverArticleJson(files);
+      temporary = writeTemporary(files.json, jsonContents, "article-json");
+      fault("after-article-json-temp", { files: files, temporary: temporary });
+      writeJournal(transaction.journal, {
+        version: 2,
+        kind: "article-json-replace",
+        temporaryJson: path.basename(temporary),
+        backup: path.basename(transaction.backup),
+      });
+      fault("after-article-json-journal", { files: files });
+      if (exists(files.json)) {
+        assertRegularFile(files.json);
+        fsApi.renameSync(files.json, transaction.backup);
+      }
+      fault("after-article-json-backup", { files: files });
+      fsApi.renameSync(temporary, files.json);
+      terminalInstalled = true;
+      fault("after-article-json-install", { files: files });
+      removeRegularFile(transaction.backup);
+      clearJournal(transaction.journal);
+    } catch (error) {
+      let rollbackError = null;
+      try {
+        if (!exists(files.json) && exists(transaction.backup))
+          fsApi.renameSync(transaction.backup, files.json);
+      } catch (cleanupError) {
+        rollbackError = cleanupError;
+        reportCleanup("article-json-rollback", cleanupError);
+      }
+
+      if (terminalInstalled || exists(files.json))
+        tryRemove(transaction.backup, "article-json-backup");
+      if (temporary) tryRemove(temporary, "article-json-temp");
+      if (!rollbackError) tryRemove(transaction.journal, "article-json-journal");
+      if (rollbackError)
+        fail(
+          "ARTICLE_FILE_TRANSACTION_INCOMPLETE",
+          "Article JSON transaction needs recovery",
+          rollbackError,
+        );
+      throw error;
+    }
   }
 
   function moveToTrash(input) {
@@ -317,10 +319,6 @@ function createArticleFileTransaction(options) {
           from: path.basename(source.json),
           to: path.basename(destination.json),
         },
-        markdown: {
-          from: path.basename(source.markdown),
-          to: path.basename(destination.markdown),
-        },
         tombstone: path.basename(destination.tombstone),
         temporaryTombstone: path.basename(temporaryTombstone),
       });
@@ -328,34 +326,29 @@ function createArticleFileTransaction(options) {
       tryRemove(temporaryTombstone, "trash-tombstone-temp");
       throw error;
     }
+
     try {
       fsApi.renameSync(source.json, destination.json);
       moves.push({ from: source.json, to: destination.json });
       fault("after-trash-json", { source: source, destination: destination });
-      fsApi.renameSync(source.markdown, destination.markdown);
-      moves.push({ from: source.markdown, to: destination.markdown });
-      fault("after-trash-markdown", {
-        source: source,
-        destination: destination,
-      });
       fsApi.renameSync(temporaryTombstone, destination.tombstone);
+      moves.push({ from: temporaryTombstone, to: destination.tombstone });
       fault("after-trash-tombstone", {
         source: source,
         destination: destination,
       });
       clearJournal(journal);
-      return;
     } catch (error) {
-      const temporaryClean = tryRemove(temporaryTombstone, "trash-tombstone-temp");
-      const tombstoneClean = tryRemove(destination.tombstone, "trash-tombstone");
       const rollbackError = rollbackMoves(moves);
+      tryRemove(destination.tombstone, "trash-tombstone");
+      tryRemove(temporaryTombstone, "trash-tombstone-temp");
+      if (!rollbackError) tryRemove(journal, "trash-journal");
       if (rollbackError)
         fail(
           "ARTICLE_FILE_TRANSACTION_INCOMPLETE",
           "Article trash transaction needs recovery",
           rollbackError,
         );
-      if (temporaryClean && tombstoneClean) tryRemove(journal, "trash-journal");
       throw error;
     }
   }
@@ -363,64 +356,60 @@ function createArticleFileTransaction(options) {
   function recoverTrashMove(source, destination) {
     const journal = transactionJournal(destination);
     if (!exists(journal)) return;
-    const record = readJournal(journal);
+    const record = readJournal(journal, "Article trash journal is invalid");
     if (!record || record.version !== 1 || typeof record.kind !== "string")
       fail("ARTICLE_INVALID", "Article trash journal is invalid");
+
     if (record.kind === "restore-from-trash")
       return recoverRestore(destination, source, journal, record);
     if (record.kind === "permanent-delete")
       return recoverPermanentDelete(destination, journal, record);
     if (
       record.kind !== "move-to-trash" ||
+      !record.json ||
+      record.json.from !== path.basename(source.json) ||
+      record.json.to !== path.basename(destination.json) ||
+      record.tombstone !== path.basename(destination.tombstone) ||
       !validTemporaryName(record.temporaryTombstone, destination.tombstone)
     )
       fail("ARTICLE_INVALID", "Article trash journal is invalid");
+
     const temporary = path.join(
       destination.directory,
       record.temporaryTombstone,
     );
-    const sourceState = [source.json, source.markdown].map(exists);
-    const destinationState = [
-      destination.json,
-      destination.markdown,
-      destination.tombstone,
-    ].map(exists);
-    if (!sourceState.some(Boolean) && destinationState.every(Boolean)) {
+    const sourceJson = exists(source.json);
+    const destinationJson = exists(destination.json);
+    const destinationTombstone = exists(destination.tombstone);
+
+    if (!sourceJson && destinationJson && destinationTombstone) {
       removeRegularFile(temporary);
       clearJournal(journal);
       return;
     }
-    if (sourceState.every(Boolean) && !destinationState.some(Boolean)) {
+    if (sourceJson && !destinationJson && !destinationTombstone) {
       removeRegularFile(temporary);
       clearJournal(journal);
       return;
     }
-    if (
-      sourceState.some(function (present, index) {
-        return present && destinationState[index];
-      }) ||
-      (destinationState[2] && sourceState.some(Boolean))
-    )
-      fail(
-        "ARTICLE_TRASH_CONFLICT",
-        "Article trash transaction has conflicting files",
-      );
-    if (destinationState.some(Boolean)) {
-      const rollbackError = rollbackMoves([
-        { from: source.markdown, to: destination.markdown },
-        { from: source.json, to: destination.json },
-      ]);
-      if (rollbackError)
-        fail(
-          "ARTICLE_FILE_TRANSACTION_INCOMPLETE",
-          "Article trash transaction needs recovery",
-          rollbackError,
-        );
+    if (!sourceJson && destinationJson && !destinationTombstone) {
+      assertRegularFile(destination.json);
+      fsApi.renameSync(destination.json, source.json);
+      removeRegularFile(temporary);
+      clearJournal(journal);
+      return;
+    }
+    if (sourceJson && !destinationJson && destinationTombstone) {
       removeRegularFile(destination.tombstone);
       removeRegularFile(temporary);
       clearJournal(journal);
       return;
     }
+    if (sourceJson && destinationJson)
+      fail(
+        "ARTICLE_TRASH_CONFLICT",
+        "Article trash transaction has conflicting files",
+      );
     fail(
       "ARTICLE_TRASH_CONFLICT",
       "Article trash transaction has unknown state",
@@ -430,137 +419,37 @@ function createArticleFileTransaction(options) {
   function recoverRestore(trash, generated, journal, record) {
     if (
       !record.json ||
-      !record.markdown ||
+      record.json.from !== path.basename(trash.json) ||
+      record.json.to !== path.basename(generated.json) ||
       record.tombstone !== path.basename(trash.tombstone)
     )
       fail("ARTICLE_INVALID", "Article restore journal is invalid");
-    const trashState = [trash.json, trash.markdown, trash.tombstone].map(
-      exists,
-    );
-    const generatedState = [generated.json, generated.markdown].map(exists);
-    if (!generatedState.some(Boolean) && trashState.every(Boolean)) {
+
+    const trashJson = exists(trash.json);
+    const trashTombstone = exists(trash.tombstone);
+    const generatedJson = exists(generated.json);
+    if (trashJson && trashTombstone && !generatedJson) {
       clearJournal(journal);
       return;
     }
-    if (generatedState.every(Boolean) && !trashState[0] && !trashState[1]) {
-      removeRegularFile(trash.tombstone);
+    if (!trashJson && generatedJson && !trashTombstone) {
       clearJournal(journal);
       return;
     }
-    if (generatedState.some(Boolean) && trashState.some(Boolean)) {
-      const rollbackError = rollbackMoves([
-        { from: trash.markdown, to: generated.markdown },
-        { from: trash.json, to: generated.json },
-      ]);
-      if (rollbackError)
-        fail(
-          "ARTICLE_FILE_TRANSACTION_INCOMPLETE",
-          "Article restore transaction needs recovery",
-          rollbackError,
-        );
+    if (!trashJson && generatedJson && trashTombstone) {
+      assertRegularFile(generated.json);
+      fsApi.renameSync(generated.json, trash.json);
       clearJournal(journal);
       return;
     }
+    if (trashJson && generatedJson)
+      fail(
+        "ARTICLE_RESTORE_CONFLICT",
+        "Article restore transaction has conflicting files",
+      );
     fail(
       "ARTICLE_RESTORE_CONFLICT",
-      "Article restore transaction has conflicting files",
-    );
-  }
-
-  function recoverPermanentDelete(files, journal, record) {
-    if (
-      !record.staging ||
-      path.basename(record.staging) !== record.staging ||
-      !record.staging.startsWith(
-        path.basename(files.json, ".json") + ".deleting-",
-      )
-    )
-      fail("ARTICLE_INVALID", "Permanent deletion journal is invalid");
-    const staging = path.join(files.directory, record.staging);
-    const stagingExists = exists(staging);
-    if (stagingExists) {
-      let stats;
-      try {
-        stats = fsApi.lstatSync(staging);
-      } catch (error) {
-        fail("ARTICLE_INVALID", "Permanent deletion staging is invalid", error);
-      }
-      if (!stats.isDirectory() || stats.isSymbolicLink())
-        fail(
-          "ARTICLE_PATH_OUT_OF_BOUNDS",
-          "Permanent deletion staging is unsafe",
-        );
-    }
-    const terminal =
-      exists(files.tombstone) &&
-      (() => {
-        try {
-          return (
-            JSON.parse(fsApi.readFileSync(files.tombstone, "utf8"))
-              .permanentlyDeleted === true
-          );
-        } catch (error) {
-          fail("ARTICLE_INVALID", "Article tombstone is invalid", error);
-        }
-      })();
-    if (terminal) {
-      if (stagingExists) {
-        const entries = fsApi.readdirSync(staging, { withFileTypes: true });
-        entries.forEach(function (entry) {
-          if (
-            !entry.isFile() ||
-            entry.isSymbolicLink() ||
-            ![
-              path.basename(files.json),
-              path.basename(files.markdown),
-            ].includes(entry.name)
-          )
-            fail("ARTICLE_INVALID", "Permanent deletion staging is invalid");
-          assertRegularFile(path.join(staging, entry.name));
-        });
-        fsApi.rmSync(staging, { recursive: true, force: true });
-      }
-      clearJournal(journal);
-      return;
-    }
-    const stagedJson = path.join(staging, path.basename(files.json));
-    const stagedMarkdown = path.join(staging, path.basename(files.markdown));
-    const stagedState = [stagedJson, stagedMarkdown].map(exists);
-    const originalState = [files.json, files.markdown].map(exists);
-    if (
-      stagedState.some(function (present, index) {
-        return present && originalState[index];
-      })
-    )
-      fail(
-        "ARTICLE_TRASH_CONFLICT",
-        "Permanent deletion transaction has conflicting files",
-      );
-    if (stagedState.some(Boolean)) {
-      const rollbackError = rollbackMoves([
-        { from: files.markdown, to: stagedMarkdown },
-        { from: files.json, to: stagedJson },
-      ]);
-      if (rollbackError)
-        fail(
-          "ARTICLE_FILE_TRANSACTION_INCOMPLETE",
-          "Permanent deletion transaction needs recovery",
-          rollbackError,
-        );
-      if (stagingExists)
-        fsApi.rmSync(staging, { recursive: true, force: true });
-      clearJournal(journal);
-      return;
-    }
-    if (originalState.every(Boolean) && stagingExists)
-      fsApi.rmSync(staging, { recursive: true, force: true });
-    if (originalState.every(Boolean)) {
-      clearJournal(journal);
-      return;
-    }
-    fail(
-      "ARTICLE_TRASH_CONFLICT",
-      "Permanent deletion transaction has conflicting files",
+      "Article restore transaction has unknown state",
     );
   }
 
@@ -574,35 +463,122 @@ function createArticleFileTransaction(options) {
         from: path.basename(source.json),
         to: path.basename(destination.json),
       },
-      markdown: {
-        from: path.basename(source.markdown),
-        to: path.basename(destination.markdown),
-      },
       tombstone: path.basename(source.tombstone),
     });
     try {
       fsApi.renameSync(source.json, destination.json);
       moves.push({ from: source.json, to: destination.json });
       fault("after-restore-json", { source: source, destination: destination });
-      fsApi.renameSync(source.markdown, destination.markdown);
-      moves.push({ from: source.markdown, to: destination.markdown });
-      fault("after-restore-markdown", {
+      removeRegularFile(source.tombstone);
+      fault("after-restore-tombstone", {
         source: source,
         destination: destination,
       });
-      removeRegularFile(source.tombstone);
       clearJournal(journal);
     } catch (error) {
+      if (!exists(source.tombstone) && exists(destination.json) && !exists(source.json)) {
+        tryRemove(journal, "restore-journal");
+        throw error;
+      }
       const rollbackError = rollbackMoves(moves);
+      if (!rollbackError) tryRemove(journal, "restore-journal");
       if (rollbackError)
         fail(
           "ARTICLE_FILE_TRANSACTION_INCOMPLETE",
           "Article restore transaction needs recovery",
           rollbackError,
         );
-      tryRemove(journal, "restore-journal");
       throw error;
     }
+  }
+
+  function assertStagingDirectory(staging, files) {
+    if (!exists(staging)) return false;
+    let stats;
+    try {
+      stats = fsApi.lstatSync(staging);
+    } catch (error) {
+      fail("ARTICLE_PATH_OUT_OF_BOUNDS", "Permanent deletion staging is unsafe", error);
+    }
+    if (!stats.isDirectory() || stats.isSymbolicLink())
+      fail("ARTICLE_PATH_OUT_OF_BOUNDS", "Permanent deletion staging is unsafe");
+    const entries = fsApi.readdirSync(staging, { withFileTypes: true });
+    entries.forEach(function (entry) {
+      if (
+        !entry.isFile() ||
+        entry.isSymbolicLink() ||
+        entry.name !== path.basename(files.json)
+      )
+        fail("ARTICLE_INVALID", "Permanent deletion staging is invalid");
+      assertRegularFile(path.join(staging, entry.name));
+    });
+    return true;
+  }
+
+  function removeStaging(staging, files) {
+    if (!assertStagingDirectory(staging, files)) return;
+    fsApi.rmSync(staging, { recursive: true, force: true });
+  }
+
+  function recoverPermanentDelete(files, journal, record) {
+    if (
+      !record.staging ||
+      path.basename(record.staging) !== record.staging ||
+      !record.staging.startsWith(
+        path.basename(files.json, ".json") + ".deleting-",
+      ) ||
+      record.json !== path.basename(files.json) ||
+      record.tombstone !== path.basename(files.tombstone)
+    )
+      fail("ARTICLE_INVALID", "Permanent deletion journal is invalid");
+
+    const staging = path.join(files.directory, record.staging);
+    const stagingExists = assertStagingDirectory(staging, files);
+    const stagedJson = path.join(staging, path.basename(files.json));
+    const stagedState = stagingExists && exists(stagedJson);
+    const originalState = exists(files.json);
+    let terminal = false;
+    if (exists(files.tombstone)) {
+      assertRegularFile(files.tombstone);
+      try {
+        terminal = JSON.parse(fsApi.readFileSync(files.tombstone, "utf8"))
+          .permanentlyDeleted === true;
+      } catch (error) {
+        fail("ARTICLE_INVALID", "Article tombstone is invalid", error);
+      }
+    }
+
+    if (terminal) {
+      if (originalState)
+        fail(
+          "ARTICLE_TRASH_CONFLICT",
+          "Permanent deletion transaction has conflicting files",
+        );
+      removeStaging(staging, files);
+      clearJournal(journal);
+      return;
+    }
+    if (stagedState && originalState)
+      fail(
+        "ARTICLE_TRASH_CONFLICT",
+        "Permanent deletion transaction has conflicting files",
+      );
+    if (stagedState && !originalState) {
+      assertRegularFile(stagedJson);
+      fsApi.renameSync(stagedJson, files.json);
+      removeStaging(staging, files);
+      clearJournal(journal);
+      return;
+    }
+    if (!stagedState && originalState) {
+      removeStaging(staging, files);
+      clearJournal(journal);
+      return;
+    }
+    fail(
+      "ARTICLE_TRASH_CONFLICT",
+      "Permanent deletion transaction has conflicting files",
+    );
   }
 
   function writeTerminalTombstone(files, contents) {
@@ -650,45 +626,38 @@ function createArticleFileTransaction(options) {
     fsApi.mkdirSync(staging);
     const staged = [];
     let terminalWritten = false;
-    writeJournal(journal, {
-      version: 1,
-      kind: "permanent-delete",
-      staging: path.basename(staging),
-      json: path.basename(files.json),
-      markdown: path.basename(files.markdown),
-      tombstone: path.basename(files.tombstone),
-    });
     try {
-      [files.json, files.markdown].forEach(function (filename) {
-        const target = path.join(staging, path.basename(filename));
-        fsApi.renameSync(filename, target);
-        staged.push({ from: filename, to: target });
-        fault(
-          "after-permanent-stage-" +
-            path.basename(filename, path.extname(filename)),
-          { files: files },
-        );
+      writeJournal(journal, {
+        version: 1,
+        kind: "permanent-delete",
+        staging: path.basename(staging),
+        json: path.basename(files.json),
+        tombstone: path.basename(files.tombstone),
       });
+      fsApi.renameSync(files.json, path.join(staging, path.basename(files.json)));
+      staged.push({
+        from: files.json,
+        to: path.join(staging, path.basename(files.json)),
+      });
+      fault(
+        "after-permanent-stage-" +
+          path.basename(files.json, path.extname(files.json)),
+        { files: files },
+      );
       writeTerminalTombstone(files, terminalContents);
       terminalWritten = true;
       fsApi.rmSync(staging, { recursive: true, force: true });
       clearJournal(journal);
     } catch (error) {
       if (!terminalWritten) {
-        const rollbackError = rollbackMoves(
-          staged.map(function (move) {
-            return { from: move.from, to: move.to };
-          }),
-        );
+        const rollbackError = rollbackMoves(staged);
         if (!rollbackError) {
-          let stagingClean = true;
           try {
             fsApi.rmSync(staging, { recursive: true, force: true });
           } catch (cleanupError) {
-            stagingClean = false;
             reportCleanup("permanent-delete-staging", cleanupError);
           }
-          if (stagingClean) tryRemove(journal, "permanent-delete-journal");
+          tryRemove(journal, "permanent-delete-journal");
         }
         if (rollbackError)
           fail(
@@ -705,8 +674,8 @@ function createArticleFileTransaction(options) {
     assertRegularFile,
     removeRegularFile,
     writeTemporary,
-    recoverArticlePair,
-    replaceArticlePair,
+    recoverArticleJson,
+    replaceArticleJson,
     moveToTrash,
     recoverTrashMove,
     restoreFromTrash,

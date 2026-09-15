@@ -15,8 +15,6 @@ const {
 const {
   normalizeArticle,
   articleForPersistence,
-  markdownFor,
-  parseMarkdown,
   assertTombstone,
 } = require("./article-serialization");
 
@@ -71,27 +69,18 @@ function createArticleStore(workspaceRoot, options) {
 
   function readArticle(clientId, articleId, providedFiles) {
     const files = providedFiles || articlePaths(clientId, articleId, false);
-    const hasJson = exists(files.json);
-    const hasMarkdown = exists(files.markdown);
-    if (!hasJson && !hasMarkdown) throw storeError("ARTICLE_NOT_FOUND", "Article was not found");
-    if (!hasJson || !hasMarkdown) throw storeError("ARTICLE_INVALID", "Article files are incomplete");
+    if (!exists(files.json)) throw storeError("ARTICLE_NOT_FOUND", "Article was not found");
     assertArticleFile(files.json, files.directory);
-    assertArticleFile(files.markdown, files.directory);
     const normalized = normalizeArticle(readJson(files.json, "ARTICLE_INVALID", "Article JSON is invalid", files.directory));
     if (normalized.id !== articleId || normalized.clientId !== clientId) throw storeError("ARTICLE_INVALID", "Article metadata does not match its path");
-    let markdown;
-    try { markdown = parseMarkdown(fsApi.readFileSync(files.markdown, "utf8")); }
-    catch (error) { if (error && error.code === "ARTICLE_INVALID") throw error; throw storeError("ARTICLE_INVALID", "Article markdown is invalid", error); }
-    if (markdown.title !== normalized.title || markdown.content !== normalized.content) throw storeError("ARTICLE_INVALID", "Article markdown does not match metadata");
     return normalized;
   }
 
-  function saveArticlePairUnlocked(files, normalized) {
-    transactions.recoverArticlePair(files);
-    transactions.replaceArticlePair(
+  function saveArticleUnlocked(files, normalized) {
+    transactions.recoverArticleJson(files);
+    transactions.replaceArticleJson(
       files,
       JSON.stringify(articleForPersistence(normalized), null, 2) + "\n",
-      markdownFor(normalized),
     );
     try { rememberSummary(files, projectArticleSummary(normalized), readVersion(files, true)); }
     catch (error) {
@@ -105,7 +94,7 @@ function createArticleStore(workspaceRoot, options) {
     const normalized = normalizeArticle(article);
     const files = articlePaths(normalized.clientId, normalized.id, true);
     return articleLock.withLock(files, function () {
-      return saveArticlePairUnlocked(files, normalized);
+      return saveArticleUnlocked(files, normalized);
     });
   }
 
@@ -113,11 +102,11 @@ function createArticleStore(workspaceRoot, options) {
     const normalized = normalizeArticle(article);
     const files = articlePaths(normalized.clientId, normalized.id, true);
     return articleLock.withLock(files, function () {
-      transactions.recoverArticlePair(files);
-      if (exists(files.json) || exists(files.markdown)) {
+      transactions.recoverArticleJson(files);
+      if (exists(files.json)) {
         throw storeError("ARTICLE_ID_CONFLICT", "Article identity already exists");
       }
-      return saveArticlePairUnlocked(files, normalized);
+      return saveArticleUnlocked(files, normalized);
     });
   }
 
@@ -125,17 +114,37 @@ function createArticleStore(workspaceRoot, options) {
     const files = articlePaths(clientId, articleId, false);
     if (!exists(files.directory)) throw storeError("ARTICLE_NOT_FOUND", "Article was not found");
     return articleLock.withLock(files, function () {
-      transactions.recoverArticlePair(files);
+      transactions.recoverArticleJson(files);
       return readArticle(clientId, articleId);
     });
   }
 
   function listArticleIds(clientId, files = articlePaths(clientId, "list-probe", false)) {
     if (!exists(files.directory)) return [];
-    const names = [...new Set(fsApi.readdirSync(files.directory, { withFileTypes: true })
-      .filter(function (entry) { return entry.isFile() && !entry.isSymbolicLink() && (entry.name.toLowerCase().endsWith(".json") || (entry.name.endsWith(".journal") && !entry.name.endsWith(".trash.journal"))); })
-      .map(function (entry) { return entry.name.slice(0, entry.name.endsWith(".journal") ? -8 : -5); }))];
-    return names;
+    const entries = fsApi.readdirSync(files.directory, { withFileTypes: true });
+    const journalNames = entries
+      .filter(function (entry) {
+        const name = entry.name.toLowerCase();
+        return entry.isFile() && !entry.isSymbolicLink() &&
+          name.endsWith(".journal") && !name.endsWith(".trash.journal");
+      })
+      .map(function (entry) { return entry.name.slice(0, -8); });
+    const filesFor = typeof files.filesFor === "function"
+      ? files.filesFor
+      : function (articleId) { return articlePaths(clientId, articleId, false); };
+    journalNames.forEach(function (articleId) {
+      const itemFiles = filesFor(articleId);
+      articleLock.withLock(itemFiles, function () {
+        transactions.recoverArticleJson(itemFiles);
+      });
+    });
+    return Array.from(new Set(fsApi.readdirSync(files.directory, { withFileTypes: true })
+      .filter(function (entry) {
+        const name = entry.name.toLowerCase();
+        return entry.isFile() && !entry.isSymbolicLink() &&
+          name.endsWith(".json");
+      })
+      .map(function (entry) { return entry.name.slice(0, -5); })));
   }
 
   function listArticles(clientId) {
@@ -147,8 +156,9 @@ function createArticleStore(workspaceRoot, options) {
   }
 
   function readListedArticle(clientId, articleId, itemFiles) {
-      // A stable pair can be read without creating a write lock. Any concurrent
-      // replacement or recovery marker falls back to the existing locked read.
+      // A stable canonical JSON file can be read without creating a write lock.
+      // Any concurrent replacement or recovery marker falls back to the existing
+      // locked read.
       const before = readVersion(itemFiles);
       if (before !== null) {
         let article, readError;
@@ -160,7 +170,7 @@ function createArticleStore(workspaceRoot, options) {
         }
       }
       return articleLock.withLock(itemFiles, function () {
-        transactions.recoverArticlePair(itemFiles);
+        transactions.recoverArticleJson(itemFiles);
         return readArticle(clientId, articleId);
       });
   }
@@ -169,13 +179,10 @@ function createArticleStore(workspaceRoot, options) {
     const stem = files.json.slice(0, -5);
     if ((!locked && exists(stem + ".article-lock")) || exists(stem + ".journal")) return null;
     try {
-      const version = [files.json, files.markdown].map(function (filename) {
-        const stat = fsApi.lstatSync(filename, { bigint: true });
-        if (!stat.isFile() || stat.isSymbolicLink() || typeof stat.mtimeNs !== "bigint") return null;
-        return [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(":");
-      });
-      if (version.includes(null) || (!locked && exists(stem + ".article-lock")) || exists(stem + ".journal")) return null;
-      return version.join("|");
+      const stat = fsApi.lstatSync(files.json, { bigint: true });
+      if (!stat.isFile() || stat.isSymbolicLink() || typeof stat.mtimeNs !== "bigint") return null;
+      if ((!locked && exists(stem + ".article-lock")) || exists(stem + ".journal")) return null;
+      return [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(":");
     } catch (error) {
       if (error && error.code === "ENOENT") return null;
       throw error;
@@ -306,13 +313,13 @@ function createArticleStore(workspaceRoot, options) {
     });
   }
 
-  function assertTrashPair(files) {
-    const present = [files.json, files.markdown, files.tombstone].map(exists);
+  function assertTrashFiles(files) {
+    const present = [files.json, files.tombstone].map(exists);
     if (!present.every(Boolean)) {
-      if (present.some(Boolean)) throw storeError("ARTICLE_INVALID", "Article trash files are incomplete");
+      if (present.some(Boolean)) throw storeError("ARTICLE_INVALID", "Article trash JSON and tombstone are incomplete");
       throw storeError("ARTICLE_NOT_FOUND", "Trashed article was not found");
     }
-    present.forEach(function (_, index) { assertArticleFile([files.json, files.markdown, files.tombstone][index], files.directory); });
+    present.forEach(function (_, index) { assertArticleFile([files.json, files.tombstone][index], files.directory); });
   }
 
   function readTrashedArticleUnlocked(clientId, articleId) {
@@ -320,27 +327,24 @@ function createArticleStore(workspaceRoot, options) {
     recoverTrashTransaction(clientId, articleId, files);
     const tombstone = getTrashedTombstoneUnlocked(clientId, articleId, files);
     if (tombstone.permanentlyDeleted === true) throw storeError("ARTICLE_PERMANENTLY_DELETED", "Article was permanently deleted");
-    assertTrashPair(files);
-    let markdown;
-    try { markdown = parseMarkdown(fsApi.readFileSync(files.markdown, "utf8")); }
-    catch (error) { throw error && error.code === "ARTICLE_INVALID" ? error : storeError("ARTICLE_INVALID", "Trashed article markdown is invalid", error); }
+    assertTrashFiles(files);
     const article = normalizeArticle(readJson(files.json, "ARTICLE_INVALID", "Trashed article JSON is invalid", files.directory));
-    if (article.id !== articleId || article.clientId !== clientId || article.title !== markdown.title || article.content !== markdown.content || article.status !== tombstone.status) throw storeError("ARTICLE_INVALID", "Trashed article files do not match");
+    if (article.id !== articleId || article.clientId !== clientId || article.status !== tombstone.status) throw storeError("ARTICLE_INVALID", "Trashed article JSON does not match tombstone");
     return { article: article, tombstone: tombstone, files: files };
   }
 
   function moveArticleToTrashUnlocked(clientId, articleId, tombstone, operationId, expectedFingerprint, source) {
     source = source || sourcePaths(clientId, articleId, false);
     if (!exists(source.directory)) throw storeError("ARTICLE_NOT_FOUND", "Article was not found");
-    transactions.recoverArticlePair(source);
+    transactions.recoverArticleJson(source);
     const article = readArticle(clientId, articleId, source);
     const normalizedTombstone = assertTombstone(Object.assign({}, tombstone, operationId === undefined ? {} : { operationId: operationId }), clientId, articleId);
     if (expectedFingerprint !== undefined && (typeof expectedFingerprint !== "string" || !/^[a-f0-9]{64}$/.test(expectedFingerprint) || fingerprintArticle(article) !== expectedFingerprint || normalizedTombstone.contentFingerprint !== expectedFingerprint)) throw storeError("ARTICLE_REMOVAL_CONTENT_CHANGED", "Article content changed before it could be moved to trash");
     if (normalizedTombstone.status !== article.status) throw storeError("ARTICLE_INVALID", "Article tombstone status does not match article");
     const destination = getTrashedPaths(clientId, articleId, true);
-    const destinationState = [destination.json, destination.markdown, destination.tombstone].map(exists);
+    const destinationState = [destination.json, destination.tombstone].map(exists);
     if (destinationState.some(Boolean)) {
-      if (destinationState.every(Boolean) && !exists(source.json) && !exists(source.markdown)) {
+      if (destinationState.every(Boolean) && !exists(source.json)) {
         const existing = readJson(destination.tombstone, "ARTICLE_INVALID", "Article tombstone is invalid", destination.directory);
         if (operationId !== undefined && existing.operationId !== operationId) throw storeError("ARTICLE_TRASH_CONFLICT", "Trashed article operation does not match");
         return assertTombstone(existing, clientId, articleId);
@@ -411,7 +415,7 @@ function createArticleStore(workspaceRoot, options) {
     function read(ref) {
       assertOpen();
       const entry = entryFor(ref);
-      transactions.recoverArticlePair(entry.files);
+      transactions.recoverArticleJson(entry.files);
       return readArticle(entry.ref.clientId, entry.ref.articleId, entry.files);
     }
     function replace(ref, article, expectedFingerprint) {
@@ -425,7 +429,7 @@ function createArticleStore(workspaceRoot, options) {
       if (expectedFingerprint !== undefined && fingerprintArticle(current) !== expectedFingerprint) {
         throw storeError("ARTICLE_EDIT_CONFLICT", "Article changed before it could be saved");
       }
-      return saveArticlePairUnlocked(entry.files, normalized);
+      return saveArticleUnlocked(entry.files, normalized);
     }
     function move(ref, tombstone, operationId, expectedFingerprint) {
       assertOpen();
@@ -482,7 +486,7 @@ function createArticleStore(workspaceRoot, options) {
   function restoreTrashedArticleUnlocked(clientId, articleId) {
     const destination = sourcePaths(clientId, articleId, true);
     const trashed = readTrashedArticleUnlocked(clientId, articleId);
-    if (exists(destination.json) || exists(destination.markdown)) throw storeError("ARTICLE_RESTORE_CONFLICT", "An article with this id already exists");
+    if (exists(destination.json)) throw storeError("ARTICLE_RESTORE_CONFLICT", "An article with this id already exists");
     transactions.restoreFromTrash(trashed.files, destination);
     return trashed.article;
   }
@@ -497,9 +501,27 @@ function createArticleStore(workspaceRoot, options) {
   function listTrashedArticles(clientId) {
     const probe = policy.trashPaths(clientId, "list-probe", false);
     if (!probe || !exists(probe.directory)) return [];
+    const entries = fsApi.readdirSync(probe.directory, { withFileTypes: true });
+    const journalNames = entries
+      .filter(function (entry) {
+        return entry.isFile() && !entry.isSymbolicLink() &&
+          entry.name.toLowerCase().endsWith(".trash.journal");
+      })
+      .map(function (entry) { return entry.name.slice(0, -14); });
+    journalNames.forEach(function (articleId) {
+      const lockFiles = sourcePaths(clientId, articleId, true);
+      articleLock.withLock(lockFiles, function () {
+        const files = getTrashedPaths(clientId, articleId, false);
+        recoverTrashTransaction(clientId, articleId, files);
+      });
+    });
     const names = fsApi.readdirSync(probe.directory, { withFileTypes: true })
-      .filter(function (entry) { return entry.isFile() && !entry.isSymbolicLink() && (entry.name.endsWith(".tombstone.json") || entry.name.endsWith(".json") || entry.name.endsWith(".md")); })
-      .map(function (entry) { return entry.name.replace(/\.tombstone\.json$|\.json$|\.md$/, ""); });
+      .filter(function (entry) {
+        const name = entry.name.toLowerCase();
+        return entry.isFile() && !entry.isSymbolicLink() &&
+          name.endsWith(".json") && !name.endsWith(".tombstone.json");
+      })
+      .map(function (entry) { return entry.name.slice(0, -5); });
     return Array.from(new Set(names)).map(function (articleId) {
       try {
         const lockFiles = sourcePaths(clientId, articleId, true);
