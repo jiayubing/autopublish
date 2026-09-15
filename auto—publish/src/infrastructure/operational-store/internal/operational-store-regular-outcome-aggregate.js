@@ -441,13 +441,18 @@ function createRegularOutcomeAggregate(context, publicationSuccess) {
         db.prepare(
           "UPDATE submission_items SET status='uncertain',claim_token=NULL,claim_until=NULL,revision=revision+1 WHERE item_id=?",
         ).run(row.item_id);
-        if (row.queue_group_id)
+        if (status === "uncertain")
+          db.prepare("DELETE FROM submission_queue_items WHERE item_id=?").run(
+            row.item_id,
+          );
+        if (status === "group_blocked" && row.queue_group_id)
           db.prepare(
             "UPDATE submission_queue_groups SET pause_intent='system',revision=revision+1,updated_at=? WHERE queue_group_id=?",
           ).run(stamp, row.queue_group_id);
         db.prepare(
           "UPDATE recovery_intents SET state='manual_check',payload_json=?,updated_at=? WHERE attempt_id=?",
         ).run(text(observedIntent(row, observed)), stamp, id);
+        if (status === "uncertain") refreshBatch(row.batch_id, stamp);
       } else if (!requeue) {
         const allowedStatuses =
           row.attempt_status === "queued"

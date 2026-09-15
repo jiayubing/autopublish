@@ -717,7 +717,7 @@ test("uncertain freezes the article, forbids replay, and exposes only the two na
     assert.equal(fake.calls.length, 2);
     assert.equal(
       findGroup(fixture, accepted.items[0].queueGroupId).pauseIntent,
-      "system",
+      "none",
     );
     assert.equal(
       fixture.store.listArticleLifecycleFacts({

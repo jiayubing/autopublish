@@ -460,7 +460,7 @@ function createRegularQueueGroupOrchestrator(options) {
           );
           if (
             !outcomeService ||
-            ["group_blocked", "uncertain"].includes(observation.status)
+            observation.status === "group_blocked"
           )
             return Object.freeze({
               queueGroupId,
