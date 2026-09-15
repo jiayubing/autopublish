@@ -143,8 +143,11 @@ function registerWorkspaceBootstrapIpc(deps) {
     return rendererWorkspaceState(await loadState(), getRuntimePhase());
   }
 
-  async function presentCommandState(state) {
-    await awaitRuntime();
+  function presentCommandState(state) {
+    // Selection commands own an in-memory confirmation token. Starting or
+    // bootstrapping the workspace here can invalidate that token before the
+    // renderer has a chance to confirm or cancel it. Runtime activation is a
+    // loaded-state concern; command results are projected as returned.
     return rendererWorkspaceState(state, getRuntimePhase());
   }
 
@@ -174,7 +177,17 @@ function registerWorkspaceBootstrapIpc(deps) {
     });
     registeredChannels.push("workspace:confirm-selection");
     typedIpcMain.handle("workspace:cancel-selection", async function () {
-      return presentCommandState(await service.cancelSelection());
+      let state;
+      try {
+        state = await service.cancelSelection();
+      } catch (error) {
+        if (!error || error.code !== "WORKSPACE_SELECTION_CANCELLED") throw error;
+        // The service uses the cancellation code as control flow after it has
+        // already cleared the pending selection. For the explicit Cancel
+        // command, project that resulting state as a successful user action.
+        state = await service.getBootstrapState();
+      }
+      return presentCommandState(state);
     });
     registeredChannels.push("workspace:cancel-selection");
     typedIpcMain.handle("workspace:get-current", async function () {
