@@ -76,7 +76,7 @@ describe("article store", function () {
     assert.deepEqual(reader.listArticles("client-1"), [updated]);
   });
 
-  it("retries a pair replaced between JSON and Markdown reads", function () {
+  it("retries a canonical JSON read when it is replaced concurrently", function () {
     store.saveArticle(valid("article-1"));
     const updated = valid("article-1", { title: "Concurrent replacement", content: "New content" });
     let replaced = false;
@@ -95,15 +95,71 @@ describe("article store", function () {
     assert.equal(replaced, true);
   });
 
-  it("list reads recover interrupted pairs and reject stable corruption", function () {
+  it("recovers an interrupted canonical JSON replacement and rejects stable corruption", function () {
     store.saveArticle(valid("article-1"));
     const writer = createArticleStore(root, { internalArticleFileFault(point) {
-      if (point === "after-article-markdown-install") throw new Error("Synthetic interruption");
+      if (point === "after-article-json-backup") throw new Error("Synthetic interruption");
     } });
     assert.throws(() => writer.saveArticle(valid("article-1", { title: "Interrupted" })), /Synthetic interruption/);
     assert.deepEqual(store.listArticles("client-1"), [valid("article-1")]);
-    fs.writeFileSync(path.join(root, "generated", "client-1", "article-1.md"), "corrupt", "utf8");
+    fs.writeFileSync(path.join(root, "generated", "client-1", "article-1.json"), "corrupt", "utf8");
     assert.throws(() => store.listArticles("client-1"), { code: "ARTICLE_INVALID" });
+  });
+
+  it("keeps the prior canonical JSON when JSON staging fails", function () {
+    const original = valid("article-1");
+    const updated = valid("article-1", { title: "Should not be persisted" });
+    store.saveArticle(original);
+    const writer = createArticleStore(root, {
+      fs: new Proxy(fs, {
+        get(target, name) {
+          if (name === "writeFileSync") {
+            return function (filename, ...args) {
+              if (String(filename).includes("article-1.json.tmp-")) {
+                throw new Error("synthetic JSON staging failure");
+              }
+              return target[name](filename, ...args);
+            };
+          }
+          return target[name];
+        },
+      }),
+    });
+
+    assert.throws(() => writer.saveArticle(updated), /synthetic JSON staging failure/);
+    assert.deepStrictEqual(store.getArticle("client-1", "article-1"), original);
+    const directory = path.join(root, "generated", "client-1");
+    assert.equal(fs.existsSync(path.join(directory, "article-1.journal")), false);
+  });
+
+  it("keeps a complete old or new canonical JSON when installation rename fails", function () {
+    const original = valid("article-1");
+    const updated = valid("article-1", { title: "Rename failure update" });
+    store.saveArticle(original);
+    const canonical = path.join(root, "generated", "client-1", "article-1.json");
+    let failInstallation = true;
+    const writer = createArticleStore(root, {
+      fs: new Proxy(fs, {
+        get(target, name) {
+          if (name === "renameSync") {
+            return function (source, targetPath) {
+              if (failInstallation &&
+                  path.resolve(targetPath) === path.resolve(canonical) &&
+                  String(source).includes("article-1.json.tmp-")) {
+                failInstallation = false;
+                throw new Error("synthetic JSON installation rename failure");
+              }
+              return target[name](source, targetPath);
+            };
+          }
+          return target[name];
+        },
+      }),
+    });
+
+    assert.throws(() => writer.saveArticle(updated), /synthetic JSON installation rename failure/);
+    assert.deepStrictEqual(store.getArticle("client-1", "article-1"), original);
+    assert.deepStrictEqual(JSON.parse(fs.readFileSync(canonical, "utf8")), original);
   });
 
   it("saves and reads a manual article without generation provenance", function () {
@@ -126,23 +182,18 @@ describe("article store", function () {
     assert.deepStrictEqual(persisted, article);
   });
 
-  it("writes editable markdown alongside full JSON metadata", function () {
+  it("does not generate markdown alongside full JSON metadata", function () {
     const article = valid("article-1");
     store.saveArticle(article);
     const directory = path.join(root, "generated", "client-1");
-    const markdown = fs.readFileSync(
-      path.join(directory, "article-1.md"),
-      "utf8",
-    );
     const metadata = JSON.parse(
       fs.readFileSync(path.join(directory, "article-1.json"), "utf8"),
     );
-    assert.match(markdown, /title: "A useful title"/);
-    assert.match(markdown, /A useful article body\./);
+    assert.equal(fs.existsSync(path.join(directory, "article-1.md")), false);
     assert.deepStrictEqual(metadata, article);
   });
 
-  it("replaces both files when saving an updated article id", function () {
+  it("replaces only canonical JSON when saving an updated article id", function () {
     store.saveArticle(valid("article-1"));
     const updated = valid("article-1", {
       title: "Updated title",
@@ -151,13 +202,11 @@ describe("article store", function () {
     });
     assert.deepStrictEqual(store.saveArticle(updated), updated);
     assert.deepStrictEqual(store.getArticle("client-1", "article-1"), updated);
-    assert.match(
-      fs.readFileSync(
-        path.join(root, "generated", "client-1", "article-1.md"),
-        "utf8",
-      ),
-      /Updated body\./,
+    assert.deepStrictEqual(
+      JSON.parse(fs.readFileSync(path.join(root, "generated", "client-1", "article-1.json"), "utf8")),
+      updated,
     );
+    assert.equal(fs.existsSync(path.join(root, "generated", "client-1", "article-1.md")), false);
   });
 
   it("lists direct article JSON records by createdAt descending without edit reordering", function () {
@@ -303,7 +352,7 @@ describe("article store", function () {
     });
   });
 
-  it("rejects damaged JSON, missing markdown, and mismatched markdown", function () {
+  it("uses JSON as the source and ignores missing, damaged, or mismatched markdown", function () {
     const article = valid("article-1");
     store.saveArticle(article);
     const directory = path.join(root, "generated", "client-1");
@@ -318,40 +367,23 @@ describe("article store", function () {
     );
 
     store.saveArticle(article);
-    fs.unlinkSync(path.join(directory, "article-1.md"));
-    assert.throws(
-      function () {
-        store.getArticle("client-1", "article-1");
-      },
-      function (error) {
-        return error.code === "ARTICLE_INVALID";
-      },
-    );
-
-    store.saveArticle(article);
     fs.writeFileSync(
       path.join(directory, "article-1.md"),
       '---\ntitle: "Changed"\n---\n\nA useful article body.\n',
     );
-    assert.throws(
-      function () {
-        store.getArticle("client-1", "article-1");
-      },
-      function (error) {
-        return error.code === "ARTICLE_INVALID";
-      },
-    );
+    assert.deepStrictEqual(store.getArticle("client-1", "article-1"), article);
+    fs.writeFileSync(path.join(directory, "article-1.md"), "corrupt", "utf8");
+    assert.deepStrictEqual(store.getArticle("client-1", "article-1"), article);
+    fs.unlinkSync(path.join(directory, "article-1.md"));
+    assert.deepStrictEqual(store.getArticle("client-1", "article-1"), article);
   });
 
-  it("reads markdown checked out with Windows CRLF line endings", function () {
+  it("ignores a legacy markdown artifact with Windows CRLF line endings", function () {
     const article = valid("article-crlf");
     store.saveArticle(article);
     const directory = path.join(root, "generated", "client-1");
     const markdownPath = path.join(directory, "article-crlf.md");
-    const markdown = fs
-      .readFileSync(markdownPath, "utf8")
-      .replace(/\n/g, "\r\n");
-    fs.writeFileSync(markdownPath, markdown, "utf8");
+    fs.writeFileSync(markdownPath, "not an article\r\n", "utf8");
 
     assert.deepStrictEqual(
       store.getArticle("client-1", "article-crlf"),
@@ -365,7 +397,34 @@ describe("article store", function () {
     );
   });
 
-  it("ignores temporary and non-JSON files while listing", function () {
+  it("bases summary freshness only on canonical JSON", function () {
+    const article = valid("summary-version");
+    store.saveArticle(article);
+    const directory = path.join(root, "generated", "client-1");
+    const reads = [];
+    const reader = createArticleStore(root, {
+      fs: new Proxy(fs, {
+        get(target, name) {
+          if (name === "readFileSync") {
+            return function (filename, ...args) {
+              reads.push(String(filename));
+              return target[name](filename, ...args);
+            };
+          }
+          return target[name];
+        },
+      }),
+    });
+    reader.getArticleSummary("client-1", "summary-version");
+    reads.length = 0;
+    fs.writeFileSync(path.join(directory, "summary-version.md"), "legacy changed\n", "utf8");
+
+    assert.equal(reader.getArticleSummary("client-1", "summary-version").title, article.title);
+    assert.equal(reads.some(file => file.endsWith(".json")), false);
+    assert.equal(reads.some(file => file.endsWith(".md")), false);
+  });
+
+  it("lists only canonical JSON articles and ignores temporary, markdown-only, and other files", function () {
     store.saveArticle(valid("article-1"));
     const directory = path.join(root, "generated", "client-1");
     fs.writeFileSync(
@@ -377,15 +436,19 @@ describe("article store", function () {
       JSON.stringify(valid("article-2")),
     );
     fs.writeFileSync(path.join(directory, "note.md"), "not an article");
+    fs.writeFileSync(path.join(directory, "markdown-only.md"), "legacy article");
     assert.deepStrictEqual(
       store.listArticles("client-1").map(function (article) {
         return article.id;
       }),
       ["article-1"],
     );
+    assert.throws(() => store.getArticle("client-1", "markdown-only"), {
+      code: "ARTICLE_NOT_FOUND",
+    });
   });
 
-  it("recovers a complete prior article after an interrupted two-file update", function () {
+  it("recovers the prior canonical JSON after an interrupted single-file update", function () {
     const original = valid("article-1");
     const updated = valid("article-1", {
       title: "Updated title",
@@ -398,28 +461,14 @@ describe("article store", function () {
       path.join(directory, "article-1.json"),
       path.join(directory, "article-1.json.backup"),
     );
-    fs.renameSync(
-      path.join(directory, "article-1.md"),
-      path.join(directory, "article-1.md.backup"),
-    );
-    fs.writeFileSync(
-      path.join(directory, "article-1.json"),
-      JSON.stringify(updated, null, 2) + "\n",
-    );
-    fs.writeFileSync(
-      path.join(directory, "article-1.md"),
-      "---\ntitle: " +
-        JSON.stringify(original.title) +
-        "\n---\n\n" +
-        original.content +
-        "\n",
-    );
+    fs.writeFileSync(path.join(directory, "article-1.json.tmp-interrupted"), JSON.stringify(updated, null, 2) + "\n");
     fs.writeFileSync(
       path.join(directory, "article-1.journal"),
       JSON.stringify({
-        version: 1,
+        version: 2,
+        kind: "article-json-replace",
         temporaryJson: "article-1.json.tmp-interrupted",
-        temporaryMarkdown: "article-1.md.tmp-interrupted",
+        backup: "article-1.json.backup",
       }) + "\n",
     );
 
@@ -433,7 +482,7 @@ describe("article store", function () {
       false,
     );
     assert.equal(
-      fs.existsSync(path.join(directory, "article-1.md.backup")),
+      fs.existsSync(path.join(directory, "article-1.json.tmp-interrupted")),
       false,
     );
     assert.deepStrictEqual(store.listArticles("client-1"), [original]);
@@ -701,7 +750,7 @@ describe("article store", function () {
     );
   });
 
-  it("moves the JSON and Markdown pair into the trash and restores the pair", function () {
+  it("moves canonical JSON and its tombstone into trash and restores JSON", function () {
     const article = valid("trash-article", {
       status: "saved",
       generationBatchId: "batch-1",
@@ -719,6 +768,8 @@ describe("article store", function () {
       ],
     };
     store.saveArticle(article);
+    const legacyMarkdown = path.join(root, "generated", "client-1", "trash-article.md");
+    fs.writeFileSync(legacyMarkdown, "legacy unmanaged article\n", "utf8");
 
     assert.deepStrictEqual(
       store.moveArticleToTrash("client-1", "trash-article", tombstone),
@@ -734,7 +785,7 @@ describe("article store", function () {
       fs.existsSync(
         path.join(root, "generated", "client-1", "trash-article.md"),
       ),
-      false,
+      true,
     );
     assert.deepStrictEqual(store.listTrashedArticles("client-1"), [tombstone]);
     assert.equal(
@@ -749,18 +800,17 @@ describe("article store", function () {
       ),
       true,
     );
-    assert.equal(
-      fs.existsSync(
-        path.join(
-          root,
-          ".autopublish",
-          "article-trash",
-          "client-1",
-          "trash-article.md",
-        ),
-      ),
-      true,
+    assert.equal(fs.existsSync(path.join(root, ".autopublish", "article-trash", "client-1", "trash-article.md")), false);
+    const legacyTrashMarkdown = path.join(
+      root,
+      ".autopublish",
+      "article-trash",
+      "client-1",
+      "trash-article.md",
     );
+    fs.writeFileSync(legacyTrashMarkdown, "legacy trash artifact\n", "utf8");
+    assert.deepStrictEqual(store.getTrashedTombstone("client-1", "trash-article"), tombstone);
+    assert.deepStrictEqual(store.listTrashedArticles("client-1"), [tombstone]);
 
     assert.deepStrictEqual(
       store.restoreTrashedArticle("client-1", "trash-article"),
@@ -770,22 +820,37 @@ describe("article store", function () {
       store.getArticle("client-1", "trash-article"),
       article,
     );
+    assert.equal(fs.existsSync(legacyMarkdown), true);
+    assert.equal(fs.existsSync(legacyTrashMarkdown), true);
+    assert.deepStrictEqual(store.listTrashedArticles("client-1"), []);
+
+    store.moveArticleToTrash("client-1", "trash-article", tombstone);
+    assert.equal(
+      store.permanentlyDeleteTrashedArticle(
+        "client-1",
+        "trash-article",
+        "2026-07-15T13:00:00.000Z",
+      ).permanentlyDeleted,
+      true,
+    );
+    assert.equal(fs.existsSync(legacyTrashMarkdown), true);
     assert.deepStrictEqual(store.listTrashedArticles("client-1"), []);
   });
 
-  it("rolls back both source files when the paired trash move fails", function () {
+  it("rolls back canonical JSON when its trash move fails", function () {
     const article = valid("failed-trash");
     store.saveArticle(article);
     const originalRename = fs.renameSync;
-    let moveCount = 0;
+    const tombstonePath = path.join(
+      root,
+      ".autopublish",
+      "article-trash",
+      "client-1",
+      "failed-trash.tombstone.json",
+    );
     fs.renameSync = function (source, target) {
-      if (
-        String(source).includes("generated") ||
-        String(target).includes("article-trash")
-      ) {
-        moveCount += 1;
-        if (moveCount === 2) throw new Error("simulated paired move failure");
-      }
+      if (path.resolve(target) === path.resolve(tombstonePath))
+        throw new Error("simulated trash tombstone move failure");
       return originalRename.apply(this, arguments);
     };
     try {
@@ -798,7 +863,7 @@ describe("article store", function () {
           status: "generated",
           references: [],
         });
-      }, /simulated paired move failure/);
+      }, /simulated trash tombstone move failure/);
     } finally {
       fs.renameSync = originalRename;
     }

@@ -347,33 +347,6 @@ function articleForPersistence(article) {
   return persisted;
 }
 
-function markdownFor(article) {
-  return (
-    "---\ntitle: " +
-    JSON.stringify(article.title) +
-    "\n---\n\n" +
-    article.content +
-    "\n"
-  );
-}
-
-function parseMarkdown(markdown) {
-  const value = String(markdown).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  const match = /^---\r?\ntitle: (.+)\r?\n---\r?\n\r?\n([\s\S]*)$/.exec(value);
-  if (!match)
-    throw storeError("ARTICLE_INVALID", "Article markdown is invalid");
-  let title;
-  try {
-    title = JSON.parse(match[1]);
-  } catch (_) {
-    throw storeError("ARTICLE_INVALID", "Article markdown is invalid");
-  }
-  const content = match[2].endsWith("\n") ? match[2].slice(0, -1) : match[2];
-  if (typeof title !== "string" || typeof content !== "string")
-    throw storeError("ARTICLE_INVALID", "Article markdown is invalid");
-  return { title: title, content: content };
-}
-
 function assertTombstone(tombstone, clientId, articleId) {
   const allowedFields = [
     "version",
@@ -453,8 +426,6 @@ module.exports = {
   LEGACY_ARTICLE,
   normalizeArticle,
   articleForPersistence,
-  markdownFor,
-  parseMarkdown,
   assertTombstone,
   titleSnapshot,
   storeError,

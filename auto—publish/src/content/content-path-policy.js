@@ -229,7 +229,6 @@ function createContentPathPolicy(workspaceRoot, options) {
     return {
       directory: clientDirectory,
       json: path.join(clientDirectory, articleId + ".json"),
-      markdown: path.join(clientDirectory, articleId + ".md"),
     };
   }
 
@@ -275,8 +274,7 @@ function createContentPathPolicy(workspaceRoot, options) {
               identity.dev !== stat.dev || identity.ino !== stat.ino)
             fail("ARTICLE_PATH_OUT_OF_BOUNDS", "Article directory changed during reading");
         }
-        return { directory: probe.directory, json: path.join(probe.directory, articleId + ".json"),
-          markdown: path.join(probe.directory, articleId + ".md") };
+        return { directory: probe.directory, json: path.join(probe.directory, articleId + ".json") };
       },
     });
   }
@@ -318,7 +316,6 @@ function createContentPathPolicy(workspaceRoot, options) {
     return {
       directory: directory,
       json: path.join(directory, articleId + ".json"),
-      markdown: path.join(directory, articleId + ".md"),
       tombstone: path.join(directory, articleId + ".tombstone.json"),
       journal: path.join(directory, articleId + ".trash.journal"),
     };

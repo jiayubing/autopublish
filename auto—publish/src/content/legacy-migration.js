@@ -306,8 +306,7 @@ function createLegacyMigrator(options) {
   function existingArticle(item, articleStore) {
     const directory = path.join(workspaceRoot, "generated", item.client.id);
     const json = path.join(directory, item.record.id + ".json");
-    const markdown = path.join(directory, item.record.id + ".md");
-    if (!fs.existsSync(json) && !fs.existsSync(markdown)) return false;
+    if (!fs.existsSync(json)) return false;
     try {
       const existing = articleStore.getArticle(item.client.id, item.record.id);
       if (!sameRecord(normalizeLegacyArticleForComparison(existing, item.record), item.record)) planWarning(item, "article");

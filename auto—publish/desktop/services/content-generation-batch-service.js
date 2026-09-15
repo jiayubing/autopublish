@@ -210,7 +210,7 @@ function createContentGenerationBatchService(options) {
 
   function enrichBatch(batch) {
     // ContentStore owns and refreshes generation identity projections, so this
-    // lookup avoids reopening article JSON/Markdown just to display a title.
+    // lookup avoids reopening canonical article JSON just to display a title.
     return projectBatchTitles(clone(batch), false);
   }
 

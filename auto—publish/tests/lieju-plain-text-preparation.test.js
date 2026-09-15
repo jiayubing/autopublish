@@ -200,7 +200,7 @@ test("Lieju plain-text renderer removes Setext and reference-style presentation 
   assert.doesNotMatch(rendered, /[!\[\]=]|file:\/\/|docs\.example\.test/);
 });
 
-test("Lieju HTTP prepare freezes the actual plain-text form body and leaves article bytes untouched", async () => {
+test("Lieju HTTP prepare freezes the actual plain-text form body and leaves canonical article JSON untouched", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "lieju-plain-text-"));
   const source = "## 标题\n\n**正文**含有 ![图片](C:\\private\\cover.png)。";
   const store = createArticleStore(root);
@@ -213,12 +213,8 @@ test("Lieju HTTP prepare freezes the actual plain-text form body and leaves arti
     createdAt: "2026-08-15T00:00:00.000Z",
   });
   const directory = path.join(root, "generated", "client-plain-text");
-  const markdown = path.join(directory, "article-plain-text.md");
   const metadata = path.join(directory, "article-plain-text.json");
-  const before = {
-    markdown: fs.readFileSync(markdown),
-    metadata: fs.readFileSync(metadata),
-  };
+  const before = fs.readFileSync(metadata);
   const fixture = loadAdapterWithFormFixture(root);
   try {
     const article = store.getArticle("client-plain-text", "article-plain-text");
@@ -246,13 +242,7 @@ test("Lieju HTTP prepare freezes the actual plain-text form body and leaves arti
       evidence,
     );
     assert.doesNotMatch(evidence.body, /private|cover\.png/);
-    assert.deepEqual(
-      {
-        markdown: fs.readFileSync(markdown),
-        metadata: fs.readFileSync(metadata),
-      },
-      before,
-    );
+    assert.deepEqual(fs.readFileSync(metadata), before);
   } finally {
     fixture.restore();
     fs.rmSync(root, { recursive: true, force: true });

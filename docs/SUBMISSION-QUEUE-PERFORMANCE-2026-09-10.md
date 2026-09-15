@@ -82,7 +82,7 @@
 
 ### 1. P2 / EXPOSED_PREEXISTING：队列标题查询扩大到客户全部文章
 
-Owner：`desktop/services/regular-queue-group-query.js:41`，`articleFor` 调用 `contentStore.listArticles(clientId)`。单次请求对同客户有 Map 去重，但每次刷新都重建；`article-store.js:125` 会读取所有稳定文章的 JSON/Markdown 配对并校验文件状态。
+Owner：`desktop/services/regular-queue-group-query.js:41`，`articleFor` 调用 `contentStore.listArticles(clientId)`。单次请求对同客户有 Map 去重，但每次刷新都重建；`article-store.js` 会按 canonical JSON 发现并读取文章，`.summary` 仅作为可重建缓存。
 
 因此开销随相关客户的全部文章数增长，而不是只随本批次剩余文章数增长。这是当前测量中最主要的 CPU、文件调用及临时对象分配来源。同步文件读取发生在主进程调用链上，有造成响应停顿的风险。
 
