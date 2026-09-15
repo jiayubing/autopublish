@@ -12,7 +12,11 @@ import ConfirmationHost from "./components/ConfirmationHost";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useMediaFeature } from "./features/media/use-media-feature";
-import { useContentWorkbenchFeature } from "./features/content/use-content-workbench-feature";
+import {
+  useContentWorkbenchFeature,
+  type ContentWorkbenchFeature,
+  type ContentWorkbenchPage,
+} from "./features/content/use-content-workbench-feature";
 import { SettingsFeatureProvider } from "./features/settings/settings-context";
 import { useSubmissionCenterFeature } from "./features/submission-center/use-submission-center-feature";
 import type { ArticleLibraryNavigationIntent } from "./article-library-navigation";
@@ -57,6 +61,13 @@ const EMPTY_FAVORITE_MEDIA_PAGE: FavoriteMediaPage = {
 type MainNavigationGuard = (action: () => void) => void;
 type PageReadiness = { loading: boolean; error: boolean };
 
+function contentPageForView(view: ViewMode): ContentWorkbenchPage | null {
+  if (view === "content-production") return "production";
+  if (view === "article-library") return "library";
+  if (view === "submission-center") return "shell";
+  return null;
+}
+
 function loadLastView(): ViewMode {
   if (typeof localStorage === "undefined") return "article-library";
   const value = localStorage.getItem(LAST_VIEW_KEY) as ViewMode | null;
@@ -94,15 +105,16 @@ export function WorkspaceScopedConfirmationHost({
 }
 
 function ContentProductionPage({
+  content,
   onOpenArticleLibrary,
   onOpenOrders,
   onReadinessChange,
 }: {
+  content: ContentWorkbenchFeature;
   onOpenArticleLibrary: (intent?: ArticleLibraryNavigationIntent) => void;
   onOpenOrders: () => void;
   onReadinessChange: (readiness: PageReadiness) => void;
 }) {
-  const content = useContentWorkbenchFeature({ page: "production" });
   useEffect(() => {
     onReadinessChange({
       loading:
@@ -126,6 +138,7 @@ function ContentProductionPage({
 }
 
 function ArticleLibraryPage({
+  content,
   articleIntent,
   onArticleIntentConsumed,
   onOpenArticleLibrary,
@@ -135,6 +148,7 @@ function ArticleLibraryPage({
   onBadgeChange,
   onReadinessChange,
 }: {
+  content: ContentWorkbenchFeature;
   articleIntent?: ArticleLibraryNavigationIntent | null;
   onArticleIntentConsumed: () => void;
   onOpenArticleLibrary: (intent?: ArticleLibraryNavigationIntent) => void;
@@ -144,7 +158,6 @@ function ArticleLibraryPage({
   onBadgeChange: (count: number) => void;
   onReadinessChange: (readiness: PageReadiness) => void;
 }) {
-  const content = useContentWorkbenchFeature({ page: "library" });
   const [favoriteMediaPage, setFavoriteMediaPage] = useState(
     EMPTY_FAVORITE_MEDIA_PAGE,
   );
@@ -220,19 +233,20 @@ function ArticleLibraryPage({
 }
 
 function SubmissionCenterPage({
+  content,
   initialSection,
   onOpenArticleLibrary,
   onOpenOrders,
   onBadgeChange,
   onReadinessChange,
 }: {
+  content: ContentWorkbenchFeature;
   initialSection: "regular" | "paid" | "attention";
   onOpenArticleLibrary: (intent?: ArticleLibraryNavigationIntent) => void;
   onOpenOrders: () => void;
   onBadgeChange: (count: number) => void;
   onReadinessChange: (readiness: PageReadiness) => void;
 }) {
-  const content = useContentWorkbenchFeature({ page: "shell" });
   const submissionCenter = useSubmissionCenterFeature();
   useEffect(() => {
     onBadgeChange(
@@ -322,6 +336,8 @@ function ResourcesRoute({
 
 function AppContent() {
   const [currentView, setCurrentView] = useState<ViewMode>(loadLastView);
+  const contentPage = contentPageForView(currentView);
+  const content = useContentWorkbenchFeature({ page: contentPage });
   const [submissionCenterSection, setSubmissionCenterSection] = useState<
     "regular" | "paid" | "attention"
   >("regular");
@@ -476,6 +492,7 @@ function AppContent() {
                   className="h-full"
                 >
                   <ContentProductionPage
+                    content={content}
                     onOpenArticleLibrary={openArticleLibrary}
                     onOpenOrders={() => changeView("orders")}
                     onReadinessChange={reportReadiness}
@@ -506,6 +523,7 @@ function AppContent() {
                   className="h-full"
                 >
                   <ArticleLibraryPage
+                    content={content}
                     articleIntent={articleLibraryIntent}
                     onArticleIntentConsumed={consumeArticleLibraryIntent}
                     onOpenArticleLibrary={openArticleLibrary}
@@ -530,6 +548,7 @@ function AppContent() {
                   className="h-full"
                 >
                   <SubmissionCenterPage
+                    content={content}
                     initialSection={submissionCenterSection}
                     onOpenArticleLibrary={openArticleLibrary}
                     onOpenOrders={() => changeView("orders")}
