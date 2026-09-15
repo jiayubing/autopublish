@@ -301,7 +301,9 @@ function createArticleStore(workspaceRoot, options) {
     if (!files || !files.directory || !exists(files.directory)) throw storeError("ARTICLE_NOT_FOUND", "Trashed article was not found");
     recoverTrashTransaction(clientId, articleId, files);
     if (!exists(files.tombstone)) throw storeError("ARTICLE_NOT_FOUND", "Trashed article was not found");
-    return assertTombstone(readJson(files.tombstone, "ARTICLE_INVALID", "Article tombstone is invalid", files.directory), clientId, articleId);
+    const tombstone = assertTombstone(readJson(files.tombstone, "ARTICLE_INVALID", "Article tombstone is invalid", files.directory), clientId, articleId);
+    if (tombstone.permanentlyDeleted === true) transactions.removeRegularFile(files.json);
+    return tombstone;
   }
 
   function getTrashedTombstone(clientId, articleId) {

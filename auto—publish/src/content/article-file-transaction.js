@@ -195,6 +195,7 @@ function createArticleFileTransaction(options) {
   }
 
   function recoverArticleJson(files) {
+    // Consume pre-atomic-replace residues only; current saves never write them.
     const transaction = articleJsonTransactionFiles(files);
     if (!exists(transaction.journal)) {
       if (exists(files.json)) {
@@ -252,51 +253,18 @@ function createArticleFileTransaction(options) {
   }
 
   function replaceArticleJson(files, jsonContents) {
-    const transaction = articleJsonTransactionFiles(files);
     let temporary = null;
-    let terminalInstalled = false;
     try {
-      recoverArticleJson(files);
-      temporary = writeTemporary(files.json, jsonContents, "article-json");
+      fault("before-article-json-temp", { files });
+      temporary = writeTemporary(files.json, jsonContents);
       fault("after-article-json-temp", { files: files, temporary: temporary });
-      writeJournal(transaction.journal, {
-        version: 2,
-        kind: "article-json-replace",
-        temporaryJson: path.basename(temporary),
-        backup: path.basename(transaction.backup),
-      });
-      fault("after-article-json-journal", { files: files });
-      if (exists(files.json)) {
-        assertRegularFile(files.json);
-        fsApi.renameSync(files.json, transaction.backup);
-      }
-      fault("after-article-json-backup", { files: files });
+      if (exists(files.json)) assertRegularFile(files.json);
+      fault("before-article-json-replace", { files });
+      // Same-directory replacement never removes the previous valid JSON first.
       fsApi.renameSync(temporary, files.json);
-      terminalInstalled = true;
       fault("after-article-json-install", { files: files });
-      removeRegularFile(transaction.backup);
-      clearJournal(transaction.journal);
-    } catch (error) {
-      let rollbackError = null;
-      try {
-        if (!exists(files.json) && exists(transaction.backup))
-          fsApi.renameSync(transaction.backup, files.json);
-      } catch (cleanupError) {
-        rollbackError = cleanupError;
-        reportCleanup("article-json-rollback", cleanupError);
-      }
-
-      if (terminalInstalled || exists(files.json))
-        tryRemove(transaction.backup, "article-json-backup");
+    } finally {
       if (temporary) tryRemove(temporary, "article-json-temp");
-      if (!rollbackError) tryRemove(transaction.journal, "article-json-journal");
-      if (rollbackError)
-        fail(
-          "ARTICLE_FILE_TRANSACTION_INCOMPLETE",
-          "Article JSON transaction needs recovery",
-          rollbackError,
-        );
-      throw error;
     }
   }
 
@@ -521,6 +489,7 @@ function createArticleFileTransaction(options) {
   }
 
   function recoverPermanentDelete(files, journal, record) {
+    // Older versions staged JSON before installing the terminal tombstone.
     if (
       !record.staging ||
       path.basename(record.staging) !== record.staging ||
@@ -583,91 +552,21 @@ function createArticleFileTransaction(options) {
 
   function writeTerminalTombstone(files, contents) {
     const temporary = writeTemporary(files.tombstone, contents);
-    const backup =
-      files.tombstone + ".backup-" + process.pid + "-" + Date.now();
-    let backedUp = false;
-    let installed = false;
     try {
       assertRegularFile(files.tombstone);
-      fsApi.renameSync(files.tombstone, backup);
-      backedUp = true;
-      fault("after-terminal-backup", { files: files });
+      fault("before-terminal-replace", { files });
       fsApi.renameSync(temporary, files.tombstone);
-      installed = true;
       fault("after-terminal-install", { files: files });
-      removeRegularFile(backup);
-    } catch (error) {
-      if (installed && exists(files.tombstone))
-        tryRemove(files.tombstone, "terminal-tombstone-installed");
-      if (backedUp && exists(backup) && !exists(files.tombstone)) {
-        try {
-          fsApi.renameSync(backup, files.tombstone);
-        } catch (restoreError) {
-          reportCleanup("terminal-tombstone-backup-restore", restoreError);
-        }
-      }
+    } finally {
       tryRemove(temporary, "terminal-tombstone-temp");
-      throw error;
     }
   }
 
   function permanentlyDelete(files, terminalContents) {
-    const journal = transactionJournal(files);
-    const staging = path.join(
-      files.directory,
-      path.basename(files.json, ".json") +
-        ".deleting-" +
-        process.pid +
-        "-" +
-        Date.now() +
-        "-" +
-        crypto.randomUUID(),
-    );
-    fsApi.mkdirSync(staging);
-    const staged = [];
-    let terminalWritten = false;
-    try {
-      writeJournal(journal, {
-        version: 1,
-        kind: "permanent-delete",
-        staging: path.basename(staging),
-        json: path.basename(files.json),
-        tombstone: path.basename(files.tombstone),
-      });
-      fsApi.renameSync(files.json, path.join(staging, path.basename(files.json)));
-      staged.push({
-        from: files.json,
-        to: path.join(staging, path.basename(files.json)),
-      });
-      fault(
-        "after-permanent-stage-" +
-          path.basename(files.json, path.extname(files.json)),
-        { files: files },
-      );
-      writeTerminalTombstone(files, terminalContents);
-      terminalWritten = true;
-      fsApi.rmSync(staging, { recursive: true, force: true });
-      clearJournal(journal);
-    } catch (error) {
-      if (!terminalWritten) {
-        const rollbackError = rollbackMoves(staged);
-        if (!rollbackError) {
-          try {
-            fsApi.rmSync(staging, { recursive: true, force: true });
-          } catch (cleanupError) {
-            reportCleanup("permanent-delete-staging", cleanupError);
-          }
-          tryRemove(journal, "permanent-delete-journal");
-        }
-        if (rollbackError)
-          fail(
-            "ARTICLE_FILE_TRANSACTION_INCOMPLETE",
-            "Permanent deletion transaction needs recovery",
-            rollbackError,
-          );
-      }
-      throw error;
-    }
+    // The retained terminal tombstone is the commit point and recovery fact.
+    writeTerminalTombstone(files, terminalContents);
+    removeRegularFile(files.json);
+    fault("after-permanent-delete-json", { files });
   }
 
   return {

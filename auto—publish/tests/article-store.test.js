@@ -98,7 +98,7 @@ describe("article store", function () {
   it("recovers an interrupted canonical JSON replacement and rejects stable corruption", function () {
     store.saveArticle(valid("article-1"));
     const writer = createArticleStore(root, { internalArticleFileFault(point) {
-      if (point === "after-article-json-backup") throw new Error("Synthetic interruption");
+      if (point === "before-article-json-replace") throw new Error("Synthetic interruption");
     } });
     assert.throws(() => writer.saveArticle(valid("article-1", { title: "Interrupted" })), /Synthetic interruption/);
     assert.deepEqual(store.listArticles("client-1"), [valid("article-1")]);
