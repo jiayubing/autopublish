@@ -37,34 +37,49 @@ function fixture(options) {
     content: "body",
     status: "generated",
   };
+  const additionalArticles = new Map(
+    (value.additionalArticleIds || []).map((articleId) => [
+      articleId,
+      {
+        clientId: "c-1",
+        id: articleId,
+        title: `Title ${articleId}`,
+        content: `body ${articleId}`,
+        status: "generated",
+      },
+    ]),
+  );
 
-  const submissionService = {
-    previewArticleRemovalImpact: () => ({
-      blockedItems: blockedItems.slice(),
-      queuedToCancel: [
-        { clientId: "c-1", articleId: "a-1", batchId: "legacy-batch" },
-      ],
+  const mutationCoordinator = {
+    previewTrashEligibility: ({ articleRefs }) => ({
+      items: articleRefs.map((ref) => {
+        const matching = blockedItems.filter(
+          (item) =>
+            item.articleId === ref.articleId &&
+            (!item.clientId || item.clientId === ref.clientId),
+        );
+        return {
+          articleRef: ref,
+          allowed: matching.length === 0,
+          reasonCodes: matching.map((item) => item.reasonCode),
+          safeMetadata: {
+            stage: (matching[0] && matching[0].status) || "in_submission",
+          },
+        };
+      }),
     }),
-    cancelArticleSubmissionItem: () => {
-      queueMutationCalls += 1;
-      throw new Error("legacy queue mutation must not be called");
-    },
-    cancelPaidOrder: () => {
-      queueMutationCalls += 1;
-      throw new Error("paid cancellation must not be called");
-    },
-    cancelOrder: () => {
-      queueMutationCalls += 1;
-      throw new Error("order cancellation must not be called");
-    },
   };
 
   const contentStore = {
     snapshotArticle: (current) => JSON.parse(JSON.stringify(current)),
-    getArticle: () => {
+    getArticle: (clientId, articleId) => {
       if (readError) throw Object.assign(new Error("article read failed"), { code: readError });
+      const current =
+        articleId === article.id ? article : additionalArticles.get(articleId);
+      if (clientId !== article.clientId || !current)
+        throw Object.assign(new Error("article missing"), { code: "ARTICLE_NOT_FOUND" });
       if (trashed) throw Object.assign(new Error("article missing"), { code: "ARTICLE_NOT_FOUND" });
-      return article;
+      return current;
     },
     fingerprintArticle: (current) => hash(current),
     isArticleTrashed: () => trashed,
@@ -100,7 +115,7 @@ function fixture(options) {
 
   const service = createArticleRemovalService({
     contentStore,
-    articleRemovalImpactQuery: submissionService,
+    mutationCoordinator,
     transactionStore: store,
     now: () => time,
     recoveryBackoffMs: 1,
@@ -115,7 +130,7 @@ function fixture(options) {
     service,
     article,
     contentStore,
-    articleRemovalImpactQuery: submissionService,
+    mutationCoordinator,
     setNow: (next) => { time = next; },
     setBlocked: (next) => { blockedItems = next || []; },
     setReadError: (next) => { readError = next || null; },
@@ -172,6 +187,38 @@ function seedLegacyTransaction(fixtureValue, overrides) {
   return transaction;
 }
 
+function seedOpenTransaction(fixtureValue, selections, overrides) {
+  const value = overrides || {};
+  return seedLegacyTransaction(
+    fixtureValue,
+    Object.assign(
+      {
+        id: value.id || "open-transaction",
+        status: "pending_auto_recovery",
+        phase: "articles",
+        legacyQueueMigration: "completed",
+        selections,
+        articles: selections.map((item) => ({
+          clientId: item.clientId,
+          articleId: item.articleId,
+          titleSnapshot:
+            item.articleId === fixtureValue.article.id
+              ? fixtureValue.article.title
+              : `Title ${item.articleId}`,
+        })),
+        contentArticleFingerprints: selections.map((item) =>
+          item.articleId === fixtureValue.article.id
+            ? hash(fixtureValue.article)
+            : `fingerprint-${item.articleId}`,
+        ),
+        contentFingerprint: `content-${value.id || "open-transaction"}`,
+        fingerprint: transactionFingerprint(selections),
+      },
+      value,
+    ),
+  );
+}
+
 it("removal preview exposes only blocked facts and never creates queue actions", (t) => {
   const f = fixture();
   t.after(f.cleanup);
@@ -189,6 +236,242 @@ it("removal preview exposes only blocked facts and never creates queue actions",
   assert.equal(Object.hasOwn(transaction, "queueActions"), false);
   assert.equal(Object.hasOwn(transaction, "queueCursor"), false);
   assert.equal(Object.hasOwn(transaction, "queueResults"), false);
+});
+
+it("maps lifecycle preview decisions to safe blockers and preserves missing article behavior", (t) => {
+  const f = fixture({
+    blockedItems: [{
+      clientId: "c-1",
+      articleId: "a-1",
+      reasonCode: "PUBLICATION_UNCERTAIN",
+      status: "in_submission",
+      publicationId: "must-not-cross-the-seam",
+    }],
+  });
+  t.after(f.cleanup);
+  const preview = f.service.previewArticleRemovalImpact({
+    selections: [
+      { clientId: "c-1", articleId: "a-1" },
+      { clientId: "c-1", articleId: "missing" },
+    ],
+  });
+  assert.deepEqual(preview.blockedItems, [
+    {
+      clientId: "c-1",
+      articleId: "missing",
+      reasonCode: "ARTICLE_NOT_FOUND",
+      source: "article",
+    },
+    {
+      clientId: "c-1",
+      articleId: "a-1",
+      reasonCode: "PUBLICATION_UNCERTAIN",
+      source: "article_lifecycle",
+      status: "in_submission",
+    },
+  ]);
+  assert.equal(preview.canCommit, false);
+});
+
+it("keeps an open removal transaction as an additional preview blocker", (t) => {
+  const f = fixture({ moveError: "IO_DOWN" });
+  t.after(f.cleanup);
+  const first = begin(f).result;
+  assert.equal(first.status, "pending_auto_recovery");
+  const preview = f.service.previewArticleRemovalImpact({
+    selections: [{ clientId: "c-1", articleId: "a-1" }],
+  });
+  assert.equal(
+    preview.blockedItems.some(
+      (item) =>
+        item.source === "removal_transaction" &&
+        item.reasonCode === "ARTICLE_REMOVAL_OPERATION_IN_FLIGHT",
+    ),
+    true,
+  );
+  assert.equal(preview.canCommit, false);
+});
+
+it("reuses an exact duplicate transaction without treating overlap as reuse", (t) => {
+  const f = fixture({ additionalArticleIds: ["a-2"] });
+  t.after(f.cleanup);
+  const selections = [
+    { clientId: "c-1", articleId: "a-1" },
+    { clientId: "c-1", articleId: "a-2" },
+  ];
+  seedOpenTransaction(f, selections, { id: "exact-ab" });
+  const preview = f.service.previewArticleRemovalImpact({
+    selections: selections.slice().reverse(),
+  });
+  assert.equal(preview.canCommit, false);
+  const result = f.service.applyArticleRemovalImpact({
+    confirmed: true,
+    token: preview.token,
+  });
+  assert.equal(result.transactionId, "exact-ab");
+  assert.equal(result.reused, true);
+  assert.equal(f.store.list().length, 1);
+});
+
+it("rejects a non-exact overlapping transaction instead of reusing it", (t) => {
+  const f = fixture();
+  t.after(f.cleanup);
+  const existingSelections = [
+    { clientId: "c-1", articleId: "a-1" },
+    { clientId: "c-1", articleId: "a-2" },
+  ];
+  seedOpenTransaction(f, existingSelections, { id: "pending-ab" });
+  const preview = f.service.previewArticleRemovalImpact({
+    selections: [{ clientId: "c-1", articleId: "a-1" }],
+  });
+  assert.equal(preview.canCommit, false);
+  assert.throws(
+    () =>
+      f.service.applyArticleRemovalImpact({
+        confirmed: true,
+        token: preview.token,
+      }),
+    { code: "ARTICLE_REMOVAL_OPERATION_IN_FLIGHT" },
+  );
+  assert.equal(f.store.list().length, 1);
+});
+
+it("rejects a non-exact overlap across a different requested selection", (t) => {
+  const f = fixture({ additionalArticleIds: ["a-2", "a-3"] });
+  t.after(f.cleanup);
+  const existingSelections = [
+    { clientId: "c-1", articleId: "a-1" },
+    { clientId: "c-1", articleId: "a-2" },
+  ];
+  seedOpenTransaction(f, existingSelections, { id: "pending-ab" });
+  const preview = f.service.previewArticleRemovalImpact({
+    selections: [
+      { clientId: "c-1", articleId: "a-2" },
+      { clientId: "c-1", articleId: "a-3" },
+    ],
+  });
+  assert.equal(preview.canCommit, false);
+  assert.throws(
+    () =>
+      f.service.applyArticleRemovalImpact({
+        confirmed: true,
+        token: preview.token,
+      }),
+    { code: "ARTICLE_REMOVAL_OPERATION_IN_FLIGHT" },
+  );
+  assert.equal(f.store.list().length, 1);
+});
+
+it("blocks a needs_repair transaction when its selections overlap the preview", (t) => {
+  const f = fixture();
+  t.after(f.cleanup);
+  const existingSelections = [
+    { clientId: "c-1", articleId: "a-1" },
+    { clientId: "c-1", articleId: "a-2" },
+  ];
+  seedLegacyTransaction(f, {
+    id: "repair-ab",
+    status: "needs_repair",
+    phase: "needs_repair",
+    legacyQueueMigration: "completed",
+    selections: existingSelections,
+    articles: existingSelections.map((item) => ({
+      clientId: item.clientId,
+      articleId: item.articleId,
+      titleSnapshot: item.articleId === "a-1" ? f.article.title : "Title B",
+    })),
+    contentArticleFingerprints: [hash(f.article), "fingerprint-b"],
+    contentFingerprint: "content-ab",
+    fingerprint: transactionFingerprint(existingSelections),
+  });
+  const preview = f.service.previewArticleRemovalImpact({
+    selections: [{ clientId: "c-1", articleId: "a-1" }],
+  });
+  assert.equal(preview.canCommit, false);
+  assert.deepEqual(
+    preview.blockedItems.filter((item) => item.source === "removal_transaction"),
+    [
+      {
+        clientId: "c-1",
+        articleId: "a-1",
+        reasonCode: "REMOVAL_REPAIR_REQUIRED",
+        source: "removal_transaction",
+        status: "needs_repair",
+      },
+    ],
+  );
+  assert.throws(
+    () =>
+      f.service.applyArticleRemovalImpact({
+        confirmed: true,
+        token: preview.token,
+      }),
+    { code: "REMOVAL_REPAIR_REQUIRED" },
+  );
+});
+
+it("does not let the current transaction block its own revalidation", (t) => {
+  const f = fixture();
+  t.after(f.cleanup);
+  const existingSelections = [
+    { clientId: "c-1", articleId: "a-1" },
+    { clientId: "c-1", articleId: "a-2" },
+  ];
+  seedLegacyTransaction(f, {
+    id: "repair-ab",
+    status: "needs_repair",
+    phase: "needs_repair",
+    legacyQueueMigration: "completed",
+    selections: existingSelections,
+    articles: existingSelections.map((item) => ({
+      clientId: item.clientId,
+      articleId: item.articleId,
+      titleSnapshot: item.articleId === "a-1" ? f.article.title : "Title B",
+    })),
+    contentArticleFingerprints: [hash(f.article), "fingerprint-b"],
+    contentFingerprint: "content-ab",
+    fingerprint: transactionFingerprint(existingSelections),
+  });
+  const result = f.service.retryArticleRemovalTransaction({
+    transactionId: "repair-ab",
+    confirmed: true,
+  });
+  assert.equal(result.status, "needs_repair");
+  assert.equal(result.errorCode, "ARTICLE_REMOVAL_CONTENT_CHANGED");
+});
+
+it("allows a preview with no article overlap with an open transaction", (t) => {
+  const f = fixture();
+  t.after(f.cleanup);
+  const existingSelections = [
+    { clientId: "c-1", articleId: "a-2" },
+    { clientId: "c-1", articleId: "a-3" },
+  ];
+  seedLegacyTransaction(f, {
+    id: "pending-bc",
+    status: "pending_auto_recovery",
+    phase: "articles",
+    legacyQueueMigration: "completed",
+    selections: existingSelections,
+    fingerprint: transactionFingerprint(existingSelections),
+  });
+  const preview = f.service.previewArticleRemovalImpact({
+    selections: [{ clientId: "c-1", articleId: "a-1" }],
+  });
+  assert.equal(preview.canCommit, true);
+  assert.equal(
+    preview.blockedItems.some((item) => item.source === "removal_transaction"),
+    false,
+  );
+  const result = f.service.applyArticleRemovalImpact({
+    confirmed: true,
+    token: preview.token,
+  });
+  assert.equal(result.status, "committed");
+  assert.equal(result.reused, undefined);
+  assert.deepEqual(f.store.get(result.transactionId).selections, [
+    { clientId: "c-1", articleId: "a-1" },
+  ]);
 });
 
 it("revalidates active facts before moving and keeps the article unchanged", (t) => {
@@ -269,7 +552,16 @@ it("moves only the completed prefix when a later article changes", (t) => {
   });
   const service = createArticleRemovalService({
     contentStore,
-    articleRemovalImpactQuery: { previewArticleRemovalImpact: () => ({ blockedItems: [] }) },
+    mutationCoordinator: {
+      previewTrashEligibility: ({ articleRefs }) => ({
+        items: articleRefs.map((articleRef) => ({
+          articleRef,
+          allowed: true,
+          reasonCodes: [],
+          safeMetadata: { stage: "pending_submission" },
+        })),
+      }),
+    },
     transactionStore: store,
     now: () => "2026-07-25T00:00:00.000Z",
     runnerId: "runner-many",
@@ -412,7 +704,7 @@ it("permits only one runner to execute a claimed transaction", (t) => {
   t.after(f.cleanup);
   const other = createArticleRemovalService({
     contentStore: f.contentStore,
-    articleRemovalImpactQuery: f.articleRemovalImpactQuery,
+    mutationCoordinator: f.mutationCoordinator,
     transactionStore: f.store,
     now: () => "2026-07-25T00:00:00.000Z",
     runnerId: "runner-b",

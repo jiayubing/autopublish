@@ -84,11 +84,6 @@ function createHarness(options) {
     workspaceRoot: root,
     contentStore,
     mutationCoordinator: coordinator,
-    articleRemovalImpactQuery: {
-      previewArticleRemovalImpact() {
-        return { canCommit: true, blockedItems: [] };
-      },
-    },
     now: () => NOW,
   });
   const clientKnowledge = {

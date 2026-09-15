@@ -8,7 +8,6 @@ const test = require("node:test");
 const { createOperationalStore } = require("../src/infrastructure/operational-store/operational-store");
 const { createContentLifecycleComposition } = require("../desktop/composition/content-lifecycle-composition");
 const { createArticleRemovalService } = require("../src/content/article-removal-service");
-const { createArticleSubmissionRemovalCoordinator } = require("../desktop/services/article-submission-removal-coordinator");
 
 function article() {
   return {
@@ -38,21 +37,20 @@ test("production removal blocks on a queued regular item and leaves queue mutati
         payload: { clientId: "client-1" },
       }],
     });
-    const impactQuery = createArticleSubmissionRemovalCoordinator({
-      lifecycleFacts: operationalStore,
-    });
     const removal = createArticleRemovalService({
       workspaceRoot: root,
       contentStore,
       mutationCoordinator: composition.articleMutationCoordinator,
       transactionStore: composition.articleRemovalTransactionStore,
-      articleRemovalImpactQuery: impactQuery,
       tokenTtlMs: 5000,
     });
     const preview = removal.previewArticleRemovalImpact({ selections: [{ clientId: "client-1", articleId: "article-1" }] });
     assert.equal(preview.canCommit, false);
     assert.equal(preview.queuedToCancel, undefined);
-    assert.equal(preview.blockedItems.some((item) => item.reasonCode === "ARTICLE_OPERATION_FROZEN"), true);
+    const blocked = preview.blockedItems.find((item) => item.reasonCode === "ARTICLE_OPERATION_FROZEN");
+    assert.ok(blocked);
+    assert.equal(blocked.source, "article_lifecycle");
+    assert.equal(blocked.status, "in_submission");
     assert.equal(contentStore.isArticleTrashed("client-1", "article-1"), false);
     assert.equal(operationalStore.getSubmissionBatch(batch.batchId).items[0].status, "queued");
 
@@ -70,39 +68,4 @@ test("production removal blocks on a queued regular item and leaves queue mutati
     operationalStore.close();
     fs.rmSync(root, { recursive: true, force: true });
   }
-});
-
-test("active and published submission facts block removal without queue actions", () => {
-  const views = [
-    { clientId: "client-1", articleId: "queued", batchId: "batch-q", status: "queued" },
-    { clientId: "client-1", articleId: "failed", batchId: "batch-f", status: "failed" },
-    { clientId: "client-1", articleId: "published", batchId: "batch-p", status: "published" },
-  ];
-  const coordinator = createArticleSubmissionRemovalCoordinator({
-    projection: {
-      allItemViews: () => views,
-      publicItem: (item) => ({ ...item }),
-    },
-    policy: {
-      CLEANED_STATUSES: new Set(),
-      normalizeSelections: (input) => input.selections,
-      selectionKey: (item) => `${item.clientId}:${item.articleId}`,
-      evaluateItemAction: (item) => ({
-        allowed: item.action === "cancel",
-        reasonCode: "ARTICLE_SUBMISSION_ACTIVE",
-      }),
-      submissionAction: (item, action) => ({ ...item, action }),
-    },
-    actionRecovery: {},
-  });
-  const preview = coordinator.previewArticleRemovalImpact({
-    selections: views.map(({ clientId, articleId }) => ({ clientId, articleId })),
-  });
-  assert.equal(preview.queuedToCancel, undefined);
-  assert.equal(preview.blockedItems.length, 2);
-  assert.equal(preview.blockedItems.some((item) => item.articleId === "queued" && item.reasonCode === "ARTICLE_OPERATION_FROZEN"), true);
-  assert.equal(preview.blockedItems.some((item) => item.articleId === "published" && item.reasonCode === "ARTICLE_PUBLISHED_IMMUTABLE"), true);
-  assert.equal(preview.canCommit, false);
-  assert.equal(typeof coordinator.cleanupArticleSubmissionItem, "undefined");
-  assert.equal(typeof coordinator.cleanupPublishedArticleLocal, "undefined");
 });

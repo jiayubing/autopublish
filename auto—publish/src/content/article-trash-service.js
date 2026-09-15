@@ -35,13 +35,12 @@ function createArticleTrashService(options) {
     ttlMs: opts.permanentDeleteTokenTtlMs,
     tokenGenerator: opts.permanentDeleteTokenGenerator,
   });
-  const removalService = opts.articleRemovalService || (opts.articleRemovalImpactQuery && opts.workspaceRoot
+  const removalService = opts.articleRemovalService || (opts.workspaceRoot && mutationCoordinator
     ? createArticleRemovalService({
       workspaceRoot: opts.workspaceRoot,
       contentStore: contentStore,
       mutationCoordinator: opts.mutationCoordinator,
       articleRemovalTransitionPort: opts.articleRemovalTransitionPort,
-      articleRemovalImpactQuery: opts.articleRemovalImpactQuery,
       transactionStore: opts.transactionStore,
       transactionDirectory: opts.transactionDirectory,
       now: opts.now,

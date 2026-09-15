@@ -915,12 +915,6 @@ test("deletion transaction DTO is versioned while completed history remains quer
     workspaceRoot: fixture.root,
     contentStore: fixture.contentStore,
     mutationCoordinator: fixture.coordinator,
-    articleRemovalImpactQuery: {
-      previewArticleRemovalImpact: () => ({
-        blockedItems: [],
-        canCommit: true,
-      }),
-    },
     createTransactionId: () => "removal-22-transaction",
     now: () => "2026-08-08T02:02:00.000Z",
   });

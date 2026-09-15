@@ -53,16 +53,12 @@ function createAiContentService(opts) {
   const researchStore = options.researchStore || createResearchStore(workspaceRoot, { paths: paths });
   const templateStore = options.templateStore || createTemplateStore(workspaceRoot, { paths: paths });
   const contentStore = options.contentStore;
-  const operationalStore = options.operationalStore || null;
   const articleMutationCoordinator = options.articleMutationCoordinator || null;
-  const articleRemovalImpactQuery = options.articleRemovalImpactQuery || null;
   const articleTrashService = options.articleTrashService || (contentStore && createArticleTrashService({
     contentStore: contentStore,
-    operationalStore: operationalStore,
     mutationCoordinator: articleMutationCoordinator,
     articleRemovalTransitionPort: options.articleRemovalTransitionPort,
     workspaceRoot: workspaceRoot,
-    articleRemovalImpactQuery,
     transactionStore: options.articleRemovalTransactionStore,
     now: options.now,
     tokenTtlMs: options.articleRemovalTokenTtlMs,
