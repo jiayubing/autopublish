@@ -1,5 +1,4 @@
 name: Windows Installer
-# Temporary PR packaging trigger for PR #57; remove after artifact is produced.
 
 on:
   workflow_run:
