@@ -22,15 +22,30 @@ function createArticleMutationRemoval(kernel) {
   function previewTrashEligibility(input) {
     const refs = transitionRefs(input);
     return kernel.withArticleSet(refs, function (session) {
+      const missing = new Set();
       const articles = refs.map(function (ref) {
         if (session.isArticleTrashed(ref)) return null;
-        return session.readArticle(ref);
+        try {
+          return session.readArticle(ref);
+        } catch (error) {
+          if (!error || error.code !== "ARTICLE_NOT_FOUND") throw error;
+          missing.add(ref);
+          return null;
+        }
       });
       const facts = kernel.factsFor(refs);
       const lifecycleFacts = Object.assign({}, facts, {
         removalTransactions: [],
       });
       const items = articles.map(function (article, index) {
+        if (missing.has(refs[index])) {
+          return Object.freeze({
+            articleRef: refs[index],
+            allowed: false,
+            reasonCodes: ["ARTICLE_NOT_FOUND"],
+            safeMetadata: {},
+          });
+        }
         if (!article) {
           const tombstone = session.getTrashedTombstone(refs[index]);
           return Object.freeze({

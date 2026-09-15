@@ -5,6 +5,106 @@ const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 const { fixture, article } = require("./helpers/article-removal-fixture");
 
+test("missing article preview returns a blocker without throwing", () => {
+  const f = fixture();
+  try {
+    const preview = f.preview(["missing"]);
+    assert.equal(preview.canCommit, false);
+    assert.equal(preview.blockedItems.length, 1);
+    assert.equal(preview.blockedItems[0].articleId, "missing");
+    assert.equal(preview.blockedItems[0].reasonCode, "ARTICLE_NOT_FOUND");
+  } finally {
+    f.close();
+  }
+});
+
+test("mixed preview retains eligible, missing and lifecycle-blocked results", () => {
+  const f = fixture();
+  try {
+    f.store.saveArticle(article("a"));
+    f.store.saveArticle(article("c"));
+    f.setFacts({
+      publications: [
+        { clientId: "client", articleId: "c", status: "uncertain" },
+      ],
+    });
+    const refs = ["a", "b", "c"].map((articleId) => ({
+      clientId: "client",
+      articleId,
+    }));
+    const baseline = f.coordinator.previewTrashEligibility({
+      articleRefs: [refs[2]],
+    }).items[0];
+    const { items } = f.coordinator.previewTrashEligibility({
+      articleRefs: refs,
+    });
+    assert.equal(items.length, 3);
+    assert.equal(items[0].allowed, true);
+    assert.deepEqual(items[0].reasonCodes, []);
+    assert.deepEqual(items[1], {
+      articleRef: refs[1],
+      allowed: false,
+      reasonCodes: ["ARTICLE_NOT_FOUND"],
+      safeMetadata: {},
+    });
+    assert.equal(items[2].allowed, false);
+    assert.deepEqual(items[2].reasonCodes, baseline.reasonCodes);
+    assert.deepEqual(items[2].safeMetadata, baseline.safeMetadata);
+    const preview = f.preview(["a", "b", "c"]);
+    assert.equal(preview.articleCount, 3);
+    assert.equal(preview.canCommit, false);
+    assert.deepEqual(
+      preview.blockedItems.map(({ articleId, reasonCode }) => ({
+        articleId,
+        reasonCode,
+      })),
+      [
+        { articleId: "b", reasonCode: "ARTICLE_NOT_FOUND" },
+        ...baseline.reasonCodes.map((reasonCode) => ({
+          articleId: "c",
+          reasonCode,
+        })),
+      ],
+    );
+  } finally {
+    f.close();
+  }
+});
+
+for (const failure of ["corruption", "EIO", "EACCES", "unexpected"]) {
+  test(`preview propagates article read ${failure}`, () => {
+    const io = Object.create(fs);
+    let armed = false;
+    let injected = 0;
+    io.readFileSync = (filename, ...args) => {
+      if (armed && String(filename).endsWith(path.sep + "a.json")) {
+        injected += 1;
+        if (failure === "corruption") return "{invalid JSON";
+        throw Object.assign(new Error("Synthetic read failure"), {
+          code: failure,
+        });
+      }
+      return fs.readFileSync(filename, ...args);
+    };
+    const f = fixture({ fs: io });
+    try {
+      f.store.saveArticle(article());
+      armed = true;
+      assert.throws(
+        () => f.preview(),
+        (error) => {
+          assert.equal(error.code, "ARTICLE_INVALID");
+          if (failure !== "corruption") assert.equal(error.cause.code, failure);
+          return true;
+        },
+      );
+      assert.ok(injected > 0);
+    } finally {
+      f.close();
+    }
+  });
+}
+
 test("file move failure before its first effect leaves JSON intact and allows explicit retry", () => {
   let fail = true;
   const io = Object.create(fs);
