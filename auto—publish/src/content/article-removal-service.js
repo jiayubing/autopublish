@@ -16,6 +16,7 @@ const {
   titleSnapshot,
   tombstoneReferences,
 } = require("./article-removal-plan");
+const { canonicalArticleRefKey } = require("./article-ref");
 const { reportDiagnostic } = require("../diagnostics/diagnostic-producer");
 
 const LEGACY_QUEUE_ACTION_FIELD = "queueActions";
@@ -509,15 +510,18 @@ function createArticleRemovalService(options) {
     });
   }
 
-  function findOpenTransaction(items, excludedTransactionId) {
-    const targetFingerprint = transactionFingerprint(items);
+  function findOverlappingOpenTransaction(items, excludedTransactionId) {
+    const targetKeys = new Set(items.map(canonicalArticleRefKey));
     return (
       canonicalizeOpenTransactions()
         .filter(function (transaction) {
           return (
             isOpenStatus(transaction.status) &&
-            transaction.fingerprint === targetFingerprint &&
-            transaction.id !== excludedTransactionId
+            transaction.id !== excludedTransactionId &&
+            Array.isArray(transaction.selections) &&
+            transaction.selections.some(function (selection) {
+              return targetKeys.has(canonicalArticleRefKey(selection));
+            })
           );
         })
         .sort(
@@ -529,7 +533,10 @@ function createArticleRemovalService(options) {
 
   function removalImpact(items, excludedTransactionId, lifecycleItems) {
     const impact = buildImpact(lifecycleItems || items);
-    const openTransaction = findOpenTransaction(items, excludedTransactionId);
+    const openTransaction = findOverlappingOpenTransaction(
+      items,
+      excludedTransactionId,
+    );
     const blockedItems = impact.blockedItems.slice();
     if (openTransaction) {
       blockedItems.push({
@@ -1190,7 +1197,7 @@ function createArticleRemovalService(options) {
       );
     tokens.delete(value.token);
     const createdAt = nowIso();
-    const existing = findOpenTransaction(token.binding.selections);
+    const existing = findOverlappingOpenTransaction(token.binding.selections);
     if (existing)
       return {
         transactionId: existing.id,

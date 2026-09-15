@@ -246,6 +246,101 @@ it("keeps an open removal transaction as an additional preview blocker", (t) => 
   assert.equal(preview.canCommit, false);
 });
 
+it("blocks a needs_repair transaction when its selections overlap the preview", (t) => {
+  const f = fixture();
+  t.after(f.cleanup);
+  const existingSelections = [
+    { clientId: "c-1", articleId: "a-1" },
+    { clientId: "c-1", articleId: "a-2" },
+  ];
+  seedLegacyTransaction(f, {
+    id: "repair-ab",
+    status: "needs_repair",
+    phase: "needs_repair",
+    legacyQueueMigration: "completed",
+    selections: existingSelections,
+    articles: existingSelections.map((item) => ({
+      clientId: item.clientId,
+      articleId: item.articleId,
+      titleSnapshot: item.articleId === "a-1" ? f.article.title : "Title B",
+    })),
+    contentArticleFingerprints: [hash(f.article), "fingerprint-b"],
+    contentFingerprint: "content-ab",
+    fingerprint: transactionFingerprint(existingSelections),
+  });
+  const preview = f.service.previewArticleRemovalImpact({
+    selections: [{ clientId: "c-1", articleId: "a-1" }],
+  });
+  assert.equal(preview.canCommit, false);
+  assert.deepEqual(
+    preview.blockedItems.filter((item) => item.source === "removal_transaction"),
+    [
+      {
+        clientId: "c-1",
+        articleId: "a-1",
+        reasonCode: "REMOVAL_REPAIR_REQUIRED",
+        source: "removal_transaction",
+        status: "needs_repair",
+      },
+    ],
+  );
+});
+
+it("does not let the current transaction block its own revalidation", (t) => {
+  const f = fixture();
+  t.after(f.cleanup);
+  const existingSelections = [
+    { clientId: "c-1", articleId: "a-1" },
+    { clientId: "c-1", articleId: "a-2" },
+  ];
+  seedLegacyTransaction(f, {
+    id: "repair-ab",
+    status: "needs_repair",
+    phase: "needs_repair",
+    legacyQueueMigration: "completed",
+    selections: existingSelections,
+    articles: existingSelections.map((item) => ({
+      clientId: item.clientId,
+      articleId: item.articleId,
+      titleSnapshot: item.articleId === "a-1" ? f.article.title : "Title B",
+    })),
+    contentArticleFingerprints: [hash(f.article), "fingerprint-b"],
+    contentFingerprint: "content-ab",
+    fingerprint: transactionFingerprint(existingSelections),
+  });
+  const result = f.service.retryArticleRemovalTransaction({
+    transactionId: "repair-ab",
+    confirmed: true,
+  });
+  assert.equal(result.status, "needs_repair");
+  assert.equal(result.errorCode, "ARTICLE_REMOVAL_CONTENT_CHANGED");
+});
+
+it("allows a preview with no article overlap with an open transaction", (t) => {
+  const f = fixture();
+  t.after(f.cleanup);
+  const existingSelections = [
+    { clientId: "c-1", articleId: "a-2" },
+    { clientId: "c-1", articleId: "a-3" },
+  ];
+  seedLegacyTransaction(f, {
+    id: "pending-bc",
+    status: "pending_auto_recovery",
+    phase: "articles",
+    legacyQueueMigration: "completed",
+    selections: existingSelections,
+    fingerprint: transactionFingerprint(existingSelections),
+  });
+  const preview = f.service.previewArticleRemovalImpact({
+    selections: [{ clientId: "c-1", articleId: "a-1" }],
+  });
+  assert.equal(preview.canCommit, true);
+  assert.equal(
+    preview.blockedItems.some((item) => item.source === "removal_transaction"),
+    false,
+  );
+});
+
 it("revalidates active facts before moving and keeps the article unchanged", (t) => {
   const f = fixture({ moveError: "IO_DOWN" });
   t.after(f.cleanup);
