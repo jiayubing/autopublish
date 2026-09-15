@@ -166,7 +166,7 @@ describe("phase 08 content lifecycle seams", function () {
       crashBetweenFileSteps(
         root,
         `store.saveArticle(${JSON.stringify(beforeInstall)});`,
-        "after-article-json-backup",
+        "before-article-json-replace",
       );
       const recoveredOld = createArticleStore(root);
       assert.deepEqual(recoveredOld.getArticle("client-1", item.id), item);
@@ -246,7 +246,7 @@ describe("phase 08 content lifecycle seams", function () {
     }
   });
 
-  it("recovers a permanent-delete staging journal without treating partial staging as deletion", function () {
+  it("keeps trash restorable when permanent deletion stops before its commit point", function () {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase08-purge-crash-"));
     try {
       const store = createArticleStore(root);
@@ -256,7 +256,7 @@ describe("phase 08 content lifecycle seams", function () {
       crashBetweenFileSteps(
         root,
         `store.permanentlyDeleteTrashedArticle("client-1", "article-1", "2026-07-03T00:00:00.000Z");`,
-        "after-permanent-stage-article-1",
+        "before-terminal-replace",
       );
       const restarted = createArticleStore(root);
       assert.equal(restarted.listTrashedArticles("client-1").length, 1);
