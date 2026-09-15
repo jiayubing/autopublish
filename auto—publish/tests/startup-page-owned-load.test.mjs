@@ -279,15 +279,21 @@ describe("startup page-owned loads", () => {
     );
   });
 
-  it("keeps App from mounting media, submission-center, and kitchen-sink content on the default page", () => {
+  it("keeps one workspace-scoped content feature while retaining page-owned lazy loads", () => {
     const app = readFileSync(
       join(root, "../media-workbench/src/App.tsx"),
       "utf8",
     );
     assert.match(app, /function ArticleLibraryPage/);
-    assert.match(app, /useContentWorkbenchFeature\(\{ page: "library" \}\)/);
-    assert.match(app, /useContentWorkbenchFeature\(\{ page: "production" \}\)/);
-    assert.match(app, /useContentWorkbenchFeature\(\{ page: "shell" \}\)/);
+    assert.match(app, /function contentPageForView/);
+    assert.match(
+      app,
+      /const content = useContentWorkbenchFeature\(\{ page: contentPage \}\)/,
+    );
+    assert.equal(
+      (app.match(/useContentWorkbenchFeature\(\{/g) || []).length,
+      1,
+    );
     assert.match(app, /useMediaFeature\(\{ surface: "orders" \}\)/);
     assert.match(app, /useMediaFeature\(\{ surface: "resources" \}\)/);
     const sidebar = readFileSync(
