@@ -103,6 +103,6 @@ build/test-results/file-safety-{targeted,core,integration,format}.log（不提�
 未运行本地产物构建、installer、release 或真实 workspace/账号操作。
 
 复杂度：生产文件合计删除 116 行、增加 17 行，净减 99 行；
-article-file-transaction 685 → 584 行（约 -15%），ArticleStore 增加 2 行终态清理。
+article-file-transaction 686 → 585 行（约 -15%），ArticleStore 增加 2 行终态清理。
 新 save 从 6 阶段降到 2，purge 从 9 降到 3；trash/restore 及锁状态不变。
 保留兼容恢复的代价已明确，不以删除真实残留恢复换取更漂亮的行数。
