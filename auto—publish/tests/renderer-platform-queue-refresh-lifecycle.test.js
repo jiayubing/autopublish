@@ -479,13 +479,23 @@ describe("renderer platform queue lifecycle", { concurrency: false }, () => {
     await installDesktopFixture(page);
     await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
     await page.getByText("数据已就绪").waitFor();
+    assert.equal(
+      await page.evaluate(() =>
+        window.__platformQueueLifecycle.getSubmissionCenterCalls(),
+      ),
+      0,
+      "article-library first paint does not load the submission-center snapshot",
+    );
+
+    await page.locator("#nav-item-submission-center").click();
+    await page.getByRole("heading", { name: "普通平台队列" }).waitFor();
     const initialCalls = await page.evaluate(() =>
       window.__platformQueueLifecycle.getSubmissionCenterCalls(),
     );
     assert.equal(
       initialCalls,
       1,
-      "the submission-center feature owns the initial composite load",
+      "the submission-center feature owns the page mount load",
     );
 
     await page.waitForTimeout(500);
@@ -494,18 +504,7 @@ describe("renderer platform queue lifecycle", { concurrency: false }, () => {
         window.__platformQueueLifecycle.getSubmissionCenterCalls(),
       ),
       initialCalls,
-      "initial idle does not trigger another submission-center query",
-    );
-
-    await page.locator("#nav-item-submission-center").click();
-    await page.getByRole("heading", { name: "普通平台队列" }).waitFor();
-    await page.waitForTimeout(500);
-    assert.equal(
-      await page.evaluate(() =>
-        window.__platformQueueLifecycle.getSubmissionCenterCalls(),
-      ),
-      initialCalls,
-      "mounting the page does not refresh again",
+      "idle after mount does not trigger another submission-center query",
     );
 
     await page.getByRole("button", { name: "刷新", exact: true }).click();

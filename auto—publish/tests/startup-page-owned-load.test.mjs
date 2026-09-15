@@ -152,6 +152,16 @@ describe("startup page-owned loads", () => {
     feature.dispose();
   });
 
+  it("library refresh still succeeds when client groups are unavailable", async () => {
+    const adapters = contentAdapters([]);
+    delete adapters.getClientGroups;
+    const feature = createContentWorkbenchFeature(adapters);
+    feature.setScope({ workspaceRuntimeId: "runtime-library-groups" });
+    assert.equal(await feature.library.refresh("manual"), true);
+    assert.equal(feature.getSnapshot().management.lifecycleCounts.needs_completion, 2);
+    feature.dispose();
+  });
+
   it("loads production-owned sources without management or paid batches", async () => {
     const calls = [];
     const feature = createContentWorkbenchFeature(contentAdapters(calls));

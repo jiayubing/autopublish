@@ -150,11 +150,11 @@ export function createContentWorkbenchFeature(adapters = {}) {
       return false;
     syncManagementScope();
     const hasSelectedClient = Boolean(sources.getSnapshot().selectedClientId);
-    const [groupsResult, managementResult] = await Promise.all([
+    const [, managementResult] = await Promise.all([
       sources.refreshClientGroups(reason),
       hasSelectedClient ? management.refreshManagement(reason) : true,
     ]);
-    return groupsResult && managementResult;
+    return managementResult;
   };
   const refreshProduction = async (reason = "manual") => {
     if (!(await sources.refreshSources(reason, { refreshFallbackData: false })))
