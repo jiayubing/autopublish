@@ -66,4 +66,65 @@ describe("authenticated runtime seam", function () {
     assert.deepEqual(await joined, expected);
     assert.deepEqual(await first, expected);
   });
+
+  it("keeps the runtime stopped when a disposed start resolves late", async function () {
+    let releaseStart;
+    const startGate = new Promise((resolve) => {
+      releaseStart = resolve;
+    });
+    const runtime = createAuthenticatedRuntime({
+      start: async () => {
+        await startGate;
+      },
+      dispose: async () => {},
+    });
+
+    const pendingStart = runtime.start({ workspacePath: "fixture-workspace" });
+    assert.equal(runtime.getState().phase, "starting");
+
+    await runtime.dispose();
+    assert.deepEqual(runtime.getState(), {
+      phase: "stopped",
+      workspacePath: null,
+    });
+
+    releaseStart();
+    assert.deepEqual(await pendingStart, {
+      phase: "stopped",
+      workspacePath: null,
+    });
+    assert.deepEqual(runtime.getState(), {
+      phase: "stopped",
+      workspacePath: null,
+    });
+  });
+
+  it("keeps the runtime stopped when a disposed start rejects late", async function () {
+    let rejectStart;
+    const startGate = new Promise((resolve, reject) => {
+      rejectStart = reject;
+    });
+    const runtime = createAuthenticatedRuntime({
+      start: async () => {
+        await startGate;
+      },
+      dispose: async () => {},
+    });
+
+    const pendingStart = runtime.start({ workspacePath: "fixture-workspace" });
+    assert.equal(runtime.getState().phase, "starting");
+
+    await runtime.dispose();
+    assert.deepEqual(runtime.getState(), {
+      phase: "stopped",
+      workspacePath: null,
+    });
+
+    rejectStart(new Error("late workspace start failure"));
+    await assert.rejects(pendingStart, /late workspace start failure/);
+    assert.deepEqual(runtime.getState(), {
+      phase: "stopped",
+      workspacePath: null,
+    });
+  });
 });
