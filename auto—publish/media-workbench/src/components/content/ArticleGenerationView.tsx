@@ -177,13 +177,13 @@ function ClientGenerationView({
     }
   }
 
-  async function retryFailed() {
+  async function continueOrRetry() {
     if (!operation || !generationFeature.retry || operation.status === 'running') return;
     setError('');
     try {
       await generationFeature.retry(operation.operationId);
     } catch (value) {
-      setError(value instanceof Error ? value.message : '失败任务重试失败');
+      setError(value instanceof Error ? value.message : operation.counts.pending > 0 ? '未完成任务继续失败' : '失败任务重试失败');
     }
   }
 
@@ -222,8 +222,8 @@ function ClientGenerationView({
 
     {operation && <section className="rounded-md border border-slate-200 bg-white p-4" aria-label="客户生成任务进度">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div><h2 className="text-sm font-semibold">任务进度</h2><p className="mt-1 text-xs text-slate-500">并发 {operation.concurrency} · 已处理 {finishedCount}/{operation.counts.total} · {operation.status === 'running' ? '后台生成中，可切换到其他客户继续操作' : '本次任务已结束'}</p></div>
-        {operation.counts.failed > 0 && operation.status !== 'running' && <button type="button" onClick={() => void retryFailed()} className="inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-xs text-slate-700"><RotateCcw className="h-3.5 w-3.5" />重试失败 {operation.counts.failed} 篇</button>}
+        <div><h2 className="text-sm font-semibold">任务进度</h2><p className="mt-1 text-xs text-slate-500">并发 {operation.concurrency} · 已处理 {finishedCount}/{operation.counts.total} · {operation.status === 'running' ? '后台生成中，可切换到其他客户继续操作' : operation.counts.pending > 0 ? '上次任务未完成，可继续未开始项' : '本次任务已结束'}</p></div>
+        {(operation.counts.pending > 0 || operation.counts.failed > 0) && operation.status !== 'running' && <button type="button" onClick={() => void continueOrRetry()} className="inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-xs text-slate-700"><RotateCcw className="h-3.5 w-3.5" />{operation.counts.pending > 0 ? `继续未完成 ${operation.counts.pending} 篇` : `重试失败 ${operation.counts.failed} 篇`}</button>}
       </div>
       <div className="mt-3 h-2 overflow-hidden rounded bg-slate-100"><div className="h-full bg-blue-600 transition-all" style={{ width: `${progress}%` }} /></div>
       <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">

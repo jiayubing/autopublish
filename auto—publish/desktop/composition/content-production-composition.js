@@ -144,6 +144,13 @@ async function createContentProductionComposition(options) {
         },
       ),
     );
+    function continueOrRetryClientGeneration(input) {
+      const continued = clientGenerationService.continuePending(input);
+      if (continued && continued.status !== "running" && continued.counts && continued.counts.pending === 0 && continued.counts.failed > 0) {
+        return clientGenerationService.retryFailed(input);
+      }
+      return continued;
+    }
     // Article management and client generation have separate owners. The
     // facade only maps the public IPC surface and must not remain mutable.
     const aiContentService = Object.freeze(
@@ -151,7 +158,7 @@ async function createContentProductionComposition(options) {
         generateArticle: clientGenerationService.generateArticle,
         startClientGeneration: clientGenerationService.start,
         getClientGenerationState: clientGenerationService.getState,
-        retryClientGeneration: clientGenerationService.retryFailed,
+        retryClientGeneration: continueOrRetryClientGeneration,
         subscribeClientGeneration: clientGenerationService.subscribe,
         getState: clientGenerationService.getState,
       }),
