@@ -531,6 +531,24 @@ function createArticleRemovalService(options) {
     );
   }
 
+  function findExactOpenTransaction(items, excludedTransactionId) {
+    const targetFingerprint = transactionFingerprint(items);
+    return (
+      canonicalizeOpenTransactions()
+        .filter(function (transaction) {
+          return (
+            isOpenStatus(transaction.status) &&
+            transaction.id !== excludedTransactionId &&
+            transaction.fingerprint === targetFingerprint
+          );
+        })
+        .sort(
+          (left, right) =>
+            String(left.createdAt || "").localeCompare(String(right.createdAt || "")),
+        )[0] || null
+    );
+  }
+
   function removalImpact(items, excludedTransactionId, lifecycleItems) {
     const impact = buildImpact(lifecycleItems || items);
     const openTransaction = findOverlappingOpenTransaction(
@@ -1189,6 +1207,31 @@ function createArticleRemovalService(options) {
           "Article trash preview is stale",
         );
     }
+    const exact = findExactOpenTransaction(token.binding.selections);
+    if (exact) {
+      tokens.delete(value.token);
+      return {
+        transactionId: exact.id,
+        status: exact.status,
+        articleCount: exact.articles
+          ? exact.articles.length
+          : token.binding.selections.length,
+        reused: true,
+        errorCode: exact.errorCode || null,
+      };
+    }
+    const overlapping = findOverlappingOpenTransaction(
+      token.binding.selections,
+    );
+    if (overlapping)
+      throw removalError(
+        overlapping.status === "needs_repair"
+          ? "REMOVAL_REPAIR_REQUIRED"
+          : "ARTICLE_REMOVAL_OPERATION_IN_FLIGHT",
+        overlapping.status === "needs_repair"
+          ? "Article removal transaction requires repair"
+          : "Article removal transaction is already in flight",
+      );
     const fresh = verifyFresh(token);
     if (fresh.blockedItems.length)
       throw removalError(
@@ -1197,17 +1240,6 @@ function createArticleRemovalService(options) {
       );
     tokens.delete(value.token);
     const createdAt = nowIso();
-    const existing = findOverlappingOpenTransaction(token.binding.selections);
-    if (existing)
-      return {
-        transactionId: existing.id,
-        status: existing.status,
-        articleCount: existing.articles
-          ? existing.articles.length
-          : token.binding.selections.length,
-        reused: true,
-        errorCode: existing.errorCode || null,
-      };
     const transaction = {
       version: 2,
       id: String(transactionStore.createId()),

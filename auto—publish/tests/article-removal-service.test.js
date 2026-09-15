@@ -37,6 +37,18 @@ function fixture(options) {
     content: "body",
     status: "generated",
   };
+  const additionalArticles = new Map(
+    (value.additionalArticleIds || []).map((articleId) => [
+      articleId,
+      {
+        clientId: "c-1",
+        id: articleId,
+        title: `Title ${articleId}`,
+        content: `body ${articleId}`,
+        status: "generated",
+      },
+    ]),
+  );
 
   const mutationCoordinator = {
     previewTrashEligibility: ({ articleRefs }) => ({
@@ -62,10 +74,12 @@ function fixture(options) {
     snapshotArticle: (current) => JSON.parse(JSON.stringify(current)),
     getArticle: (clientId, articleId) => {
       if (readError) throw Object.assign(new Error("article read failed"), { code: readError });
-      if (clientId !== article.clientId || articleId !== article.id)
+      const current =
+        articleId === article.id ? article : additionalArticles.get(articleId);
+      if (clientId !== article.clientId || !current)
         throw Object.assign(new Error("article missing"), { code: "ARTICLE_NOT_FOUND" });
       if (trashed) throw Object.assign(new Error("article missing"), { code: "ARTICLE_NOT_FOUND" });
-      return article;
+      return current;
     },
     fingerprintArticle: (current) => hash(current),
     isArticleTrashed: () => trashed,
@@ -173,6 +187,38 @@ function seedLegacyTransaction(fixtureValue, overrides) {
   return transaction;
 }
 
+function seedOpenTransaction(fixtureValue, selections, overrides) {
+  const value = overrides || {};
+  return seedLegacyTransaction(
+    fixtureValue,
+    Object.assign(
+      {
+        id: value.id || "open-transaction",
+        status: "pending_auto_recovery",
+        phase: "articles",
+        legacyQueueMigration: "completed",
+        selections,
+        articles: selections.map((item) => ({
+          clientId: item.clientId,
+          articleId: item.articleId,
+          titleSnapshot:
+            item.articleId === fixtureValue.article.id
+              ? fixtureValue.article.title
+              : `Title ${item.articleId}`,
+        })),
+        contentArticleFingerprints: selections.map((item) =>
+          item.articleId === fixtureValue.article.id
+            ? hash(fixtureValue.article)
+            : `fingerprint-${item.articleId}`,
+        ),
+        contentFingerprint: `content-${value.id || "open-transaction"}`,
+        fingerprint: transactionFingerprint(selections),
+      },
+      value,
+    ),
+  );
+}
+
 it("removal preview exposes only blocked facts and never creates queue actions", (t) => {
   const f = fixture();
   t.after(f.cleanup);
@@ -246,6 +292,76 @@ it("keeps an open removal transaction as an additional preview blocker", (t) => 
   assert.equal(preview.canCommit, false);
 });
 
+it("reuses an exact duplicate transaction without treating overlap as reuse", (t) => {
+  const f = fixture({ additionalArticleIds: ["a-2"] });
+  t.after(f.cleanup);
+  const selections = [
+    { clientId: "c-1", articleId: "a-1" },
+    { clientId: "c-1", articleId: "a-2" },
+  ];
+  seedOpenTransaction(f, selections, { id: "exact-ab" });
+  const preview = f.service.previewArticleRemovalImpact({
+    selections: selections.slice().reverse(),
+  });
+  assert.equal(preview.canCommit, false);
+  const result = f.service.applyArticleRemovalImpact({
+    confirmed: true,
+    token: preview.token,
+  });
+  assert.equal(result.transactionId, "exact-ab");
+  assert.equal(result.reused, true);
+  assert.equal(f.store.list().length, 1);
+});
+
+it("rejects a non-exact overlapping transaction instead of reusing it", (t) => {
+  const f = fixture();
+  t.after(f.cleanup);
+  const existingSelections = [
+    { clientId: "c-1", articleId: "a-1" },
+    { clientId: "c-1", articleId: "a-2" },
+  ];
+  seedOpenTransaction(f, existingSelections, { id: "pending-ab" });
+  const preview = f.service.previewArticleRemovalImpact({
+    selections: [{ clientId: "c-1", articleId: "a-1" }],
+  });
+  assert.equal(preview.canCommit, false);
+  assert.throws(
+    () =>
+      f.service.applyArticleRemovalImpact({
+        confirmed: true,
+        token: preview.token,
+      }),
+    { code: "ARTICLE_REMOVAL_OPERATION_IN_FLIGHT" },
+  );
+  assert.equal(f.store.list().length, 1);
+});
+
+it("rejects a non-exact overlap across a different requested selection", (t) => {
+  const f = fixture({ additionalArticleIds: ["a-2", "a-3"] });
+  t.after(f.cleanup);
+  const existingSelections = [
+    { clientId: "c-1", articleId: "a-1" },
+    { clientId: "c-1", articleId: "a-2" },
+  ];
+  seedOpenTransaction(f, existingSelections, { id: "pending-ab" });
+  const preview = f.service.previewArticleRemovalImpact({
+    selections: [
+      { clientId: "c-1", articleId: "a-2" },
+      { clientId: "c-1", articleId: "a-3" },
+    ],
+  });
+  assert.equal(preview.canCommit, false);
+  assert.throws(
+    () =>
+      f.service.applyArticleRemovalImpact({
+        confirmed: true,
+        token: preview.token,
+      }),
+    { code: "ARTICLE_REMOVAL_OPERATION_IN_FLIGHT" },
+  );
+  assert.equal(f.store.list().length, 1);
+});
+
 it("blocks a needs_repair transaction when its selections overlap the preview", (t) => {
   const f = fixture();
   t.after(f.cleanup);
@@ -283,6 +399,14 @@ it("blocks a needs_repair transaction when its selections overlap the preview", 
         status: "needs_repair",
       },
     ],
+  );
+  assert.throws(
+    () =>
+      f.service.applyArticleRemovalImpact({
+        confirmed: true,
+        token: preview.token,
+      }),
+    { code: "REMOVAL_REPAIR_REQUIRED" },
   );
 });
 
@@ -339,6 +463,15 @@ it("allows a preview with no article overlap with an open transaction", (t) => {
     preview.blockedItems.some((item) => item.source === "removal_transaction"),
     false,
   );
+  const result = f.service.applyArticleRemovalImpact({
+    confirmed: true,
+    token: preview.token,
+  });
+  assert.equal(result.status, "committed");
+  assert.equal(result.reused, undefined);
+  assert.deepEqual(f.store.get(result.transactionId).selections, [
+    { clientId: "c-1", articleId: "a-1" },
+  ]);
 });
 
 it("revalidates active facts before moving and keeps the article unchanged", (t) => {
