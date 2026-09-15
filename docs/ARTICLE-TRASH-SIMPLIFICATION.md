@@ -36,7 +36,7 @@ backoff、重试计数、lease、revision CAS、duplicate canonicalization 或�
 - [x] 跨实例竞争、恢复、永久删除、内容变化
 - [x] 定向回归、integration、lint/typecheck
 - [x] Primary review → 必要修复 → bounded re-review
-- [ ] 提交后最终验证与证据
+- [x] 提交后最终验证与证据
 
 最终命令、结果、发现及剩余风险在完成时写回本文件。
 
@@ -81,3 +81,37 @@ internal article-mutation-removal。合计 2,599 → 1,123 行（约 -57%），
 崩溃验证覆盖进程异常退出，不声称验证了断电/磁盘硬件损坏。
 旧 removal-*.json 不删除且不自动继续；如需处理历史批次，应按当前文件事实重新预览。
 用户原有 pelican-bicycle.html 删除和 work/ 未跟踪内容始终保留，不提交。
+
+## 最终提交后验证：COMPLETE
+
+实现提交：`5a6d6b33576c9a0727ba4b1216125bef1d642852`。
+环境：Windows / Node `v24.16.0`，命令工作目录 `auto—publish/`。
+本节是之后的纯文档 evidence 提交，不修改生产源码、测试或 gate。
+验证时本任务源码/测试与上述提交一致；仓库不是全局 clean，
+只有用户原有的根目录删除与未跟踪 work/，没有把它们伪称为 clean 或加入提交。
+
+| 实际命令 | 最终结果 |
+| --- | --- |
+| `npm test` | PASS，59 文件，587/587，0 skipped/todo，43.346 秒 |
+| `npm run test:integration` | PASS，223 文件，1,166/1,166，0 skipped/todo，220.769 秒 |
+| `npm run lint` | PASS |
+| `npm run typecheck:main` | PASS |
+| `git diff --check` | PASS |
+
+新增最终定向命令（实现提交前）：
+`node --test tests/article-removal-service.test.js tests/workspace-runtime-lifecycle.test.js`
+为 25/25 PASS；全部已被提交后的 core 组覆盖。
+较早定向检查另覆盖 `phase-08-content-lifecycle.test.js` 的文件恢复、
+restore/purge 中断及目录 junction 边界；这些也被最终 integration 组覆盖。
+
+原生测试输出保留于未提交生成物
+`auto—publish/build/test-results/core-timings.json` 与
+`auto—publish/build/test-results/integration-timings.json`；
+二者均报告 CLOSED / allFilesReported / noSkippedTodo。
+
+实际最终调用链：
+`trash service / removal service（确认与查询） → article-mutation-removal
+（既有文章锁、lifecycle projection 复核、单份批量意图）
+→ ArticleStore（JSON/墓碑及文件恢复日志）`。
+
+本阶段结束；未 push、未创建 PR、未 merge。不继续其他架构优化。
