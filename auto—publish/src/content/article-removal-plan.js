@@ -65,26 +65,6 @@ function transactionFingerprint(selectionsValue) {
   });
 }
 
-function isOpenStatus(status) {
-  return ["pending_auto_recovery", "pending_recovery", "needs_repair"].includes(
-    status,
-  );
-}
-
-function isRepairableError(error) {
-  return (
-    !!error &&
-    [
-      "ARTICLE_REMOVAL_OPERATION_IN_FLIGHT",
-      "ARTICLE_REMOVAL_OPERATION_CONFLICT",
-      "ARTICLE_REMOVAL_CONTENT_CHANGED",
-      "ARTICLE_REMOVAL_BLOCKED",
-      "ARTICLE_MUTATION_RESULT_UNCERTAIN",
-      "ARTICLE_TOMBSTONE_CHANGED",
-    ].includes(error.code)
-  );
-}
-
 function titleSnapshot(article) {
   return typeof article.title === "string" && article.title.trim()
     ? article.title.trim().slice(0, 200)
@@ -114,8 +94,6 @@ module.exports = {
   selections,
   fingerprint,
   transactionFingerprint,
-  isOpenStatus,
-  isRepairableError,
   titleSnapshot,
   tombstoneReferences,
 };

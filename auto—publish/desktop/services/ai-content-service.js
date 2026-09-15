@@ -57,7 +57,6 @@ function createAiContentService(opts) {
   const articleTrashService = options.articleTrashService || (contentStore && createArticleTrashService({
     contentStore: contentStore,
     mutationCoordinator: articleMutationCoordinator,
-    articleRemovalTransitionPort: options.articleRemovalTransitionPort,
     workspaceRoot: workspaceRoot,
     transactionStore: options.articleRemovalTransactionStore,
     now: options.now,

@@ -113,7 +113,6 @@ async function createContentProductionComposition(options) {
         operationalStore: value.operationalStore,
         articleMutationCoordinator: value.articleMutationCoordinator,
         articleRemovalTransactionStore: value.articleRemovalTransactionStore,
-        articleRemovalTransitionPort: value.articleRemovalTransitionPort,
         onArticleRemovalTransaction: function (transaction) {
           const eventContract = productionIpcRegistry.byChannel(
             "content:article-removal-transaction",
@@ -156,28 +155,6 @@ async function createContentProductionComposition(options) {
         getState: clientGenerationService.getState,
       }),
     );
-    const removalRecoveryScheduler =
-      articleContentService.recoverPendingArticleRemovals
-        ? ownService(
-            require("../../src/content/article-removal-recovery-scheduler").createArticleRemovalRecoveryScheduler(
-              {
-                recover: articleContentService.recoverPendingArticleRemovals,
-                onDiagnostic: function (diagnostic) {
-                  try {
-                    value.runtimeDiagnosticsService &&
-                      value.runtimeDiagnosticsService.report &&
-                      value.runtimeDiagnosticsService.report(diagnostic);
-                  } catch (_) {
-                    reportContentProductionDiagnostic(
-                      "CONTENT_PRODUCTION_RECOVERY_DIAGNOSTIC_FAILED",
-                      "recovery-diagnostic",
-                    );
-                  }
-                },
-              },
-            ),
-          )
-        : null;
     const batchAiProvider = {
       createClient: function () {
         return aiExecutionService.createClient("batch-generation");
@@ -210,7 +187,15 @@ async function createContentProductionComposition(options) {
       start: function () {
         if (disposed || started) return;
         started = true;
-        if (removalRecoveryScheduler) removalRecoveryScheduler.start();
+        try {
+          if (articleContentService.recoverPendingArticleRemovals)
+            articleContentService.recoverPendingArticleRemovals();
+        } catch (_) {
+          reportContentProductionDiagnostic(
+            "ARTICLE_REMOVAL_STARTUP_RECOVERY_FAILED",
+            "removal-startup-recovery",
+          );
+        }
       },
       dispose,
     });

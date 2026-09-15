@@ -40,13 +40,10 @@ function createArticleTrashService(options) {
       workspaceRoot: opts.workspaceRoot,
       contentStore: contentStore,
       mutationCoordinator: opts.mutationCoordinator,
-      articleRemovalTransitionPort: opts.articleRemovalTransitionPort,
       transactionStore: opts.transactionStore,
-      transactionDirectory: opts.transactionDirectory,
       now: opts.now,
       tokenTtlMs: opts.tokenTtlMs,
       tokenGenerator: opts.tokenGenerator,
-      afterArticleMove: opts.afterArticleMove,
       onTransactionStatus: opts.onTransactionStatus
     }) : null);
 

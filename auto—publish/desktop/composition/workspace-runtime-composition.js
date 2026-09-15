@@ -383,8 +383,6 @@ async function createWorkspaceRuntimeComposition(deps) {
           articleMutationCoordinator,
           articleRemovalTransactionStore:
             contentLifecycleComposition.articleRemovalTransactionStore,
-          articleRemovalTransitionPort:
-            contentLifecycleComposition.articleRemovalTransitionPort,
           onDataInvalidated: invalidation.invalidate,
           sendToRenderer,
           runtimeDiagnosticsService: runtime.diagnosticsService,
