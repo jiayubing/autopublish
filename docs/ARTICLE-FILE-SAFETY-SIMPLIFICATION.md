@@ -44,7 +44,7 @@ Windows 依据：[libuv fs__rename](https://github.com/libuv/libuv/blob/v1.x/src
 - [x] 最新基线、新分支、调用链与并发模型
 - [x] 实现与真实文件故障矩阵：定向 108/108（提交前）
 - [x] Primary review → 修复 → bounded re-review
-- [ ] 最终测试、证据、commit/push/PR（不 merge）
+- [x] 最终本地测试、证据及实现提交；push/PR 在 GitHub 核实（不 merge）
 
 用户原有 pelican-bicycle.html 删除和 work/ 未跟踪目录保留，不提交。
 
@@ -71,3 +71,38 @@ trash/restore 仍由底层日志恢复；上层 intent 只负责批次余项，�
 核心模块保持 article-store / article-file-transaction / article-lock 三个，不新增抽象。
 锁状态不变；新写入 journal 类型从 save/trash/restore/purge 四类减少到 trash/restore 两类。
 旧格式恢复不计作新写入状态；不伪称所有 journal/backup 代码已删除。
+
+## 最终本地 evidence
+
+实现提交：`e211385a7bb2986caab149cc6b15d741b86bc446`。
+环境：Windows / Node v24.16.0；C:（测试 temp）与 F: 均为 NTFS。
+命令工作目录 `auto—publish/`；之后仅修改本文档，不改变已验证源码/测试/gate。
+
+| 实际命令 | 结果 |
+| --- | --- |
+| `node --test tests/article-file-safety.test.js tests/article-store.test.js tests/phase-08-content-lifecycle.test.js tests/article-removal-service.test.js tests/article-mutation-coordinator.test.js tests/workspace-runtime-lifecycle.test.js` | 108/108 PASS（提交前，新增文件随后只经 Prettier 格式化） |
+| `npm test` | 59 文件，593/593 PASS，23.977 秒 |
+| `npm run test:integration` | 224 文件，1,186/1,186 PASS，184.370 秒 |
+| `npm run lint` | PASS |
+| `npm run typecheck:main` | PASS |
+| `npm run typecheck:renderer` | PASS |
+| `npm run typecheck:bridge` | PASS |
+| `git diff --check` | PASS |
+| `npm run format:check` | FAIL，4 项 baseline 告警，见下 |
+
+format 告警：src/domain/identities.js、tests/authenticated-runtime.test.js、
+tests/phase-01-domain-contracts.test.js、tests/phase-08-content-lifecycle.test.js。
+逐个执行 `git show origin/master:auto—publish/<file> | npx prettier --check --stdin-filepath <file>`，
+四项 baseline 均 exit=1。未顺手格式化这些既有代码；future owner=各文件维护者。
+CI toolchain 同一 PowerShell run 连续执行多个 npm 命令，不能将其最终绿色等同于
+本机 format 命令通过；本节保留实际失败结果，不修改 CI 范围。
+
+core/integration 均 CLOSED、allFilesReported=true、noSkippedTodo=true。
+原生证据在 build/test-results/{core,integration}-timings.json；完整输出在
+build/test-results/file-safety-{targeted,core,integration,format}.log（不提交）。
+未运行本地产物构建、installer、release 或真实 workspace/账号操作。
+
+复杂度：生产文件合计删除 116 行、增加 17 行，净减 99 行；
+article-file-transaction 685 → 584 行（约 -15%），ArticleStore 增加 2 行终态清理。
+新 save 从 6 阶段降到 2，purge 从 9 降到 3；trash/restore 及锁状态不变。
+保留兼容恢复的代价已明确，不以删除真实残留恢复换取更漂亮的行数。
