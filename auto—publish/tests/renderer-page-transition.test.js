@@ -14,19 +14,27 @@ describe("renderer page transition ownership", function () {
     assert.doesNotMatch(app, /AnimatePresence mode="sync"/);
     assert.match(app, /function ArticleLibraryPage/);
     assert.match(app, /function ContentProductionPage/);
-    assert.match(app, /useContentWorkbenchFeature\(\{ page: "library" \}\)/);
     assert.match(
       app,
-      /useContentWorkbenchFeature\(\{ page: "production" \}\)/,
+      /const content = useContentWorkbenchFeature\(\{ page: contentPage \}\)/,
     );
+    assert.match(app, /<ContentProductionPage[\s\S]*content=\{content\}/);
+    assert.match(app, /<ArticleLibraryPage[\s\S]*content=\{content\}/);
     assert.doesNotMatch(app, /useMediaFeature\(\)/);
     assert.doesNotMatch(app, /useContentWorkbenchFeature\(\)/);
   });
 
-  it("keeps page-owned feature hooks out of AppContent so unused pages stay unloaded", function () {
+  it("keeps one workspace content owner while unrelated page features stay lazy", function () {
     const app = read("media-workbench/src/App.tsx");
     const appContent = app.slice(app.indexOf("function AppContent"));
-    assert.doesNotMatch(appContent, /useContentWorkbenchFeature/);
+    assert.match(
+      appContent,
+      /const content = useContentWorkbenchFeature\(\{ page: contentPage \}\)/,
+    );
+    assert.equal(
+      (app.match(/useContentWorkbenchFeature\(\{/g) || []).length,
+      1,
+    );
     assert.doesNotMatch(appContent, /useSubmissionCenterFeature/);
     assert.doesNotMatch(appContent, /useMediaFeature/);
   });
