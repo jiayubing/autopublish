@@ -137,7 +137,7 @@ test("content feature fails closed when its production content capability is una
   feature.dispose();
 });
 
-test("content ordinary mutations have independent command owners and refresh their authoritative query", async () => {
+test("content ordinary mutations have independent command owners and apply question results locally", async () => {
   let resolveSave;
   let questionReads = 0;
   let managementReads = 0;
@@ -159,7 +159,8 @@ test("content ordinary mutations have independent command owners and refresh the
   await creating;
   assert.equal(feature.getSnapshot().commands.createQuestion.busy, false);
   assert.equal(feature.getSnapshot().commands.saveArticle.busy, true);
-  assert.ok(questionReads > baselineQuestionReads);
+  assert.equal(questionReads, baselineQuestionReads);
+  assert.deepEqual(feature.getSnapshot().questions.map((item) => item.id), ["question-new"]);
   assert.equal(managementReads, baselineManagementReads);
 
   resolveSave({ id: "article-a", clientId: "client-a", title: "A", status: "saved" });

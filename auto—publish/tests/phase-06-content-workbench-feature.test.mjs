@@ -215,7 +215,7 @@ test("content workspace switch clears articles and rejects the previous runtime 
   );
 });
 
-test("content workspace owns each ordinary question mutation independently", async () => {
+test("content workspace applies ordinary question mutations without a client refresh", async () => {
   let refreshes = 0;
   const feature = createContentWorkbenchFeature({
     ...paidExecutionAdapters,
@@ -241,10 +241,7 @@ test("content workspace owns each ordinary question mutation independently", asy
 
   assert.equal(feature.getSnapshot().commands.deleteQuestion.busy, false);
   assert.equal(feature.getSnapshot().commands.deleteQuestion.error, null);
-  assert.ok(
-    refreshes >= 2,
-    "the named command refreshes the client snapshot itself",
-  );
+  assert.equal(refreshes, 1, "the question result updates the existing client snapshot");
 });
 
 test("content workspace keeps paid-media preflight and confirmation as named commands", async () => {

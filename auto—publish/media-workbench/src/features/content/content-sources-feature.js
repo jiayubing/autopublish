@@ -27,9 +27,9 @@ const LOGIN_STATUSES = new Set(['unknown', 'checking', 'login_required', 'authen
 
 const SOURCE_COMMANDS = Object.freeze({
   updateClientGroups: 'clientGroups',
-  createQuestion: 'client',
-  updateQuestion: 'client',
-  deleteQuestion: 'client',
+  createQuestion: 'question',
+  updateQuestion: 'question',
+  deleteQuestion: 'question',
   saveManualResearch: 'client',
   retryMaterial: 'sources',
   saveClientLiejuPublicationProfile: 'workspaceSources',
@@ -55,7 +55,7 @@ const QUEUE_COMMANDS = new Set([
 ]);
 
 const LOGIN_COMMANDS = new Set(['getDoubaoLoginStatus', 'openDoubaoLogin']);
-const CLIENT_SCOPED_TARGETS = new Set(['client', 'sources']);
+const CLIENT_SCOPED_TARGETS = new Set(['client', 'sources', 'question']);
 
 const CLIENT_IDENTITY = Object.freeze({
   createQuestion: (input) => [input?.clientId],
@@ -114,6 +114,10 @@ function queueRefreshKey(value) {
     ? value.tasks.map((task) => task?.id).filter(Boolean).join('|')
     : '';
   return `${value?.status || 'idle'}:${value?.completed || 0}:${value?.total || 0}:${taskIds}`;
+}
+
+function normalizeQuestionText(value) {
+  return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '';
 }
 
 function assertClientScope(name, input, selectedClientId) {
@@ -463,8 +467,51 @@ export function createContentSourcesFeature(adapters = {}) {
     }
   };
 
+  const invalidateQuestionResearch = (clientId, questionId) => {
+    research = research.filter((item) => item?.id !== questionId);
+    const indexedResearch = researchByClient[clientId];
+    if (Array.isArray(indexedResearch)) {
+      researchByClient = Object.freeze({
+        ...researchByClient,
+        [clientId]: Object.freeze(indexedResearch.filter((item) => item?.id !== questionId)),
+      });
+    }
+    researchClientVersions.set(clientId, (researchClientVersions.get(clientId) || 0) + 1);
+  };
+
+  const applyQuestionMutation = (name, result) => {
+    if (!result || typeof result !== 'object' || Array.isArray(result) ||
+      typeof result.id !== 'string' || !result.id) return false;
+
+    const previousQuestion = questions.find((item) => item.id === result.id);
+    const textChanged = name === 'updateQuestion' && previousQuestion &&
+      normalizeQuestionText(previousQuestion.text) !== normalizeQuestionText(result.text);
+
+    if (name === 'deleteQuestion') {
+      questions = questions.filter((item) => item.id !== result.id);
+    } else {
+      let replaced = false;
+      questions = questions.map((item) => {
+        if (item.id !== result.id) return item;
+        replaced = true;
+        return result;
+      });
+      if (!replaced) questions = [...questions, result];
+    }
+    if (name === 'deleteQuestion' || textChanged)
+      invalidateQuestionResearch(selectedClientId, result.id);
+
+    clientIdentity.invalidate();
+    clientQuery = Object.freeze({ loading: false, error: null, reason: 'command-result' });
+    publish();
+    return true;
+  };
+
   const refreshAfterCommand = async (name, reason = 'command-result') => {
     const target = SOURCE_COMMANDS[name];
+    if (target === 'question') {
+      return;
+    }
     if (target === 'client') {
       await refreshClientData(reason);
     } else if (target === 'sources') {
@@ -521,6 +568,8 @@ export function createContentSourcesFeature(adapters = {}) {
       }
       if (QUEUE_COMMANDS.has(name)) applyQueue(result, 'command-result', queueToken);
       if (LOGIN_COMMANDS.has(name)) applyLogin(result, 'command-result', loginToken);
+      if (target === 'question' && isCommandScopeCurrent())
+        applyQuestionMutation(name, result);
       await refreshAfterCommand(name);
       if (!owner.isCurrent(token) || !isCommandScopeCurrent())
         return staleContentCommandResult();

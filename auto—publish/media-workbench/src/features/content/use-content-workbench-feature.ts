@@ -71,6 +71,12 @@ import {
 
 export type ContentWorkbenchPage = "library" | "production" | "shell";
 
+const LOCAL_QUESTION_MUTATION_REASONS = new Set([
+  "CONTENT_QUESTION_CREATED",
+  "CONTENT_QUESTION_UPDATED",
+  "CONTENT_QUESTION_DELETED",
+]);
+
 export function useContentWorkbenchFeature(options?: {
   page?: ContentWorkbenchPage | null;
 }) {
@@ -210,6 +216,10 @@ export function useContentWorkbenchFeature(options?: {
     alignHydrationRuntime(event.workspaceRuntimeId);
     feature.setScope({ workspaceRuntimeId: event.workspaceRuntimeId });
     if (["initial", "identity", "runtime-switch"].includes(event.kind)) return;
+    // Question commands apply their returned question and research change in
+    // the sources feature.  Do not hydrate the same page again for the paired
+    // desktop invalidation event.
+    if (LOCAL_QUESTION_MUTATION_REASONS.has(event.reasonCode)) return;
     hydratedPagesRef.current.clear();
     if (!pageRef.current) return;
     return hydratePage(pageRef.current, event.kind);
