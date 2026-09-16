@@ -32,6 +32,39 @@ function adapters(overrides = {}) {
   };
 }
 
+test("late client summaries preserve loaded DOCX details until an explicit detail refresh", async () => {
+  const summary = { id: 'docx-a', name: '资料.docx', extension: '.docx', status: 'ready' };
+  let pendingList = null;
+  let body = '完整的客户资料';
+  let detailReads = 0;
+  const clientList = () => [{ id: 'client-a', name: 'A', knowledgeFiles: [summary] }];
+  const feature = createContentWorkbenchFeature(adapters({
+    listClients: () => pendingList ? pendingList.promise : Promise.resolve(clientList()),
+    getClientDetails: async () => {
+      detailReads++;
+      return { client: { ...clientList()[0], knowledgeFiles: [{ ...summary, content: body, characterCount: body.length }] }, research: [] };
+    },
+  }));
+  feature.setScope({ workspaceRuntimeId: 'runtime-a' });
+  await feature.production.refresh('initial');
+  pendingList = deferred();
+  const listing = feature.refreshSources('page-entry', { refreshFallbackData: false });
+  await feature.refreshClientData('scope-change');
+  const baseline = detailReads;
+  pendingList.resolve(clientList());
+  await listing;
+  assert.equal(feature.getSnapshot().clients[0].knowledgeFiles[0].content, body);
+  assert.equal(detailReads, baseline, 'summary refresh does not reread heavy details');
+  pendingList = null;
+  body = '修改后的客户资料';
+  await feature.production.refresh('manual');
+  assert.equal(feature.getSnapshot().clients[0].knowledgeFiles[0].content, body);
+  feature.setScope({ workspaceRuntimeId: 'runtime-b' });
+  await feature.refreshSources('initial');
+  assert.equal(feature.getSnapshot().clients[0].knowledgeFiles[0].content, undefined);
+  feature.dispose();
+});
+
 test("content read model owns client questions, research, and article-management projections", async () => {
   const feature = createContentWorkbenchFeature(adapters());
   feature.setScope({ workspaceRuntimeId: "runtime-1" });

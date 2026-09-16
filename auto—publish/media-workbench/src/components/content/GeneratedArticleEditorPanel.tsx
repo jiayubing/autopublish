@@ -1,5 +1,5 @@
-import React, { ReactNode, useEffect, useRef, useState } from 'react';
-import { Save, X } from 'lucide-react';
+import React, { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { Save, Search, X } from 'lucide-react';
 import type { GeneratedContentArticle } from '../../types/generation';
 import type { ArticleEditorSnapshot } from '../../bridge/content';
 import { useConfirmation } from '../../confirmation';
@@ -28,6 +28,57 @@ export default function GeneratedArticleEditorPanel({ article, published = false
   const [error, setError] = useState('');
   const saveInFlightRef = useRef(false);
   const titleRef = useRef<HTMLInputElement | null>(null);
+  const bodyRef = useRef<HTMLTextAreaElement | null>(null);
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const [matchIndex, setMatchIndex] = useState(-1);
+  const matches = useMemo(() => {
+    if (!searchText) return [];
+    const result: Array<{ field: 'title' | 'content'; start: number; end: number }> = [];
+    const escaped = searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    for (const field of ['title', 'content'] as const) {
+      for (const match of draft[field].matchAll(new RegExp(escaped, 'gi'))) {
+        result.push({ field, start: match.index!, end: match.index! + match[0].length });
+      }
+    }
+    return result;
+  }, [searchText, draft.title, draft.content]);
+
+  useEffect(() => { setMatchIndex(-1); }, [matches]);
+
+  function openSearch() {
+    setSearchOpen(true);
+    requestAnimationFrame(() => { searchRef.current?.focus(); searchRef.current?.select(); });
+  }
+
+  function findMatch(direction: number) {
+    if (!matches.length) return;
+    const index = matchIndex < 0 ? (direction > 0 ? 0 : matches.length - 1)
+      : (matchIndex + direction + matches.length) % matches.length;
+    const match = matches[index];
+    const input = match.field === 'title' ? titleRef.current : bodyRef.current;
+    if (!input) return;
+    input.focus();
+    input.setSelectionRange(match.start, match.end);
+    if (input instanceof HTMLTextAreaElement) {
+      const mirror = document.createElement('div');
+      const style = getComputedStyle(input);
+      mirror.style.cssText = 'position:fixed;visibility:hidden;white-space:pre-wrap;overflow-wrap:break-word;';
+      for (const property of ['font', 'letter-spacing', 'line-height', 'padding', 'border', 'box-sizing'])
+        mirror.style.setProperty(property, style.getPropertyValue(property));
+      mirror.style.width = `${input.clientWidth + parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth)}px`;
+      mirror.textContent = input.value.slice(0, match.start);
+      const marker = document.createElement('span');
+      marker.textContent = input.value.slice(match.start, match.end) || ' ';
+      mirror.append(marker);
+      document.body.append(mirror);
+      input.scrollTop = Math.max(0, marker.offsetTop - input.clientHeight / 2);
+      mirror.remove();
+    }
+    setMatchIndex(index);
+    input.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
   const dirty = draft.title !== base.title || draft.content !== base.content;
   const canEdit = !published && editable && Boolean(editFingerprint);
 
@@ -35,6 +86,8 @@ export default function GeneratedArticleEditorPanel({ article, published = false
     setDraft(article);
     setBase(article);
     setError('');
+    setSearchOpen(false);
+    setSearchText('');
     requestAnimationFrame(() => titleRef.current?.focus());
   }, [article]);
 
@@ -45,15 +98,31 @@ export default function GeneratedArticleEditorPanel({ article, published = false
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
+      if (event.defaultPrevented || document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
+        event.preventDefault();
+        openSearch();
+        return;
+      }
+      const activeMatch = matches[matchIndex];
+      const matchedInput = activeMatch?.field === 'title' ? titleRef.current : bodyRef.current;
+      if (searchOpen && activeMatch && event.key === 'Enter' && !event.isComposing &&
+          event.target === matchedInput && matchedInput?.selectionStart === activeMatch.start &&
+          matchedInput.selectionEnd === activeMatch.end) {
+        event.preventDefault();
+        findMatch(event.shiftKey ? -1 : 1);
+        return;
+      }
       if (event.key === 'Escape') {
         event.preventDefault();
+        if (searchOpen) { setSearchOpen(false); titleRef.current?.focus(); return; }
         void close();
         return;
       }
     }
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [dirty]);
+  }, [dirty, searchOpen, matches, matchIndex]);
 
   async function close() {
     if (dirty && !(await confirm({ title: '放弃未保存修改？', message: '文章有未保存修改，确认关闭并放弃这些修改吗？', confirmLabel: '放弃修改', tone: 'warning' }))) return;
@@ -105,14 +174,24 @@ export default function GeneratedArticleEditorPanel({ article, published = false
         <p className="mt-1 text-xs text-slate-500">{published ? '已发布文章已有发布成功事实，永久只读。' : !editable ? '文章当前存在未结束的投稿事实，暂不能修改。' : !editFingerprint ? '正在读取文章编辑凭证…' : (dirty ? '有未保存修改' : '所有修改已保存')}</p>
       </div>
       {canEdit && <button type="button" onClick={() => void save()} disabled={saving || !dirty} aria-label="保存文章" className="task-icon-button shrink-0"><Save className="h-4 w-4" /></button>}
+      <button type="button" onClick={openSearch} aria-label="搜索文章" title="搜索文章 (Ctrl+F)" className="task-icon-button shrink-0"><Search className="h-4 w-4" /></button>
       <button type="button" onClick={() => void close()} disabled={saving} aria-label="关闭文章编辑器" title="关闭文章编辑器" className="task-icon-button shrink-0"><X className="h-4 w-4" /></button>
     </div>
+    {searchOpen && <div role="search" aria-label="文章内搜索" className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2 text-xs">
+      <input ref={searchRef} aria-label="搜索文章内容" placeholder="搜索标题和正文" value={searchText} onChange={(event) => setSearchText(event.target.value)} onKeyDown={(event) => {
+        if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); findMatch(event.shiftKey ? -1 : 1); }
+      }} className="min-w-0 flex-1 rounded border border-slate-300 px-2 py-1" />
+      <span role="status">{searchText ? (matches.length ? `${matchIndex + 1} / ${matches.length}` : '无匹配') : '输入关键词'}</span>
+      <button type="button" disabled={!matches.length} onClick={() => findMatch(-1)} aria-label="上一处匹配" className="disabled:opacity-40">上一处</button>
+      <button type="button" disabled={!matches.length} onClick={() => findMatch(1)} aria-label="下一处匹配" className="disabled:opacity-40">下一处</button>
+      <button type="button" onClick={() => { setSearchOpen(false); titleRef.current?.focus(); }} aria-label="关闭文章搜索"><X className="h-4 w-4" /></button>
+    </div>}
     <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
       <label className="grid gap-1 text-xs font-medium text-slate-600">文章标题
-        <input ref={titleRef} aria-label="文章标题" value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} disabled={!canEdit || saving} className="min-w-0 rounded-md border border-slate-300 px-3 py-2 text-base font-semibold disabled:bg-slate-50" />
+        <input ref={titleRef} aria-label="文章标题" value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} readOnly={!canEdit || saving} className="min-w-0 rounded-md border border-slate-300 px-3 py-2 text-base font-semibold read-only:bg-slate-50 selection:bg-amber-300 selection:text-slate-950" />
       </label>
       <label className="grid min-h-64 gap-1 text-xs font-medium text-slate-600">文章正文
-        <textarea aria-label="文章正文" value={draft.content} onChange={(event) => setDraft((current) => ({ ...current, content: event.target.value }))} disabled={!canEdit || saving} className="min-h-64 w-full resize-none rounded-md border border-slate-300 p-3 text-sm leading-6 disabled:bg-slate-50" />
+        <textarea ref={bodyRef} aria-label="文章正文" value={draft.content} onChange={(event) => setDraft((current) => ({ ...current, content: event.target.value }))} readOnly={!canEdit || saving} className="min-h-64 w-full resize-none rounded-md border border-slate-300 p-3 text-sm leading-6 read-only:bg-slate-50 selection:bg-amber-300 selection:text-slate-950" />
       </label>
       <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500"><span>来源：{sourceLabel}</span></div>
       {footer}

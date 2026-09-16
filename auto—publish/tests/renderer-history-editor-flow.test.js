@@ -749,6 +749,43 @@ describe("renderer history editor flow", { concurrency: false }, () => {
     }
   });
 
+  it("searches article drafts with Ctrl+F without saving or closing the editor", async () => {
+    const { page, fixture } = await openHistory();
+    try {
+      await page.getByRole("button", { name: /fixture-platform.*历史文章超长模板名称/ }).click();
+      await page.getByText(fixture.selectedArticle.title, { exact: true }).click();
+      const title = page.getByLabel("文章标题", { exact: true });
+      const body = page.getByLabel("文章正文", { exact: true });
+      await title.fill("搜索测试 [正文]");
+      await body.fill("开头\n" + "长段落内容\n".repeat(100) + "[正文] 末尾 [正文]");
+      await body.press("Control+f");
+      const search = page.getByRole('search', { name: '文章内搜索' });
+      const input = page.getByLabel('搜索文章内容');
+      await input.fill('[正文]');
+      await input.press('Enter');
+      assert.equal(await title.evaluate((node) => node.value.slice(node.selectionStart, node.selectionEnd)), '[正文]');
+      await search.getByRole('button', { name: '下一处匹配' }).click();
+      assert.equal(await body.evaluate((node) => node.value.slice(node.selectionStart, node.selectionEnd)), '[正文]');
+      assert.equal(await body.evaluate((node) => document.activeElement === node), true, 'keep the match focused so its selection is visible');
+      assert.notEqual(await body.evaluate((node) => getComputedStyle(node, '::selection').backgroundColor), 'rgba(0, 0, 0, 0)');
+      assert.ok(await body.evaluate((node) => node.scrollTop > 0));
+      await page.keyboard.press('Enter');
+      assert.equal(await search.getByRole('status').innerText(), '3 / 3');
+      await search.getByRole('button', { name: '下一处匹配' }).click();
+      assert.equal(await search.getByRole('status').innerText(), '1 / 3');
+      await input.press('Shift+Enter');
+      assert.equal(await search.getByRole('status').innerText(), '3 / 3');
+      await input.fill('不存在的词');
+      assert.equal(await search.getByRole('status').innerText(), '无匹配');
+      assert.equal(await search.getByRole('button', { name: '下一处匹配' }).isDisabled(), true);
+      await input.press('Escape');
+      assert.equal(await search.count(), 0);
+      assert.equal(await title.inputValue(), '搜索测试 [正文]');
+      assert.equal(await page.getByRole('heading', { name: '编辑文章' }).isVisible(), true);
+      assert.equal(await page.evaluate(() => window.__historyEditorFlow.calls.saveArticle.length), 0);
+    } finally { await page.close(); }
+  });
+
   it("guards unsaved edits and opens only publication details for published articles", async () => {
     const { page, fixture } = await openHistory();
     try {
@@ -818,7 +855,13 @@ describe("renderer history editor flow", { concurrency: false }, () => {
       await page.getByRole("button", { name: "刷新客户与模板" }).click();
       await page.getByRole("status").filter({ hasText: "客户与模板已刷新" }).waitFor();
 
-      assert.equal(await editorTitle.isDisabled(), true);
+      assert.equal(await editorTitle.isEditable(), false);
+      await editorTitle.press('Control+f');
+      const search = page.getByLabel('搜索文章内容');
+      await search.fill(fixture.selectedArticle.title);
+      await search.press('Enter');
+      assert.equal(await editorTitle.evaluate((node) => node.value.slice(node.selectionStart, node.selectionEnd)), fixture.selectedArticle.title);
+      assert.equal(await editorTitle.isEditable(), false);
       assert.equal(await page.getByRole("button", { name: "保存文章" }).count(), 0);
     } finally {
       await page.close();

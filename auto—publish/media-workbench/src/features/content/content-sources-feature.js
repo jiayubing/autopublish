@@ -364,7 +364,21 @@ export function createContentSourcesFeature(adapters = {}) {
         adapters.listTemplateCatalog(),
       ]);
       if (!identity.isCurrent(token)) return false;
-      clients = Array.isArray(nextClients) ? nextClients : [];
+      // The directory query contains material metadata, not replacement bodies.
+      // Keep already loaded details for surviving files; explicit detail reads
+      // remain authoritative for changed content and conversion outcomes.
+      const previousClients = new Map(clients.map((client) => [client.id, client]));
+      clients = (Array.isArray(nextClients) ? nextClients : []).map((client) => {
+        const previous = previousClients.get(client.id);
+        if (!previous || !Array.isArray(client.knowledgeFiles)) return client;
+        const materials = new Map((previous.knowledgeFiles || []).map((item) => [item.id || item.name, item]));
+        return { ...client, knowledgeFiles: client.knowledgeFiles.map((item) => {
+          const loaded = materials.get(item.id || item.name);
+          if (!loaded || typeof loaded.content !== 'string' || typeof item.content === 'string') return item;
+          return { ...item, content: loaded.content, characterCount: loaded.characterCount,
+            status: loaded.status, error: loaded.error, contentHash: loaded.contentHash };
+        }) };
+      });
       templateCatalog = nextCatalog || EMPTY_CATALOG;
       const nextSelectedClientId = clients.some((item) => item.id === selectedClientId)
         ? selectedClientId
@@ -558,6 +572,8 @@ export function createContentSourcesFeature(adapters = {}) {
       await refreshClientData(reason);
     } else if (target === 'sources') {
       await refreshSources(reason);
+      if (name === 'retryMaterial' && reason !== 'stale-command-result')
+        await refreshClientData(reason);
     } else if (target === 'workspaceSources') {
       await refreshSources(reason);
     }
