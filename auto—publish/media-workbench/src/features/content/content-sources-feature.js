@@ -30,10 +30,10 @@ const SOURCE_COMMANDS = Object.freeze({
   createQuestion: 'question',
   updateQuestion: 'question',
   deleteQuestion: 'question',
-  saveManualResearch: 'client',
+  saveManualResearch: 'research',
   retryMaterial: 'sources',
   saveClientLiejuPublicationProfile: 'workspaceSources',
-  collectDoubaoQuestion: 'client',
+  collectDoubaoQuestion: 'research',
   startPreparedDoubaoBatch: 'workspace',
   pauseDoubaoBatch: 'workspace',
   resumeDoubaoBatch: 'workspace',
@@ -55,7 +55,7 @@ const QUEUE_COMMANDS = new Set([
 ]);
 
 const LOGIN_COMMANDS = new Set(['getDoubaoLoginStatus', 'openDoubaoLogin']);
-const CLIENT_SCOPED_TARGETS = new Set(['client', 'sources', 'question']);
+const CLIENT_SCOPED_TARGETS = new Set(['client', 'sources', 'question', 'research']);
 
 const CLIENT_IDENTITY = Object.freeze({
   createQuestion: (input) => [input?.clientId],
@@ -507,9 +507,40 @@ export function createContentSourcesFeature(adapters = {}) {
     return true;
   };
 
-  const refreshAfterCommand = async (name, reason = 'command-result') => {
+  const applyResearchMutation = (result, clientId) => {
+    if (!result || typeof result !== 'object' || Array.isArray(result) ||
+      typeof result.id !== 'string' || !result.id || result.clientId !== clientId) return false;
+
+    const upsertResearch = (items) => {
+      let replaced = false;
+      const next = items.map((item) => {
+        if (item?.id !== result.id) return item;
+        replaced = true;
+        return result;
+      });
+      return replaced ? next : [...next, result];
+    };
+
+    research = upsertResearch(research);
+    researchByClient = Object.freeze({
+      ...researchByClient,
+      [clientId]: Object.freeze(upsertResearch(researchByClient[clientId] || [])),
+    });
+    researchClientVersions.set(clientId, (researchClientVersions.get(clientId) || 0) + 1);
+    clientIdentity.invalidate();
+    clientQuery = Object.freeze({ loading: false, error: null, reason: 'command-result' });
+    publish();
+    return true;
+  };
+
+  const refreshAfterCommand = async (name, reason = 'command-result', options = {}) => {
     const target = SOURCE_COMMANDS[name];
     if (target === 'question') {
+      return;
+    }
+    if (target === 'research') {
+      if (reason === 'stale-command-result' || options.localResultApplied) return;
+      await refreshClientData(reason);
       return;
     }
     if (target === 'client') {
@@ -570,7 +601,10 @@ export function createContentSourcesFeature(adapters = {}) {
       if (LOGIN_COMMANDS.has(name)) applyLogin(result, 'command-result', loginToken);
       if (target === 'question' && isCommandScopeCurrent())
         applyQuestionMutation(name, result);
-      await refreshAfterCommand(name);
+      const localResearchResultApplied = target === 'research' && isCommandScopeCurrent()
+        ? applyResearchMutation(result, commandClientId)
+        : false;
+      await refreshAfterCommand(name, 'command-result', { localResultApplied: localResearchResultApplied });
       if (!owner.isCurrent(token) || !isCommandScopeCurrent())
         return staleContentCommandResult();
       owner.finalize(token, { result });
