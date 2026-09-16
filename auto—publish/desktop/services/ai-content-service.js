@@ -275,6 +275,7 @@ function createAiContentService(opts) {
         : contentStore.saveArticle(request.article);
     } catch (error) {
       if (error && error.code === "ARTICLE_EDIT_CONFLICT") {
+        notifyAttentionChange("ARTICLE_EDIT_CONFLICT");
         return {
           outcome: "conflict",
           code: "ARTICLE_EDIT_CONFLICT",
@@ -283,6 +284,7 @@ function createAiContentService(opts) {
         };
       }
       if (error && error.code === "ARTICLE_MUTATION_RESULT_UNCERTAIN") {
+        notifyAttentionChange("ARTICLE_MUTATION_RESULT_UNCERTAIN");
         return {
           outcome: "result-uncertain",
           code: "ARTICLE_MUTATION_RESULT_UNCERTAIN",

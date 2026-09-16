@@ -31,6 +31,25 @@ function createService(overrides) {
 }
 
 describe("ai content service", function() {
+  for (const [code, outcome] of [
+    ["ARTICLE_EDIT_CONFLICT", "conflict"],
+    ["ARTICLE_MUTATION_RESULT_UNCERTAIN", "result-uncertain"],
+  ]) {
+    it(`invalidates management before returning ${outcome}`, function() {
+      const reasons = [];
+      const { service, article } = createService({
+        onDataInvalidated: (reason) => reasons.push(reason),
+        articleMutationCoordinator: {
+          saveExistingArticle() { throw Object.assign(new Error("synthetic"), { code }); },
+        },
+      });
+      assert.deepEqual(service.saveArticle({ article }), {
+        outcome, code, articleId: article.id, refreshRequired: true,
+      });
+      assert.deepEqual(reasons, [code]);
+    });
+  }
+
   it("lists local content without AI configuration", async function() {
     const setup = createService();
     const clients = await setup.service.listClients();

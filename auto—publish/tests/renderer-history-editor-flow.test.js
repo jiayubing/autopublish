@@ -132,9 +132,20 @@ function installDesktopFixture(page, fixture) {
       removalTransaction: null,
       removalPolls: 0,
       removalListeners: [],
+      invalidationListeners: [],
       calls: { getArticleEditor: [], saveArticle: [], submission: [], paidPreview: [], regularPreview: [], regularAdmission: [], removalRetries: 0, removalApply: [], permanentDelete: [] }
     };
     const ok = (data) => Promise.resolve({ ok: true, data });
+    const invalidateManagement = (reasonCode) => {
+      state.revision += 1;
+      state.invalidationListeners.forEach((listener) => listener({
+        schemaVersion: 1,
+        workspaceRuntimeId: "history-runtime",
+        revision: state.revision,
+        scopes: ["articleManagement"],
+        reasonCode,
+      }));
+    };
     const client = { id: "history-editor-fixture", name: "历史文章编辑测试客户", knowledgeFiles: [] };
     const otherClient = { id: "history-editor-other", name: "另一个客户", knowledgeFiles: [] };
     const template = {
@@ -224,6 +235,7 @@ function installDesktopFixture(page, fixture) {
       saveArticle: ({ article }) => {
         state.calls.saveArticle.push(article);
         state.articles = state.articles.map((item) => item.id === article.id ? article : item);
+        invalidateManagement("ARTICLE_SAVED");
         return ok({ outcome: "saved", article, editFingerprint: `fixture-edit-${article.id}-saved` });
       },
       listPaidMediaBatches: () => ok({ items: [] }),
@@ -247,6 +259,7 @@ function installDesktopFixture(page, fixture) {
       admitRegularQueueItems: (input) => {
         state.calls.regularAdmission.push(input);
         state.submittedArticleIds.push(...input.articleRefs.map((article) => article.articleId));
+        invalidateManagement("SUBMISSION_BATCH_CREATED");
         return ok({
           items: input.articleRefs.map((articleRef) => ({
             articleRef,
@@ -259,7 +272,10 @@ function installDesktopFixture(page, fixture) {
           conflictCount: 0,
         });
       },
-      startRegularQueueGroup: () => ok({ completed: true }),
+      startRegularQueueGroup: () => {
+        invalidateManagement("REGULAR_QUEUE_GROUP_RUN_INTENT_CHANGED");
+        return ok({ completed: true });
+      },
       previewPaidMediaPreflight: ({ articleRefs, mediaResourceId }) => {
         state.calls.paidPreview.push(mediaResourceId);
         const model = {
@@ -291,6 +307,7 @@ function installDesktopFixture(page, fixture) {
       confirmPaidMediaBatch: ({ confirmationToken }) => {
         state.calls.submission.push(confirmationToken);
         state.submittedArticleIds.push("selected-article-09");
+        invalidateManagement("SUBMISSION_BATCH_CREATED");
         return ok({ batchId: "paid-batch-fixture", targetKey: "media:fixture-resource", mediaResourceId: "fixture-resource", status: "queued", articleCount: 1, idempotent: false, items: [], articleRefs: [{ clientId: "history-editor-fixture", articleId: "selected-article-09" }], confirmationFingerprint: "paid-fingerprint", quotedPrice: 12, estimatedTotal: 12 });
       },
       previewArticleRemovalImpact: (input) => {
@@ -322,12 +339,14 @@ function installDesktopFixture(page, fixture) {
       },
       restoreArticle: ({ articleId }) => {
         state.trash = state.trash.filter((entry) => entry.articleId !== articleId);
+        invalidateManagement("ARTICLE_RESTORED");
         return ok({ article: { id: articleId, clientId: client.id }, restored: true, queueRestored: false, message: "restored" });
       },
       preparePermanentDeleteArticle: ({ articleId }) => ok({ token: "fixture-token", clientId: client.id, articleId, deletedAt: "2026-07-18T00:40:00.000Z", status: "prepared" }),
       permanentlyDeleteArticle: ({ articleId, token }) => {
         state.calls.permanentDelete.push({ articleId, token });
         state.trash = state.trash.filter((entry) => entry.articleId !== articleId);
+        invalidateManagement("ARTICLE_PERMANENTLY_DELETED");
         return ok({ clientId: client.id, articleId, deleted: true, deletedAt: "2026-07-18T00:40:01.000Z" });
       }
     };
@@ -363,7 +382,13 @@ function installDesktopFixture(page, fixture) {
     window.desktopConsole = {
       auth: { getState: () => ok({ authenticated: true, user: { loginName: "admin" }, entitlements: [{ product: "AutoPublish", enabled: true, expiresAt: null }] }), login: () => ok({ authenticated: true }), refresh: () => ok({ authenticated: true }), logout: () => ok({ authenticated: false }), onStateChanged: () => () => {} },
       workspace,
-      workspaceData: { getRuntimeIdentity: () => ok({ workspaceRuntimeId: "history-runtime", revision: 1 }), onInvalidated: () => () => {} },
+      workspaceData: {
+        getRuntimeIdentity: () => ok({ workspaceRuntimeId: "history-runtime", revision: state.revision }),
+        onInvalidated: (listener) => {
+          state.invalidationListeners.push(listener);
+          return () => { state.invalidationListeners = state.invalidationListeners.filter((item) => item !== listener); };
+        },
+      },
       runtimeDiagnostics: runtime,
       aiProvider,
       platformSettings,

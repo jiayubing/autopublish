@@ -166,6 +166,6 @@ test("content ordinary mutations have independent command owners and apply quest
   resolveSave({ id: "article-a", clientId: "client-a", title: "A", status: "saved" });
   await saving;
   assert.equal(feature.getSnapshot().commands.saveArticle.busy, false);
-  assert.ok(managementReads > baselineManagementReads);
+  assert.equal(managementReads, baselineManagementReads, "save completion leaves management refresh to invalidation");
   assert.equal(feature.getSnapshot().currentArticle.id, "article-a");
 });
