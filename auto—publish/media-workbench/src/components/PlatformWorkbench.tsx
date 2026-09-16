@@ -61,11 +61,6 @@ export default function PlatformWorkbench({
 }: PlatformWorkbenchProps) {
   const { confirm } = useConfirmation();
   const { snapshot, feature } = usePlatformFeature();
-  const clientId = content.snapshot.selectedClientId || "";
-  const clientLabel =
-    content.snapshot.clients.find((client) => client.id === clientId)?.name ||
-    clientId ||
-    "当前客户";
   const center = submissionCenter.snapshot;
   const [clientFilter, setClientFilter] = useState<string>("");
   const [page, setPage] = useState(1);
@@ -232,9 +227,9 @@ export default function PlatformWorkbench({
       setAttentionDetail(item);
       return;
     }
-    if (item.articleId) {
+    if (item.articleId && item.clientId) {
       onOpenArticleLibrary({
-        clientId: item.clientId || clientId || undefined,
+        clientId: item.clientId,
         articleId: item.articleId,
         destination: "publication",
       });
@@ -244,24 +239,24 @@ export default function PlatformWorkbench({
   }
 
   function openArticle(item: ArticleAttentionItem) {
-    if (!item.articleId) {
+    if (!item.articleId || !item.clientId) {
       setAttentionDetail(item);
       return;
     }
     onOpenArticleLibrary({
-      clientId: item.clientId || clientId || undefined,
+      clientId: item.clientId,
       articleId: item.articleId,
       destination: "article",
     });
   }
 
   function openSubmission(item: ArticleAttentionItem) {
-    if (!item.articleId) {
+    if (!item.articleId || !item.clientId) {
       setAttentionDetail(item);
       return;
     }
     onOpenArticleLibrary({
-      clientId: item.clientId || clientId || undefined,
+      clientId: item.clientId,
       articleId: item.articleId,
       destination: "submission",
     });
@@ -558,7 +553,7 @@ export default function PlatformWorkbench({
               getTargetLabel={(item) =>
                 item.targetLabel || "未指定目标 / 账号未记录"
               }
-              clientLabel={clientLabel}
+              getClientLabel={(item) => content.snapshot.clients.find((client) => client.id === item.clientId)?.name || item.clientId || "客户未记录"}
               onOpenPublication={openPublication}
               onOpenArticleLibrary={openSubmission}
               onInspect={setAttentionDetail}

@@ -71,7 +71,6 @@ test("attention panel presents loading, empty, error, disabled, and safe failure
     views.failure,
     /平台明确拒绝了这篇文章，请检查内容后从统一投稿入口重新发起。/,
   );
-  assert.match(views.failure, /发生了什么/);
-  assert.match(views.failure, /处理完成后/);
+  assert.doesNotMatch(views.failure, /发生了什么|下一步|处理完成后|允许操作/);
   assert.match(views.failure, /核对详情/);
 });
