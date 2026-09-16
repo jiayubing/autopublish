@@ -46,6 +46,7 @@ function installQuestionFixture(page, options = {}) {
       "client-a": [
         {
           id: "question-1",
+          clientId: "client-a",
           question: "问题一",
           answerText: "客户 A 的回答",
           references: [{ title: "引用一", url: "https://example.com/one" }],
@@ -54,6 +55,7 @@ function installQuestionFixture(page, options = {}) {
         },
         {
           id: "question-2",
+          clientId: "client-a",
           question: "问题二",
           answerText: "客户 A 的第二个回答",
           references: [{ title: "引用二", url: "https://example.com/two" }],
@@ -64,6 +66,7 @@ function installQuestionFixture(page, options = {}) {
       "client-b": [
         {
           id: "question-b",
+          clientId: "client-b",
           question: "问题 B",
           answerText: "客户 B 的回答",
           references: [{ title: "引用 B", url: "https://example.com/b" }],
@@ -73,10 +76,35 @@ function installQuestionFixture(page, options = {}) {
       ],
     };
     const result = (data) => Promise.resolve({ ok: true, data });
+    const readCounts = {
+      listClients: 0,
+      listTemplateCatalog: 0,
+      listQuestions: 0,
+      getClientDetails: 0,
+      listResearch: 0,
+      listResearchMetadata: 0,
+    };
     const questionFlow = {
       previewCalls: 0,
       executeCalls: 0,
       resolvePreview: null,
+    };
+    const refreshFixture = {
+      saveCalls: 0,
+      collectCalls: 0,
+      invalidationListener: null,
+      revision: 1,
+      readCounts,
+    };
+    refreshFixture.emitInvalidation = (reasonCode) => {
+      refreshFixture.revision += 1;
+      refreshFixture.invalidationListener?.({
+        schemaVersion: 1,
+        workspaceRuntimeId: "question-runtime",
+        revision: refreshFixture.revision,
+        scopes: ["contentSources"],
+        reasonCode,
+      });
     };
     const queueFlow = { queue: null, resumeCalls: 0 };
     const queueListeners = new Set();
@@ -85,8 +113,14 @@ function installQuestionFixture(page, options = {}) {
       queueListeners.forEach(listener => listener({ type: "state", state: queue, ...queue }));
     };
     const content = {
-      listClients: () => result({ clients }),
-      getClientDetails: (clientId) => result({ client: clients.find((item) => item.id === clientId), research: research[clientId] || [] }),
+      listClients: () => {
+        readCounts.listClients += 1;
+        return result({ clients });
+      },
+      getClientDetails: (clientId) => {
+        readCounts.getClientDetails += 1;
+        return result({ client: clients.find((item) => item.id === clientId), research: research[clientId] || [] });
+      },
       listGeneratedArticles: () => result({ articles: [] }),
       getArticleManagementSnapshot: ({ clientId }) =>
         result({
@@ -100,20 +134,28 @@ function installQuestionFixture(page, options = {}) {
         }),
       listSubmissionBatches: () => result({ batches: [] }),
       listArticleTrash: () => result({ trash: [] }),
-      listResearch: (clientId) =>
-        result({ research: research[clientId] || [] }),
-      listResearchMetadata: (clientId) =>
-        result({ research: research[clientId] || [] }),
-      listQuestions: (clientId) =>
-        result({ questions: questions[clientId] || [] }),
+      listResearch: (clientId) => {
+        readCounts.listResearch += 1;
+        return result({ research: research[clientId] || [] });
+      },
+      listResearchMetadata: (clientId) => {
+        readCounts.listResearchMetadata += 1;
+        return result({ research: research[clientId] || [] });
+      },
+      listQuestions: (clientId) => {
+        readCounts.listQuestions += 1;
+        return result({ questions: questions[clientId] || [] });
+      },
       listTemplates: () => result({ templates: [] }),
-      listTemplateCatalog: () =>
-        result({
+      listTemplateCatalog: () => {
+        readCounts.listTemplateCatalog += 1;
+        return result({
           revision: "fixture",
           platforms: [],
           templates: [],
           diagnostics: [],
-        }),
+        });
+      },
       getDoubaoLoginState: () => result({ loginState: { status: "unknown" } }),
       getDoubaoQueueState: () =>
         result({
@@ -187,14 +229,52 @@ function installQuestionFixture(page, options = {}) {
           },
         });
       },
+      collectDoubaoOne: (input) => {
+        refreshFixture.collectCalls += 1;
+        const current = (research[input.clientId] || []).find((item) => item.id === input.questionId);
+        const next = {
+          ...current,
+          id: input.questionId,
+          clientId: input.clientId,
+          question: questions[input.clientId].find((item) => item.id === input.questionId)?.text,
+          answerText: "新的豆包回答",
+          references: [],
+          collectionMethod: "automatic",
+          updatedAt: "2026-09-16T00:02:00.000Z",
+        };
+        research[input.clientId] = [
+          next,
+          ...(research[input.clientId] || []).filter((item) => item.id !== input.questionId),
+        ];
+        return result({ research: next });
+      },
       createQuestion: () => result({ question: {} }),
       updateQuestion: () => result({ question: {} }),
       deleteQuestion: () => result({ question: {} }),
-      saveManualResearch: () => result({ research: {} }),
+      saveManualResearch: (input) => {
+        refreshFixture.saveCalls += 1;
+        const current = (research[input.clientId] || []).find((item) => item.id === input.questionId);
+        const next = {
+          ...current,
+          id: input.questionId,
+          clientId: input.clientId,
+          question: questions[input.clientId].find((item) => item.id === input.questionId)?.text,
+          answerText: input.answerText,
+          references: input.references || [],
+          collectionMethod: "manual",
+          updatedAt: "2026-09-16T00:02:00.000Z",
+        };
+        research[input.clientId] = [
+          next,
+          ...(research[input.clientId] || []).filter((item) => item.id !== input.questionId),
+        ];
+        return result({ research: next });
+      },
       listArticleAttention: () =>
         result({ items: [], counts: { total: 0, actionable: 0 } }),
     };
     window.__questionFixture = questionFlow;
+    window.__questionRefreshFixture = refreshFixture;
     window.__questionQueue = queueFlow;
     window.desktopConsole = {
       auth: {
@@ -223,7 +303,13 @@ function installQuestionFixture(page, options = {}) {
       workspaceData: {
         getRuntimeIdentity: () =>
           result({ workspaceRuntimeId: "question-runtime", revision: 1 }),
-        onInvalidated: () => () => {},
+        onInvalidated: (listener) => {
+          refreshFixture.invalidationListener = listener;
+          return () => {
+            if (refreshFixture.invalidationListener === listener)
+              refreshFixture.invalidationListener = null;
+          };
+        },
       },
       runtimeDiagnostics: {
         get: () =>
@@ -582,6 +668,109 @@ describe(
       );
       assert.deepEqual(pageErrors, []);
       await page.close();
+    });
+
+    it("keeps research mutations local while refreshing unrelated content invalidations", async function (t) {
+      const page = await browser.newPage({
+        viewport: { width: 1024, height: 800 },
+      });
+      t.after(() => page.close());
+      page.setDefaultTimeout(8000);
+      await installQuestionFixture(page);
+      await page.goto(rendererUrl, { waitUntil: "domcontentloaded" });
+      await page.locator("#nav-item-content-production").click();
+      await page.getByRole("heading", { name: "问题与采集" }).waitFor();
+      await page.waitForFunction(
+        () =>
+          Boolean(window.__questionRefreshFixture?.invalidationListener) &&
+          window.__questionRefreshFixture.readCounts.listQuestions >= 1 &&
+          window.__questionRefreshFixture.readCounts.getClientDetails >= 1 &&
+          window.__questionRefreshFixture.readCounts.listResearchMetadata >= 2,
+      );
+
+      const initialReads = await page.evaluate(() => ({
+        ...window.__questionRefreshFixture.readCounts,
+      }));
+      const sourceOne = page.getByRole("button", { name: "人工回答：问题一" });
+      await sourceOne.click();
+      const editor = page.getByRole("dialog", { name: /人工编辑回答/ });
+      await editor.waitFor();
+      await editor
+        .getByPlaceholder("回答正文（至少 10 个字符）")
+        .fill("本次保存的人工回答");
+      await editor.getByRole("button", { name: "保存人工回答" }).click();
+      await editor.waitFor({ state: "detached" });
+      await page.waitForFunction(
+        () => window.__questionRefreshFixture.saveCalls === 1,
+      );
+
+      const afterManualSave = await page.evaluate(() => ({
+        ...window.__questionRefreshFixture.readCounts,
+      }));
+      assert.deepEqual(afterManualSave, initialReads);
+      const questionOne = page
+        .locator(".source-collapse-button")
+        .filter({ hasText: "问题一" })
+        .first();
+      await questionOne.click();
+      await page.getByText("本次保存的人工回答", { exact: true }).waitFor();
+
+      await page.evaluate(() =>
+        window.__questionRefreshFixture.emitInvalidation(
+          "CONTENT_RESEARCH_MANUAL_SAVED",
+        ),
+      );
+      await page.waitForTimeout(100);
+      assert.deepEqual(
+        await page.evaluate(() => ({
+          ...window.__questionRefreshFixture.readCounts,
+        })),
+        afterManualSave,
+      );
+
+      await page.locator('button[title="单条采集"]').first().click();
+      await page.waitForFunction(
+        () => window.__questionRefreshFixture.collectCalls === 1,
+      );
+      const afterCollect = await page.evaluate(() => ({
+        ...window.__questionRefreshFixture.readCounts,
+      }));
+      assert.deepEqual(afterCollect, afterManualSave);
+      await page.evaluate(() =>
+        window.__questionRefreshFixture.emitInvalidation(
+          "CONTENT_RESEARCH_COLLECTED",
+        ),
+      );
+      await page.waitForTimeout(100);
+      assert.deepEqual(
+        await page.evaluate(() => ({
+          ...window.__questionRefreshFixture.readCounts,
+        })),
+        afterCollect,
+      );
+
+      await page.evaluate(() =>
+        window.__questionRefreshFixture.emitInvalidation("CONTENT_SOURCE_CHANGED"),
+      );
+      await page.waitForFunction(
+        (previous) =>
+          window.__questionRefreshFixture.readCounts.listClients >
+          previous.listClients,
+        afterCollect,
+      );
+      const afterUnrelated = await page.evaluate(() => ({
+        ...window.__questionRefreshFixture.readCounts,
+      }));
+      assert.equal(afterUnrelated.listClients, afterCollect.listClients + 1);
+      assert.equal(
+        afterUnrelated.listResearchMetadata,
+        afterCollect.listResearchMetadata + 2,
+      );
+      assert.equal(afterUnrelated.listQuestions, afterCollect.listQuestions + 1);
+      assert.equal(
+        afterUnrelated.getClientDetails,
+        afterCollect.getClientDetails + 1,
+      );
     });
   },
 );

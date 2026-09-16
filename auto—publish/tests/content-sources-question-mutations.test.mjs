@@ -52,6 +52,7 @@ async function makeFeature(t, options = {}) {
   const calls = {
     listQuestions: 0,
     getClientDetails: 0,
+    listResearchMetadata: 0,
     listResearch: 0,
   };
   const clients = [
@@ -68,6 +69,10 @@ async function makeFeature(t, options = {}) {
     },
     listResearch: async (clientId) => {
       calls.listResearch += 1;
+      return cloneItems(researchData.get(clientId) || []);
+    },
+    listResearchMetadata: async (clientId) => {
+      calls.listResearchMetadata += 1;
       return cloneItems(researchData.get(clientId) || []);
     },
     getClientDetails: async (clientId) => {
@@ -113,7 +118,11 @@ async function makeFeature(t, options = {}) {
 }
 
 function readCounts(calls) {
-  return { listQuestions: calls.listQuestions, getClientDetails: calls.getClientDetails };
+  return {
+    listQuestions: calls.listQuestions,
+    getClientDetails: calls.getClientDetails,
+    listResearchMetadata: calls.listResearchMetadata,
+  };
 }
 
 test("createQuestion applies the returned question without rereading client data", async (t) => {
@@ -238,11 +247,49 @@ test("a stale question command cannot write into the newly selected client", asy
   assert.deepEqual(readCounts(value.calls), afterSwitch);
 });
 
-test("Doubao collection commands keep their client refresh behavior", async (t) => {
+test("manual research applies the returned record without rereading client data", async (t) => {
+  const value = await makeFeature(t, {
+    adapters: {
+      saveManualResearch: async () => {
+        const saved = {
+          ...research("question-1", "client-a", "原问题"),
+          answerText: "新的人工回答",
+          updatedAt: "2026-09-16T00:02:00.000Z",
+        };
+        const current = value.researchData.get("client-a") || [];
+        value.researchData.set("client-a", [
+          saved,
+          ...current.filter((item) => item.id !== saved.id),
+        ]);
+        return saved;
+      },
+    },
+  });
+  const baseline = readCounts(value.calls);
+
+  const saved = await value.feature.commands.saveManualResearch({
+    clientId: "client-a",
+    questionId: "question-1",
+    answerText: "新的人工回答",
+    references: [],
+  });
+
+  assert.equal(saved.answerText, "新的人工回答");
+  assert.equal(value.feature.getSnapshot().research.find((item) => item.id === "question-1").answerText, "新的人工回答");
+  assert.equal(value.feature.getSnapshot().researchByClient["client-a"].find((item) => item.id === "question-1").answerText, "新的人工回答");
+  assert.deepEqual(value.feature.getSnapshot().researchByClient["client-b"].map((item) => item.id), ["question-b"]);
+  assert.deepEqual(readCounts(value.calls), baseline);
+});
+
+test("Doubao collection applies the returned research without rereading client data", async (t) => {
   const value = await makeFeature(t, {
     adapters: {
       collectDoubaoQuestion: async () => {
-        const collected = research("question-1", "client-a", "原问题");
+        const collected = {
+          ...research("question-1", "client-a", "原问题"),
+          answerText: "新的豆包回答",
+          collectionMethod: "automatic",
+        };
         const current = value.researchData.get("client-a") || [];
         value.researchData.set("client-a", [
           collected,
@@ -254,13 +301,55 @@ test("Doubao collection commands keep their client refresh behavior", async (t) 
   });
   const baseline = readCounts(value.calls);
 
-  await value.feature.commands.collectDoubaoQuestion({
+  const collected = await value.feature.commands.collectDoubaoQuestion({
     clientId: "client-a",
     questionId: "question-1",
   });
 
-  assert.deepEqual(readCounts(value.calls), {
-    listQuestions: baseline.listQuestions + 1,
-    getClientDetails: baseline.getClientDetails + 1,
+  assert.equal(collected.answerText, "新的豆包回答");
+  assert.equal(value.feature.getSnapshot().research.find((item) => item.id === "question-1").answerText, "新的豆包回答");
+  assert.equal(value.feature.getSnapshot().researchByClient["client-a"].find((item) => item.id === "question-1").collectionMethod, "automatic");
+  assert.deepEqual(readCounts(value.calls), baseline);
+});
+
+test("a stale research command cannot write into the newly selected client", async (t) => {
+  const pending = deferred();
+  const value = await makeFeature(t, {
+    adapters: {
+      collectDoubaoQuestion: () => pending.promise,
+    },
   });
+
+  const command = value.feature.commands.collectDoubaoQuestion({
+    clientId: "client-a",
+    questionId: "question-1",
+  });
+  await value.feature.selectClient("client-b");
+
+  pending.resolve(research("question-1", "client-a", "迟到回答"));
+  assert.deepEqual(await command, { stale: true, code: "CONTENT_COMMAND_STALE", reason: "scope-changed" });
+  assert.equal(value.feature.getSnapshot().selectedClientId, "client-b");
+  assert.deepEqual(value.feature.getSnapshot().research.map((item) => item.id), ["question-b"]);
+  assert.deepEqual(value.feature.getSnapshot().researchByClient["client-a"].map((item) => item.id), ["question-1", "question-2"]);
+});
+
+test("a stale research command cannot write into the newly selected workspace", async (t) => {
+  const pending = deferred();
+  const value = await makeFeature(t, {
+    adapters: {
+      collectDoubaoQuestion: () => pending.promise,
+    },
+  });
+
+  const command = value.feature.commands.collectDoubaoQuestion({
+    clientId: "client-a",
+    questionId: "question-1",
+  });
+  value.feature.setScope({ workspaceRuntimeId: "runtime-2" });
+
+  pending.resolve(research("question-1", "client-a", "旧工作区回答"));
+  assert.deepEqual(await command, { stale: true, code: "CONTENT_COMMAND_STALE", reason: "scope-changed" });
+  assert.equal(value.feature.getSnapshot().scope.workspaceRuntimeId, "runtime-2");
+  assert.equal(value.feature.getSnapshot().selectedClientId, "");
+  assert.deepEqual(value.feature.getSnapshot().research, []);
 });
