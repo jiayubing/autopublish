@@ -34,6 +34,17 @@ function research(id, clientId, questionText) {
   };
 }
 
+function queueState(status, tasks) {
+  return {
+    status,
+    currentTaskId: null,
+    completed: status === "completed" ? tasks.length : 0,
+    total: tasks.length,
+    waitRemainingMs: 0,
+    tasks,
+  };
+}
+
 function normalizedText(value) {
   return value.trim().replace(/\s+/g, " ");
 }
@@ -310,6 +321,77 @@ test("Doubao collection applies the returned research without rereading client d
   assert.equal(value.feature.getSnapshot().research.find((item) => item.id === "question-1").answerText, "新的豆包回答");
   assert.equal(value.feature.getSnapshot().researchByClient["client-a"].find((item) => item.id === "question-1").collectionMethod, "automatic");
   assert.deepEqual(readCounts(value.calls), baseline);
+});
+
+test("single collection completion skips queue refresh while batch completion still refreshes", async (t) => {
+  let queueListener;
+  const batchTask = {
+    id: "batch-task",
+    clientId: "client-a",
+    questionId: "question-1",
+    status: "succeeded",
+  };
+  const value = await makeFeature(t, {
+    adapters: {
+      subscribeDoubaoQueue: (listener) => {
+        queueListener = listener;
+        return () => { queueListener = undefined; };
+      },
+      collectDoubaoQuestion: async (input) => {
+        const task = {
+          id: "single-task",
+          clientId: input.clientId,
+          questionId: input.questionId,
+          status: "succeeded",
+        };
+        queueListener(queueState("running", [{ ...task, status: "running" }]));
+        const collected = {
+          ...research(input.questionId, input.clientId, "原问题"),
+          answerText: "订阅链路采集结果",
+          collectionMethod: "automatic",
+        };
+        value.researchData.set(input.clientId, [
+          collected,
+          ...(value.researchData.get(input.clientId) || []).filter(
+            (item) => item.id !== collected.id,
+          ),
+        ]);
+        queueListener(queueState("completed", [task]));
+        return collected;
+      },
+      startPreparedDoubaoBatch: async () => {
+        queueListener(queueState("running", [{ ...batchTask, status: "running" }]));
+        const completed = queueState("completed", [batchTask]);
+        queueListener(completed);
+        return completed;
+      },
+    },
+  });
+  const baseline = readCounts(value.calls);
+
+  await value.feature.commands.collectDoubaoQuestion({
+    clientId: "client-a",
+    questionId: "question-1",
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(
+    value.feature.getSnapshot().research.find((item) => item.id === "question-1").answerText,
+    "订阅链路采集结果",
+  );
+  assert.deepEqual(readCounts(value.calls), baseline);
+
+  await value.feature.commands.startPreparedDoubaoBatch({
+    clientIds: ["client-a"],
+    mode: "all",
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(readCounts(value.calls), {
+    listQuestions: baseline.listQuestions + 1,
+    getClientDetails: baseline.getClientDetails + 1,
+    listResearchMetadata: baseline.listResearchMetadata + 2,
+  });
 });
 
 test("a stale research command cannot write into the newly selected client", async (t) => {
