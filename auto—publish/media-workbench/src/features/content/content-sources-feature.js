@@ -181,6 +181,7 @@ export function createContentSourcesFeature(adapters = {}) {
   let previousQueueStatus = EMPTY_QUEUE.status;
   let lastQueueRefreshKey = null;
   let unsubscribeQueue = null;
+  const activeSingleCollections = new Set();
   let revision = 0;
   let snapshot;
 
@@ -248,6 +249,16 @@ export function createContentSourcesFeature(adapters = {}) {
     void refreshResearchIndex('doubao-complete');
   };
 
+  const isActiveSingleCollectionCompletion = (queue) => {
+    if (!scope || !Array.isArray(queue.tasks) || queue.tasks.length !== 1) return false;
+    const task = queue.tasks[0];
+    if (task?.status !== 'succeeded') return false;
+    return Array.from(activeSingleCollections).some((collection) =>
+      collection.workspaceRuntimeId === scope.workspaceRuntimeId &&
+      collection.clientId === task.clientId &&
+      collection.questionId === task.questionId);
+  };
+
   const applyQueue = (value, reason = 'event', token = null) => {
     if (disposed) return false;
     if (token && !queueIdentity.isCurrent(token)) return false;
@@ -267,7 +278,7 @@ export function createContentSourcesFeature(adapters = {}) {
       const key = queueRefreshKey(nextQueue);
       if (key !== lastQueueRefreshKey) {
         lastQueueRefreshKey = key;
-        refreshCompletedQueueData();
+        if (!isActiveSingleCollectionCompletion(nextQueue)) refreshCompletedQueueData();
       }
     }
     return true;
@@ -582,6 +593,14 @@ export function createContentSourcesFeature(adapters = {}) {
       publish();
     }
     const token = owner.begin(commandScope);
+    const singleCollectionScope = name === 'collectDoubaoQuestion'
+      ? Object.freeze({
+          workspaceRuntimeId: commandScope.workspaceRuntimeId,
+          clientId: commandClientId,
+          questionId: input?.questionId,
+        })
+      : null;
+    if (singleCollectionScope) activeSingleCollections.add(singleCollectionScope);
     publish();
     try {
       const result = await adapter(input);
@@ -635,6 +654,8 @@ export function createContentSourcesFeature(adapters = {}) {
       owner.finalize(token, { error });
       publish();
       throw Object.assign(new Error(error.userMessage), error);
+    } finally {
+      if (singleCollectionScope) activeSingleCollections.delete(singleCollectionScope);
     }
   };
 
@@ -749,6 +770,7 @@ export function createContentSourcesFeature(adapters = {}) {
       loginIdentity.dispose();
       clearQueueSubscription();
       Object.values(commandOwners).forEach((owner) => owner.dispose());
+      activeSingleCollections.clear();
       listeners.clear();
       scope = null;
       clients = [];

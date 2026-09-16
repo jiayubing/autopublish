@@ -35,6 +35,8 @@ const SCOPES_BY_REASON = Object.freeze({
   GENERATION_BATCH_TERMINAL: ["articleManagement"],
   GENERATION_PENDING_TASKS_CANCELLED: ["articleManagement"],
   ARTICLE_SAVED: ["articleManagement"],
+  ARTICLE_EDIT_CONFLICT: ["articleManagement"],
+  ARTICLE_MUTATION_RESULT_UNCERTAIN: ["articleManagement"],
   ARTICLE_RESTORED: ["articleManagement"],
   ARTICLE_PERMANENTLY_DELETED: ["articleManagement"],
   CONTENT_SOURCE_CHANGED: ["contentSources"],

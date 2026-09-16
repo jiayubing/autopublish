@@ -290,7 +290,7 @@ test("content workspace keeps paid-media preflight and confirmation as named com
     ],
     ["confirm", { confirmationToken: "token-1" }],
   ]);
-  assert.ok(managementLoads >= 2);
+  assert.equal(managementLoads, 1, "confirmation completion leaves refresh to workspace invalidation");
   assert.equal(
     feature.getSnapshot().commands.confirmPaidMediaBatch.busy,
     false,

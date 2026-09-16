@@ -391,7 +391,8 @@ export function createArticleManagementFeature(adapters = {}) {
       refreshRemovalManagement(result, reason, true);
       return;
     }
-    if (COMMAND_SCOPES[name] === "management") await refreshManagement(reason);
+    // Other mutations refresh through workspace invalidation, including when
+    // their command result arrives late or fails after a persisted change.
   };
 
   const assertClientScope = (name, input) => {

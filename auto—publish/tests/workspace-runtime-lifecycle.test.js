@@ -175,6 +175,8 @@ it("maps every production workspace mutation reason explicitly without a broad f
     "GENERATION_PENDING_TASKS_CANCELLED",
     "GENERATION_BATCH_CHANGED",
     "ARTICLE_SAVED",
+    "ARTICLE_EDIT_CONFLICT",
+    "ARTICLE_MUTATION_RESULT_UNCERTAIN",
     "ARTICLE_RESTORED",
     "ARTICLE_PERMANENTLY_DELETED",
   ].forEach(function(reasonCode) {
