@@ -156,6 +156,24 @@ function createWorkspaceMigrationComposition(options) {
         repair: null,
       });
     }
+    // A verified journal is terminal evidence of a completed migration. The
+    // planner may legitimately produce a different fingerprint after later
+    // scanner changes; when the current workspace is clean, that historical
+    // journal must not make an otherwise usable workspace unavailable.
+    if (
+      !migrationRequired &&
+      journals.length > 0 &&
+      journals.every((journal) => journal && journal.phase === "verified")
+    ) {
+      return Object.freeze({
+        allowed: true,
+        status: "verified_journal_ignored",
+        code: null,
+        phase: "verified",
+        executionGroupsPaused: true,
+        repair: null,
+      });
+    }
     if (!migrationRequired && journals.length === 0) {
       return Object.freeze({
         allowed: true,

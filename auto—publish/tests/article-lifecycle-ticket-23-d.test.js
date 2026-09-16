@@ -586,6 +586,27 @@ it("ignores a detected journal when only current runtime artifacts remain", () =
   }
 });
 
+it("allows a clean workspace with a stale verified migration journal", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "migration-23-d-verified-history-"));
+  try {
+    const composition = createWorkspaceMigrationComposition({
+      workspaceRoot: root,
+      planner: {
+        planResult() {
+          return { plan: { ...plan(), entries: [] }, report: { counts: { unplanned: 0, corrupt: 0 } } };
+        },
+        getCurrentRuntimeArtifactCount() { return 0; },
+      },
+      backup: { ensure() {}, verify() {} },
+      inspectMigrationJournals() { return [{ ...plan(), migrationRunId: "older-run", phase: "verified" }]; },
+    });
+    const result = composition.run({});
+    assert.equal(result.allowed, true);
+    assert.equal(result.status, "verified_journal_ignored");
+    composition.close();
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
 it("does not construct normal or remote composition while migration is blocked", async () => {
   let normalConstructions = 0;
   await assert.rejects(
