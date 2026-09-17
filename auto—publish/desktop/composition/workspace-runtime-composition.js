@@ -381,6 +381,12 @@ async function createWorkspaceRuntimeComposition(deps) {
           contentStore,
           operationalStore: publicationRecoveryComposition.operationalStore,
           articleMutationCoordinator,
+          getAttentionItems: function (attentionIds) {
+            attentionPorts.attentionQuery.invalidate();
+            return attentionIds.map((attentionId) =>
+              attentionPorts.attentionQuery.get({ attentionId }),
+            );
+          },
           articleRemovalTransactionStore:
             contentLifecycleComposition.articleRemovalTransactionStore,
           onDataInvalidated: invalidation.invalidate,

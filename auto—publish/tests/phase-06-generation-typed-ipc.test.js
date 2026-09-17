@@ -24,10 +24,11 @@ const CHANNELS = [
   "content:preview-cancel-pending-generation-batch",
   "content:cancel-pending-generation-batch",
   "content:get-generation-runtime-snapshot",
+  "content:regenerate-attention-items",
 ];
 
-test("generation inventory has nine invokes with real feature consumers and one event", () => {
-  assert.equal(generationContracts.length, 9);
+test("generation inventory has ten invokes with real feature consumers and one event", () => {
+  assert.equal(generationContracts.length, 10);
   assert.equal(
     generationContracts.every((contract) => contract.kind !== "event"),
     true,
@@ -57,7 +58,11 @@ test("generation preload forwards named methods as exact versioned requests", as
   const methodCalls = [
     ["previewGenerationBatch", CHANNELS[0], [plan]],
     ["createAndStartGenerationBatch", CHANNELS[1], [plan]],
-    ["abandonGenerationBatch", CHANNELS[2], [{ batchId: "batch-1", confirmed: true }]],
+    [
+      "abandonGenerationBatch",
+      CHANNELS[2],
+      [{ batchId: "batch-1", confirmed: true }],
+    ],
     ["pauseGenerationBatch", CHANNELS[3], [{ batchId: "batch-1" }]],
     ["resumeGenerationBatch", CHANNELS[4], [{ batchId: "batch-1" }]],
     ["retryFailedGenerationBatch", CHANNELS[5], [{ batchId: "batch-1" }]],
@@ -72,6 +77,17 @@ test("generation preload forwards named methods as exact versioned requests", as
       [{ batchId: "batch-1", confirmed: true }],
     ],
     ["getGenerationRuntimeSnapshot", CHANNELS[8], []],
+    [
+      "regenerateAttentionItems",
+      CHANNELS[9],
+      [
+        {
+          requestId: "request-1",
+          attentionIds: ["attention-1"],
+          confirmed: true,
+        },
+      ],
+    ],
   ];
   for (const [method, channel, args] of methodCalls) {
     await preload.api.content[method](...args);

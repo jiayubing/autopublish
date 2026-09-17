@@ -45,6 +45,7 @@ function safeTask(value) {
     message: "生成任务失败，请检查诊断信息。",
   };
   if (task.articleId !== undefined) result.articleId = task.articleId;
+  if (task.sourceArticleId !== undefined) result.sourceArticleId = task.sourceArticleId;
   if (
     typeof task.articleTitle === "string" &&
     task.articleTitle.length > 0 &&
@@ -173,6 +174,9 @@ function registerContentGenerationBatchIpc(deps) {
   if (!ipcMain || typeof ipcMain.handle !== "function" || !service) throw new Error("Generation batch IPC dependencies are required");
   ipcMain.handle("content:preview-generation-batch", function(event, value) { return invoke(async function() { return safePreview(await service.preview(input(value))); }); });
   ipcMain.handle("content:create-and-start-generation-batch", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.createAndStartBatch(input(value))) }; }); });
+  ipcMain.handle("content:regenerate-attention-items", function(event, value) { return invoke(async function() {
+    return { batch: safeBatch(await service.regenerateAttentionItems(input(value))) };
+  }); });
   ipcMain.handle("content:pause-generation-batch", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.pauseBatch(value === undefined ? undefined : input(value))) }; }); });
   ipcMain.handle("content:abandon-generation-batch", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.abandonBatch(input(value))) }; }); });
   ipcMain.handle("content:resume-generation-batch", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.resumeBatch(input(value))) }; }); });

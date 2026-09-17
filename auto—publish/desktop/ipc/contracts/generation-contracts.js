@@ -60,6 +60,7 @@ const task = exactObject({
     message: literalField("生成任务失败，请检查诊断信息。"),
   }))),
   articleId: optionalField(nullableField(id)),
+  sourceArticleId: optionalField(id),
   articleTitle: optionalField(displayText(300)),
   createdAt: optionalField(timestamp),
   updatedAt: optionalField(timestamp),
@@ -240,6 +241,7 @@ function generationTask(value) {
     attempts: value.attempts,
   };
   if (value.articleId !== undefined) output.articleId = generationOptionalText(value.articleId, 200);
+  if (value.sourceArticleId !== undefined) output.sourceArticleId = generationText(value.sourceArticleId, 200);
   if (value.articleTitle !== undefined) output.articleTitle = generationDisplayText(value.articleTitle, 300);
   if (value.error !== undefined && value.error !== null) {
     exactKeys(value.error, ["code", "message"], []);
@@ -340,6 +342,7 @@ const COMMON_ERRORS = {
   IPC_INTERNAL: { category: "internal", retryability: "manual-check", userMessage: "生成操作未能安全完成，请检查诊断信息。" },
 };
 const GENERATION_CODES = [
+  "GENERATION_CONTENT_FAILURE_REQUIRED",
   "GENERATION_INPUT_INVALID", "GENERATION_CLIENTS_REQUIRED", "GENERATION_TEMPLATES_REQUIRED",
   "GENERATION_SOURCE_LIMIT", "GENERATION_TASK_LIMIT",
   "GENERATION_CLIENT_NOT_FOUND", "CLIENT_MATERIAL_REQUIRED", "CLIENT_MATERIAL_INVALID",
@@ -364,7 +367,11 @@ function errors(codes, userMessage) {
     }])),
   });
 }
-const generationErrors = errors(GENERATION_CODES, "生成操作未完成，请检查选择与任务状态。供诊断使用的错误代码已保留。");
+const generationErrors = Object.freeze({
+  ...errors(GENERATION_CODES, "生成操作未完成，请检查选择与任务状态。供诊断使用的错误代码已保留。"),
+  GENERATION_CONTENT_FAILURE_REQUIRED: { category: "validation", retryability: "never", userMessage: "所选事项已变化或不是可重新生成的内容审核失败，请刷新后重新选择。" },
+  GENERATION_SOURCE_INVALID: { category: "validation", retryability: "never", userMessage: "原文章的生成来源缺失或已失效，本批次未启动。请检查原客户资料、问题和模板。" },
+});
 function contract(input, ownedErrors) {
   return defineContract({
     feature: "generation",
@@ -375,6 +382,9 @@ function contract(input, ownedErrors) {
 }
 
 const generationContracts = Object.freeze([
+  contract({ capability: "generation.regenerateAttentionItems", channel: "content:regenerate-attention-items", kind: "command",
+    request: exactObject({ requestId: id, attentionIds: arrayField(displayText(512), { min: 1, max: 100 }), confirmed: literalField(true), concurrency: optionalField(integerField({ min: 1, max: 4 })) }),
+    success: batchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),
   contract({ capability: "generation.previewBatch", channel: "content:preview-generation-batch", kind: "query", request: planRequest, success: preview, fromArgs: directArgs, toArgs: directInput }, generationErrors),
   contract({ capability: "generation.createAndStartBatch", channel: "content:create-and-start-generation-batch", kind: "command", request: planRequest, success: batchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),
   contract({ capability: "generation.pauseBatch", channel: "content:pause-generation-batch", kind: "command", request: stopRequest, success: nullableBatchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),

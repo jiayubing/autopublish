@@ -546,6 +546,9 @@ const api = {
         input || {},
       );
     },
+    regenerateAttentionItems: function (input) {
+      return ipcRenderer.invoke("content:regenerate-attention-items", input || {});
+    },
     pauseGenerationBatch: function (input) {
       return ipcRenderer.invoke("content:pause-generation-batch", input || {});
     },

@@ -171,6 +171,7 @@ async function createContentProductionComposition(options) {
           contentStore: value.contentStore,
           articleMutationCoordinator: value.articleMutationCoordinator,
           aiProviderService: batchAiProvider,
+          getAttentionItems: value.getAttentionItems,
           onDataInvalidated: value.onDataInvalidated,
         },
       ),

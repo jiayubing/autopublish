@@ -203,10 +203,38 @@ function createGenerationBatchStore(options) {
     return writeBatch({ version: BATCH_VERSION, id: id, concurrency: value.concurrency === undefined ? 1 : value.concurrency, status: "pending", createdAt: createdAt, updatedAt: createdAt, aiConfigFingerprint: value.aiConfigFingerprint.trim(), clientSources: sources, templates: selectedTemplates, tasks: tasks, counts: countsFor(tasks) });
   }
 
+  function createRegenerationBatch(input) {
+    assertIdentifier(input.id, "batch id");
+    assertArray(input.tasks, "GENERATION_SOURCE_INVALID", "Tasks", true);
+    const createdAt = clock();
+    const tasks = input.tasks.map(function (value, index) {
+      const source = normalizeSource(value);
+      const template = normalizeTemplate(value);
+      assertIdentifier(value.sourceArticleId, "source article id");
+      if (typeof value.sourceAttentionId !== "string" || !value.sourceAttentionId || value.sourceAttentionId.length > 512)
+        throw storeError("GENERATION_SOURCE_INVALID", "Attention identity is required");
+      return { ...source, ...template, sourceArticleId: value.sourceArticleId, sourceAttentionId: value.sourceAttentionId,
+        id: taskId(input.id, source.clientId, template.platform, String(index)),
+        status: "pending", attempts: 0, error: null, articleId: null, createdAt, updatedAt: createdAt };
+    });
+    assertUnique(tasks.map((task) => task.sourceAttentionId), "GENERATION_INPUT_INVALID", "Attention item");
+    assertUnique(tasks.map((task) => JSON.stringify([task.clientId, task.sourceArticleId])), "GENERATION_INPUT_INVALID", "Source article");
+    try {
+      getBatch(input.id);
+      throw storeError("GENERATION_TASK_CONFLICT", "Generation batch already exists");
+    } catch (error) {
+      if (error.code !== "GENERATION_BATCH_NOT_FOUND") throw error;
+    }
+    return writeBatch({ version: BATCH_VERSION, id: input.id, concurrency: input.concurrency || 2,
+      status: "pending", createdAt, updatedAt: createdAt, aiConfigFingerprint: input.aiConfigFingerprint,
+      clientSources: tasks.map(normalizeSource), templates: tasks.map(normalizeTemplate), tasks });
+  }
+
   recoverInterrupted();
 
   return {
     createBatch,
+    createRegenerationBatch,
     getBatch,
     listBatches: fileStore.list,
     updateBatchStatus,

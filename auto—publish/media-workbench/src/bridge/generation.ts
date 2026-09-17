@@ -42,6 +42,9 @@ type GenerationRuntimeSnapshot = {
   capabilities: GenerationBatchState["capabilities"];
 };
 type GenerationContentApi = {
+  regenerateAttentionItems: (
+    input: AttentionRegenerationInput,
+  ) => Promise<GenerationIpcResponse<{ batch: GenerationBatch }>>;
   generateArticle: (input: {
     generationOperationId?: string;
     articleCount?: number;
@@ -221,6 +224,23 @@ export async function createAndStartGenerationBatch(
   return callGeneration(
     (api) => requireBridgeMethod(api.createAndStartGenerationBatch)(input),
     "Unable to create and start generation batch",
+    { map: (data) => data.batch },
+  );
+}
+
+export type AttentionRegenerationInput = {
+  requestId: string;
+  attentionIds: string[];
+  confirmed: true;
+  concurrency?: number;
+};
+
+export async function regenerateAttentionItems(
+  input: AttentionRegenerationInput,
+): Promise<GenerationBatch> {
+  return callGeneration(
+    (api) => requireBridgeMethod(api.regenerateAttentionItems)(input),
+    "Unable to regenerate attention items",
     { map: (data) => data.batch },
   );
 }
