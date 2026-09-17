@@ -133,6 +133,72 @@ function createWorkspaceMigrationComposition(options) {
         journal.planFingerprint === planned.plan.planFingerprint &&
         journal.sourceVersion === 1,
     );
+    // Ignored source content can change the scan fingerprint without changing
+    // any imported fact. Reuse only an entire, still-verifiable prior import;
+    // never merge partial imports or treat changed evidence as a duplicate.
+    const counts = (planned.report && planned.report.counts) || {};
+    const verifiedDuplicate =
+      planned.plan.entries.length > 0 &&
+      planned.plan.entries.every(
+        (entry) => entry.variant === "deletionRecoveryConflict",
+      ) &&
+      counts.unplanned === 0 &&
+      counts.corrupt === 0 &&
+      journals.every(
+        (journal) =>
+          journal.phase === "verified" ||
+          (journal === matchingJournal &&
+            ["detected", "backed_up", "confirmed"].includes(journal.phase) &&
+            !journal.importCommitFingerprint),
+      ) &&
+      journals.find(
+        (journal) =>
+          journal.phase === "verified" &&
+          journal.sourceVersion === 1 &&
+          journal.workspaceFingerprint === planned.plan.workspaceFingerprint &&
+          require("node:util").isDeepStrictEqual(
+            journal.importedEntries,
+            [...planned.plan.entries].sort((a, b) =>
+              a.entryId.localeCompare(b.entryId),
+            ),
+          ),
+      );
+    if (verifiedDuplicate && verifiedDuplicate !== matchingJournal) {
+      const historicalPlan = {
+        ...planned.plan,
+        ...verifiedDuplicate,
+        entries: verifiedDuplicate.importedEntries,
+      };
+      const verifier =
+        require("../services/workspace-migration-verifier").createWorkspaceMigrationVerifier(
+          {
+            listImportedLifecycleFacts: () => verifiedDuplicate.importedEntries,
+            verifyOperationalStore: () =>
+              require("../../src/infrastructure/operational-store/operational-store").verifyOperationalDatabase(
+                require("node:path").join(
+                  values.workspaceRoot,
+                  ".autopublish",
+                  "operations",
+                  "operations.db",
+                ),
+              ),
+          },
+        );
+      if (
+        backup.verify(historicalPlan).valid === true &&
+        verifier.verify({ plan: historicalPlan, journal: verifiedDuplicate })
+          .verificationFingerprint === verifiedDuplicate.verificationFingerprint
+      ) {
+        return Object.freeze({
+          allowed: true,
+          status: "verified_import_reused",
+          code: null,
+          phase: "verified",
+          executionGroupsPaused: true,
+          repair: null,
+        });
+      }
+    }
     const currentRuntimeArtifactCount =
       planner && typeof planner.getCurrentRuntimeArtifactCount === "function"
         ? planner.getCurrentRuntimeArtifactCount()

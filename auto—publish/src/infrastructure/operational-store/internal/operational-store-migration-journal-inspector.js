@@ -43,6 +43,15 @@ function inspectOperationalStoreMigrationJournals(options) {
             importCommitFingerprint: row.import_commit_fingerprint,
             verificationFingerprint: row.verification_fingerprint,
             importedSchemaVersion: row.imported_schema_version,
+            importedEntries:
+              row.phase === "verified"
+                ? db
+                    .prepare(
+                      "SELECT entry_json FROM migration_import_entries WHERE migration_run_id=? ORDER BY entry_id",
+                    )
+                    .all(row.migration_run_id)
+                    .map((entry) => JSON.parse(entry.entry_json))
+                : [],
           }),
         ),
     );
