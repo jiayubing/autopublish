@@ -28,6 +28,7 @@ interface PlatformWorkbenchProps {
   initialSection?: SubmissionCenterSection;
   onOpenArticleLibrary: (intent?: ArticleLibraryNavigationIntent) => void;
   onOpenOrders: () => void;
+  onOpenSettings: () => void;
 }
 
 const SECTIONS: Array<{
@@ -58,6 +59,7 @@ export default function PlatformWorkbench({
   initialSection = "regular",
   onOpenArticleLibrary,
   onOpenOrders,
+  onOpenSettings,
 }: PlatformWorkbenchProps) {
   const { confirm } = useConfirmation();
   const { snapshot, feature } = usePlatformFeature();
@@ -556,6 +558,7 @@ export default function PlatformWorkbench({
               getClientLabel={(item) => content.snapshot.clients.find((client) => client.id === item.clientId)?.name || item.clientId || "客户未记录"}
               onOpenPublication={openPublication}
               onOpenArticleLibrary={openSubmission}
+              onOpenPlatformSettings={onOpenSettings}
               onInspect={setAttentionDetail}
               onOpenArticle={openArticle}
               onAttentionAction={(item) => setAttentionDetail(item)}

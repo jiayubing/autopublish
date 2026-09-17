@@ -1,9 +1,11 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useConfirmation } from "../../confirmation";
+import { deriveAttentionFailureCapabilities } from "../../features/attention/attention-failure-capabilities.js";
 import type { createAttentionFeature } from "../../features/attention/attention-feature.js";
 import type { ArticleAttentionItem } from "../../types/publication";
 import { formatBeijingTime } from "../../time-format";
 import { reportRuntimeDiagnostic } from "../../features/workspace/runtime-diagnostic-sink";
+import { Button } from "../ui/primitives";
 
 type AttentionFeature = ReturnType<typeof createAttentionFeature>;
 type ArticleAttentionSnapshot = ReturnType<AttentionFeature["getSnapshot"]>;
@@ -19,11 +21,11 @@ function labelFor(item: ArticleAttentionItem): string {
   return "需处理项需要核对";
 }
 
-function happenedCopy(item: ArticleAttentionItem): string {
+function reasonCopy(item: ArticleAttentionItem): string {
   if (item.kind === "regular_platform_failed")
     return (
       item.reasonSummary ||
-      "投稿未被平台接受，请检查投稿信息后从统一投稿入口重新发起。"
+      "投稿未被平台接受，请查看详情后决定后续处理。"
     );
   if (item.kind === "regular_platform_uncertain")
     return "投稿请求已发出，但远端结果尚未确认，远端可能已经接受。";
@@ -42,14 +44,20 @@ function confirmationMessage(
   return fallback || `${item.titleSnapshot || item.attentionId} 需要确认后才能继续。`;
 }
 
-function actionLabel(action: string): string {
+function actionLabel(action: string, item?: ArticleAttentionItem): string {
+  if (
+    action === "open-submission" &&
+    item?.kind === "regular_platform_failed"
+  )
+    return "改投其他平台";
   const labels: Record<string, string> = {
     "retry-removal": "重试修复删除",
     "open-submission": "打开发起投稿",
     "open-publication": "打开发布详情",
     "open-article": "打开文章",
+    "open-platform-settings": "去设置账号",
     "trash-article": "移入回收站",
-    inspect: "查看差异",
+    inspect: "核对详情",
     "retry-archive": "重试本地归档",
     "confirm-regular-accepted": "确认已接受",
     "confirm-regular-not-accepted": "确认未接受",
@@ -62,40 +70,10 @@ function actionLabel(action: string): string {
   return labels[action] || action;
 }
 
-function attentionGroupKey(item: ArticleAttentionItem): string {
-  if (item.articleId)
-    return `article:${item.clientId || ""}:${item.articleId}`;
-  return `attention:${item.attentionId}`;
-}
-
-interface AttentionCard {
-  key: string;
-  items: ArticleAttentionItem[];
-}
-
-function groupAttentionItems(items: ArticleAttentionItem[]): AttentionCard[] {
-  const grouped = new Map<string, ArticleAttentionItem[]>();
-  items.forEach((item) => {
-    const key = attentionGroupKey(item);
-    grouped.set(key, [...(grouped.get(key) || []), item]);
-  });
-  return [...grouped.entries()].map(([key, groupedItems]) => ({
-    key,
-    items: groupedItems,
-  }));
-}
-
 function defaultTargetLabel(item: ArticleAttentionItem): string {
   const platform = item.displayName || item.platformId || "未指定平台";
   return `${platform} / 账号未记录`;
 }
-
-const ARTICLE_NAVIGATION_ACTIONS = new Set([
-  "open-submission",
-  "open-publication",
-  "open-article",
-  "trash-article",
-]);
 
 function actionError(value: unknown): string {
   const error = value as {
@@ -129,6 +107,7 @@ interface ArticleAttentionPanelProps {
   onOpenArticleLibrary?: (item: ArticleAttentionItem) => void;
   onInspect: (item: ArticleAttentionItem) => void;
   onOpenArticle: (item: ArticleAttentionItem) => void;
+  onOpenPlatformSettings?: () => void;
   onAttentionAction?: (item: ArticleAttentionItem, action: string) => void;
   getTargetLabel?: (item: ArticleAttentionItem) => string;
   getClientLabel?: (item: ArticleAttentionItem) => string;
@@ -147,6 +126,7 @@ export default function ArticleAttentionPanel({
   onOpenArticleLibrary,
   onInspect,
   onOpenArticle,
+  onOpenPlatformSettings,
   onAttentionAction,
   getTargetLabel,
   getClientLabel,
@@ -156,20 +136,99 @@ export default function ArticleAttentionPanel({
 }: ArticleAttentionPanelProps) {
   const { confirm } = useConfirmation();
   const itemRefs = useRef(new Map<string, HTMLDivElement>());
-  const attentionCards = useMemo(
-    () => groupAttentionItems(snapshot.items as ArticleAttentionItem[]),
-    [snapshot.items],
+  const [selectedAttentionIds, setSelectedAttentionIds] = useState<Set<string>>(
+    () => new Set(),
   );
+  const [batchNotice, setBatchNotice] = useState("");
+  const attentionItems = snapshot.items as ArticleAttentionItem[];
+  const itemCapabilities = useMemo(
+    () =>
+      new Map(
+        attentionItems.map((item) => [
+          item.attentionId,
+          deriveAttentionFailureCapabilities(item),
+        ]),
+      ),
+    [attentionItems],
+  );
+  const selectedItems = useMemo(
+    () =>
+      attentionItems.filter((item) =>
+        selectedAttentionIds.has(item.attentionId),
+      ),
+    [attentionItems, selectedAttentionIds],
+  );
+  const selectedCount = selectedItems.length;
+  const regeneratableCount = selectedItems.filter(
+    (item) => itemCapabilities.get(item.attentionId)?.canRegenerate,
+  ).length;
+  const repostableCount = selectedItems.filter(
+    (item) => itemCapabilities.get(item.attentionId)?.canRepostToAnotherPlatform,
+  ).length;
+  const allSelected =
+    attentionItems.length > 0 &&
+    attentionItems.every((item) =>
+      selectedAttentionIds.has(item.attentionId),
+    );
+  const canBatchRegenerate =
+    selectedCount > 0 && regeneratableCount === selectedCount;
+  const canBatchRepost =
+    selectedCount > 0 && repostableCount === selectedCount;
+  const selectionSummary =
+    selectedCount === 0
+      ? "尚未选择需处理项"
+      : `已选 ${selectedCount} 项；其中 ${regeneratableCount} 项可重新生成，${repostableCount} 项可改投其他平台。`;
+  const commandError =
+    snapshot.commands.execute.error || snapshot.commands.preview.error;
+  const actionBusy =
+    snapshot.commands.preview.busy ||
+    snapshot.commands.execute.busy ||
+    extraActionBusy;
+
+  useEffect(() => {
+    const currentIds = new Set(
+      attentionItems.map((item) => item.attentionId),
+    );
+    setSelectedAttentionIds((current) => {
+      const next = new Set(
+        [...current].filter((attentionId) => currentIds.has(attentionId)),
+      );
+      return next.size === current.size ? current : next;
+    });
+    setBatchNotice("");
+  }, [attentionItems]);
 
   useEffect(() => {
     if (!selectedAttentionId) return;
-    const card = attentionCards.find(({ items }) =>
-      items.some((item) => item.attentionId === selectedAttentionId),
-    );
-    const element = card ? itemRefs.current.get(card.key) : undefined;
+    const element = itemRefs.current.get(selectedAttentionId);
     element?.scrollIntoView({ block: "nearest" });
     element?.focus();
-  }, [attentionCards, selectedAttentionId]);
+  }, [attentionItems, selectedAttentionId]);
+
+  function toggleSelection(attentionId: string) {
+    setSelectedAttentionIds((current) => {
+      const next = new Set(current);
+      if (next.has(attentionId)) next.delete(attentionId);
+      else next.add(attentionId);
+      return next;
+    });
+    setBatchNotice("");
+  }
+
+  function toggleAll() {
+    setSelectedAttentionIds(
+      allSelected
+        ? new Set()
+        : new Set(attentionItems.map((item) => item.attentionId)),
+    );
+    setBatchNotice("");
+  }
+
+  function reserveBatchAction(label: string) {
+    setBatchNotice(
+      `已选择 ${selectedCount} 项；${label}将在后续阶段接入，本次未执行。`,
+    );
+  }
 
   async function resolve(item: ArticleAttentionItem, action: string) {
     if (action === "trash-article") {
@@ -184,6 +243,10 @@ export default function ArticleAttentionPanel({
       onOpenArticleLibrary?.(item);
       return;
     }
+    if (action === "open-platform-settings") {
+      onOpenPlatformSettings?.();
+      return;
+    }
     if (action === "inspect") {
       onInspect(item);
       return;
@@ -194,10 +257,7 @@ export default function ArticleAttentionPanel({
     }
     if (
       onAttentionAction &&
-      [
-        "bind-paid-order-number",
-        "confirm-paid-order-absent",
-      ].includes(action)
+      ["bind-paid-order-number", "confirm-paid-order-absent"].includes(action)
     ) {
       onAttentionAction(item, action);
       return;
@@ -213,7 +273,7 @@ export default function ArticleAttentionPanel({
         !(await confirm({
           title: "确认处理需处理项",
           message: confirmationMessage(item, action, preview.message),
-          confirmLabel: actionLabel(action),
+          confirmLabel: actionLabel(action, item),
           tone: "warning",
         }))
       )
@@ -229,13 +289,6 @@ export default function ArticleAttentionPanel({
     }
   }
 
-  const commandError =
-    snapshot.commands.execute.error || snapshot.commands.preview.error;
-  const actionBusy =
-    snapshot.commands.preview.busy ||
-    snapshot.commands.execute.busy ||
-    extraActionBusy;
-
   return (
     <section
       aria-label="需处理页面"
@@ -244,6 +297,9 @@ export default function ArticleAttentionPanel({
       <div className="flex items-center justify-between gap-2">
         <div>
           <h3 className="text-sm font-semibold text-amber-900">需处理</h3>
+          <p className="mt-1 text-[11px] text-slate-500">
+            投稿失败后在这里集中处理。
+          </p>
         </div>
         <button
           type="button"
@@ -254,6 +310,52 @@ export default function ArticleAttentionPanel({
           {snapshot.query.loading ? "刷新中…" : "刷新"}
         </button>
       </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2 rounded border border-amber-200 bg-white p-2">
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={!attentionItems.length}
+          onClick={toggleAll}
+        >
+          {allSelected ? "取消全选" : "全选当前结果"}
+        </Button>
+        <span
+          role="status"
+          aria-live="polite"
+          className="text-[11px] font-medium text-slate-600"
+        >
+          {selectionSummary}
+        </span>
+        <div className="ml-auto flex flex-wrap gap-1.5">
+          <Button
+            size="sm"
+            disabled={!canBatchRegenerate || actionBusy}
+            title="仅当选中项全部支持重新生成时可用"
+            onClick={() => reserveBatchAction("批量重新生成")}
+          >
+            批量重新生成
+          </Button>
+          <Button
+            size="sm"
+            disabled={!canBatchRepost || actionBusy}
+            title="仅当选中项全部支持改投其他平台时可用"
+            onClick={() => reserveBatchAction("批量改投其他平台")}
+          >
+            批量改投其他平台
+          </Button>
+        </div>
+      </div>
+
+      {batchNotice && (
+        <p
+          role="status"
+          className="mt-2 rounded border border-blue-200 bg-blue-50 p-2 text-[11px] text-blue-800"
+        >
+          {batchNotice}
+        </p>
+      )}
+
       {commandError && (
         <div
           role="alert"
@@ -270,151 +372,178 @@ export default function ArticleAttentionPanel({
           {actionError(snapshot.query.error)}
         </div>
       )}
+
       <div className="mt-3 grid gap-2">
-        {attentionCards.map((card) => {
-          const selected = card.items.some(
-            (item) => item.attentionId === selectedAttentionId,
-          );
+        {attentionItems.map((item) => {
+          const capability = itemCapabilities.get(item.attentionId);
           const title =
-            card.items.find((item) => item.titleSnapshot)?.titleSnapshot ||
-            card.items.find((item) => item.articleId)?.articleId ||
-            card.items[0]?.transactionId ||
+            item.titleSnapshot ||
+            item.articleId ||
+            item.transactionId ||
             "需处理项";
-          const targetLabels = [
-            ...new Set(
-              card.items.map(
-                (item) => getTargetLabel?.(item) || defaultTargetLabel(item),
-              ),
-            ),
-          ];
-          const updatedAtValues = card.items
-            .map((item) => item.updatedAt)
-            .filter((value): value is string => Boolean(value))
-            .sort();
-          const navigationActions = new Set<string>();
-          const actions = card.items.flatMap((item) => {
-            const itemActions = [
-              ...item.allowedActions,
-              ...(getAdditionalActions?.(item) || []),
-            ];
-            return [...new Set(itemActions)].flatMap((action) => {
-              if (ARTICLE_NAVIGATION_ACTIONS.has(action)) {
-                if (navigationActions.has(action)) return [];
-                navigationActions.add(action);
-              }
-              return [{
-                action,
-                item,
-                label:
-                  card.items.length > 1 && !ARTICLE_NAVIGATION_ACTIONS.has(action)
-                    ? `${actionLabel(action)} · ${labelFor(item)}`
-                    : actionLabel(action),
-              }];
-            });
-          });
+          const selected = selectedAttentionIds.has(item.attentionId);
+          const focused = item.attentionId === selectedAttentionId;
+          const targetLabel =
+            getTargetLabel?.(item) || defaultTargetLabel(item);
+          const actions = [
+            ...(capability?.needsAccountSettings && onOpenPlatformSettings
+              ? ["open-platform-settings"]
+              : []),
+            ...item.allowedActions,
+            ...(getAdditionalActions?.(item) || []),
+          ].filter(
+            (action, index, values) => values.indexOf(action) === index,
+          );
+
           return (
             <div
-              key={card.key}
+              key={item.attentionId}
               ref={(node) => {
-                if (node) itemRefs.current.set(card.key, node);
-                else itemRefs.current.delete(card.key);
+                if (node) itemRefs.current.set(item.attentionId, node);
+                else itemRefs.current.delete(item.attentionId);
               }}
-              tabIndex={selected ? -1 : undefined}
-              className={`rounded border bg-white p-2 outline-none ${selected ? "border-blue-400 ring-2 ring-blue-100" : "border-amber-200"}`}
+              tabIndex={focused ? -1 : undefined}
+              className={`rounded border bg-white p-2.5 outline-none ${
+                focused
+                  ? "border-blue-400 ring-2 ring-blue-100"
+                  : selected
+                    ? "border-blue-200"
+                    : "border-amber-200"
+              }`}
             >
-            <div className="flex items-start gap-2">
-              <div className="min-w-0 flex-1">
-                <h4 className="break-words text-sm font-semibold text-slate-800">
-                  {title}
-                </h4>
-              </div>
-              {card.items.some((item) => item.freeze.article) && (
-                <span className="shrink-0 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-800">
-                  文章已冻结
-                </span>
-              )}
-            </div>
-            <details className="mt-2 text-xs text-slate-600">
-              <summary className="cursor-pointer">核对详情</summary>
-            <dl className="mt-2 grid min-w-0 gap-2 text-xs">
-              <div className="grid min-w-0 grid-cols-[6rem_minmax(0,1fr)] gap-2">
-                <dt className="text-slate-400">客户</dt>
-                <dd className="min-w-0 break-words text-slate-700">
-                  {getClientLabel?.(card.items[0]) || card.items[0]?.clientId || "客户未记录"}
-                </dd>
-              </div>
-              <div className="grid min-w-0 grid-cols-[6rem_minmax(0,1fr)] gap-2">
-                <dt className="text-slate-400">投稿目标</dt>
-                <dd className="min-w-0 break-words text-slate-700">
-                  {targetLabels.map((label) => (
-                    <div key={label}>{label}</div>
-                  ))}
-                </dd>
-              </div>
-              <div className="grid min-w-0 grid-cols-[6rem_minmax(0,1fr)] gap-2">
-                <dt className="text-slate-400">问题类型</dt>
-                <dd className="min-w-0 break-words text-slate-700">
-                  {card.items.map((item) => (
-                    <div key={item.attentionId}>
-                      {labelFor(item)}
+              <div className="flex min-w-0 items-start gap-2.5">
+                <input
+                  type="checkbox"
+                  aria-label={`选择 ${title}`}
+                  checked={selected}
+                  onChange={() => toggleSelection(item.attentionId)}
+                  className="mt-0.5 h-4 w-4 shrink-0"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+                    <h4 className="min-w-0 break-words text-sm font-semibold text-slate-800">
+                      {title}
+                    </h4>
+                    {item.freeze.article && (
+                      <span className="shrink-0 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-800">
+                        文章已冻结
+                      </span>
+                    )}
+                  </div>
+
+                  <dl className="mt-2 grid min-w-0 gap-x-5 gap-y-2 text-xs sm:grid-cols-2 xl:grid-cols-5">
+                    <div className="min-w-0">
+                      <dt className="text-slate-400">客户</dt>
+                      <dd className="mt-0.5 break-words text-slate-700">
+                        {getClientLabel?.(item) || item.clientId || "客户未记录"}
+                      </dd>
                     </div>
-                  ))}
-                </dd>
-              </div>
-              <div className="grid min-w-0 grid-cols-[6rem_minmax(0,1fr)] gap-2">
-                <dt className="text-slate-400">文章冻结</dt>
-                <dd className="min-w-0 break-words text-slate-700">
-                  {card.items.some((item) => item.freeze.article)
-                    ? "是，仅允许当前事项动作"
-                    : "否"}
-                </dd>
-              </div>
-              <div className="grid min-w-0 grid-cols-[6rem_minmax(0,1fr)] gap-2">
-                <dt className="text-slate-400">最近一次执行</dt>
-                <dd className="min-w-0 break-words text-slate-700">
-                  {formatBeijingTime(
-                    updatedAtValues[updatedAtValues.length - 1],
+                    <div className="min-w-0">
+                      <dt className="text-slate-400">原平台</dt>
+                      <dd className="mt-0.5 break-words text-slate-700">
+                        {targetLabel}
+                      </dd>
+                    </div>
+                    <div className="min-w-0 sm:col-span-2 xl:col-span-1">
+                      <dt className="text-slate-400">失败原因</dt>
+                      <dd className="mt-0.5 break-words text-slate-700">
+                        {reasonCopy(item)}
+                      </dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="text-slate-400">最后执行</dt>
+                      <dd className="mt-0.5 text-slate-700">
+                        {formatBeijingTime(item.updatedAt)}
+                      </dd>
+                    </div>
+                  </dl>
+
+                  {capability && item.kind === "regular_platform_failed" && (
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+                      <span className="rounded bg-blue-50 px-2 py-1 text-blue-800">
+                        {capability.nextStep}
+                      </span>
+                      {capability.canRegenerate && (
+                        <span className="rounded bg-emerald-50 px-2 py-1 text-emerald-800">
+                          可重新生成
+                        </span>
+                      )}
+                      {capability.canRepostToAnotherPlatform && (
+                        <span className="rounded bg-slate-100 px-2 py-1 text-slate-700">
+                          可改投其他平台
+                        </span>
+                      )}
+                    </div>
                   )}
-                </dd>
+
+                  <details className="mt-2 text-xs text-slate-600">
+                    <summary className="cursor-pointer">技术详情</summary>
+                    <dl className="mt-2 grid min-w-0 gap-2">
+                      <div className="grid min-w-0 grid-cols-[6rem_minmax(0,1fr)] gap-2">
+                        <dt className="text-slate-400">问题类型</dt>
+                        <dd className="min-w-0 break-words text-slate-700">
+                          {labelFor(item)}
+                        </dd>
+                      </div>
+                      <div className="grid min-w-0 grid-cols-[6rem_minmax(0,1fr)] gap-2">
+                        <dt className="text-slate-400">状态</dt>
+                        <dd className="min-w-0 break-words text-slate-700">
+                          {item.status || "未知"}
+                        </dd>
+                      </div>
+                      {item.reasonCode && (
+                        <div className="grid min-w-0 grid-cols-[6rem_minmax(0,1fr)] gap-2">
+                          <dt className="text-slate-400">原因码</dt>
+                          <dd className="min-w-0 break-all font-mono text-slate-700">
+                            {item.reasonCode}
+                          </dd>
+                        </div>
+                      )}
+                      {(item.publicationId || item.attemptId) && (
+                        <div className="grid min-w-0 grid-cols-[6rem_minmax(0,1fr)] gap-2">
+                          <dt className="text-slate-400">发布记录</dt>
+                          <dd className="min-w-0 break-all text-slate-700">
+                            {[item.publicationId, item.attemptId]
+                              .filter(Boolean)
+                              .join(" / ")}
+                          </dd>
+                        </div>
+                      )}
+                      {item.targetKey && (
+                        <div className="grid min-w-0 grid-cols-[6rem_minmax(0,1fr)] gap-2">
+                          <dt className="text-slate-400">目标标识</dt>
+                          <dd className="min-w-0 break-all font-mono text-slate-700">
+                            {item.targetKey}
+                          </dd>
+                        </div>
+                      )}
+                    </dl>
+                  </details>
+
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {actions.map((action) => (
+                      <button
+                        key={`${item.attentionId}:${action}`}
+                        type="button"
+                        disabled={actionBusy}
+                        onClick={() => void resolve(item, action)}
+                        className="rounded border border-slate-300 bg-white px-2 py-1 text-[11px] text-slate-700 disabled:opacity-40"
+                      >
+                        {actionLabel(action, item)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
-            </dl>
-              {card.items.map((item) => item.reasonCode ? (
-                <p key={item.attentionId} className="mt-1 break-all font-mono">
-                  原因码：{item.reasonCode}
-                </p>
-              ) : null)}
-            </details>
-            <div className="mt-2 text-xs leading-5 text-amber-900">
-              {card.items.map((item) => (
-                <p key={item.attentionId} className="mt-1 break-words">
-                  {happenedCopy(item)}
-                </p>
-              ))}
-            </div>
-            <div className="mt-3">
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {actions.map(({ action, item, label }) => (
-                  <button
-                    key={`${item.attentionId}:${action}`}
-                    type="button"
-                    disabled={actionBusy}
-                    onClick={() => void resolve(item, action)}
-                    className="rounded border border-slate-300 bg-white px-2 py-1 text-[11px] text-slate-700 disabled:opacity-40"
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
             </div>
           );
         })}
-        {snapshot.query.loading && !attentionCards.length && (
+        {snapshot.query.loading && !attentionItems.length && (
           <div className="rounded border border-dashed border-amber-300 bg-white p-4 text-center text-xs text-amber-800">
             正在加载需处理项…
           </div>
         )}
-        {!snapshot.items.length &&
+        {!attentionItems.length &&
           !snapshot.query.loading &&
           !snapshot.query.error && (
             <div className="rounded border border-dashed border-amber-300 bg-white p-4 text-center text-xs text-amber-800">
@@ -425,4 +554,3 @@ export default function ArticleAttentionPanel({
     </section>
   );
 }
-
