@@ -12,6 +12,9 @@ const {
 const {
   inspectOperationalStoreMigrationJournals,
 } = require("./internal/operational-store-migration-journal-inspector");
+const {
+  inspectOperationalStoreImportedMigrationEntries,
+} = require("./internal/operational-store-migration-import-inspector");
 const storeContext = require("./internal/operational-store-context");
 const publications = require("./internal/operational-store-publication-aggregate");
 const {
@@ -244,6 +247,7 @@ module.exports = {
   createOperationalStore,
   createOperationalStoreMigrationFacade,
   inspectOperationalStoreMigrationJournals,
+  inspectOperationalStoreImportedMigrationEntries,
   releaseOperationalStoreMigrationLease,
   dryRunOperationalStoreMigration,
   verifyOperationalDatabase,
