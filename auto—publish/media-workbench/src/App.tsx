@@ -237,6 +237,7 @@ function SubmissionCenterPage({
   initialSection,
   onOpenArticleLibrary,
   onOpenOrders,
+  onOpenSettings,
   onBadgeChange,
   onReadinessChange,
 }: {
@@ -244,6 +245,7 @@ function SubmissionCenterPage({
   initialSection: "regular" | "paid" | "attention";
   onOpenArticleLibrary: (intent?: ArticleLibraryNavigationIntent) => void;
   onOpenOrders: () => void;
+  onOpenSettings: () => void;
   onBadgeChange: (count: number) => void;
   onReadinessChange: (readiness: PageReadiness) => void;
 }) {
@@ -278,6 +280,7 @@ function SubmissionCenterPage({
       initialSection={initialSection}
       onOpenArticleLibrary={onOpenArticleLibrary}
       onOpenOrders={onOpenOrders}
+      onOpenSettings={onOpenSettings}
     />
   );
 }
@@ -552,6 +555,7 @@ function AppContent() {
                     initialSection={submissionCenterSection}
                     onOpenArticleLibrary={openArticleLibrary}
                     onOpenOrders={() => changeView("orders")}
+                    onOpenSettings={() => changeView("settings")}
                     onBadgeChange={reportSubmissionCenterBadge}
                     onReadinessChange={reportReadiness}
                   />
