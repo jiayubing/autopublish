@@ -39,6 +39,7 @@ test('article attention actions produce visible publication/detail results', asy
     browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
     await page.addInitScript(() => {
+      localStorage.setItem('auto-publish:selected-client', 'client-other');
       const ok = (data) => Promise.resolve({ ok: true, data });
       const article = { id: 'article-1', clientId: 'client-1', title: '失败后可打开统一投稿入口', content: '安全测试正文', status: 'saved', platform: 'hepan', scenario: '测试', templateId: 'template-1', createdAt: '2026-07-19T00:00:00.000Z', updatedAt: '2026-07-19T00:00:00.000Z' };
       const attention = { attentionId: 'failed-active-1', kind: 'regular_platform_failed', owner: 'regular-platform-outcome', freeze: { article: false, reasonCode: null }, resolutionPriority: 300, safeFacts: {}, articleId: article.id, clientId: article.clientId, titleSnapshot: article.title, platformId: 'hepan', displayName: '蓝色河畔', publicationId: 'publication-1', attemptId: 'attempt-1', status: 'failed', reasonCode: 'REMOTE_REJECTED', reasonSummary: '平台明确拒绝了这篇文章，请检查内容后从统一投稿入口重新发起。', updatedAt: article.updatedAt, message: '投稿明确失败', allowedActions: ['open-submission', 'open-publication', 'open-article'] };
@@ -48,14 +49,17 @@ test('article attention actions produce visible publication/detail results', asy
       const publication = { publicationId: 'publication-1', clientId: article.clientId, articleId: article.id, platformId: 'hepan', targetKey: 'platform:hepan:account:account-1', displayName: '蓝色河畔', status: 'failed', updatedAt: article.updatedAt, attempts: [{ attemptId: 'attempt-1', status: 'failed', updatedAt: article.updatedAt, errorCode: 'REMOTE_REJECTED' }] };
       const calls = [];
       const content = {
-        listClients: () => ok({ clients: [{ id: article.clientId, name: '测试客户', knowledgeFiles: [] }] }),
-        getClientDetails: () => ok({ client: { id: article.clientId, name: '测试客户', knowledgeFiles: [] }, research: [] }),
+        listClients: () => ok({ clients: [{ id: 'client-other', name: '另一个客户', knowledgeFiles: [] }, { id: article.clientId, name: '测试客户', knowledgeFiles: [] }] }),
+        getClientDetails: (clientId) => ok({ client: { id: clientId, name: clientId === article.clientId ? '测试客户' : '另一个客户', knowledgeFiles: [] }, research: [] }),
         listGeneratedArticles: () => ok({ articles: [article] }),
-        getArticleEditor: () => ok({ article, editFingerprint: "attention-editor-fixture" }),
-        getArticleManagementSnapshot: () => ok({
-          clientId: article.clientId,
+        getArticleEditor: ({ clientId }) => {
+          window.__editorClientId = clientId;
+          return ok({ article: { ...article, clientId }, editFingerprint: "attention-editor-fixture" });
+        },
+        getArticleManagementSnapshot: ({ clientId }) => ok({
+          clientId,
           revision: 1,
-          articles: [article],
+          articles: [{ ...article, clientId, title: clientId === article.clientId ? article.title : '其他客户的同 ID 文章' }],
           trash: [],
           publicationRecords: [publication],
           submissionPlatforms: [{ id: 'hepan', displayName: '蓝色河畔', contentQueueImport: true }],
@@ -126,6 +130,7 @@ test('article attention actions produce visible publication/detail results', asy
     assert.equal(await page.getByText('失败后可打开统一投稿入口', { exact: true }).count(), 1);
     const attentionRegion = page.getByRole('region', { name: '需处理页面' });
     assert.equal(await attentionRegion.getByText('测试客户', { exact: true }).count(), 2);
+    assert.equal(await attentionRegion.getByText('另一个客户', { exact: true }).count(), 0);
     assert.equal(await attentionRegion.getByText('蓝色河畔 / account-1', { exact: true }).count(), 2);
     assert.equal(await attentionRegion.getByRole('button', { name: /打开发起投稿/ }).count(), 1);
     assert.equal(await attentionRegion.getByRole('button', { name: /打开发布详情/ }).count(), 1);
@@ -133,17 +138,21 @@ test('article attention actions produce visible publication/detail results', asy
     assert.equal(await attentionRegion.getByRole('button', { name: /重试本地归档/ }).count(), 0);
     assert.ok((await page.getByText('问题类型', { exact: true }).count()) > 0);
     assert.equal(await attentionRegion.getByRole('button', { name: /打开文章/ }).count(), 1);
-    assert.ok((await page.getByText('发生了什么', { exact: true }).count()) > 0);
-    assert.ok((await page.getByText('下一步', { exact: true }).count()) > 0);
-    assert.ok((await page.getByText('处理完成后', { exact: true }).count()) > 0);
+    for (const label of ['发生了什么', '下一步', '处理完成后', '允许操作'])
+      assert.equal(await attentionRegion.getByText(label, { exact: true }).count(), 0);
+    assert.equal(await attentionRegion.getByText('2026-07-19 08:00:00', { exact: true }).isVisible(), false);
+    assert.ok(await attentionRegion.getByText('投稿请求已发出，但远端结果尚未确认，远端可能已经接受。', { exact: true }).isVisible());
+    await attentionRegion.locator('summary').first().click();
     assert.ok(await page.getByText('平台明确拒绝了这篇文章，请检查内容后从统一投稿入口重新发起。', { exact: true }).isVisible());
     assert.ok((await page.getByText('最近一次执行', { exact: true }).count()) > 0);
     assert.ok(await page.getByText('2026-07-19 08:00:00', { exact: true }).isVisible());
+    await attentionRegion.locator('summary').first().click();
     assert.equal(await page.getByRole('button', { name: '全选当前结果' }).count(), 0);
     assert.equal(await page.getByRole('button', { name: '发起投稿', exact: true }).count(), 0);
     await attentionRegion.getByRole('button', { name: '打开发布详情' }).click();
     await page.getByRole('heading', { name: '文章库' }).waitFor({ state: 'visible' });
     await page.getByRole('dialog', { name: '文章 失败后可打开统一投稿入口 的发布详情' }).waitFor({ state: 'visible' });
+    assert.equal(await page.evaluate(() => localStorage.getItem('auto-publish:selected-client')), 'client-1');
     assert.deepEqual(await page.evaluate(() => window.__attentionActionCalls), []);
     await page.getByRole('button', { name: '关闭发布详情' }).first().click();
     await page.getByRole('button', { name: '投稿中心' }).click();
@@ -153,14 +162,18 @@ test('article attention actions produce visible publication/detail results', asy
     await acceptanceConfirmation.waitFor({ state: 'visible' });
     assert.ok(await acceptanceConfirmation.getByText('确认后文章将永久标记为已发布；发布链接不是必填项。', { exact: false }).isVisible());
     await acceptanceConfirmation.getByRole('button', { name: '取消' }).click();
+    await page.evaluate(() => localStorage.setItem('auto-publish:selected-client', 'client-other'));
     await page.getByRole('button', { name: '打开发起投稿' }).click();
     await page.getByRole('dialog', { name: '发起投稿' }).waitFor({ state: 'visible' });
+    assert.equal(await page.evaluate(() => localStorage.getItem('auto-publish:selected-client')), 'client-1');
     assert.ok(await page.getByText('当前选择 1 篇文章；确认前不会创建投稿批次或订单。', { exact: true }).isVisible());
     await page.getByRole('button', { name: '关闭发起投稿' }).click();
     await page.getByRole('button', { name: '投稿中心' }).click();
     await page.getByRole('tab', { name: /需处理事项/ }).click();
+    await page.evaluate(() => localStorage.setItem('auto-publish:selected-client', 'client-other'));
     await page.getByRole('button', { name: '打开文章' }).click();
     await page.getByRole('heading', { name: '编辑文章' }).waitFor({ state: 'visible' });
+    assert.equal(await page.evaluate(() => window.__editorClientId), 'client-1');
     assert.equal(await page.getByRole('dialog', { name: /发布详情/ }).count(), 0);
     await page.getByRole('button', { name: '投稿中心' }).click();
     await page.getByRole('tab', { name: /需处理事项/ }).click();

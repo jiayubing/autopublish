@@ -30,22 +30,6 @@ function happenedCopy(item: ArticleAttentionItem): string {
   return item.message || "当前状态需要进一步处理。";
 }
 
-function nextStepCopy(item: ArticleAttentionItem): string {
-  if (item.kind === "regular_platform_failed")
-    return "可查看文章和发布详情；重新投稿请通过统一投稿入口发起。";
-  if (item.kind === "regular_platform_uncertain")
-    return "请人工核对远端结果后，选择“确认已接受”或“确认未接受”。";
-  return "请根据下方允许操作继续处理。";
-}
-
-function completionCopy(item: ArticleAttentionItem): string {
-  if (item.kind === "regular_platform_failed")
-    return "打开统一投稿入口不会重试原请求；它会开始一次新的投稿流程。";
-  if (item.kind === "regular_platform_uncertain")
-    return "确认已接受会永久标记文章已发布；确认未接受会按最终事实解除当前待确认事项。";
-  return "处理完成后会刷新权威结果；已解决事项将自动消失。";
-}
-
 function confirmationMessage(
   item: ArticleAttentionItem,
   action: string,
@@ -147,7 +131,7 @@ interface ArticleAttentionPanelProps {
   onOpenArticle: (item: ArticleAttentionItem) => void;
   onAttentionAction?: (item: ArticleAttentionItem, action: string) => void;
   getTargetLabel?: (item: ArticleAttentionItem) => string;
-  clientLabel?: string;
+  getClientLabel?: (item: ArticleAttentionItem) => string;
   getAdditionalActions?: (item: ArticleAttentionItem) => string[];
   onTrashArticle?: (item: ArticleAttentionItem) => void;
   extraActionBusy?: boolean;
@@ -165,7 +149,7 @@ export default function ArticleAttentionPanel({
   onOpenArticle,
   onAttentionAction,
   getTargetLabel,
-  clientLabel,
+  getClientLabel,
   getAdditionalActions,
   onTrashArticle,
   extraActionBusy = false,
@@ -260,9 +244,6 @@ export default function ArticleAttentionPanel({
       <div className="flex items-center justify-between gap-2">
         <div>
           <h3 className="text-sm font-semibold text-amber-900">需处理</h3>
-          <p className="mt-1 text-xs text-amber-800">
-            按文章展示问题原因、投稿目标和当前允许的处理动作。
-          </p>
         </div>
         <button
           type="button"
@@ -299,10 +280,6 @@ export default function ArticleAttentionPanel({
             card.items.find((item) => item.articleId)?.articleId ||
             card.items[0]?.transactionId ||
             "需处理项";
-          const status =
-            card.items.find((item) => item.status === "uncertain")?.status ||
-            card.items[0]?.status ||
-            "待处理";
           const targetLabels = [
             ...new Set(
               card.items.map(
@@ -351,15 +328,19 @@ export default function ArticleAttentionPanel({
                   {title}
                 </h4>
               </div>
-              <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">
-                {status}
-              </span>
+              {card.items.some((item) => item.freeze.article) && (
+                <span className="shrink-0 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-800">
+                  文章已冻结
+                </span>
+              )}
             </div>
-            <dl className="mt-3 grid min-w-0 gap-2 text-xs">
+            <details className="mt-2 text-xs text-slate-600">
+              <summary className="cursor-pointer">核对详情</summary>
+            <dl className="mt-2 grid min-w-0 gap-2 text-xs">
               <div className="grid min-w-0 grid-cols-[6rem_minmax(0,1fr)] gap-2">
                 <dt className="text-slate-400">客户</dt>
                 <dd className="min-w-0 break-words text-slate-700">
-                  {clientLabel || card.items[0]?.clientId || "当前客户未记录"}
+                  {getClientLabel?.(card.items[0]) || card.items[0]?.clientId || "客户未记录"}
                 </dd>
               </div>
               <div className="grid min-w-0 grid-cols-[6rem_minmax(0,1fr)] gap-2">
@@ -397,44 +378,20 @@ export default function ArticleAttentionPanel({
                 </dd>
               </div>
             </dl>
-            <div className="mt-3 rounded border border-amber-100 bg-amber-50/60 p-2 text-xs leading-5 text-amber-900">
-              <div className="font-semibold">发生了什么</div>
+              {card.items.map((item) => item.reasonCode ? (
+                <p key={item.attentionId} className="mt-1 break-all font-mono">
+                  原因码：{item.reasonCode}
+                </p>
+              ) : null)}
+            </details>
+            <div className="mt-2 text-xs leading-5 text-amber-900">
               {card.items.map((item) => (
                 <p key={item.attentionId} className="mt-1 break-words">
                   {happenedCopy(item)}
                 </p>
               ))}
             </div>
-            <div className="mt-2 rounded border border-slate-100 bg-slate-50 p-2 text-xs leading-5 text-slate-700">
-              <div className="font-semibold">下一步</div>
-              {card.items.map((item) => (
-                <p key={item.attentionId} className="mt-1 break-words">
-                  {nextStepCopy(item)}
-                </p>
-              ))}
-            </div>
-            <div className="mt-2 rounded border border-slate-100 bg-white p-2 text-xs leading-5 text-slate-600">
-              <div className="font-semibold">处理完成后</div>
-              {card.items.map((item) => (
-                <p key={item.attentionId} className="mt-1 break-words">
-                  {completionCopy(item)}
-                </p>
-              ))}
-            </div>
-            {card.items.some((item) => item.reasonCode) && (
-              <details className="mt-2 rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-600">
-                <summary className="cursor-pointer font-semibold">核对详情</summary>
-                {card.items.map((item) =>
-                  item.reasonCode ? (
-                    <p key={item.attentionId} className="mt-1 break-all font-mono">
-                      原因码：{item.reasonCode}
-                    </p>
-                  ) : null,
-                )}
-              </details>
-            )}
             <div className="mt-3">
-              <div className="text-xs font-semibold text-slate-700">允许操作</div>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {actions.map(({ action, item, label }) => (
                   <button

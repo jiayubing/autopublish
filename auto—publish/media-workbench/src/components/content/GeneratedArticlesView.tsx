@@ -354,7 +354,8 @@ export default function GeneratedArticlesView({
       return;
     const articleId = articleNavigationIntent?.articleId;
     if (!articleId) return;
-    const target = articles.find((article) => article.id === articleId);
+    if (articleNavigationIntent.clientId && articleNavigationIntent.clientId !== clientId) return;
+    const target = articles.find((article) => article.id === articleId && article.clientId === clientId);
     if (!target) return;
     handledArticleNavigationRef.current = articleNavigationIntent;
     const destination = articleNavigationIntent.destination || "publication";
@@ -373,6 +374,7 @@ export default function GeneratedArticlesView({
     ]);
   }, [
     articleNavigationIntent,
+    clientId,
     articles,
     canSubmitArticle,
     intakeIntents,

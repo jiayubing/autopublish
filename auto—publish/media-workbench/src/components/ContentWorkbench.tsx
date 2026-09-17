@@ -171,8 +171,11 @@ export default function ContentWorkbench({
     if (mode === "library") setArticleStageFilter(loadArticleStage());
   }, [mode]);
 
+  const restoredClientRef = useRef(false);
   useEffect(() => {
-    if (!clients.length) return;
+    if (!clients.length || restoredClientRef.current) return;
+    restoredClientRef.current = true;
+    if (articleIntent?.clientId) return;
     const rememberedClientId = loadSelectedClientId();
     if (
       rememberedClientId &&
@@ -181,7 +184,7 @@ export default function ContentWorkbench({
     ) {
       void content.selectClient(rememberedClientId);
     }
-  }, [clientId, clients, content]);
+  }, [articleIntent, clientId, clients, content]);
 
   useEffect(() => {
     if (!refreshConfirmationVisible) return;
@@ -194,13 +197,22 @@ export default function ContentWorkbench({
 
   useEffect(() => {
     if (!articleIntent) return;
+    if (articleIntent.clientId && !clients.length) return;
+    if (articleIntent.clientId && !clients.some((client) => client.id === articleIntent.clientId)) {
+      setError("目标客户不存在，请刷新客户列表后重试。");
+      onArticleIntentConsumed?.();
+      return;
+    }
     setTab("history");
     setArticleStageFilter("all");
     setGenerationBatchFilter(articleIntent.generationBatchId || null);
     setArticleNavigationIntent(articleIntent);
-    if (articleIntent.clientId) content.selectClient(articleIntent.clientId);
+    if (articleIntent.clientId) {
+      remember(SELECTED_CLIENT_KEY, articleIntent.clientId);
+      void content.selectClient(articleIntent.clientId);
+    }
     onArticleIntentConsumed?.();
-  }, [articleIntent, content, onArticleIntentConsumed]);
+  }, [articleIntent, clients, content, onArticleIntentConsumed]);
 
   useEffect(() => {
     function guardWindowClose(event: BeforeUnloadEvent) {
