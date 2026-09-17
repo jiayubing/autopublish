@@ -106,6 +106,7 @@ function projectPlatformQueue(value) {
         id: String((platform && platform.id) || ""),
         displayName: String((platform && platform.displayName) || ""),
         loginAvailable: platform && platform.loginAvailable === true,
+        ...(typeof platform?.queueConfigured === "boolean" ? { queueConfigured: platform.queueConfigured } : {}),
       }),
     ),
     queue: (Array.isArray(input.queue) ? input.queue : []).map((article) => ({

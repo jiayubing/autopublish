@@ -3,6 +3,7 @@
 const domain = require("../../src/domain");
 const {
   canonicalArticleRefs,
+  canonicalArticleRefKey,
   normalizeArticleRef,
 } = require("../../src/content/article-ref");
 const { deriveArticleLifecycle } = require("../../src/content/article-lifecycle-projection");
@@ -99,6 +100,8 @@ function createRegularQueueApplication(options) {
     const platformId = request.platformId.trim();
     const platform = platformList().find(function (candidate) { return candidate.id === platformId; });
     if (!platform) throw fail("REGULAR_QUEUE_PLATFORM_UNSUPPORTED");
+    if (request.retargetFrom !== undefined && value.isTargetConfigured && !value.isTargetConfigured(platformId))
+      throw fail("PLATFORM_CONFIG_NOT_SET");
     let target;
     try {
       target = domain.parsePublicationTarget({
@@ -285,11 +288,14 @@ function createRegularQueueApplication(options) {
   function previewRegularQueueAdmission(input) {
     const { target } = targetFrom(input);
     const refs = refsFrom(input);
+    const retargetConflicts = retargetConflictsFor(input, refs, target);
     queueConfigForTarget(input, target);
     const facts = factsFor(refs);
     const key = targetKey(target);
     const groupReasons = new Map();
     const items = refs.map(function (ref) {
+      const retargetReason = retargetConflicts.get(canonicalArticleRefKey(ref));
+      if (retargetReason) return Object.freeze({ articleRef: ref, articleId: ref.articleId, status: "conflict", reasonCode: retargetReason });
       let article;
       try {
         article = contentStore.getArticle(ref.clientId, ref.articleId);
@@ -338,6 +344,8 @@ function createRegularQueueApplication(options) {
   function admitRegularQueueItems(input) {
     const { target, account } = targetFrom(input);
     const refs = refsFrom(input);
+    const retargetConflicts = retargetConflictsFor(input, refs, target);
+    const eligibleRefs = refs.filter((ref) => !retargetConflicts.has(canonicalArticleRefKey(ref)));
     const queueConfig = queueConfigForTarget(input, target);
     const platform = platformList().find(function (candidate) { return candidate.id === target.platformId; });
     const targetSnapshotV1 = domain.parseTargetSnapshotV1({
@@ -356,19 +364,57 @@ function createRegularQueueApplication(options) {
         ];
       }),
     ));
-    const result = coordinator.admitRegularQueueItems({
-      articleRefs: refs,
+    const result = eligibleRefs.length ? coordinator.admitRegularQueueItems({
+      articleRefs: eligibleRefs,
       target,
       targetSnapshotV1,
       customerSnapshotsV1,
       queueConfig,
-    });
+    }) : { items: [], admittedCount: 0, idempotentCount: 0, missingCount: 0, conflictCount: 0 };
+    const conflicts = refs.filter((ref) => retargetConflicts.has(canonicalArticleRefKey(ref))).map((ref) => ({
+      articleRef: ref, articleId: ref.articleId, status: "conflict",
+      reasonCode: retargetConflicts.get(canonicalArticleRefKey(ref)),
+    }));
     if (result.admittedCount > 0)
       notifyDataInvalidated("SUBMISSION_BATCH_CREATED");
     return Object.freeze(Object.assign({}, result, {
+      items: Object.freeze([...result.items, ...conflicts]),
+      conflictCount: result.conflictCount + conflicts.length,
       target,
       articleRefs: Object.freeze(refs),
     }));
+  }
+
+  function retargetConflictsFor(input, refs, target) {
+    const sources = input && input.retargetFrom;
+    const conflicts = new Map();
+    if (sources === undefined) return conflicts;
+    if (!Array.isArray(sources) || sources.length !== refs.length || input.autoStart === true)
+      throw fail("REGULAR_QUEUE_RETARGET_INPUT_INVALID");
+    const byRef = new Map();
+    for (const source of sources) {
+      if (!source || typeof source.attentionId !== "string" || !source.attentionId.trim())
+        throw fail("REGULAR_QUEUE_RETARGET_INPUT_INVALID");
+      const key = canonicalArticleRefKey(source.articleRef);
+      if (byRef.has(key)) throw fail("REGULAR_QUEUE_RETARGET_INPUT_INVALID");
+      byRef.set(key, source.attentionId);
+    }
+    if (refs.some((ref) => !byRef.has(canonicalArticleRefKey(ref))))
+      throw fail("REGULAR_QUEUE_RETARGET_INPUT_INVALID");
+    if (typeof value.getAttentionItems !== "function")
+      throw fail("ARTICLE_ATTENTION_DOMAIN_UNAVAILABLE");
+    const attention = value.getAttentionItems(refs.map((ref) => byRef.get(canonicalArticleRefKey(ref))));
+    refs.forEach((ref, index) => {
+      const item = attention[index];
+      const key = canonicalArticleRefKey(ref);
+      if (!item || item.attentionId !== byRef.get(key) || item.clientId !== ref.clientId || item.articleId !== ref.articleId)
+        conflicts.set(key, "ARTICLE_ATTENTION_STALE");
+      else if (item.kind !== "regular_platform_failed" || item.freeze?.article || !item.allowedActions?.includes("open-submission"))
+        conflicts.set(key, "ARTICLE_ATTENTION_ACTION_NOT_ALLOWED");
+      else if (!item.platformId || item.platformId === target.platformId)
+        conflicts.set(key, "REGULAR_QUEUE_DIFFERENT_PLATFORM_REQUIRED");
+    });
+    return conflicts;
   }
 
   function removePendingQueueItems(input) {

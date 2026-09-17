@@ -28,6 +28,7 @@ export async function getPlatformQueue(): Promise<PlatformQueueData> {
       id: string;
       displayName: string;
       loginAvailable?: boolean;
+      queueConfigured?: boolean;
     }>;
     queue: PlatformArticle[];
   };
@@ -37,6 +38,7 @@ export async function getPlatformQueue(): Promise<PlatformQueueData> {
       id: platform.id,
       displayName: platform.displayName,
       loginAvailable: platform.loginAvailable,
+      queueConfigured: platform.queueConfigured,
     })),
     queue: data.queue,
   };

@@ -230,6 +230,7 @@ const platformContracts = [
           id: identifier,
           displayName: safeText(160, 1),
           loginAvailable: "boolean",
+          queueConfigured: optionalField("boolean"),
         }),
         { max: 32 },
       ),

@@ -141,6 +141,7 @@ function regularAdmissionInput(input, confirmed) {
       return (
         [
           "articleRefs",
+          "retargetFrom",
           "platformId",
           "accountProfileId",
           "queueConfig",

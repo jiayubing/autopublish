@@ -54,6 +54,7 @@ const regularQueueConfig = exactObject({
 });
 const regularAdmissionFields = {
   articleRefs: arrayField(articleRef, { min: 1, max: 1000 }),
+  retargetFrom: optionalField(arrayField(exactObject({ articleRef, attentionId: id }), { min: 1, max: 1000 })),
   platformId: id,
   accountProfileId: id,
   autoStart: optionalField("boolean"),

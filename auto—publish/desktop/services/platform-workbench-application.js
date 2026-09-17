@@ -33,6 +33,7 @@ function createPlatformWorkbenchApplication(options) {
         id: platform.id,
         displayName: platform.displayName,
         loginAvailable: platformSessionService.supports(platform.id),
+        ...(values.isRegularQueueConfigured ? { queueConfigured: values.isRegularQueueConfigured(platform.id) } : {}),
       })),
       queue: [],
     });

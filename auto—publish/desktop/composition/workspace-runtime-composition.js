@@ -277,6 +277,14 @@ async function createWorkspaceRuntimeComposition(deps) {
             };
           },
           platforms: regularDirectoryEntries,
+          isTargetConfigured:
+            platformRuntimeComposition.isRegularQueueConfigured,
+          getAttentionItems: function (attentionIds) {
+            attentionPorts.attentionQuery.invalidate();
+            return attentionIds.map((attentionId) =>
+              attentionPorts.attentionQuery.get({ attentionId }),
+            );
+          },
         },
       );
     const createDesktopTaskService =
@@ -456,6 +464,8 @@ async function createWorkspaceRuntimeComposition(deps) {
       require("../services/platform-workbench-application").createPlatformWorkbenchApplication(
         {
           directoryEntries,
+          isRegularQueueConfigured:
+            platformRuntimeComposition.isRegularQueueConfigured,
           loginSessionPorts,
           platformSessionService,
           taskService,

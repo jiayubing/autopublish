@@ -19,6 +19,7 @@ import type { useSubmissionCenterFeature } from "../features/submission-center/u
 import RegularQueueGroupsPanel from "./RegularQueueGroupsPanel";
 import PaidMediaWorkbench from "./PaidMediaWorkbench";
 import ArticleAttentionPanel from "./content/ArticleAttentionPanel";
+import AttentionRetargetDialog from "./content/AttentionRetargetDialog";
 import ArticleAttentionDetailDrawer from "./content/ArticleAttentionDetailDrawer";
 import { Button, PageHeader, Surface } from "./ui/primitives";
 
@@ -124,6 +125,7 @@ export default function PlatformWorkbench({
   const [attentionDetail, setAttentionDetail] =
     useState<ArticleAttentionItem | null>(null);
   const [attentionError, setAttentionError] = useState("");
+  const [retargetItems, setRetargetItems] = useState<ArticleAttentionItem[] | null>(null);
   const [actionError, setActionError] = useState("");
   const groups = regularQueueGroupViews(
     center.data.regular.groups,
@@ -553,6 +555,7 @@ export default function PlatformWorkbench({
               </p>
             )}
             <ArticleAttentionPanel
+              onRetarget={setRetargetItems}
               onRegenerate={async (attentionIds) => {
                 const key = JSON.stringify([
                   generation.snapshot.scope?.workspaceRuntimeId,
@@ -573,6 +576,7 @@ export default function PlatformWorkbench({
                 return result;
               }}
               extraActionBusy={
+                Boolean(retargetItems) ||
                 generation.snapshot.commands.regenerate.busy ||
                 ["running", "pausing"].includes(
                   generation.snapshot.batch?.status || "",
@@ -599,6 +603,9 @@ export default function PlatformWorkbench({
               onOpenArticle={openArticle}
               onAttentionAction={(item) => setAttentionDetail(item)}
             />
+            {retargetItems && <AttentionRetargetDialog items={retargetItems} onClose={() => setRetargetItems(null)} onCommitted={() => {
+              void attentionFeature.refresh("retarget-result");
+            }} />}
             {generation.snapshot.hydration.error && (
               <p role="alert" className="text-sm text-rose-700">
                 生成进度暂时无法确认，请刷新进度；不要重复创建生成任务。
