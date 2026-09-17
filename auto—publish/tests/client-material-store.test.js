@@ -117,6 +117,34 @@ describe("client material store", function() {
     assert.deepEqual(items.filter(function(item) { return item.extension !== ".docx"; }).map(function(item) { return item.content; }), ["品牌资料", "{\"ok\":true}", "notes", "plain"]);
   });
 
+  it("ignores Office temporary DOCX files in material listing and conversion", async function() {
+    const normalName = "客户资料.docx";
+    const temporaryName = "~$客户资料.docx";
+    fs.copyFileSync(DOCX_FIXTURE, path.join(clientDirectory, normalName));
+    fs.writeFileSync(path.join(clientDirectory, temporaryName), "office-lock", "utf8");
+    const convertedNames = [];
+    const store = createClientMaterialStore({
+      workspaceRoot,
+      converter: async function(_buffer, options) {
+        convertedNames.push(options.name);
+        return "转换后的客户资料";
+      }
+    });
+
+    const items = await store.listMaterials("client-1");
+    const metadata = store.listMaterialMetadata("client-1");
+
+    const materialNames = items.map(function(item) { return item.name; });
+    const metadataNames = metadata.map(function(item) { return item.name; });
+    assert.equal(materialNames.includes(temporaryName), false);
+    assert.equal(metadataNames.includes(temporaryName), false);
+    assert.deepEqual(materialNames.filter(function(name) { return name.includes("客户资料.docx"); }), [normalName]);
+    assert.deepEqual(metadataNames.filter(function(name) { return name.includes("客户资料.docx"); }), [normalName]);
+    assert.deepEqual(convertedNames.filter(function(name) { return name.includes("客户资料.docx"); }), [normalName]);
+    assert.equal(items.find(function(item) { return item.name === normalName; }).status, "ready");
+    assert.match(items.find(function(item) { return item.name === normalName; }).content, /转换后的客户资料/);
+  });
+
   it("reuses a DOCX conversion cache and invalidates it when the source changes", async function() {
     const calls = [];
     const store = createClientMaterialStore({

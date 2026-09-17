@@ -36,6 +36,20 @@ function isMissing(error) {
   return error && (error.code === "ENOENT" || error.code === "ENOTDIR");
 }
 
+function isMaterialEntry(entry) {
+  return entry.isFile() &&
+    !entry.name.startsWith(".") &&
+    !entry.name.startsWith("~$") &&
+    !EXCLUDED_NAMES.has(entry.name) &&
+    SUPPORTED_EXTENSIONS.has(path.extname(entry.name).toLowerCase());
+}
+
+function materialEntries(clientDirectory) {
+  return fs.readdirSync(clientDirectory, { withFileTypes: true })
+    .filter(isMaterialEntry)
+    .sort(function(a, b) { return a.name.localeCompare(b.name); });
+}
+
 function encodeMaterialId(name) {
   return Buffer.from(name, "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
@@ -229,31 +243,24 @@ function createClientMaterialStore(options) {
   async function listMaterials(clientId, internalOptions) {
     const client = getClientDirectory(clientId);
     let entries;
-    try { entries = fs.readdirSync(client.directory, { withFileTypes: true }); } catch (error) {
+    try { entries = materialEntries(client.directory); } catch (error) {
       if (isMissing(error)) throw materialError("CLIENT_NOT_FOUND", "Client directory was not found");
       throw pathError();
     }
-    const materialEntries = entries.filter(function(entry) {
-      if (!entry.isFile() || entry.name.startsWith(".") || EXCLUDED_NAMES.has(entry.name)) return false;
-      return SUPPORTED_EXTENSIONS.has(path.extname(entry.name).toLowerCase());
-    }).sort(function(a, b) { return a.name.localeCompare(b.name); });
     const forceName = internalOptions && internalOptions.forceName;
     const results = [];
-    for (const entry of materialEntries) results.push(await loadEntry(clientId, client, entry, forceName === entry.name));
+    for (const entry of entries) results.push(await loadEntry(clientId, client, entry, forceName === entry.name));
     return results;
   }
 
   function listMaterialMetadata(clientId) {
     const client = getClientDirectory(clientId);
     let entries;
-    try { entries = fs.readdirSync(client.directory, { withFileTypes: true }); } catch (error) {
+    try { entries = materialEntries(client.directory); } catch (error) {
       if (isMissing(error)) throw materialError("CLIENT_NOT_FOUND", "Client directory was not found");
       throw pathError();
     }
-    return entries.filter(function(entry) {
-      if (!entry.isFile() || entry.name.startsWith(".") || EXCLUDED_NAMES.has(entry.name)) return false;
-      return SUPPORTED_EXTENSIONS.has(path.extname(entry.name).toLowerCase());
-    }).sort(function(a, b) { return a.name.localeCompare(b.name); }).map(function(entry) {
+    return entries.map(function(entry) {
       const extension = path.extname(entry.name).toLowerCase();
       return { id: encodeMaterialId(entry.name), name: entry.name, extension: extension, status: "ready" };
     });
