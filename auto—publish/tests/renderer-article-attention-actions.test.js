@@ -49,7 +49,7 @@ test('article attention actions produce visible publication/detail results', asy
       const repair = { attentionId: 'repair-1', kind: 'removal_needs_repair', owner: 'article-removal-recovery', freeze: { article: true, reasonCode: 'REMOVAL_NEEDS_REPAIR' }, resolutionPriority: 220, safeFacts: {}, articleId: 'article-missing', clientId: article.clientId, titleSnapshot: '删除事务待修复', transactionId: 'transaction-1', status: 'needs_repair', reasonCode: 'ARTICLE_REMOVAL_BLOCKED', message: '删除事务未完成，需要重新预检并继续', allowedActions: ['retry-removal', 'inspect'] };
       const publication = { publicationId: 'publication-1', clientId: article.clientId, articleId: article.id, platformId: 'hepan', targetKey: 'platform:hepan:account:account-1', displayName: '蓝色河畔', status: 'failed', updatedAt: article.updatedAt, attempts: [{ attemptId: 'attempt-1', status: 'failed', updatedAt: article.updatedAt, errorCode: 'REMOTE_REJECTED' }] };
       const calls = [];
-      let generationBatch = null;
+      let generationBatch = { id: 'existing-batch', status: 'running', tasks: [], counts: { total: 1, succeeded: 0, failed: 0, pending: 1, interrupted: 0, cancelled: 0 } };
       let generationSequence = 0;
       const generationListeners = new Set();
       window.__regenerationCalls = [];
@@ -67,7 +67,7 @@ test('article attention actions produce visible publication/detail results', asy
           return ok({ batch: generationBatch });
         },
         listClients: () => ok({ clients: [{ id: 'client-other', name: '另一个客户', knowledgeFiles: [] }, { id: article.clientId, name: '测试客户', knowledgeFiles: [] }] }),
-        getClientDetails: (clientId) => ok({ client: { id: clientId, name: clientId === article.clientId ? '测试客户' : '另一个客户', knowledgeFiles: [] }, research: [] }),
+        getClientDetails: (clientId) => ok({ client: { id: clientId, name: clientId === article.clientId ? '测试客户' : '另一个客户', knowledgeFiles: [{ id: 'material-1', name: '资料.txt', extension: '.txt', status: 'ready', characterCount: 10 }] }, research: [{ id: 'research-1', question: '问题', answerText: '有效调研回答', answerLength: 6, isAnswerComplete: true }] }),
         listGeneratedArticles: () => ok({ articles: [article] }),
         getArticleEditor: ({ clientId }) => {
           window.__editorClientId = clientId;
@@ -128,7 +128,7 @@ test('article attention actions produce visible publication/detail results', asy
         getArticleAttention: ({ attentionId }) => ok({ item: attentionId === repair.attentionId ? repair : attention }), previewArticleAttention: ({ attentionId, action, resolutionInput }) => ok({ attentionId, revision: 1, action, requiresConfirmation: true, confirmationToken: 'attention-token', resolutionInput, message: '投稿明确失败', changedScopes: [] }),
         resolveArticleAttention: ({ attentionId, action }) => { calls.push(action); return ok({ outcome: action === 'open-publication' ? 'open-publication' : 'inspection_required', attentionId, changedScopes: [] }); },
         listSubmissionBatches: () => ok({ batches: [] }), listArticleTrash: () => ok({ trash: [] }),
-        listPublicationHistory: () => ok({ records: [publication] }), listResearch: () => ok({ research: [] }), listResearchMetadata: () => ok({ research: [] }), listQuestions: () => ok({ questions: [] }), listTemplateCatalog: () => ok({ revision: '1', platforms: [], templates: [], diagnostics: [] }), listTemplates: () => ok({ templates: [] }),
+        listPublicationHistory: () => ok({ records: [publication] }), listResearch: () => ok({ research: [] }), listResearchMetadata: () => ok({ research: [] }), listQuestions: () => ok({ questions: [] }), listTemplateCatalog: () => ok({ revision: '1', platforms: [{ id: 'hepan', displayName: '蓝色河畔' }], templates: [{ id: 'template-1', platform: 'hepan', name: '可选写作模板', body: '模板正文', bodyHash: 'hash', source: 'custom', enabled: true }], diagnostics: [] }), listTemplates: () => ok({ templates: [] }),
         getDoubaoLoginState: () => ok({ loginState: { status: 'unknown' } }), getDoubaoQueueState: () => ok({ queue: { status: 'idle', currentTaskId: null, completed: 0, total: 0, waitRemainingMs: 0, tasks: [] } }), onDoubaoQueueState: () => () => {}, onArticleRemovalTransaction: () => () => {}, listArticleRemovalTransactions: () => ok({ transactions: [] })
       };
       window.desktopConsole = {
@@ -205,27 +205,23 @@ test('article attention actions produce visible publication/detail results', asy
     assert.deepEqual(await page.evaluate(() => window.__attentionActionCalls), []);
     await attentionCheckboxes.nth(1).uncheck();
 
-    // P2 确认前不创建任务；确认后显示现有生成进度，不发起投稿。
+    // Navigation preselects clients; it never starts AI on the attention page.
     await attentionCheckboxes.nth(0).check();
     await attentionRegion.getByRole('button', { name: '批量重新生成（1）', exact: true }).click();
-    const regenerationConfirmation = page.getByRole('dialog', { name: '批量重新生成', exact: true });
-    await regenerationConfirmation.waitFor();
-    assert.ok(await regenerationConfirmation.getByText(/原文章及投稿失败记录保留/).isVisible());
-    await regenerationConfirmation.getByRole('button', { name: '取消', exact: true }).click();
+    await page.getByRole('heading', { name: '选择批次客户', exact: true }).waitFor();
+    await page.getByRole('button', { name: '选择部分客户…', exact: true }).click();
+    assert.equal(await page.getByRole('checkbox', { name: /测试客户/ }).isChecked(), true);
+    assert.equal(await page.getByRole('checkbox', { name: /另一个客户/ }).isChecked(), false);
+    await page.getByRole('button', { name: '完成选择', exact: true }).click();
+    await page.getByRole('button', { name: '下一步', exact: true }).click();
+    await page.getByRole('heading', { name: '选择跨平台写作模板', exact: true }).waitFor();
+    await page.getByRole('checkbox', { name: /可选写作模板/ }).check();
+    assert.equal(await page.getByRole('checkbox', { name: /可选写作模板/ }).isChecked(), true);
+    assert.ok(await page.getByText(/已有批次正在生成/).isVisible());
     assert.deepEqual(await page.evaluate(() => window.__regenerationCalls), []);
-    await attentionRegion.getByRole('button', { name: '批量重新生成（1）', exact: true }).click();
-    await regenerationConfirmation.getByRole('button', { name: '确认生成新文章', exact: true }).click();
-    await page.getByRole('heading', { name: '重新生成进度', exact: true }).waitFor();
-    assert.equal(await page.evaluate(() => window.__regenerationCalls.length), 1);
-    assert.deepEqual(await page.evaluate(() => window.__regenerationCalls[0].attentionIds), ['failed-active-1']);
-    assert.equal(await page.evaluate(() => window.__regenerationCalls[0].confirmed), true);
-    assert.deepEqual(await page.evaluate(() => window.__attentionActionCalls), []);
-    await attentionCheckboxes.nth(0).check();
-    assert.equal(await attentionRegion.getByRole('button', { name: /^批量重新生成/ }).isDisabled(), true);
-    await page.evaluate(() => window.__completeRegeneration());
-    await page.getByText(/共 1 篇，成功 0 篇，失败 1 篇/).waitFor();
-    assert.equal(await attentionCheckboxes.count(), 5);
-    await attentionCheckboxes.nth(0).uncheck();
+    assert.equal(await page.getByRole('heading', { name: '重新生成进度', exact: true }).count(), 0);
+    await page.getByRole('button', { name: '投稿中心', exact: true }).click();
+    await page.getByRole('tab', { name: /需处理事项/ }).click();
 
     await attentionRegion.getByRole('button', { name: '打开发布详情', exact: true }).first().click();
     await page.getByRole('heading', { name: '文章库' }).waitFor({ state: 'visible' });
@@ -279,13 +275,15 @@ test('article attention actions produce visible publication/detail results', asy
     await attentionCheckboxes.nth(0).check();
     await attentionCheckboxes.nth(1).check();
     await attentionRegion.getByRole('button', { name: '批量重新生成（2）', exact: true }).click();
-    await regenerationConfirmation.getByRole('button', { name: '确认生成新文章', exact: true }).click();
-    await page.getByText(/共 2 篇，成功 0 篇/).waitFor();
-    assert.deepEqual(await page.evaluate(() => window.__regenerationCalls[1].attentionIds), ['failed-active-1', 'failed-credentials-1']);
-    await page.evaluate(() => window.__completeRegeneration());
-    await page.getByText(/共 2 篇，成功 1 篇，失败 1 篇/).waitFor();
-    assert.equal(await attentionCheckboxes.count(), 5);
-    assert.deepEqual(await page.evaluate(() => window.__attentionActionCalls), []);
+    await page.getByRole('heading', { name: '选择批次客户', exact: true }).waitFor();
+    await page.getByRole('button', { name: '选择部分客户…', exact: true }).click();
+    assert.equal(await page.getByRole('checkbox', { name: /测试客户/ }).isChecked(), true);
+    await page.getByRole('button', { name: '完成选择', exact: true }).click();
+    assert.deepEqual(await page.evaluate(() => window.__regenerationCalls), []);
+    await page.getByRole('button', { name: '投稿中心', exact: true }).click();
+    await page.getByRole('tab', { name: /需处理事项/ }).click();
+    await attentionCheckboxes.nth(0).check();
+    await attentionCheckboxes.nth(1).check();
 
     // Retarget uses one selected target, preserves mixed failure selection and never starts publishing.
     await page.evaluate(() => {
@@ -329,6 +327,8 @@ test('article attention actions produce visible publication/detail results', asy
     const targetSelect = retargetDialog.getByLabel('改投目标平台');
     await targetSelect.waitFor();
     assert.deepEqual(await targetSelect.locator('option').allTextContents(), ['请选择一个平台', '列举网']);
+    assert.ok(await retargetDialog.getByText(/缺少配置：平台配置未完成/).isVisible());
+    assert.ok(await retargetDialog.getByText(/未绑定账号平台：当前内容库没有该平台的已绑定账号/).isVisible());
     assert.equal(await targetSelect.getAttribute('multiple'), null);
     await targetSelect.selectOption('lieju');
     await retargetDialog.getByLabel('改投投稿账号').selectOption('lieju-account');

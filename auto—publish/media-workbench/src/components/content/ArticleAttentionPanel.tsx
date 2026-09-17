@@ -233,22 +233,7 @@ export default function ArticleAttentionPanel({
     setRegenerationBusy(true);
     const ids = selectedItems.map((item) => item.attentionId);
     try {
-      if (
-        !(await confirm({
-          title: "批量重新生成",
-          message: `将创建 ${ids.length} 篇新文章，使用原文章所选资料、问题和模板的当前内容。原文章及投稿失败记录保留，原需处理事项不会自动关闭。不会自动投稿。`,
-          confirmLabel: "确认生成新文章",
-          tone: "warning",
-        }))
-      )
-        return;
-      const result = await onRegenerate(ids);
-      if (result) {
-        setSelectedAttentionIds(new Set());
-        setBatchNotice(
-          "生成任务已创建。可在下方查看进度；成功的新文章进入文章库，原失败事项保留。",
-        );
-      }
+      await onRegenerate(ids);
     } catch (error) {
       setBatchNotice(actionError(error));
     } finally {

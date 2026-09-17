@@ -5,13 +5,16 @@ export default function AttentionRetargetDialog({
   items,
   onClose,
   onCommitted,
+  onOpenSettings,
 }: {
   items: ArticleAttentionItem[];
   onClose: () => void;
   onCommitted: () => void;
+  onOpenSettings?: () => void;
 }) {
   const {
     targets,
+    unavailableTargets,
     profiles,
     platformId,
     setPlatformId,
@@ -48,7 +51,7 @@ export default function AttentionRetargetDialog({
           </p>
         ) : !targets.length ? (
           <p role="status">
-            没有共同可用的其他平台。请到设置绑定账号，或按原平台分批选择。
+            {unavailableTargets.length ? "没有共同可用的其他平台，请查看下方具体原因。" : "没有共同可用的其他平台：未读取到普通平台目录，请刷新或重新启动软件。"}
           </p>
         ) : (
           <fieldset disabled={busy || attempted} className="grid gap-3">
@@ -93,6 +96,14 @@ export default function AttentionRetargetDialog({
               </select>
             </label>
           </fieldset>
+        )}
+        {!loading && !loadError && (unavailableTargets.length > 0 || !targets.length) && (
+          <div className="mt-3 text-sm text-slate-600">
+            {unavailableTargets.length > 0 && <p>暂不可选的平台：</p>}
+            <ul>{unavailableTargets.map((target) => <li key={target.id}>{target.displayName}：{target.reason}</li>)}</ul>
+            <button className="mt-2 rounded border px-2 py-1" disabled={busy || attempted} onClick={retryLoad}>刷新平台和账号</button>
+            {onOpenSettings && <button className="ml-2 rounded border px-2 py-1" disabled={busy || attempted} onClick={onOpenSettings}>打开平台设置</button>}
+          </div>
         )}
         {error && (
           <p role="alert" className="mt-3 text-sm text-rose-700">

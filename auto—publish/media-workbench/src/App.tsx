@@ -106,11 +106,13 @@ export function WorkspaceScopedConfirmationHost({
 
 function ContentProductionPage({
   content,
+  initialBatchClientIds,
   onOpenArticleLibrary,
   onOpenOrders,
   onReadinessChange,
 }: {
   content: ContentWorkbenchFeature;
+  initialBatchClientIds?: string[];
   onOpenArticleLibrary: (intent?: ArticleLibraryNavigationIntent) => void;
   onOpenOrders: () => void;
   onReadinessChange: (readiness: PageReadiness) => void;
@@ -131,6 +133,7 @@ function ContentProductionPage({
     <ContentWorkbench
       content={content.production}
       mode="production"
+      initialBatchClientIds={initialBatchClientIds}
       onOpenArticleLibrary={onOpenArticleLibrary}
       onOpenOrders={onOpenOrders}
     />
@@ -234,6 +237,7 @@ function ArticleLibraryPage({
 
 function SubmissionCenterPage({
   content,
+  onOpenBatchGeneration,
   initialSection,
   onOpenArticleLibrary,
   onOpenOrders,
@@ -242,6 +246,7 @@ function SubmissionCenterPage({
   onReadinessChange,
 }: {
   content: ContentWorkbenchFeature;
+  onOpenBatchGeneration: (clientIds: string[]) => void;
   initialSection: "regular" | "paid" | "attention";
   onOpenArticleLibrary: (intent?: ArticleLibraryNavigationIntent) => void;
   onOpenOrders: () => void;
@@ -276,6 +281,7 @@ function SubmissionCenterPage({
   return (
     <PlatformWorkbench
       content={content}
+      onOpenBatchGeneration={onOpenBatchGeneration}
       submissionCenter={submissionCenter}
       initialSection={initialSection}
       onOpenArticleLibrary={onOpenArticleLibrary}
@@ -339,6 +345,10 @@ function ResourcesRoute({
 
 function AppContent() {
   const [currentView, setCurrentView] = useState<ViewMode>(loadLastView);
+  const [batchClientIds, setBatchClientIds] = useState<string[] | undefined>();
+  useEffect(() => {
+    if (currentView !== "content-production") setBatchClientIds(undefined);
+  }, [currentView]);
   const contentPage = contentPageForView(currentView);
   const content = useContentWorkbenchFeature({ page: contentPage });
   const [submissionCenterSection, setSubmissionCenterSection] = useState<
@@ -496,6 +506,7 @@ function AppContent() {
                 >
                   <ContentProductionPage
                     content={content}
+                    initialBatchClientIds={batchClientIds}
                     onOpenArticleLibrary={openArticleLibrary}
                     onOpenOrders={() => changeView("orders")}
                     onReadinessChange={reportReadiness}
@@ -552,6 +563,10 @@ function AppContent() {
                 >
                   <SubmissionCenterPage
                     content={content}
+                    onOpenBatchGeneration={(clientIds) => {
+                      setBatchClientIds(clientIds);
+                      changeView("content-production");
+                    }}
                     initialSection={submissionCenterSection}
                     onOpenArticleLibrary={openArticleLibrary}
                     onOpenOrders={() => changeView("orders")}

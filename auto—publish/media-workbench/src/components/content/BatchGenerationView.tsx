@@ -13,6 +13,7 @@ import { useConfirmation } from '../../confirmation';
 import { isContentCommandStaleResult } from '../../content-command-result';
 
 interface BatchGenerationViewProps {
+  initialClientIds?: string[];
   clients: ContentClient[];
   grouping?: ClientGrouping;
   currentClientId?: string;
@@ -53,7 +54,7 @@ function errorReason(code: string) {
   return labels[code] || code;
 }
 
-export default function BatchGenerationView({ clients, grouping, currentClientId, researchByClient, getClientDetails, templateCatalog, commands, commandStates, onViewBatchArticles }: BatchGenerationViewProps) {
+export default function BatchGenerationView({ initialClientIds, clients, grouping, currentClientId, researchByClient, getClientDetails, templateCatalog, commands, commandStates, onViewBatchArticles }: BatchGenerationViewProps) {
   const { confirm } = useConfirmation();
   const [viewMode, setViewMode] = useState<BatchViewMode>('wizard');
   const [step, setStep] = useState(0);
@@ -76,9 +77,10 @@ export default function BatchGenerationView({ clients, grouping, currentClientId
   const [batchSubmissionOpen, setBatchSubmissionOpen] = useState(false);
   const [batchSubmissionFeedback, setBatchSubmissionFeedback] = useState('');
   const preflightErrorRef = useRef<HTMLDivElement | null>(null);
-  const clientSelectionTouchedRef = useRef(false);
+  const clientSelectionTouchedRef = useRef(Boolean(initialClientIds));
+  const initialSelectionApplied = useRef(false);
   const templateSelectionTouchedRef = useRef(false);
-  const newBatchWizardRef = useRef(false);
+  const newBatchWizardRef = useRef(Boolean(initialClientIds));
   const generation = useGenerationFeature();
   const batch = generation.snapshot.batch as GenerationBatch | null;
   const batchState = (generation.snapshot.runtime || EMPTY_STATE) as GenerationBatchState;
@@ -122,8 +124,14 @@ export default function BatchGenerationView({ clients, grouping, currentClientId
 
   useEffect(() => {
     const availableClientIds = clients.map((client) => client.id);
+    if (initialClientIds && !initialSelectionApplied.current) {
+      if (!clients.length) return;
+      initialSelectionApplied.current = true;
+      setSelectedClientIds([...new Set(initialClientIds)].filter((id) => availableClientIds.includes(id)));
+      return;
+    }
     setSelectedClientIds((current) => preserveSelection(current, availableClientIds, clientSelectionTouchedRef.current));
-  }, [clients]);
+  }, [clients, initialClientIds]);
 
   useEffect(() => {
     const nextCatalog = templateCatalog || { revision: '', platforms: [], templates: [], diagnostics: [] };
@@ -225,7 +233,7 @@ export default function BatchGenerationView({ clients, grouping, currentClientId
   }
 
   async function start() {
-    if (!previewResult?.executableTaskCount || generationCommands.start.busy || !generation.snapshot.scope) return;
+    if (batchRunning || !previewResult?.executableTaskCount || generationCommands.start.busy || !generation.snapshot.scope) return;
     if (riskWarning && !(await confirm({ title: '确认启动批量生成', message: `当前批量任务数为 ${potentialTaskCount}，可能产生较多 AI 调用费用。`, confirmLabel: '继续启动', tone: 'warning' }))) return;
     setLoading(true); setError('');
     try {
@@ -336,6 +344,7 @@ export default function BatchGenerationView({ clients, grouping, currentClientId
     <div className="batch-stepper shrink-0 border-b border-slate-200 bg-white px-4 py-3"><div className="grid grid-cols-4 gap-2">{BATCH_GENERATION_STEPS.map((id, index) => <button type="button" key={id} onClick={() => index <= step && setStep(index)} className={`batch-step ${index === step ? 'is-active' : ''} ${index < step ? 'is-complete' : ''}`}><span>{index < step ? <Check className="h-3.5 w-3.5" /> : index + 1}</span>{stepTitles[index]}</button>)}</div></div>
     </>}
     <div className="min-h-0 flex-1 overflow-y-auto p-4">
+      {viewMode === 'wizard' && batchRunning && <p role="status" className="mb-3 text-sm text-amber-700">已有批次正在生成。可以先选择客户和模板，待当前批次结束后启动新批次；原文章仍可改投。</p>}
       {hydrationError && <div role="alert" aria-live="polite" className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">{hydrationError}</div>}
       {viewMode === 'wizard' && <>
       {excludedClients.length > 0 && <div role="status" className="mb-3 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">已自动排除 {excludedClients.length} 个不满足生成条件的客户：{excludedClients.map((item) => `${item.name}（${item.reason}）`).join('；')}。{!selectedCount && '没有可生成客户，请补充资料和调研回答，或重新选择客户。'}</div>}
@@ -348,7 +357,7 @@ export default function BatchGenerationView({ clients, grouping, currentClientId
           selectedIds={selectedClientIds}
           grouping={grouping}
           onChange={(ids) => { clientSelectionTouchedRef.current = true; setSelectedClientIds(ids); setPreviewResult(null); setError(''); setExcludedClients([]); }}
-          disabled={loading || batchRunning}
+          disabled={loading}
           describeClient={clientReadiness}
         />
       </section>}
@@ -362,7 +371,7 @@ export default function BatchGenerationView({ clients, grouping, currentClientId
           </label>
           <p className="mt-2 text-slate-500">同时生成的文章数。遇到模型限流时可降低；已创建批次继续使用原并发数。</p>
         </div><div className="rounded border border-slate-200 bg-white p-3 text-xs text-slate-600">潜在 AI 调用数：{selectedCount} × {selectedTemplates.length} = {potentialTaskCount}{riskWarning && <span className="ml-2 text-amber-700">· 费用风险：超过 {GENERATION_BATCH_RISK_THRESHOLD} 个任务</span>}</div>{selectedClientIds.map((clientId) => { const client = clientMap.get(clientId); const materials = materialForClient(client || { id: clientId, name: clientId, knowledgeFiles: [] }); const research = resolvedResearchByClient[clientId] || []; const source = sources[clientId] || { materialIds: [], researchQueryIds: [] }; const selectedMaterials = materials.filter((item) => source.materialIds.includes(getMaterialId(item)) && isUsableMaterial(item)); const selectedResearch = research.filter((item) => source.researchQueryIds.includes(item.id) && isUsableResearch(item)); const reason = !selectedMaterials.length ? '没有有效客户资料' : !selectedResearch.length ? '没有有效 GEO 调研回答' : ''; return <article key={clientId} className="rounded-md border border-slate-200 bg-white p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><h2 className="text-sm font-semibold">{client?.name || clientId}</h2><p className="mt-1 text-xs text-slate-500">预计输入字符数 {sourceCharacterCount(selectedMaterials, selectedResearch)}</p></div><span className={`text-xs font-semibold ${reason ? 'text-rose-600' : 'text-emerald-600'}`}>{reason || '可生成'}</span></div><div className="mt-3 grid gap-2">{materials.map((item) => <CollapsibleSourceItem key={getMaterialId(item)} id={`${clientId}-${getMaterialId(item)}`} title={item.name} summary={`${item.extension || '资料'} · ${item.characterCount || 0} 字${item.status === 'error' ? ' · 错误' : item.status === 'converting' ? ' · 转换中' : ''}`} selected={source.materialIds.includes(getMaterialId(item)) && isUsableMaterial(item)} disabled={!isUsableMaterial(item)} onSelectedChange={(selected) => updateSource(clientId, 'materialIds', getMaterialId(item), selected)} actions={item.extension?.toLowerCase() === '.docx' && (item.status === 'error' || item.status === 'converting') ? <button type="button" onClick={(event) => { event.stopPropagation(); void retryMaterialItem(clientId, getMaterialId(item)); }} disabled={commandStates.retryMaterial.busy} className="rounded border border-blue-300 px-2 py-1 text-xs text-blue-700 disabled:opacity-40">{commandStates.retryMaterial.busy ? '重试中…' : '重试转换'}</button> : undefined} defaultExpanded={false}>{materialBodyLabel(item)}</CollapsibleSourceItem>)}{research.map((item) => <CollapsibleSourceItem key={item.id} id={`${clientId}-${item.id}`} title={item.question || item.id} summary={`${item.answerText?.length || item.answerLength || 0} 字 · GEO 调研回答${item.isAnswerComplete === false ? ' · 未完成' : ''}`} selected={isUsableResearch(item) && source.researchQueryIds.includes(item.id)} disabled={!isUsableResearch(item)} onSelectedChange={(selected) => isUsableResearch(item) && updateSource(clientId, 'researchQueryIds', item.id, selected)} defaultExpanded={false}>{item.answerText || (isUsableResearch(item) ? '回答正文将在生成时按需读取' : '没有回答内容')}</CollapsibleSourceItem>)}</div></article>; })}</section>}
-      {step === 3 && <section className="rounded-md border border-slate-200 bg-white p-4"><h2 className="text-sm font-semibold">确认任务并启动</h2><p className="mt-1 text-xs text-slate-500">客户数 × 模板数 = AI 调用任务数 · 本批次并发 {concurrency} 篇</p><div className="mt-4 grid gap-2 sm:grid-cols-3"><div className="rounded bg-slate-50 p-3 text-sm">{selectedCount} × {selectedTemplates.length} = {previewResult?.taskCount ?? potentialTaskCount}</div><div className="rounded bg-emerald-50 p-3 text-sm text-emerald-700">可执行任务数：{executableTaskCount}</div><div className="rounded bg-rose-50 p-3 text-sm text-rose-700">排除客户/任务：{previewResult?.excludedClients.length ?? Math.max(0, selectedCount - executableClients.length)} / {previewResult?.excludedTaskCount ?? Math.max(0, potentialTaskCount - executableTaskCount)}</div></div>{riskWarning && <div className="mt-3 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">费用风险提示：任务数较多，启动前请再次确认。</div>}{previewResult?.excludedClients.length ? <div className="mt-4 rounded border border-rose-100 bg-rose-50 p-3 text-xs text-rose-700"><p className="font-semibold">被排除客户与原因</p>{previewResult.excludedClients.map((item) => <p key={item.clientId} className="mt-1">{clientMap.get(item.clientId)?.name || item.clientId}：{item.codes.map(errorReason).join('、')}</p>)}</div> : <p className="mt-4 text-xs text-emerald-700">没有被排除的客户。</p>}<button type="button" onClick={() => void start()} disabled={loading || !previewResult?.executableTaskCount} className="mt-4 h-10 w-full rounded-md bg-blue-600 text-sm font-semibold text-white disabled:opacity-40">{loading ? '启动中…' : '确认并启动批量生成'}</button></section>}
+      {step === 3 && <section className="rounded-md border border-slate-200 bg-white p-4"><h2 className="text-sm font-semibold">确认任务并启动</h2><p className="mt-1 text-xs text-slate-500">客户数 × 模板数 = AI 调用任务数 · 本批次并发 {concurrency} 篇</p><div className="mt-4 grid gap-2 sm:grid-cols-3"><div className="rounded bg-slate-50 p-3 text-sm">{selectedCount} × {selectedTemplates.length} = {previewResult?.taskCount ?? potentialTaskCount}</div><div className="rounded bg-emerald-50 p-3 text-sm text-emerald-700">可执行任务数：{executableTaskCount}</div><div className="rounded bg-rose-50 p-3 text-sm text-rose-700">排除客户/任务：{previewResult?.excludedClients.length ?? Math.max(0, selectedCount - executableClients.length)} / {previewResult?.excludedTaskCount ?? Math.max(0, potentialTaskCount - executableTaskCount)}</div></div>{riskWarning && <div className="mt-3 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">费用风险提示：任务数较多，启动前请再次确认。</div>}{previewResult?.excludedClients.length ? <div className="mt-4 rounded border border-rose-100 bg-rose-50 p-3 text-xs text-rose-700"><p className="font-semibold">被排除客户与原因</p>{previewResult.excludedClients.map((item) => <p key={item.clientId} className="mt-1">{clientMap.get(item.clientId)?.name || item.clientId}：{item.codes.map(errorReason).join('、')}</p>)}</div> : <p className="mt-4 text-xs text-emerald-700">没有被排除的客户。</p>}<button type="button" onClick={() => void start()} disabled={loading || batchRunning || !previewResult?.executableTaskCount} className="mt-4 h-10 w-full rounded-md bg-blue-600 text-sm font-semibold text-white disabled:opacity-40">{loading ? '启动中…' : '确认并启动批量生成'}</button></section>}
       </>}
       {viewMode === 'monitoring' && batch && <div className="generation-batch-control-area">
          <GenerationBatchDetail batch={batch} state={batchState} busy={{ pause: generationCommands.pause.busy, resume: generationCommands.resume.busy, abandon: generationCommands.abandon.busy }} clientNames={clientNames} onPause={() => void pause()} onResume={() => void resume()} onAbandon={() => void abandon()} onPreviewCancelPending={generation.previewCancelPending} onCancelPending={generation.cancelPending} onStartNew={startNewBatch} onViewBatchArticles={onViewBatchArticles} onBulkSubmit={() => { setBatchSubmissionFeedback(''); setBatchSubmissionOpen(true); }} />

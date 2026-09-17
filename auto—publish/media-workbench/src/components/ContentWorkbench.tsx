@@ -67,6 +67,7 @@ function remember(key: string, value: string) {
 
 interface ContentWorkbenchProps {
   content: ContentWorkbenchFeature;
+  initialBatchClientIds?: string[];
   mode?: "production" | "library";
   articleIntent?: ArticleLibraryNavigationIntent | null;
   onArticleIntentConsumed?: () => void;
@@ -80,6 +81,7 @@ interface ContentWorkbenchProps {
 
 export default function ContentWorkbench({
   content,
+  initialBatchClientIds,
   mode = "production",
   articleIntent,
   onArticleIntentConsumed,
@@ -122,7 +124,7 @@ export default function ContentWorkbench({
     string | null
   >(null);
   const [tab, setTab] = useState<WorkbenchTab>(
-    mode === "library" ? "history" : loadProductionTab(),
+    mode === "library" ? "history" : initialBatchClientIds ? "batch" : loadProductionTab(),
   );
   const [articleStageFilter, setArticleStageFilter] = useState<
     ArticleWorkflowFilter
@@ -167,9 +169,9 @@ export default function ContentWorkbench({
   }
 
   useEffect(() => {
-    setTab(mode === "library" ? "history" : loadProductionTab());
+    setTab(mode === "library" ? "history" : initialBatchClientIds ? "batch" : loadProductionTab());
     if (mode === "library") setArticleStageFilter(loadArticleStage());
-  }, [mode]);
+  }, [mode, initialBatchClientIds]);
 
   const restoredClientRef = useRef(false);
   useEffect(() => {
@@ -482,6 +484,7 @@ export default function ContentWorkbench({
         )}
         {(tab === "client" || tab === "batch") && (
           <ArticleGenerationView
+            initialBatchClientIds={initialBatchClientIds}
             grouping={grouping}
             client={clients.find((item) => item.id === clientId)}
             clients={clients}

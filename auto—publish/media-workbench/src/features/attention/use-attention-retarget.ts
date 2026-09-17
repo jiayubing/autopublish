@@ -28,6 +28,7 @@ export function useAttentionRetarget(
     };
   }, []);
   const [targets, setTargets] = useState<PlatformTarget[]>([]);
+  const [unavailableTargets, setUnavailableTargets] = useState<Array<{ id: string; displayName: string; reason: string }>>([]);
   const [profiles, setProfiles] = useState<AccountProfile[]>([]);
   const [platformId, setPlatformId] = useState("");
   const [accountProfileId, setAccountProfileId] = useState("");
@@ -46,6 +47,8 @@ export function useAttentionRetarget(
     let active = true;
     setLoading(true);
     setLoadError(false);
+    setPlatformId("");
+    setAccountProfileId("");
     Promise.all([getPlatformQueue(), listAccountProfiles()])
       .then(([queue, accounts]) => {
         if (!active) return;
@@ -53,6 +56,14 @@ export function useAttentionRetarget(
           (account) => account.bindingStatus === "bound",
         );
         setProfiles(bound);
+        setUnavailableTargets(queue.platforms.flatMap((target) => {
+          const reasons = [];
+          if (items.some((item) => item.platformId === target.id)) reasons.push("所选文章包含该平台的失败项，请按原平台分批选择");
+          if (target.queueConfigured === false) reasons.push("平台配置未完成，请在设置中配置");
+          if (target.queueConfigured === undefined) reasons.push("无法确认平台配置，请完全退出软件后重新启动");
+          if (!bound.some((account) => account.platformId === target.id)) reasons.push("当前内容库没有该平台的已绑定账号，请在设置中绑定");
+          return reasons.length ? [{ id: target.id, displayName: target.displayName, reason: reasons.join("；") }] : [];
+        }));
         setTargets(
           queue.platforms.filter(
             (target) =>
@@ -127,6 +138,7 @@ export function useAttentionRetarget(
 
   return {
     targets,
+    unavailableTargets,
     profiles,
     platformId,
     setPlatformId,
