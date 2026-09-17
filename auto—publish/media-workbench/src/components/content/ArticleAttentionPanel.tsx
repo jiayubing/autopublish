@@ -112,6 +112,7 @@ interface ArticleAttentionPanelProps {
   onTrashArticle?: (item: ArticleAttentionItem) => void;
   extraActionBusy?: boolean;
   onRegenerate?: (attentionIds: string[]) => Promise<unknown>;
+  onRetarget?: (items: ArticleAttentionItem[]) => void;
 }
 
 export default function ArticleAttentionPanel({
@@ -132,6 +133,7 @@ export default function ArticleAttentionPanel({
   onTrashArticle,
   extraActionBusy = false,
   onRegenerate,
+  onRetarget,
 }: ArticleAttentionPanelProps) {
   const { confirm } = useConfirmation();
   const itemRefs = useRef(new Map<string, HTMLDivElement>());
@@ -224,12 +226,6 @@ export default function ArticleAttentionPanel({
     setBatchNotice("");
   }
 
-  function reserveBatchAction(label: string) {
-    setBatchNotice(
-      `已选择 ${selectedCount} 项；${label}将在后续阶段接入，本次未执行。`,
-    );
-  }
-
   async function regenerate() {
     if (!onRegenerate || !canBatchRegenerate || regenerationLock.current)
       return;
@@ -271,6 +267,10 @@ export default function ArticleAttentionPanel({
       return;
     }
     if (action === "open-submission") {
+      if (item.kind === "regular_platform_failed" && onRetarget) {
+        onRetarget([item]);
+        return;
+      }
       onOpenArticleLibrary?.(item);
       return;
     }
@@ -369,9 +369,9 @@ export default function ArticleAttentionPanel({
           </Button>
           <Button
             size="sm"
-            disabled={!canBatchRepost || actionBusy}
+            disabled={!canBatchRepost || actionBusy || !onRetarget || selectedCount > 1000}
             title="仅当选中项全部支持改投其他平台时可用"
-            onClick={() => reserveBatchAction("批量改投其他平台")}
+            onClick={() => onRetarget?.(selectedItems)}
           >
             批量改投其他平台
           </Button>

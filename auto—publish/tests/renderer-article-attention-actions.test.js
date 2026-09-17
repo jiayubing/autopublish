@@ -135,7 +135,7 @@ test('article attention actions produce visible publication/detail results', asy
         auth: { getState: () => ok({ authenticated: true, user: { loginName: 'admin' }, entitlements: [{ product: 'AutoPublish', enabled: true, expiresAt: null }] }), login: () => ok({ authenticated: true }), refresh: () => ok({ authenticated: true }), logout: () => ok({ authenticated: false }), onStateChanged: () => () => {} },
         content, articleAttention: { list: content.listArticleAttention, get: content.getArticleAttention, preview: content.previewArticleAttention, resolve: content.resolveArticleAttention },
         workspace: { getBootstrapState: () => ok({ state: 'ready' }), getCurrent: () => ok({}), openCurrent: () => ok(undefined), onInvalidated: () => () => {} },
-        workspaceData: { getRuntimeIdentity: () => ok({ workspaceRuntimeId: 'attention-runtime', revision: 1 }), onInvalidated: () => () => {} }, platforms: { getQueue: () => ok({ platforms: [], queue: [] }), getState: () => ok({ phase: 'idle' }), onState: () => () => {} },
+        workspaceData: { getRuntimeIdentity: () => ok({ workspaceRuntimeId: 'attention-runtime', revision: 1 }), onInvalidated: () => () => {} }, platforms: { getQueue: () => ok({ platforms: [], queue: [] }), listAccountProfiles: () => ok({ profiles: [] }), getState: () => ok({ phase: 'idle' }), onState: () => () => {} },
         runtimeDiagnostics: { get: () => ok({ ok: true, buildInfo: {}, capabilities: {}, errors: [], warnings: [] }) }, media: {  getResourcePage: () => ok({ items: [], total: 0, page: 1, pageSize: 100 }), getPool: () => ok([]), getBalance: () => ok({ balance: '0' }) }, orders: { getOrders: () => ok([]) },
         aiProvider: { getStatus: () => ok({ configured: false }) }, platformSettings: { getStatus: () => ok({ configured: false }) }, storageMaintenance: { getUsage: () => ok({}) }
       };
@@ -196,9 +196,12 @@ test('article attention actions produce visible publication/detail results', asy
     assert.equal(await attentionRegion.getByRole('button', { name: /^批量重新生成/ }).isDisabled(), true);
     assert.equal(await attentionRegion.getByRole('button', { name: '批量改投其他平台', exact: true }).isDisabled(), false);
 
-    // 改投仍为 P3 占位。
+    // P3 无可用目标时显示空态，不会入队。
     await attentionRegion.getByRole('button', { name: '批量改投其他平台', exact: true }).click();
-    assert.ok(await attentionRegion.getByText(/将在后续阶段接入，本次未执行/).isVisible());
+    const retargetDialog = page.getByRole('dialog', { name: '批量改投其他平台', exact: true });
+    await retargetDialog.getByText(/没有共同可用的其他平台/).waitFor();
+    assert.equal(await retargetDialog.getByRole('button', { name: '确认加入队列' }).isDisabled(), true);
+    await retargetDialog.getByRole('button', { name: '取消', exact: true }).click();
     assert.deepEqual(await page.evaluate(() => window.__attentionActionCalls), []);
     await attentionCheckboxes.nth(1).uncheck();
 
@@ -239,10 +242,10 @@ test('article attention actions produce visible publication/detail results', asy
     await acceptanceConfirmation.getByRole('button', { name: '取消' }).click();
     await page.evaluate(() => localStorage.setItem('auto-publish:selected-client', 'client-other'));
     await page.getByRole('button', { name: '改投其他平台', exact: true }).first().click();
-    await page.getByRole('dialog', { name: '发起投稿' }).waitFor({ state: 'visible' });
-    assert.equal(await page.evaluate(() => localStorage.getItem('auto-publish:selected-client')), 'client-1');
-    assert.ok(await page.getByText('当前选择 1 篇文章；确认前不会创建投稿批次或订单。', { exact: true }).isVisible());
-    await page.getByRole('button', { name: '关闭发起投稿' }).click();
+    await retargetDialog.waitFor({ state: 'visible' });
+    assert.equal(await page.evaluate(() => localStorage.getItem('auto-publish:selected-client')), 'client-other');
+    assert.ok(await retargetDialog.getByText(/将 1 篇原文章加入/).isVisible());
+    await retargetDialog.getByRole('button', { name: '取消', exact: true }).click();
     await page.getByRole('button', { name: '投稿中心' }).click();
     await page.getByRole('tab', { name: /需处理事项/ }).click();
     await page.evaluate(() => localStorage.setItem('auto-publish:selected-client', 'client-other'));
@@ -283,6 +286,92 @@ test('article attention actions produce visible publication/detail results', asy
     await page.getByText(/共 2 篇，成功 1 篇，失败 1 篇/).waitFor();
     assert.equal(await attentionCheckboxes.count(), 5);
     assert.deepEqual(await page.evaluate(() => window.__attentionActionCalls), []);
+
+    // Retarget uses one selected target, preserves mixed failure selection and never starts publishing.
+    await page.evaluate(() => {
+      window.__retargetCalls = [];
+      window.__retargetMode = 'partial';
+      window.desktopConsole.platforms.getQueue = () => new Promise((resolve, reject) => {
+        window.__finishTargetLoad = () => resolve({ ok: true, data: { platforms: [
+          { id: 'hepan', displayName: '蓝色河畔', queueConfigured: true },
+          { id: 'lieju', displayName: '列举网', queueConfigured: true },
+          { id: 'unconfigured', displayName: '缺少配置', queueConfigured: false },
+          { id: 'unbound', displayName: '未绑定账号平台', queueConfigured: true },
+        ], queue: [] } });
+        window.__failTargetLoad = () => reject(new Error('synthetic unavailable'));
+      });
+      window.desktopConsole.platforms.listAccountProfiles = () => Promise.resolve({ ok: true, data: { profiles: [
+        { platformId: 'lieju', accountProfileId: 'lieju-account', displayName: '测试账号', bindingStatus: 'bound' },
+        { platformId: 'unconfigured', accountProfileId: 'unconfigured-account', displayName: '未配置账号', bindingStatus: 'bound' },
+        { platformId: 'unbound', accountProfileId: 'unbound-account', displayName: '未绑定账号', bindingStatus: 'unbound' },
+      ] } });
+      window.desktopConsole.content.previewRegularQueueAdmission = (input) => {
+        window.__retargetCalls.push({ kind: 'preview', input });
+        return Promise.resolve({ ok: true, data: { target: { platformId: input.platformId, accountProfileId: input.accountProfileId }, articleRefs: input.articleRefs, items: input.articleRefs.map((articleRef) => ({ articleRef, articleId: articleRef.articleId, status: window.__retargetMode === 'stale' ? 'conflict' : 'queueable' })), totalCount: input.articleRefs.length, queueableCount: window.__retargetMode === 'stale' ? 0 : input.articleRefs.length, idempotentCount: 0, missingCount: 0, conflictCount: 0 } });
+      };
+      window.desktopConsole.content.admitRegularQueueItems = (input) => {
+        window.__retargetCalls.push({ kind: 'admit', input });
+        return new Promise((resolve, reject) => {
+          window.__finishRetarget = () => resolve({ ok: true, data: { target: { platformId: input.platformId, accountProfileId: input.accountProfileId }, articleRefs: input.articleRefs, items: input.articleRefs.map((articleRef, index) => ({ articleRef, articleId: articleRef.articleId, status: index === 0 ? 'queued' : 'conflict' })), admittedCount: 1, idempotentCount: 0, missingCount: 0, conflictCount: input.articleRefs.length - 1 } });
+          window.__failRetarget = () => reject(new Error('synthetic response lost'));
+        });
+      };
+    });
+    await attentionCheckboxes.nth(0).check();
+    await attentionCheckboxes.nth(1).check();
+    await attentionRegion.getByRole('button', { name: '批量改投其他平台', exact: true }).click();
+    await retargetDialog.getByText('正在读取可用平台…').waitFor();
+    await page.evaluate(() => window.__failTargetLoad());
+    await retargetDialog.getByText(/平台读取失败/).waitFor();
+    await retargetDialog.getByRole('button', { name: '重试', exact: true }).click();
+    await retargetDialog.getByText('正在读取可用平台…').waitFor();
+    await page.evaluate(() => window.__finishTargetLoad());
+    const targetSelect = retargetDialog.getByLabel('改投目标平台');
+    await targetSelect.waitFor();
+    assert.deepEqual(await targetSelect.locator('option').allTextContents(), ['请选择一个平台', '列举网']);
+    assert.equal(await targetSelect.getAttribute('multiple'), null);
+    await targetSelect.selectOption('lieju');
+    await retargetDialog.getByLabel('改投投稿账号').selectOption('lieju-account');
+    await retargetDialog.getByRole('button', { name: '取消', exact: true }).click();
+    assert.deepEqual(await page.evaluate(() => window.__retargetCalls), []);
+
+    await attentionRegion.getByRole('button', { name: '批量改投其他平台', exact: true }).click();
+    await retargetDialog.getByText('正在读取可用平台…').waitFor();
+    await page.evaluate(() => window.__finishTargetLoad());
+    await targetSelect.selectOption('lieju');
+    await retargetDialog.getByLabel('改投投稿账号').selectOption('lieju-account');
+    await retargetDialog.getByRole('button', { name: '确认加入队列', exact: true }).click();
+    await page.waitForFunction(() => window.__retargetCalls.some((call) => call.kind === 'admit'));
+    assert.equal(await retargetDialog.getByRole('button', { name: '处理中…' }).isDisabled(), true);
+    assert.equal(await retargetDialog.getByRole('button', { name: '关闭', exact: true }).isDisabled(), true);
+    const retargetCall = await page.evaluate(() => window.__retargetCalls.find((call) => call.kind === 'admit').input);
+    assert.equal(retargetCall.platformId, 'lieju');
+    assert.equal(retargetCall.autoStart, false);
+    assert.equal(retargetCall.confirmed, true);
+    assert.deepEqual(retargetCall.retargetFrom.map((source) => source.attentionId), ['failed-active-1', 'failed-credentials-1']);
+    await page.evaluate(() => window.__finishRetarget());
+    await retargetDialog.getByText('新增入队 1 篇；已存在 0 篇；未入队或需核对 1 篇。', { exact: true }).waitFor();
+    assert.equal(await retargetDialog.getByRole('button', { name: '确认加入队列' }).isDisabled(), true);
+    await retargetDialog.getByRole('button', { name: '关闭', exact: true }).click();
+
+    // A stale preview never invokes the command; transport uncertainty cannot be blindly retried.
+    await page.evaluate(() => { window.__retargetCalls = []; window.__retargetMode = 'stale'; });
+    await attentionRegion.getByRole('button', { name: '改投其他平台', exact: true }).first().click();
+    await retargetDialog.getByText('正在读取可用平台…').waitFor();
+    await page.evaluate(() => window.__finishTargetLoad());
+    await targetSelect.selectOption('lieju');
+    await retargetDialog.getByLabel('改投投稿账号').selectOption('lieju-account');
+    await retargetDialog.getByRole('button', { name: '确认加入队列' }).click();
+    await retargetDialog.getByText(/部分文章状态已变化/).waitFor();
+    assert.deepEqual(await page.evaluate(() => window.__retargetCalls.map((call) => call.kind)), ['preview']);
+    await page.evaluate(() => { window.__retargetMode = 'ready'; });
+    await retargetDialog.getByRole('button', { name: '确认加入队列' }).click();
+    await page.waitForFunction(() => window.__retargetCalls.some((call) => call.kind === 'admit'));
+    await page.evaluate(() => window.__failRetarget());
+    await retargetDialog.getByText(/入队结果暂时无法确认/).waitFor();
+    assert.equal(await retargetDialog.getByRole('button', { name: '确认加入队列' }).isDisabled(), true);
+    assert.equal(await page.evaluate(() => window.__retargetCalls.filter((call) => call.kind === 'admit').length), 1);
+    await retargetDialog.getByRole('button', { name: '关闭', exact: true }).click();
   } finally {
     if (browser) await browser.close();
     if (viteProcess && !viteProcess.killed) viteProcess.kill();

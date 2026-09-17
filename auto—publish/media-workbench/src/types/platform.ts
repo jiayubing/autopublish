@@ -45,6 +45,7 @@ export interface PlatformTarget {
   id: string;
   displayName: string;
   loginAvailable?: boolean;
+  queueConfigured?: boolean;
 }
 
 export interface PlatformStatus {

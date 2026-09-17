@@ -429,6 +429,7 @@ export interface RegularQueueItem {
 }
 export interface RegularQueueAdmissionInput {
   articleRefs: ArticleSelection[];
+  retargetFrom?: Array<{ articleRef: ArticleSelection; attentionId: string }>;
   platformId: string;
   accountProfileId: string;
   autoStart?: boolean;

@@ -189,6 +189,15 @@ async function createPlatformRuntimeComposition(options) {
       clientProfileReaders,
       submissionPlatformDirectory,
       platformSettingsService,
+      isRegularQueueConfigured: function (platformId) {
+        if (!regularDirectoryEntries.some((entry) => entry.id === platformId))
+          return false;
+        if (!settingsAdapters.some((adapter) => adapter.id === platformId))
+          return true;
+        return (
+          platformSettingsService.getStatus(platformId).configured === true
+        );
+      },
       platformAccountBindingStore,
       platformAccountIdentityService,
       platformAccountProfileService,

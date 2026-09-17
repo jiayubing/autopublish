@@ -4,6 +4,8 @@ const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 const domain = require("../src/domain");
+const { createArticleAttentionQuery } = require("../desktop/services/article-attention-query");
+const { createCrossClientRegularQueueApplication } = require("../desktop/services/cross-client-regular-queue-application");
 
 const {
   createRegularQueueApplication,
@@ -98,7 +100,13 @@ function makeFixture(options) {
       removalTransactionStore: value.removalTransactionStore,
       clock: () => new Date("2026-08-07T00:00:00.000Z"),
     });
+    const attentionQuery = createArticleAttentionQuery({ operationalStore: store, readers: { getArticle: contentStore.getArticle } });
     const application = createRegularQueueApplication({
+      getAttentionItems(ids) {
+        attentionQuery.invalidate();
+        return ids.map((attentionId) => attentionQuery.get({ attentionId }));
+      },
+      isTargetConfigured: value.isTargetConfigured,
       contentStore,
       articleMutationCoordinator: coordinator,
       regularQueueTransitions: transitionPorts.regularQueueTransitions,
@@ -137,6 +145,7 @@ function makeFixture(options) {
       contentStore,
       coordinator,
       application,
+      attentionQuery,
       profiles,
       lockEvents,
       invalidationReasons,
@@ -165,6 +174,142 @@ function makeFixture(options) {
     throw error;
   }
 }
+
+function failQueuedArticle(fixture, queued, status = "failed") {
+  if (status === "accepted") {
+    const group = fixture.transitionPorts.regularQueueGroupTransitions;
+    group.setRegularQueueGroupRunIntent({ queueGroupId: queued.queueGroupId, running: true });
+    const claim = group.claimRegularQueueGroupHead({ queueGroupId: queued.queueGroupId, claimToken: `claim-${queued.attemptId}`, leaseMs: 30000 });
+    assert.equal(claim.regularPublicationAttemptId, queued.attemptId);
+    group.beginRegularRemoteSubmission({ regularPublicationAttemptId: queued.attemptId, claimToken: claim.claimToken, preparedSubmissionEvidenceV1: domain.createTextOnlyPreparedSubmissionEvidenceV1(claim) });
+    fixture.transitionPorts.regularOutcomeTransitions.recordRegularAccepted({ regularPublicationAttemptId: queued.attemptId, observation: { status: "accepted", code: "HEPAN_ACCEPTED", remoteId: "synthetic-accepted", observedAt: "2026-08-07T00:00:00.000Z" } });
+    return;
+  }
+  const durable = fixture.store.getSubmissionBatch(queued.batchId).items.find((item) => item.itemId === queued.itemId);
+  const claim = fixture.store.claimSubmissionItemById({ itemId: queued.itemId, batchId: queued.batchId, revision: durable.revision, claimToken: `claim-${queued.attemptId}` });
+  fixture.store.commitRemoteOutcome({ attemptId: queued.attemptId, batchItemId: queued.itemId, batchClaimToken: claim.claimToken, outcome: { status, ...(status === "accepted" ? { remoteId: "synthetic-accepted" } : {}) } });
+}
+
+function retargetInput(fixture, refs, platformId = "hepan") {
+  fixture.attentionQuery.invalidate();
+  const attention = fixture.attentionQuery.list().items;
+  return { ...admissionInput(fixture, refs, platformId), autoStart: false,
+    retargetFrom: refs.map((articleRef) => ({ articleRef, attentionId: attention.find((item) => item.articleId === articleRef.articleId && item.clientId === articleRef.clientId).attentionId })) };
+}
+
+test("attention retarget uses existing queue, preserves articles/history, closes attention and survives restart", () => {
+  const f = makeFixture();
+  try {
+    f.add(article("retarget-a"));
+    f.add(article("retarget-b", "client-b"));
+    const app = createCrossClientRegularQueueApplication({ regularQueueApplication: f.application });
+    const refs = [ref("retarget-a"), ref("retarget-b", "client-b")];
+    const original = refs.map((item) => f.contentStore.getArticle(item.clientId, item.articleId));
+    const first = app.admitRegularQueueItems(admissionInput(f, refs));
+    first.items.forEach((item) => failQueuedArticle(f, item));
+    const input = retargetInput(f, refs);
+    assert.equal(app.previewRegularQueueAdmission(input).queueableCount, 2);
+    const admitted = app.admitRegularQueueItems(input);
+    assert.equal(admitted.admittedCount, 2);
+    assert.equal(app.admitRegularQueueItems(input).admittedCount, 0);
+    assert.equal(f.store.listSubmissionQueueItems().filter((item) => item.status === "queued").length, 2);
+    assert.deepEqual(f.store.listPublicationAttention(), []);
+    assert.deepEqual(refs.map((item) => f.contentStore.getArticle(item.clientId, item.articleId)), original);
+    assert.deepEqual(f.store.listPublicationRecords({ articleIds: refs.map((item) => item.articleId) }).map((item) => item.status).sort(), ["failed", "failed", "queued", "queued"]);
+    // The new target uses the original claim/outcome path, not a retarget publisher.
+    failQueuedArticle(f, admitted.items[0], "accepted");
+    assert.equal(app.admitRegularQueueItems(input).admittedCount, 0);
+    f.store.close();
+    const reopened = createOperationalStore({ workspaceRoot: f.root });
+    try {
+      assert.deepEqual(reopened.listPublicationAttention(), []);
+      assert.equal(reopened.listPublicationRecords({ articleIds: refs.map((item) => item.articleId) }).length, 4);
+    } finally { reopened.close(); }
+  } finally { f.close(); }
+});
+
+test("retarget rejects same platform, multiple targets, unconfigured/account mismatch and stale attention", () => {
+  let configured = true;
+  const f = makeFixture({ isTargetConfigured: () => configured });
+  try {
+    f.add(article("retarget-a"));
+    const first = f.application.admitRegularQueueItems(admissionInput(f, [ref("retarget-a")]));
+    failQueuedArticle(f, first.items[0]);
+    const input = retargetInput(f, [ref("retarget-a")]);
+    assert.equal(f.application.admitRegularQueueItems({ ...input, platformId: "toutiao", accountProfileId: f.profiles.toutiao.accountProfileId }).items[0].reasonCode, "REGULAR_QUEUE_DIFFERENT_PLATFORM_REQUIRED");
+    assert.throws(() => f.application.admitRegularQueueItems({ ...input, targetPlatformIds: ["hepan", "toutiao"] }), { code: "REGULAR_QUEUE_SINGLE_TARGET_REQUIRED" });
+    assert.throws(() => f.application.admitRegularQueueItems({ ...input, accountProfileId: f.profiles.toutiao.accountProfileId }), { code: "ACCOUNT_PROFILE_PLATFORM_MISMATCH" });
+    configured = false;
+    assert.throws(() => f.application.admitRegularQueueItems(input), { code: "PLATFORM_CONFIG_NOT_SET" });
+    configured = true;
+    assert.throws(() => f.application.admitRegularQueueItems({ ...input, autoStart: true }), { code: "REGULAR_QUEUE_RETARGET_INPUT_INVALID" });
+    assert.equal(f.application.admitRegularQueueItems({ ...input, retargetFrom: [{ articleRef: ref("retarget-a"), attentionId: "stale" }] }).items[0].reasonCode, "ARTICLE_ATTENTION_STALE");
+    assert.equal(f.store.listSubmissionQueueItems().filter((item) => item.status === "queued").length, 0);
+    assert.equal(f.store.listPublicationAttention().length, 1);
+  } finally { f.close(); }
+});
+
+test("retarget back to a previously failed platform closes the latest attention and preserves all attempts", () => {
+  const f = makeFixture();
+  try {
+    f.add(article("retarget-cycle"));
+    const refs = [ref("retarget-cycle")];
+    const first = f.application.admitRegularQueueItems(admissionInput(f, refs));
+    failQueuedArticle(f, first.items[0]);
+    const second = f.application.admitRegularQueueItems(retargetInput(f, refs));
+    failQueuedArticle(f, second.items[0]);
+    const third = f.application.admitRegularQueueItems(retargetInput(f, refs, "toutiao"));
+    assert.equal(third.admittedCount, 1);
+    assert.deepEqual(f.store.listPublicationAttention(), []);
+    failQueuedArticle(f, third.items[0]);
+    assert.equal(f.store.listPublicationAttention()[0].attemptId, third.items[0].attemptId);
+    const history = f.store.listPublicationRecords({ articleIds: ["retarget-cycle"] });
+    assert.equal(history.flatMap((record) => record.attempts).length, 3);
+  } finally { f.close(); }
+});
+
+test("retarget reports partial results without closing stale/uncertain source attention", () => {
+  const f = makeFixture();
+  try {
+    const refs = [ref("partial-a"), ref("partial-b", "client-b")];
+    refs.forEach((item) => f.add(article(item.articleId, item.clientId)));
+    const app = createCrossClientRegularQueueApplication({ regularQueueApplication: f.application });
+    const first = app.admitRegularQueueItems(admissionInput(f, refs));
+    first.items.forEach((item) => failQueuedArticle(f, item));
+    const input = retargetInput(f, refs);
+    input.retargetFrom[1].attentionId = "stale-source";
+    const result = app.admitRegularQueueItems(input);
+    assert.equal(result.admittedCount, 1);
+    assert.equal(result.conflictCount, 1);
+    assert.equal(result.items.find((item) => item.articleId === "partial-b").reasonCode, "ARTICLE_ATTENTION_STALE");
+    assert.deepEqual(f.store.listPublicationAttention().map((item) => item.articleId), ["partial-b"]);
+    const secondInput = retargetInput(f, [refs[1]]);
+    const next = f.application.admitRegularQueueItems(admissionInput(f, [refs[1]]));
+    failQueuedArticle(f, next.items[0], "uncertain");
+    assert.equal(f.application.admitRegularQueueItems(secondInput).admittedCount, 0);
+    assert.equal(f.store.listPublicationAttention().find((item) => item.articleId === "partial-b").status, "uncertain");
+  } finally { f.close(); }
+});
+
+test("retarget commit failure retains failure attention and original publication history", () => {
+  let armed = false;
+  const f = makeFixture({ beforeCommit() { if (armed) throw Object.assign(new Error("synthetic commit failure"), { code: "TEST_COMMIT_FAILED" }); } });
+  try {
+    f.add(article("rollback-retarget"));
+    const refs = [ref("rollback-retarget")];
+    const first = f.application.admitRegularQueueItems(admissionInput(f, refs));
+    failQueuedArticle(f, first.items[0]);
+    const input = retargetInput(f, refs);
+    armed = true;
+    const app = createCrossClientRegularQueueApplication({ regularQueueApplication: f.application });
+    const result = app.admitRegularQueueItems(input);
+    assert.equal(result.items[0].status, "uncertain");
+    assert.equal(result.admittedCount, 0);
+    assert.equal(f.store.listPublicationRecords({ articleIds: ["rollback-retarget"] }).length, 1);
+    assert.equal(f.store.listPublicationAttention().length, 1);
+    assert.equal(f.store.listSubmissionQueueItems().filter((item) => item.status === "queued").length, 0);
+  } finally { armed = false; f.close(); }
+});
 
 function admissionInput(fixture, articleRefs, platformId = "toutiao") {
   return {

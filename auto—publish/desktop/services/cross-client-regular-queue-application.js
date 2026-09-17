@@ -2,6 +2,7 @@
 
 const {
   canonicalArticleRefs,
+  canonicalArticleRefKey,
 } = require("../../src/content/article-ref");
 
 function fail(code, message) {
@@ -15,7 +16,15 @@ function refsFrom(input) {
   const raw = Array.isArray(request.articleRefs) ? request.articleRefs : [];
   if (!raw.length) throw fail("REGULAR_QUEUE_ARTICLES_REQUIRED");
   try {
-    return canonicalArticleRefs(raw);
+    const refs = canonicalArticleRefs(raw);
+    if (request.retargetFrom !== undefined) {
+      if (!Array.isArray(request.retargetFrom) || request.retargetFrom.length !== refs.length)
+        throw fail("REGULAR_QUEUE_RETARGET_INPUT_INVALID");
+      const keys = request.retargetFrom.map((source) => canonicalArticleRefKey(source.articleRef));
+      if (new Set(keys).size !== refs.length || refs.some((ref) => !keys.includes(canonicalArticleRefKey(ref))))
+        throw fail("REGULAR_QUEUE_RETARGET_INPUT_INVALID");
+    }
+    return refs;
   } catch (_) {
     throw fail("REGULAR_QUEUE_ARTICLE_IDENTITY_INVALID");
   }
@@ -37,7 +46,12 @@ function groupRefs(refs) {
 }
 
 function groupInput(input, refs) {
-  return Object.assign({}, input || {}, { articleRefs: refs });
+  const result = Object.assign({}, input || {}, { articleRefs: refs });
+  if (Array.isArray(result.retargetFrom)) {
+    const keys = new Set(refs.map(canonicalArticleRefKey));
+    result.retargetFrom = result.retargetFrom.filter((source) => keys.has(canonicalArticleRefKey(source.articleRef)));
+  }
+  return result;
 }
 
 function outcome(ref, status, reasonCode) {
