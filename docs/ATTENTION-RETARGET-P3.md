@@ -1,6 +1,6 @@
 # 需处理批量改投 P3
 
-状态：RUNNING（实现、主审查与有界复查完成，等待最终 clean HEAD 门禁）。
+状态：COMPLETE（实现、主审查、有界复查及最终 clean HEAD 门禁完成；独立 PR，不自动合并）。
 
 基线：P2 `2971278be2d9d271f21f6bab8ad5e3f5a4122430`；PR #70 启动时 OPEN，故独立分支 `codex/attention-retarget-p3` 基于 P2，PR 以 P2 分支为 base。不自动合并，不修改 P2，不执行真实投稿。
 
@@ -34,3 +34,18 @@
 - 最终提交前 main/renderer/bridge typecheck、ESLint、renderer/preload build 通过；新增 typed retarget/目录配置合同测试 2 项通过。构建仅有既有 bundle-size 提示。
 
 仅使用合成数据、临时 SQLite/文件和假 transport。真实登录、发布、付费、AI、图片上传及生产数据库不在授权范围。
+
+## 最终验证与交接
+
+最终 clean implementation HEAD：`db278ff51ec05b92a46e139544c193f95ab66272`。环境：Windows / Node v24.16.0。其后仅更新本报告和工作索引，生产代码、测试与门禁无变化。
+
+- `npm test`：596/596，0 failed/skipped/todo，约 21 秒。
+- `npm run test:integration`：1244/1244，0 failed/skipped/todo，约 171 秒；包含新 P3 持久化/IPC/目录合同和完整需处理浏览器回归。
+- `node --test tests/phase-06-production-ipc-fixture-matrix.test.js`：6/6。
+- `npm run typecheck:main`、`npm run typecheck:renderer`、`npm run typecheck:bridge`、`npm run lint`、`npm run build:renderer`、`npm run build:preload` 均通过。renderer 保留既有 bundle-size 提示。
+- `npm run format:check`：仅三个未改动的基线文件报错：`src/domain/identities.js`、`tests/authenticated-runtime.test.js`、`tests/phase-08-content-lifecycle.test.js`。与 P2 记录相同，已用相对基线 diff 核实没有本次变更；延期到各原文件 owner 的格式维护任务，不扩大本阶段范围。本次受格式 gate 管理的文件及新增 hook/dialog 的定向 Prettier 检查通过。
+- `git diff --check` 通过。未跟踪构建/测试 evidence 位于 `auto—publish/build/test-results/p3-*.log` 及 runner timings，不提交产物。
+- Playwright 技能指导使用既有测试脚本执行 UI 行为验证；只操作临时浏览器 fixture，测试结束关闭浏览器和预览服务。
+- 未运行 release/安装包或真实外部验收：本阶段非发布任务，且没有真实账号、投稿、AI、付费授权。
+
+已知阻塞 finding 全部关闭。没有下一阶段实施任务。P2 PR #70 仍 OPEN，P3 必须按 stacked 依赖审阅；不自动合并任何 PR。

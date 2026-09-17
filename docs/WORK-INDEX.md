@@ -4,8 +4,6 @@
 
 ## 当前执行入口
 
-- [需处理批量改投 P3](ATTENTION-RETARGET-P3.md)：基于已完成 P2 的独立分支实施与验证，不自动合并。
-
 - [规模审计修复](../.scratch/scale-audit/REMEDIATION.md)：SA-01 / SA-02 / SA-04 及付费页面分页/摘要读取完成；普通队列、全局执行/启动与其余失效优化待后续批次。
 
 关联功能合同：[客户生成任务化与并发](../.scratch/client-generation-tasks/CLIENT-GENERATION-TASKS-PLAN.md)，只在涉及其行为时读取。
@@ -21,6 +19,8 @@
 - Ticket 19 的独立 HTTP multipart 带图验收：[Ticket 19 合同](../.scratch/article-lifecycle-and-submission/issues/19-lieju-image-publication-adapter.md)。
 
 ## 最近已完成的本地计划
+
+- [需处理批量改投 P3](ATTENTION-RETARGET-P3.md)：2026-09-17 完成；复用普通队列完成批量改投与原待办结案，独立 stacked PR，不自动合并。
 
 - [文章删除事务简化](ARTICLE-TRASH-SIMPLIFICATION.md)：移除重复状态机、租约和后台恢复，保留最小批量意图与 ArticleStore 文件恢复；验证证据见该文档。
 
