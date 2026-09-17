@@ -2,6 +2,7 @@ import { useEffect, useRef, useSyncExternalStore } from 'react';
 import {
   cancelPendingGenerationBatch,
   createAndStartGenerationBatch,
+  regenerateAttentionItems,
   getGenerationRuntimeSnapshot,
   pauseGenerationBatch,
   resumeGenerationBatch,
@@ -15,12 +16,13 @@ import { useWorkspaceRuntimeIdentity } from '../workspace/workspace-coordinator-
 import { createGenerationFeature } from './generation-feature.js';
 import { reportRuntimeDiagnostic } from '../workspace/runtime-diagnostic-sink';
 
-export function useGenerationFeature() {
+export function useGenerationFeature(enabled = true) {
   const workspace = useWorkspaceRuntimeIdentity();
   const featureRef = useRef<ReturnType<typeof createGenerationFeature> | null>(null);
   if (!featureRef.current) {
     featureRef.current = createGenerationFeature({
       start: createAndStartGenerationBatch,
+      regenerate: regenerateAttentionItems,
       previewBatch: previewGenerationBatch,
       pause: pauseGenerationBatch,
       resume: resumeGenerationBatch,
@@ -35,18 +37,20 @@ export function useGenerationFeature() {
   }
   const feature = featureRef.current;
   useEffect(() => {
-    if (workspace.workspaceRuntimeId) {
+    if (enabled && workspace.workspaceRuntimeId) {
       feature.setScope({ workspaceRuntimeId: workspace.workspaceRuntimeId, batchId: 'current' });
       void feature.hydrate('initial').catch(() => {
         reportRuntimeDiagnostic('GENERATION_RUNTIME_HYDRATION_FAILED', 'workspace-invalidation');
       });
     }
-  }, [feature, workspace.workspaceRuntimeId]);
+  }, [feature, workspace.workspaceRuntimeId, enabled]);
   useEffect(() => () => feature.dispose(), [feature]);
   const snapshot = useSyncExternalStore(feature.subscribe, feature.getSnapshot, feature.getSnapshot);
   return {
     snapshot,
     start: feature.start,
+    regenerate: feature.regenerate,
+    refresh: feature.hydrate,
     previewBatch: feature.previewBatch,
     pause: feature.pause,
     resume: feature.resume,

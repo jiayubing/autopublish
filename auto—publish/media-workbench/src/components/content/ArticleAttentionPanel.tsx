@@ -14,7 +14,8 @@ function labelFor(item: ArticleAttentionItem): string {
   if (item.kind === "removal_needs_repair") return "删除事务需要修复";
   if (item.kind === "regular_platform_failed") return "投稿未被平台接受";
   if (item.kind === "regular_platform_uncertain") return "远端投稿结果待确认";
-  if (item.kind === "paid_order_creation_uncertain") return "付费订单创建待确认";
+  if (item.kind === "paid_order_creation_uncertain")
+    return "付费订单创建待确认";
   if (item.kind === "order_status_anomaly") return "订单状态异常";
   if (item.kind === "published_archive_failed")
     return "远端成功，本地归档待处理";
@@ -23,10 +24,7 @@ function labelFor(item: ArticleAttentionItem): string {
 
 function reasonCopy(item: ArticleAttentionItem): string {
   if (item.kind === "regular_platform_failed")
-    return (
-      item.reasonSummary ||
-      "投稿未被平台接受，请查看详情后决定后续处理。"
-    );
+    return item.reasonSummary || "投稿未被平台接受，请查看详情后决定后续处理。";
   if (item.kind === "regular_platform_uncertain")
     return "投稿请求已发出，但远端结果尚未确认，远端可能已经接受。";
   return item.message || "当前状态需要进一步处理。";
@@ -41,14 +39,13 @@ function confirmationMessage(
     return "请仅在已人工核对远端接受后确认。确认后文章将永久标记为已发布；发布链接不是必填项。";
   if (action === "confirm-regular-not-accepted")
     return "请仅在已人工核对远端未接受后确认。确认后当前待确认事项会按最终事实关闭。";
-  return fallback || `${item.titleSnapshot || item.attentionId} 需要确认后才能继续。`;
+  return (
+    fallback || `${item.titleSnapshot || item.attentionId} 需要确认后才能继续。`
+  );
 }
 
 function actionLabel(action: string, item?: ArticleAttentionItem): string {
-  if (
-    action === "open-submission" &&
-    item?.kind === "regular_platform_failed"
-  )
+  if (action === "open-submission" && item?.kind === "regular_platform_failed")
     return "改投其他平台";
   const labels: Record<string, string> = {
     "retry-removal": "重试修复删除",
@@ -114,6 +111,7 @@ interface ArticleAttentionPanelProps {
   getAdditionalActions?: (item: ArticleAttentionItem) => string[];
   onTrashArticle?: (item: ArticleAttentionItem) => void;
   extraActionBusy?: boolean;
+  onRegenerate?: (attentionIds: string[]) => Promise<unknown>;
 }
 
 export default function ArticleAttentionPanel({
@@ -133,6 +131,7 @@ export default function ArticleAttentionPanel({
   getAdditionalActions,
   onTrashArticle,
   extraActionBusy = false,
+  onRegenerate,
 }: ArticleAttentionPanelProps) {
   const { confirm } = useConfirmation();
   const itemRefs = useRef(new Map<string, HTMLDivElement>());
@@ -140,6 +139,8 @@ export default function ArticleAttentionPanel({
     () => new Set(),
   );
   const [batchNotice, setBatchNotice] = useState("");
+  const regenerationLock = useRef(false);
+  const [regenerationBusy, setRegenerationBusy] = useState(false);
   const attentionItems = snapshot.items as ArticleAttentionItem[];
   const itemCapabilities = useMemo(
     () =>
@@ -163,17 +164,17 @@ export default function ArticleAttentionPanel({
     (item) => itemCapabilities.get(item.attentionId)?.canRegenerate,
   ).length;
   const repostableCount = selectedItems.filter(
-    (item) => itemCapabilities.get(item.attentionId)?.canRepostToAnotherPlatform,
+    (item) =>
+      itemCapabilities.get(item.attentionId)?.canRepostToAnotherPlatform,
   ).length;
   const allSelected =
     attentionItems.length > 0 &&
-    attentionItems.every((item) =>
-      selectedAttentionIds.has(item.attentionId),
-    );
+    attentionItems.every((item) => selectedAttentionIds.has(item.attentionId));
   const canBatchRegenerate =
-    selectedCount > 0 && regeneratableCount === selectedCount;
-  const canBatchRepost =
-    selectedCount > 0 && repostableCount === selectedCount;
+    selectedCount > 0 &&
+    selectedCount <= 100 &&
+    regeneratableCount === selectedCount;
+  const canBatchRepost = selectedCount > 0 && repostableCount === selectedCount;
   const selectionSummary =
     selectedCount === 0
       ? "尚未选择需处理项"
@@ -183,12 +184,11 @@ export default function ArticleAttentionPanel({
   const actionBusy =
     snapshot.commands.preview.busy ||
     snapshot.commands.execute.busy ||
+    regenerationBusy ||
     extraActionBusy;
 
   useEffect(() => {
-    const currentIds = new Set(
-      attentionItems.map((item) => item.attentionId),
-    );
+    const currentIds = new Set(attentionItems.map((item) => item.attentionId));
     setSelectedAttentionIds((current) => {
       const next = new Set(
         [...current].filter((attentionId) => currentIds.has(attentionId)),
@@ -228,6 +228,37 @@ export default function ArticleAttentionPanel({
     setBatchNotice(
       `已选择 ${selectedCount} 项；${label}将在后续阶段接入，本次未执行。`,
     );
+  }
+
+  async function regenerate() {
+    if (!onRegenerate || !canBatchRegenerate || regenerationLock.current)
+      return;
+    regenerationLock.current = true;
+    setRegenerationBusy(true);
+    const ids = selectedItems.map((item) => item.attentionId);
+    try {
+      if (
+        !(await confirm({
+          title: "批量重新生成",
+          message: `将创建 ${ids.length} 篇新文章，使用原文章所选资料、问题和模板的当前内容。原文章及投稿失败记录保留，原需处理事项不会自动关闭。不会自动投稿。`,
+          confirmLabel: "确认生成新文章",
+          tone: "warning",
+        }))
+      )
+        return;
+      const result = await onRegenerate(ids);
+      if (result) {
+        setSelectedAttentionIds(new Set());
+        setBatchNotice(
+          "生成任务已创建。可在下方查看进度；成功的新文章进入文章库，原失败事项保留。",
+        );
+      }
+    } catch (error) {
+      setBatchNotice(actionError(error));
+    } finally {
+      regenerationLock.current = false;
+      setRegenerationBusy(false);
+    }
   }
 
   async function resolve(item: ArticleAttentionItem, action: string) {
@@ -330,11 +361,11 @@ export default function ArticleAttentionPanel({
         <div className="ml-auto flex flex-wrap gap-1.5">
           <Button
             size="sm"
-            disabled={!canBatchRegenerate || actionBusy}
-            title="仅当选中项全部支持重新生成时可用"
-            onClick={() => reserveBatchAction("批量重新生成")}
+            disabled={!canBatchRegenerate || actionBusy || !onRegenerate}
+            title="仅当选中项全部支持重新生成时可用，每批最多 100 项"
+            onClick={() => void regenerate()}
           >
-            批量重新生成
+            批量重新生成（{selectedCount}）
           </Button>
           <Button
             size="sm"
@@ -391,9 +422,7 @@ export default function ArticleAttentionPanel({
               : []),
             ...item.allowedActions,
             ...(getAdditionalActions?.(item) || []),
-          ].filter(
-            (action, index, values) => values.indexOf(action) === index,
-          );
+          ].filter((action, index, values) => values.indexOf(action) === index);
 
           return (
             <div
@@ -435,7 +464,9 @@ export default function ArticleAttentionPanel({
                     <div className="min-w-0">
                       <dt className="text-slate-400">客户</dt>
                       <dd className="mt-0.5 break-words text-slate-700">
-                        {getClientLabel?.(item) || item.clientId || "客户未记录"}
+                        {getClientLabel?.(item) ||
+                          item.clientId ||
+                          "客户未记录"}
                       </dd>
                     </div>
                     <div className="min-w-0">

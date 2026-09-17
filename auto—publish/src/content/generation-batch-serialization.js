@@ -232,11 +232,16 @@ function normalizePersisted(batch) {
       assertIdentifier(task.clientId, "client id");
       assertIdentifier(task.platform, "platform");
       assertIdentifier(task.templateId, "template id");
+      if (task.sourceArticleId !== undefined) assertIdentifier(task.sourceArticleId, "source article id");
+      if (task.sourceAttentionId !== undefined && (typeof task.sourceAttentionId !== "string" || !task.sourceAttentionId || task.sourceAttentionId.length > 512))
+        throw storeError("GENERATION_BATCH_INVALID", "Source attention identity is invalid");
       return {
         id: task.id,
         clientId: task.clientId,
         platform: task.platform,
         templateId: task.templateId,
+        ...(task.sourceArticleId !== undefined ? { sourceArticleId: task.sourceArticleId } : {}),
+        ...(task.sourceAttentionId !== undefined ? { sourceAttentionId: task.sourceAttentionId } : {}),
         materialIds: task.materialIds.slice(),
         researchQueryIds: task.researchQueryIds.slice(),
         status: task.status,

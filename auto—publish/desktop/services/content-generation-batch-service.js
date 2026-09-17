@@ -39,6 +39,7 @@ const SAFE_MESSAGES = {
   GENERATION_WORKSPACE_REQUIRED: "Workspace root is required",
   GENERATION_INVALID_ID: "Generation identifier is invalid",
   GENERATION_SOURCE_INVALID: "Generation source is invalid",
+  GENERATION_CONTENT_FAILURE_REQUIRED: "Only content review failures can be regenerated",
   GENERATION_MATERIAL_IDS_REQUIRED: "At least one client material is required",
   GENERATION_RESEARCH_IDS_REQUIRED: "At least one GEO research answer is required",
   GENERATION_BATCH_INVALID: "Generation batch data is invalid",
@@ -136,6 +137,7 @@ function createContentGenerationBatchService(options) {
   let activeStatus = "idle";
   let activeBatchId = null;
   let activeRun = null;
+  let preparingRegeneration = false;
   let runner;
   let sourceCache = null;
   let titleCache = null;
@@ -262,7 +264,7 @@ function createContentGenerationBatchService(options) {
 
   function assertAvailable() {
     if (disposed) throw generationError("GENERATION_RUNNER_DISPOSED");
-    if (activeRun || activeStatus === "running" || activeStatus === "pausing") throw generationError("GENERATION_BATCH_BUSY");
+    if (preparingRegeneration || activeRun || activeStatus === "running" || activeStatus === "pausing") throw generationError("GENERATION_BATCH_BUSY");
   }
 
   function currentState(persistedBatch) {
@@ -371,8 +373,10 @@ function createContentGenerationBatchService(options) {
     if (!previewResult.executableTaskCount) throw generationError("GENERATION_NO_EXECUTABLE_TASKS");
     const requestedConcurrency = input && input.concurrency !== undefined ? input.concurrency : 2;
     if (!Number.isInteger(requestedConcurrency) || requestedConcurrency < 1 || requestedConcurrency > 4) throw generationError("GENERATION_CONCURRENCY_INVALID");
+    const aiConfigFingerprint = await fingerprint();
+    assertAvailable();
     const batch = batchStore.createBatch({ clientSources: previewResult.clientSources, templates: previewResult.templates,
-      aiConfigFingerprint: await fingerprint(), concurrency: requestedConcurrency });
+      aiConfigFingerprint, concurrency: requestedConcurrency });
     emitBatch(batch);
     notifyData("GENERATION_BATCH_CREATED");
     return enrichBatch(batch);
@@ -543,6 +547,73 @@ function createContentGenerationBatchService(options) {
     return runBatch(batch.id, "pending", false);
   }
 
+  async function regenerateAttentionItems(input) {
+    const value = assertObject(input);
+    assertId(value.requestId, "request id");
+    if (value.confirmed !== true || !Array.isArray(value.attentionIds) || value.attentionIds.length < 1 || value.attentionIds.length > 100 ||
+        value.attentionIds.some((id) => typeof id !== "string" || !id || id.length > 512) ||
+        new Set(value.attentionIds).size !== value.attentionIds.length)
+      throw generationError("GENERATION_INPUT_INVALID");
+    const batchId = "regeneration-" + crypto.createHash("sha256").update(value.requestId).digest("hex");
+    try {
+      const existing = batchStore.getBatch(batchId);
+      if (existing) {
+        const original = existing.tasks.map((task) => task.sourceAttentionId).sort();
+        if (JSON.stringify(original) !== JSON.stringify(value.attentionIds.slice().sort())) throw generationError("GENERATION_TASK_CONFLICT");
+        // A replay observes persisted work, never starts another AI request.
+        return enrichBatch(existing);
+      }
+    } catch (error) {
+      if (error.code !== "GENERATION_BATCH_NOT_FOUND") throw error;
+    }
+    assertAvailable();
+    preparingRegeneration = true;
+    try {
+      const concurrency = value.concurrency === undefined ? 2 : value.concurrency;
+      if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 4) throw generationError("GENERATION_INPUT_INVALID");
+      function readItems() {
+        const items = typeof opts.getAttentionItems === "function" ? opts.getAttentionItems(value.attentionIds) : [];
+        if (!Array.isArray(items) || items.length !== value.attentionIds.length) throw generationError("GENERATION_CONTENT_FAILURE_REQUIRED");
+        items.forEach((item, index) => {
+          if (!item || item.attentionId !== value.attentionIds[index] || item.kind !== "regular_platform_failed" ||
+            !["CONTENT_REJECTED", "ARTICLE_REJECTED", "HEPAN_CONTENT_REJECTED"].includes(String(item.reasonCode || "").toUpperCase()) ||
+            !Array.isArray(item.allowedActions) || !item.allowedActions.includes("open-submission")) throw generationError("GENERATION_CONTENT_FAILURE_REQUIRED");
+        });
+        return items;
+      }
+      const items = readItems();
+      const tasks = [];
+      for (const item of items) {
+        const article = contentStore.getArticle(item.clientId, item.articleId);
+        const materialIds = article && (article.materialIds || article.materialSnapshots?.map((source) => source.id));
+        if (!article || !Array.isArray(materialIds) || !materialIds.length || !Array.isArray(article.researchQueryIds) || !article.researchQueryIds.length ||
+            typeof article.platform !== "string" || typeof article.templateId !== "string")
+          throw generationError("GENERATION_SOURCE_INVALID");
+        const checked = await preview({
+          clientIds: [item.clientId],
+          clientSources: [{ clientId: item.clientId, materialIds, researchQueryIds: article.researchQueryIds }],
+          templates: [{ platform: article.platform, templateId: article.templateId }],
+        });
+        if (checked.executableTaskCount !== 1) throw generationError("GENERATION_SOURCE_INVALID");
+        tasks.push({ ...checked.tasks[0], sourceArticleId: item.articleId, sourceAttentionId: item.attentionId });
+      }
+      const aiConfigFingerprint = await fingerprint();
+      if (disposed) throw generationError("GENERATION_RUNNER_DISPOSED");
+      readItems().forEach((current, index) => {
+        const item = items[index];
+        if (current.articleId !== item.articleId || current.clientId !== item.clientId || current.attemptId !== item.attemptId)
+          throw generationError("GENERATION_CONTENT_FAILURE_REQUIRED");
+      });
+      const batch = batchStore.createRegenerationBatch({ id: batchId, tasks, concurrency, aiConfigFingerprint });
+      emitBatch(batch);
+      notifyData("GENERATION_BATCH_CREATED");
+      preparingRegeneration = false;
+      return await runBatch(batch.id, "pending", false);
+    } finally {
+      preparingRegeneration = false;
+    }
+  }
+
   async function pauseBatch(input) {
     return requestPause(input);
   }
@@ -597,6 +668,7 @@ function createContentGenerationBatchService(options) {
     createBatch,
     startBatch,
     createAndStartBatch,
+    regenerateAttentionItems,
     pauseBatch,
     resumeBatch,
     abandonBatch,

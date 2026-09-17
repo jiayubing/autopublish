@@ -6,9 +6,11 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { regularQueueGroupViews } from "../features/platform/platform-feature";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePlatformFeature } from "../features/platform/platform-feature-context";
 import { useAttentionFeature } from "../features/attention/use-attention-feature";
+import { useGenerationFeature } from "../features/generation/use-generation-feature";
+import { reportRuntimeDiagnostic } from "../features/workspace/runtime-diagnostic-sink";
 import { useConfirmation } from "../confirmation";
 import type { ContentWorkbenchFeature } from "../features/content/use-content-workbench-feature";
 import type { ArticleAttentionItem } from "../types/publication";
@@ -62,6 +64,9 @@ export default function PlatformWorkbench({
   onOpenSettings,
 }: PlatformWorkbenchProps) {
   const { confirm } = useConfirmation();
+  const regenerationRequest = useRef<{ key: string; requestId: string } | null>(
+    null,
+  );
   const { snapshot, feature } = usePlatformFeature();
   const center = submissionCenter.snapshot;
   const [clientFilter, setClientFilter] = useState<string>("");
@@ -110,6 +115,7 @@ export default function PlatformWorkbench({
     });
   const [section, setSection] =
     useState<SubmissionCenterSection>(initialSection);
+  const generation = useGenerationFeature(section === "attention");
 
   useEffect(() => {
     setSection(initialSection);
@@ -487,7 +493,8 @@ export default function PlatformWorkbench({
               {residue.phase === "awaiting-confirmation" && (
                 <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[11px] text-amber-900">
                   <span>
-                    可清理 {residue.cleanableCount} 项，另有 {residue.reportedCount} 项仅报告。
+                    可清理 {residue.cleanableCount} 项，另有{" "}
+                    {residue.reportedCount} 项仅报告。
                   </span>
                   <Button
                     size="sm"
@@ -502,9 +509,7 @@ export default function PlatformWorkbench({
               )}
               {residue.feedback && (
                 <p
-                  role={
-                    residue.feedback.kind === "error" ? "alert" : "status"
-                  }
+                  role={residue.feedback.kind === "error" ? "alert" : "status"}
                   className={`mt-2 text-[11px] ${
                     residue.feedback.kind === "error"
                       ? "text-rose-700"
@@ -548,6 +553,31 @@ export default function PlatformWorkbench({
               </p>
             )}
             <ArticleAttentionPanel
+              onRegenerate={async (attentionIds) => {
+                const key = JSON.stringify([
+                  generation.snapshot.scope?.workspaceRuntimeId,
+                  attentionIds.slice().sort(),
+                ]);
+                if (regenerationRequest.current?.key !== key)
+                  regenerationRequest.current = {
+                    key,
+                    requestId: crypto.randomUUID(),
+                  };
+                const result = await generation.regenerate({
+                  attentionIds,
+                  requestId: regenerationRequest.current.requestId,
+                  confirmed: true,
+                });
+                if (result && !result.ignored)
+                  regenerationRequest.current = null;
+                return result;
+              }}
+              extraActionBusy={
+                generation.snapshot.commands.regenerate.busy ||
+                ["running", "pausing"].includes(
+                  generation.snapshot.batch?.status || "",
+                )
+              }
               snapshot={attentionSnapshot}
               onRefresh={attentionFeature.refresh}
               onPreviewAction={attentionFeature.previewAction}
@@ -555,7 +585,13 @@ export default function PlatformWorkbench({
               getTargetLabel={(item) =>
                 item.targetLabel || "未指定目标 / 账号未记录"
               }
-              getClientLabel={(item) => content.snapshot.clients.find((client) => client.id === item.clientId)?.name || item.clientId || "客户未记录"}
+              getClientLabel={(item) =>
+                content.snapshot.clients.find(
+                  (client) => client.id === item.clientId,
+                )?.name ||
+                item.clientId ||
+                "客户未记录"
+              }
               onOpenPublication={openPublication}
               onOpenArticleLibrary={openSubmission}
               onOpenPlatformSettings={onOpenSettings}
@@ -563,6 +599,81 @@ export default function PlatformWorkbench({
               onOpenArticle={openArticle}
               onAttentionAction={(item) => setAttentionDetail(item)}
             />
+            {generation.snapshot.hydration.error && (
+              <p role="alert" className="text-sm text-rose-700">
+                生成进度暂时无法确认，请刷新进度；不要重复创建生成任务。
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    void generation
+                      .refresh("attention-refresh")
+                      .catch(() =>
+                        reportRuntimeDiagnostic(
+                          "GENERATION_RUNTIME_REFRESH_FAILED",
+                          "workspace-invalidation",
+                        ),
+                      )
+                  }
+                >
+                  刷新生成进度
+                </Button>
+              </p>
+            )}
+            {generation.snapshot.batch?.id.startsWith("regeneration-") && (
+              <Surface>
+                <h3 className="font-semibold">重新生成进度</h3>
+                <p role="status" className="mt-2 text-sm">
+                  共 {generation.snapshot.batch.counts.total} 篇，成功{" "}
+                  {generation.snapshot.batch.counts.succeeded} 篇，失败{" "}
+                  {generation.snapshot.batch.counts.failed} 篇，待执行{" "}
+                  {generation.snapshot.batch.counts.pending} 篇，中断{" "}
+                  {generation.snapshot.batch.counts.interrupted} 篇。
+                </p>
+                <p className="mt-2 text-xs text-slate-500">
+                  原文章、失败记录与需处理事项保留。失败或中断的生成任务可在内容生产的批量生成页继续处理。
+                </p>
+                <ul className="my-2 text-xs">
+                  {generation.snapshot.batch.tasks.map((task) => (
+                    <li key={task.id}>
+                      {center.data.attention.items.find((item) => item.clientId === task.clientId && item.articleId === task.sourceArticleId)?.titleSnapshot || "原文章"}：
+                      {(
+                        {
+                          pending: "等待中",
+                          running: "生成中",
+                          succeeded: "已生成新文章",
+                          failed: "生成失败，请检查资料或 AI 设置",
+                          interrupted: "已中断",
+                          cancelled: "已取消",
+                        } as Record<string, string>
+                      )[task.status] || task.status}
+                      {task.articleId && (
+                        <Button
+                          size="sm"
+                          onClick={() =>
+                            onOpenArticleLibrary({
+                              clientId: task.clientId,
+                              articleId: task.articleId || undefined,
+                              destination: "article",
+                            })
+                          }
+                        >
+                          打开新文章
+                        </Button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                <Button
+                  onClick={() =>
+                    onOpenArticleLibrary({
+                      generationBatchId: generation.snapshot.batch.id,
+                    })
+                  }
+                >
+                  查看本批次文章
+                </Button>
+              </Surface>
+            )}
             <Button className="justify-self-start" onClick={onOpenOrders}>
               查看真实订单
             </Button>

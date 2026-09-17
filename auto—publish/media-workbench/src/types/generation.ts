@@ -78,6 +78,7 @@ export interface GenerationBatchPreview {
 export type GenerationTaskStatus =
   "pending" | "running" | "succeeded" | "failed" | "interrupted" | "cancelled";
 export interface GenerationBatchTask {
+  sourceArticleId?: string;
   id: string;
   clientId: string;
   platform: string;

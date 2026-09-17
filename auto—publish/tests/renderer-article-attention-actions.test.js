@@ -49,7 +49,23 @@ test('article attention actions produce visible publication/detail results', asy
       const repair = { attentionId: 'repair-1', kind: 'removal_needs_repair', owner: 'article-removal-recovery', freeze: { article: true, reasonCode: 'REMOVAL_NEEDS_REPAIR' }, resolutionPriority: 220, safeFacts: {}, articleId: 'article-missing', clientId: article.clientId, titleSnapshot: '删除事务待修复', transactionId: 'transaction-1', status: 'needs_repair', reasonCode: 'ARTICLE_REMOVAL_BLOCKED', message: '删除事务未完成，需要重新预检并继续', allowedActions: ['retry-removal', 'inspect'] };
       const publication = { publicationId: 'publication-1', clientId: article.clientId, articleId: article.id, platformId: 'hepan', targetKey: 'platform:hepan:account:account-1', displayName: '蓝色河畔', status: 'failed', updatedAt: article.updatedAt, attempts: [{ attemptId: 'attempt-1', status: 'failed', updatedAt: article.updatedAt, errorCode: 'REMOTE_REJECTED' }] };
       const calls = [];
+      let generationBatch = null;
+      let generationSequence = 0;
+      const generationListeners = new Set();
+      window.__regenerationCalls = [];
+      window.__makeSecondContentFailure = () => { credentialsFailure.reasonCode = 'HEPAN_CONTENT_REJECTED'; credentialsFailure.reasonSummary = '内容审核未通过'; };
+      window.__completeRegeneration = () => {
+        generationBatch = { ...generationBatch, status: 'failed', counts: { ...generationBatch.counts, pending: 0, failed: 1, succeeded: generationBatch.counts.total - 1 } };
+        generationListeners.forEach((listener) => listener({ runtimeId: 'generation-runtime', sequence: ++generationSequence, batchId: generationBatch.id, status: 'failed', batch: generationBatch, counts: generationBatch.counts, capabilities: { canResume: true } }));
+      };
       const content = {
+        getGenerationRuntimeSnapshot: () => ok({ runtimeId: 'generation-runtime', sequence: generationSequence, runtime: { batchId: generationBatch?.id || null, status: generationBatch?.status || 'idle' }, batch: generationBatch, capabilities: {} }),
+        onGenerationBatchState: (listener) => { generationListeners.add(listener); return () => generationListeners.delete(listener); },
+        regenerateAttentionItems: (input) => {
+          window.__regenerationCalls.push(input);
+          generationBatch = { id: 'regeneration-fixture', status: 'running', tasks: [], counts: { total: input.attentionIds.length, succeeded: 0, failed: 0, pending: input.attentionIds.length, interrupted: 0, cancelled: 0 } };
+          return ok({ batch: generationBatch });
+        },
         listClients: () => ok({ clients: [{ id: 'client-other', name: '另一个客户', knowledgeFiles: [] }, { id: article.clientId, name: '测试客户', knowledgeFiles: [] }] }),
         getClientDetails: (clientId) => ok({ client: { id: clientId, name: clientId === article.clientId ? '测试客户' : '另一个客户', knowledgeFiles: [] }, research: [] }),
         listGeneratedArticles: () => ok({ articles: [article] }),
@@ -164,27 +180,49 @@ test('article attention actions produce visible publication/detail results', asy
     assert.ok(await attentionRegion.getByText('尚未选择需处理项', { exact: true }).isVisible());
     await attentionRegion.getByRole('button', { name: '全选当前结果', exact: true }).click();
     assert.ok(await attentionRegion.getByText('已选 5 项；其中 1 项可重新生成，2 项可改投其他平台。', { exact: true }).isVisible());
-    assert.equal(await attentionRegion.getByRole('button', { name: '批量重新生成', exact: true }).isDisabled(), true);
+    assert.equal(await attentionRegion.getByRole('button', { name: /^批量重新生成/ }).isDisabled(), true);
     assert.equal(await attentionRegion.getByRole('button', { name: '批量改投其他平台', exact: true }).isDisabled(), true);
     await attentionRegion.getByRole('button', { name: '取消全选', exact: true }).click();
 
     await attentionCheckboxes.nth(0).check();
     assert.ok(await attentionRegion.getByText('已选 1 项；其中 1 项可重新生成，1 项可改投其他平台。', { exact: true }).isVisible());
-    assert.equal(await attentionRegion.getByRole('button', { name: '批量重新生成', exact: true }).isDisabled(), false);
+    assert.equal(await attentionRegion.getByRole('button', { name: /^批量重新生成/ }).isDisabled(), false);
     assert.equal(await attentionRegion.getByRole('button', { name: '批量改投其他平台', exact: true }).isDisabled(), false);
     await attentionCheckboxes.nth(0).uncheck();
 
     // 账号类失败不提供重新生成，但可提示设置账号并允许改投。
     await attentionCheckboxes.nth(1).check();
     assert.ok(await attentionRegion.getByText('已选 1 项；其中 0 项可重新生成，1 项可改投其他平台。', { exact: true }).isVisible());
-    assert.equal(await attentionRegion.getByRole('button', { name: '批量重新生成', exact: true }).isDisabled(), true);
+    assert.equal(await attentionRegion.getByRole('button', { name: /^批量重新生成/ }).isDisabled(), true);
     assert.equal(await attentionRegion.getByRole('button', { name: '批量改投其他平台', exact: true }).isDisabled(), false);
 
-    // P1 的批量按钮只做能力占位，不执行 P2/P3 行为。
+    // 改投仍为 P3 占位。
     await attentionRegion.getByRole('button', { name: '批量改投其他平台', exact: true }).click();
     assert.ok(await attentionRegion.getByText(/将在后续阶段接入，本次未执行/).isVisible());
     assert.deepEqual(await page.evaluate(() => window.__attentionActionCalls), []);
     await attentionCheckboxes.nth(1).uncheck();
+
+    // P2 确认前不创建任务；确认后显示现有生成进度，不发起投稿。
+    await attentionCheckboxes.nth(0).check();
+    await attentionRegion.getByRole('button', { name: '批量重新生成（1）', exact: true }).click();
+    const regenerationConfirmation = page.getByRole('dialog', { name: '批量重新生成', exact: true });
+    await regenerationConfirmation.waitFor();
+    assert.ok(await regenerationConfirmation.getByText(/原文章及投稿失败记录保留/).isVisible());
+    await regenerationConfirmation.getByRole('button', { name: '取消', exact: true }).click();
+    assert.deepEqual(await page.evaluate(() => window.__regenerationCalls), []);
+    await attentionRegion.getByRole('button', { name: '批量重新生成（1）', exact: true }).click();
+    await regenerationConfirmation.getByRole('button', { name: '确认生成新文章', exact: true }).click();
+    await page.getByRole('heading', { name: '重新生成进度', exact: true }).waitFor();
+    assert.equal(await page.evaluate(() => window.__regenerationCalls.length), 1);
+    assert.deepEqual(await page.evaluate(() => window.__regenerationCalls[0].attentionIds), ['failed-active-1']);
+    assert.equal(await page.evaluate(() => window.__regenerationCalls[0].confirmed), true);
+    assert.deepEqual(await page.evaluate(() => window.__attentionActionCalls), []);
+    await attentionCheckboxes.nth(0).check();
+    assert.equal(await attentionRegion.getByRole('button', { name: /^批量重新生成/ }).isDisabled(), true);
+    await page.evaluate(() => window.__completeRegeneration());
+    await page.getByText(/共 1 篇，成功 0 篇，失败 1 篇/).waitFor();
+    assert.equal(await attentionCheckboxes.count(), 5);
+    await attentionCheckboxes.nth(0).uncheck();
 
     await attentionRegion.getByRole('button', { name: '打开发布详情', exact: true }).first().click();
     await page.getByRole('heading', { name: '文章库' }).waitFor({ state: 'visible' });
@@ -232,6 +270,19 @@ test('article attention actions produce visible publication/detail results', asy
     assert.deepEqual(await page.evaluate(() => window.__attentionActionCalls), []);
     await page.getByRole('button', { name: '核对详情', exact: true }).last().click();
     await page.getByRole('dialog', { name: '需处理详情' }).waitFor({ state: 'visible' });
+    await page.getByRole('button', { name: '关闭需处理详情' }).last().click();
+    await page.evaluate(() => window.__makeSecondContentFailure());
+    await attentionRegion.getByRole('button', { name: '刷新', exact: true }).click();
+    await attentionCheckboxes.nth(0).check();
+    await attentionCheckboxes.nth(1).check();
+    await attentionRegion.getByRole('button', { name: '批量重新生成（2）', exact: true }).click();
+    await regenerationConfirmation.getByRole('button', { name: '确认生成新文章', exact: true }).click();
+    await page.getByText(/共 2 篇，成功 0 篇/).waitFor();
+    assert.deepEqual(await page.evaluate(() => window.__regenerationCalls[1].attentionIds), ['failed-active-1', 'failed-credentials-1']);
+    await page.evaluate(() => window.__completeRegeneration());
+    await page.getByText(/共 2 篇，成功 1 篇，失败 1 篇/).waitFor();
+    assert.equal(await attentionCheckboxes.count(), 5);
+    assert.deepEqual(await page.evaluate(() => window.__attentionActionCalls), []);
   } finally {
     if (browser) await browser.close();
     if (viteProcess && !viteProcess.killed) viteProcess.kill();

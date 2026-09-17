@@ -1165,6 +1165,18 @@ const rawProductionIpcContractFixtures = [
     },
   },
   {
+    capability: "generation.regenerateAttentionItems",
+    channel: "content:regenerate-attention-items",
+    owner: "generation",
+    request: { requestId: "request-1", attentionIds: ["attention-1"], confirmed: true },
+    result: {
+      batch: {
+        id: "regeneration-fixture", status: "pending", clientSources: [], templates: [], tasks: [],
+        counts: { total: 0, succeeded: 0, failed: 0, pending: 0, interrupted: 0, cancelled: 0 },
+      },
+    },
+  },
+  {
     capability: "generation.abandonBatch",
     channel: "content:abandon-generation-batch",
     owner: "generation",
