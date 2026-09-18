@@ -260,6 +260,11 @@ function createSubmissionCenterSnapshot(options) {
       throw fail("SUBMISSION_CENTER_DEPENDENCY_REQUIRED");
   }
   const cache = new Map();
+  const inFlight = new Map();
+  let generation = 0;
+  const cacheRevision = (clientId, revision) => Number(
+    typeof opts.getCacheRevision === "function" ? opts.getCacheRevision(clientId) : revision,
+  );
 
   async function attempt(clientId, knownRevision, queryPage) {
     const revisionBefore = knownRevision === undefined
@@ -267,6 +272,7 @@ function createSubmissionCenterSnapshot(options) {
       : knownRevision;
     if (!Number.isSafeInteger(revisionBefore) || revisionBefore < 0)
       throw fail("SUBMISSION_CENTER_SNAPSHOT_INVALID");
+    const versionBefore = cacheRevision(clientId, revisionBefore);
     const settled = await Promise.allSettled([
       Promise.resolve().then(() => opts.listRegularQueueGroups({ page: queryPage.page, pageSize: queryPage.pageSize, ...(clientId ? { clientId } : {}) })),
       Promise.resolve().then(() => opts.listPaidMediaBatches({ page: queryPage.page, pageSize: queryPage.pageSize, ...(clientId ? { clientId } : {}) })),
@@ -315,6 +321,8 @@ function createSubmissionCenterSnapshot(options) {
     return {
       revisionBefore,
       revisionAfter,
+      versionBefore,
+      versionAfter: cacheRevision(clientId, revisionAfter),
       snapshot: {
         schemaVersion: 1,
         clientId,
@@ -342,29 +350,43 @@ function createSubmissionCenterSnapshot(options) {
       throw fail("SUBMISSION_CENTER_QUERY_FAILED");
     }
     const revision = Number(opts.getRevision());
-    const cacheRevision = typeof opts.getCacheRevision === "function" ? opts.getCacheRevision() : revision;
-    const key = `${opts.getWorkspaceRuntimeId()}\u0000${clientId || "*"}\u0000${query.page}\u0000${query.pageSize}\u0000${cacheRevision}`;
-    if (cache.has(key)) return frozenClone({ ...cache.get(key), revision });
-    try {
-      let result = await attempt(clientId, revision, query);
-      if (result.revisionBefore !== result.revisionAfter) result = await attempt(clientId, undefined, query);
-      if (result.revisionBefore !== result.revisionAfter)
-        throw fail("SUBMISSION_CENTER_SNAPSHOT_STALE");
-      const finalCacheRevision = typeof opts.getCacheRevision === "function" ? opts.getCacheRevision() : result.revisionBefore;
-      const finalKey = `${opts.getWorkspaceRuntimeId()}\u0000${clientId || "*"}\u0000${query.page}\u0000${query.pageSize}\u0000${finalCacheRevision}`;
-      cache.clear();
-      cache.set(finalKey, frozenClone(result.snapshot));
-      return frozenClone(result.snapshot);
-    } catch (error) {
-      if (error && [
-        "SUBMISSION_CENTER_SNAPSHOT_STALE",
-        "SUBMISSION_CENTER_SNAPSHOT_INVALID",
-      ].includes(error.code)) throw error;
-      throw fail("SUBMISSION_CENTER_QUERY_FAILED");
+    const version = cacheRevision(clientId, revision);
+    const key = JSON.stringify([opts.getWorkspaceRuntimeId(), clientId, query.page, query.pageSize]);
+    const cached = cache.get(key);
+    if (cached && cached.version === version) return frozenClone({ ...cached.snapshot, revision });
+    const pendingKey = JSON.stringify([key, version, generation]);
+    let pending = inFlight.get(pendingKey);
+    if (!pending) {
+      const startedGeneration = generation;
+      pending = Promise.resolve().then(async () => {
+        try {
+          let result = await attempt(clientId, revision, query);
+          if (result.versionBefore !== result.versionAfter) result = await attempt(clientId, undefined, query);
+          if (result.versionBefore !== result.versionAfter || generation !== startedGeneration)
+            throw fail("SUBMISSION_CENTER_SNAPSHOT_STALE");
+          const snapshot = frozenClone({ ...result.snapshot, revision: result.revisionAfter });
+          if (!snapshot.failures.length) {
+            cache.delete(key);
+            cache.set(key, { version: result.versionAfter, snapshot });
+            if (cache.size > 64) cache.delete(cache.keys().next().value);
+          }
+          return snapshot;
+        } catch (error) {
+          if (error && [
+            "SUBMISSION_CENTER_SNAPSHOT_STALE",
+            "SUBMISSION_CENTER_SNAPSHOT_INVALID",
+          ].includes(error.code)) throw error;
+          throw fail("SUBMISSION_CENTER_QUERY_FAILED");
+        }
+      }).finally(() => {
+        if (inFlight.get(pendingKey) === pending) inFlight.delete(pendingKey);
+      });
+      inFlight.set(pendingKey, pending);
     }
+    return frozenClone(await pending);
   }
 
-  return Object.freeze({ get, clear: function () { cache.clear(); } });
+  return Object.freeze({ get, clear: function () { generation += 1; cache.clear(); inFlight.clear(); } });
 }
 
 module.exports = { createSubmissionCenterSnapshot };

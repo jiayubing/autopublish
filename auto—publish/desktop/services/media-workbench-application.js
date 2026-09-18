@@ -128,7 +128,25 @@ function createMediaWorkbenchApplication(options) {
     });
   }
 
-  function orderMutation(command, reasonCode, changed) {
+  function orderInvalidationScope(input, result) {
+    const observation = values.orderObservationTransitions;
+    if (!observation || typeof observation.getOrderObservationContext !== "function") return undefined;
+    try {
+      let orderId = input?.orderId || result?.orderId;
+      const cancellationAttemptId = input?.cancellationAttemptId || result?.cancellationAttemptId;
+      if (!orderId && cancellationAttemptId)
+        orderId = cancellationService().getOrderCancellationContext({ cancellationAttemptId }).orderId;
+      if (!orderId) return undefined;
+      const context = observation.getOrderObservationContext(orderId);
+      return { clientId: context.articleIdentityV1?.clientId };
+    } catch (_) {
+      // Identity lookup is only a cache optimization: a missing/unreadable
+      // context must invalidate globally, never hide a committed mutation.
+      return undefined;
+    }
+  }
+
+  function orderMutation(command, reasonCode, changed, input) {
     return Promise.resolve()
       .then(command)
       .then(
@@ -139,7 +157,7 @@ function createMediaWorkbenchApplication(options) {
               ? changed(result)
               : !result || result.idempotent !== true)
           )
-            invalidateData(reasonCode);
+            invalidateData(reasonCode, orderInvalidationScope(input, result));
           return result;
         },
         (error) => {
@@ -149,10 +167,14 @@ function createMediaWorkbenchApplication(options) {
             error.mutation &&
             error.mutation.changed === true
           )
-            invalidateData(reasonCode);
+            invalidateData(reasonCode, orderInvalidationScope(input));
           throw error;
         },
       );
+  }
+
+  function batchInvalidationScope(batch) {
+    return { clientIds: batch?.items?.map(item => item.articleIdentityV1?.clientId || item.articleRef?.clientId) };
   }
 
   return Object.freeze({
@@ -197,7 +219,7 @@ function createMediaWorkbenchApplication(options) {
         throw error;
       }
       const result = await paidMediaPreflightService.confirm(input || {});
-      if (invalidateData) invalidateData("SUBMISSION_BATCH_CREATED");
+      if (invalidateData) invalidateData("SUBMISSION_BATCH_CREATED", { clientIds: result?.articleRefs?.map(ref => ref.clientId) });
       return result;
     },
     getPaidMediaBatches: (input) => {
@@ -219,11 +241,20 @@ function createMediaWorkbenchApplication(options) {
         throw error;
       }
       const batchId = input && input.batchId;
+      let affected;
+      try {
+        if (typeof batchId === "string" && batchId)
+          affected = batchInvalidationScope(paidMediaBatchOrchestrator.snapshot({ batchId })[0]);
+      } catch (_) {
+        // An unavailable scope must fall back to global invalidation, not
+        // change the execution command's outcome or suppress its notification.
+        affected = undefined;
+      }
       const execution = paidMediaBatchOrchestrator.startBatch(input || {});
-      if (invalidateData) invalidateData("PAID_BATCH_EXECUTION_CHANGED");
+      if (invalidateData) invalidateData("PAID_BATCH_EXECUTION_CHANGED", affected);
       return Promise.resolve(execution).then(
         (result) => {
-          if (invalidateData) invalidateData("PAID_BATCH_EXECUTION_CHANGED");
+          if (invalidateData) invalidateData("PAID_BATCH_EXECUTION_CHANGED", affected);
           return {
             executionStatus:
               result && typeof result.status === "string"
@@ -233,7 +264,7 @@ function createMediaWorkbenchApplication(options) {
           };
         },
         (error) => {
-          if (invalidateData) invalidateData("PAID_BATCH_EXECUTION_CHANGED");
+          if (invalidateData) invalidateData("PAID_BATCH_EXECUTION_CHANGED", affected);
           throw error;
         },
       );
@@ -254,10 +285,10 @@ function createMediaWorkbenchApplication(options) {
         throw error;
       }
       const execution = paidMediaBatchOrchestrator.startAll({ clientId });
-      if (invalidateData) invalidateData("PAID_BATCH_EXECUTION_CHANGED");
+      if (invalidateData) invalidateData("PAID_BATCH_EXECUTION_CHANGED", { clientId });
       return Promise.resolve(execution).then(
         (result) => {
-          if (invalidateData) invalidateData("PAID_BATCH_EXECUTION_CHANGED");
+          if (invalidateData) invalidateData("PAID_BATCH_EXECUTION_CHANGED", { clientId });
           const results = Array.isArray(result && result.results)
             ? result.results.map((item) => ({
                 batchId: item.batchId,
@@ -276,7 +307,7 @@ function createMediaWorkbenchApplication(options) {
           };
         },
         (error) => {
-          if (invalidateData) invalidateData("PAID_BATCH_EXECUTION_CHANGED");
+          if (invalidateData) invalidateData("PAID_BATCH_EXECUTION_CHANGED", { clientId });
           throw error;
         },
       );
@@ -291,7 +322,7 @@ function createMediaWorkbenchApplication(options) {
         throw error;
       }
       const batch = paidMediaBatchOrchestrator.pauseBatch(input || {});
-      if (invalidateData) invalidateData("PAID_BATCH_EXECUTION_CHANGED");
+      if (invalidateData) invalidateData("PAID_BATCH_EXECUTION_CHANGED", batchInvalidationScope(batch));
       return { batch };
     },
     cancelRemainingPaidMediaBatchItems: (input) => {
@@ -307,7 +338,7 @@ function createMediaWorkbenchApplication(options) {
         .then(() => paidMediaBatchOrchestrator.cancelRemaining(input || {}))
         .then((result) => {
           if (invalidateData && result && result.cancelledCount > 0)
-            invalidateData("PAID_BATCH_REMAINING_CANCELLED");
+            invalidateData("PAID_BATCH_REMAINING_CANCELLED", batchInvalidationScope(result.batch));
           return {
             executionStatus:
               result && typeof result.status === "string"
@@ -332,6 +363,8 @@ function createMediaWorkbenchApplication(options) {
       orderMutation(
         () => cancellationService().cancelOrder(input || {}),
         "PAID_ORDER_CANCELLATION_CHANGED",
+        undefined,
+        input,
       ),
     prepareCancellationResolution: (input) =>
       cancellationService().prepareCancellationResolution(input || {}),
@@ -339,16 +372,22 @@ function createMediaWorkbenchApplication(options) {
       orderMutation(
         () => cancellationService().confirmCancellationSucceeded(input || {}),
         "PAID_ORDER_CANCELLATION_CHANGED",
+        undefined,
+        input,
       ),
     confirmCancellationNotApplied: (input) =>
       orderMutation(
         () => cancellationService().confirmCancellationNotApplied(input || {}),
         "PAID_ORDER_CANCELLATION_CHANGED",
+        undefined,
+        input,
       ),
     syncOrder: async (orderNid) => {
       await orderMutation(
         () => orderService.syncOrder(orderNid),
         "PAID_ORDER_OBSERVATION_CHANGED",
+        undefined,
+        { orderId: orderNid },
       );
       const order = orderService
         .listOrderViews()
@@ -376,16 +415,22 @@ function createMediaWorkbenchApplication(options) {
       orderMutation(
         () => orderService.resumeOrderTracking(input || {}),
         "PAID_ORDER_STATUS_ANOMALY_RESOLVED",
+        undefined,
+        input,
       ),
     confirmOrderPublished: (input) =>
       orderMutation(
         () => orderService.confirmOrderPublished(input || {}),
         "PAID_ORDER_STATUS_ANOMALY_RESOLVED",
+        undefined,
+        input,
       ),
     confirmOrderNotPublished: (input) =>
       orderMutation(
         () => orderService.confirmOrderNotPublished(input || {}),
         "PAID_ORDER_STATUS_ANOMALY_RESOLVED",
+        undefined,
+        input,
       ),
     openPublishedUrl: (orderNid) => orderService.openPublishedUrl(orderNid),
   });

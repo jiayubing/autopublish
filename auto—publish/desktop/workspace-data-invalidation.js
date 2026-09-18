@@ -17,17 +17,20 @@ const SCOPES_BY_REASON = Object.freeze({
   SUBMISSION_QUEUE_CLEANED: ["articleManagement", "articleAttention", "platformQueue"],
   REGULAR_QUEUE_GROUP_RUN_INTENT_CHANGED: ["articleManagement", "articleAttention", "platformQueue"],
   REGULAR_QUEUE_GROUP_IMAGE_COUNT_UPDATED: ["articleManagement", "articleAttention", "platformQueue"],
+  REGULAR_QUEUE_GROUP_SUBMISSION_INTERVAL_UPDATED: ["platformQueue"],
   PAID_BATCH_EXECUTION_CHANGED: ["articleManagement", "articleAttention", "orders"],
   PAID_BATCH_REMAINING_CANCELLED: ["articleManagement", "articleAttention", "orders"],
   CONTENT_EXPORT_QUEUED: ["articleManagement", "articleAttention", "platformQueue", "mediaWorkbench"],
   PUBLICATION_RECONCILED: ["articleManagement", "articleAttention", "platformQueue"],
   MEDIA_SUBMIT_COMPLETED: ["articleManagement", "articleAttention", "platformQueue", "orders"],
   PAID_ORDER_RESOLUTION_CHANGED: ["articleManagement", "articleAttention", "orders"],
+  PAID_ORDER_CANCELLATION_CHANGED: ["articleManagement", "articleAttention", "orders"],
   PAID_ORDER_OBSERVATION_CHANGED: ["articleManagement", "articleAttention", "orders"],
   PAID_ORDER_STATUS_ANOMALY_RESOLVED: ["articleManagement", "articleAttention", "orders"],
   PLATFORM_AUTO_TRASH_APPLIED: ["articleManagement", "articleAttention", "platformQueue"],
   ARTICLE_REMOVAL_TRANSACTION_CHANGED: ["articleManagement", "articleAttention", "platformQueue"],
   ARTICLE_ATTENTION_RESOLVED: ["articleManagement", "articleAttention", "platformQueue"],
+  ARTICLE_ATTENTION_DOMAIN_MUTATION: ["articleManagement", "articleAttention", "platformQueue", "orders"],
   TRASHED_QUEUE_RESIDUE_RESOLVED: ["articleManagement", "articleAttention", "platformQueue"],
   FAILED_QUEUE_ITEMS_CLEANED: ["articleManagement", "articleAttention", "platformQueue"],
   GENERATION_BATCH_CHANGED: ["articleManagement"],
@@ -72,13 +75,25 @@ function createWorkspaceDataInvalidation(options) {
     ? opts.workspaceRuntimeId : randomUUID();
   let revision = Number.isInteger(opts.initialRevision) && opts.initialRevision >= 0 ? opts.initialRevision : 0;
   let articleReadRevision = revision;
+  let globalArticleReadRevision = revision;
+  const articleReadRevisionByClient = new Map();
   const send = typeof opts.sendToRenderer === "function" ? opts.sendToRenderer : function() {};
 
-  function invalidate(reasonCode) {
+  function invalidate(reasonCode, affected) {
     const code = safeReasonCode(reasonCode);
     const scopes = [...new Set(scopesForReason(code).filter((scope) => ALLOWED_SCOPES.includes(scope)))];
     revision += 1;
-    if (!scopes.length || code === "CONTENT_SOURCE_CHANGED" || scopes.some(scope => scope !== "contentSources")) articleReadRevision = revision;
+    if (!scopes.length || code === "CONTENT_SOURCE_CHANGED" || scopes.some(scope => scope !== "contentSources")) {
+      articleReadRevision = revision;
+      const clientIds = affected && Array.isArray(affected.clientIds)
+        ? affected.clientIds : affected && affected.clientId ? [affected.clientId] : [];
+      if (clientIds.length && clientIds.every(id => typeof id === "string" && id.trim())) {
+        for (const id of clientIds) articleReadRevisionByClient.set(id, revision);
+      } else {
+        globalArticleReadRevision = revision;
+        articleReadRevisionByClient.clear();
+      }
+    }
     send("workspace:data-invalidated", {
       schemaVersion: 1,
       workspaceRuntimeId,
@@ -92,7 +107,9 @@ function createWorkspaceDataInvalidation(options) {
   return {
     invalidate,
     getRevision: function() { return revision; },
-    getArticleReadRevision: function() { return articleReadRevision; },
+    getArticleReadRevision: function(clientId) {
+      return clientId ? Math.max(globalArticleReadRevision, articleReadRevisionByClient.get(clientId) || 0) : articleReadRevision;
+    },
     getWorkspaceRuntimeId: function() { return workspaceRuntimeId; },
     getRuntimeIdentity: function() {
       return { workspaceRuntimeId, revision };

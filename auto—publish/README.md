@@ -90,6 +90,10 @@ ArticleStore 只把同目录的 JSON 文章文件作为运行时真源，并维�
 
 文章保存、普通队列入队/启动、付费批次确认、恢复和永久删除后的文章库查询由 workspace invalidation 负责；command 完成、失败或过期返回不再额外刷新。保存冲突和结果不确定也发送失效通知，不自动重试保存。删除事务继续由既有事务事件与结果去重路径刷新，对应 workspace 通知不重复查询文章库。定向回归见 `tests/article-management-refresh-ownership.test.mjs`。
 
+媒体与订单的 workspace refresh 返回完整异步任务供 coordinator 合并；订单写入后的列表由 invalidation 单独刷新。资源刷新/收藏操作没有 workspace 通知，仍保留一次 command-result 读取。平台 feature 按消费页面挂载：投稿中心加载队列，文章投稿弹窗和设置账号页按需加载平台目录；订单与资源页不加载平台队列/账号。文章库收藏媒体分页由独立轻量 query owner 管理，workspace 切换、翻页和卸载后的迟到响应不能回写。
+
+文章管理、attention 与投稿中心使用客户读取版本复用缓存；已知客户的写入不淘汰其他客户缓存，跨客户队列组/全局同步/身份不可确认的变化保留全局失效。投稿中心保留至多64个查询缓存，并合并同版本并发读取；失败分区不缓存。全局事件 revision 继续用于通知顺序和公开合同，不作为所有客户唯一缓存版本。定向回归见 `tests/refresh-invalidation-ownership.test.mjs` 与 `tests/renderer-page-navigation.test.js`。
+
 豆包继续按客户分组串行采集，每轮采集（包括重试失败）为客户新开对话，同一客户在本轮内共用。
 不再读取或写入历史客户会话 URL，旧文件保留但不参与采集。暂停后继续仍使用本轮对话。
 发送前先等待上一题结束，

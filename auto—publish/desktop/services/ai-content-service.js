@@ -118,9 +118,9 @@ function createAiContentService(opts) {
     }
   }
 
-  function notifyAttentionChange(reasonCode) {
+  function notifyAttentionChange(reasonCode, clientId) {
     if (typeof options.onDataInvalidated !== "function") return;
-    try { options.onDataInvalidated(reasonCode); } catch (error) {
+    try { options.onDataInvalidated(reasonCode, { clientId }); } catch (error) {
       reportDiagnostic({
         code: "AI_CONTENT_INVALIDATION_LISTENER_FAILED",
         module: "ai-content-service",
@@ -275,7 +275,7 @@ function createAiContentService(opts) {
         : contentStore.saveArticle(request.article);
     } catch (error) {
       if (error && error.code === "ARTICLE_EDIT_CONFLICT") {
-        notifyAttentionChange("ARTICLE_EDIT_CONFLICT");
+        notifyAttentionChange("ARTICLE_EDIT_CONFLICT", request.article.clientId);
         return {
           outcome: "conflict",
           code: "ARTICLE_EDIT_CONFLICT",
@@ -284,7 +284,7 @@ function createAiContentService(opts) {
         };
       }
       if (error && error.code === "ARTICLE_MUTATION_RESULT_UNCERTAIN") {
-        notifyAttentionChange("ARTICLE_MUTATION_RESULT_UNCERTAIN");
+        notifyAttentionChange("ARTICLE_MUTATION_RESULT_UNCERTAIN", request.article.clientId);
         return {
           outcome: "result-uncertain",
           code: "ARTICLE_MUTATION_RESULT_UNCERTAIN",
@@ -294,7 +294,7 @@ function createAiContentService(opts) {
       }
       throw error;
     }
-    notifyAttentionChange("ARTICLE_SAVED");
+    notifyAttentionChange("ARTICLE_SAVED", request.article.clientId);
     if (saved && (saved.outcome === "saved" || saved.outcome === "conflict" || saved.outcome === "result-uncertain")) return saved;
     return {
       outcome: "saved",
@@ -310,13 +310,13 @@ function createAiContentService(opts) {
 
   function restoreArticle(input) {
     const result = articleTrashService.restoreArticle(input);
-    notifyAttentionChange("ARTICLE_RESTORED");
+    notifyAttentionChange("ARTICLE_RESTORED", input && input.clientId);
     return result;
   }
 
   function permanentlyDeleteArticle(input) {
     const result = articleTrashService.permanentlyDeleteArticle(input);
-    notifyAttentionChange("ARTICLE_PERMANENTLY_DELETED");
+    notifyAttentionChange("ARTICLE_PERMANENTLY_DELETED", input && input.clientId);
     return result;
   }
 

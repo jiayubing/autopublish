@@ -864,6 +864,7 @@ function createOrderObservationAggregate(
         row.orderSnapshotV1,
       ),
       orderRevision: queryBinding.orderRevision,
+      articleIdentityV1: row.orderSnapshotV1.articleIdentityV1,
       latestFactFingerprint: queryBinding.latestFactFingerprint,
       anomalyFingerprint: queryBinding.anomalyFingerprint,
       published: queryBinding.published,

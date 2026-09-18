@@ -1,6 +1,6 @@
 # 规模审计修复
 
-状态：BATCH_4_COMPLETE / OVERALL_PENDING。SA-01 / SA-02 / SA-04 已修复；SA-03 付费页面与普通队列展示截断、SA-05 投稿中心付费读取、以及执行/启动全量快照（SA-03/07 执行链）已关闭。SA-06 宽失效与 SA-07 的 App 默认装载投稿中心 feature 仍待后续批次，不宣称整个规模目标通过。
+状态：REFRESH_INVALIDATION_LOCAL_VERIFICATION / OVERALL_PENDING。SA-01 / SA-02 / SA-04 已修复；SA-03 付费页面与普通队列展示截断、SA-05 投稿中心付费读取、以及执行/启动全量快照（SA-03/07 执行链）已关闭。2026-09-18 本轮收敛 SA-06 客户读取版本与 SA-07 页面消费范围，以及用户提出的5项 Refresh / Invalidation / Feature Owner 问题；当前修复与验证见文末。不宣称整个规模目标或 clean HEAD 发布门禁通过。
 
 保持唯一 OperationalStore owner、FIFO、暂停/在途/不确定结果及发布证据校验；不修改真实数据库，不执行外部投稿。
 
@@ -134,3 +134,15 @@
 - exclusive client SQL/JS 拒绝 null clientId 与 mixed-client batch，不改变正常单客户路径。
 
 验证：`npm run test:desktop-core` 291 文件、1793/1793；`typecheck:main` / renderer / bridge、`lint`、`format:check`、`build:renderer`、`build:preload`、`git diff --check` 通过。未 merge。
+
+## 2026-09-18：Refresh / Invalidation / Feature Owner 有界收尾
+
+- 用户授权：核对所给审计、建立分支并修复。分支 `codex/refresh-invalidation-owner-fixes`，基线 `123b0ec4f605ae79d20a3b82a8f32a76b38ae1e4`。不自动 commit/merge/push，不访问真实账号、订单或生产库；原有未跟踪 `work/` 保留。
+- 审计校正：资源刷新/收藏没有 workspace 通知，不能删其 command-result 读取；Platform Feature 同时被投稿弹窗和设置消费，不能只在投稿中心提供 context。
+- 实现：Media scope callback 返回 Promise；订单 mutation 由通知唯一刷新；补齐 cancellation、submission interval 和 attention domain mutation 的实际 reason 路由。
+- 页面：Platform Provider 只在内容生产/文章库/投稿中心/设置消费页面挂载，队列默认只由投稿中心 initial 加载，弹窗/账号设置按 workspace scope 读取目录；资源与订单页不注册平台消费者。账号 hydration 归 provider，直接组件不再重复读取账号。
+- 收藏媒体：独立 lazy query owner + QueryIdentity；拒绝乱序、旧 workspace 和卸载后的回写，不挂载完整 Media Feature。
+- 缓存：单一 invalidation owner 保留全局事件 revision，维护客户 article read revision；article management、attention、submission center 都按客户读取。投稿中心同版本 in-flight 合并，至多64个查询缓存，不缓存失败分区，clear 可 fence 在途构建。
+- 客户身份来自直接业务输入或权威 observation/batch context，覆盖保存/生成、回收与恢复、普通入队/移除/发布结果、attention resolution、订单写入与付费批次。订单 context 仅增加既有文章身份供内部失效使用，未改变 schema、IPC DTO、writer 或远端副作用。
+- 保留边界：普通队列组可跨客户、全局同步/启动/暂停及无法确认完整身份的事件仍全局失效；不从分页预览猜测客户全集。单个付费批次启动为范围判定额外读取该 batch 的完整现有 snapshot，不枚举其他批次；身份读取失败全局失效，不改 command 结果。
+- 本轮只对已知 findings、修复 diff、直接调用方及受影响缓存/异步不变量做有界复核，不重启 fresh full audit。最终命令、结果和源状态摘要见 [本轮验证记录](REFRESH-INVALIDATION-2026-09-18.md)。

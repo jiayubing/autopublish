@@ -64,7 +64,6 @@ function createArticleAttentionQuery(options) {
   const hasAuthoritativeRevision = typeof opts.getRevision === "function";
   let fallbackRevision = 1;
   const cachedSnapshots = new Map();
-  let cachedRevision = null;
 
   function reader(name, fallback) {
     return typeof readers[name] === "function" ? readers[name] : fallback;
@@ -601,14 +600,12 @@ function createArticleAttentionQuery(options) {
 
   function snapshot(clientId) {
     const revision = currentRevision();
-    const cacheRevision = typeof opts.getCacheRevision === "function" ? opts.getCacheRevision() : revision;
-    if (cachedRevision !== cacheRevision) {
-      cachedSnapshots.clear();
-      cachedRevision = cacheRevision;
+    const cacheRevision = typeof opts.getCacheRevision === "function" ? opts.getCacheRevision(clientId) : revision;
+    const cacheKey = clientId || "";
+    if (cachedSnapshots.get(cacheKey)?.cacheRevision !== cacheRevision) {
+      cachedSnapshots.set(cacheKey, { cacheRevision, entries: entries(clientId) });
+      if (cachedSnapshots.size > 64) cachedSnapshots.delete(cachedSnapshots.keys().next().value);
     }
-    const cacheKey = `${cacheRevision}\u0000${clientId || ""}`;
-    if (!cachedSnapshots.has(cacheKey))
-      cachedSnapshots.set(cacheKey, { revision: revision, entries: entries(clientId) });
     return { ...cachedSnapshots.get(cacheKey), revision };
   }
 
@@ -665,7 +662,6 @@ function createArticleAttentionQuery(options) {
   function invalidate() {
     if (!hasAuthoritativeRevision) fallbackRevision += 1;
     cachedSnapshots.clear();
-    cachedRevision = null;
     return currentRevision();
   }
 

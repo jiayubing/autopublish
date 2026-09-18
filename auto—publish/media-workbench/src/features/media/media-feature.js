@@ -446,11 +446,10 @@ export function createMediaFeature(adapters = {}) {
         }),
       "ORDER_STATUS_ANOMALY_RESOLUTION_FAILED",
       "订单状态核对未能安全完成。",
-      async () => {
+      () => {
         const next = { ...orders.anomalyPreparations };
         delete next[orderId];
         orders = { ...orders, anomalyPreparations: next };
-        await refreshOrders("command-result");
       },
       {
         exclusiveOrderMutation: true,
@@ -586,8 +585,7 @@ export function createMediaFeature(adapters = {}) {
         () => adapters.syncOrder(orderNid),
         "MEDIA_ORDER_SYNC_FAILED",
         "同步订单失败。",
-        async () => {
-          await refreshOrders("command-result");
+        () => {
           syncingOrderNid = null;
           publish();
         },
@@ -615,14 +613,13 @@ export function createMediaFeature(adapters = {}) {
         () => adapters.syncAllOrders(),
         "MEDIA_ORDER_SYNC_FAILED",
         "刷新订单失败。",
-        async (result) => {
+        (result) => {
           orders = {
             ...orders,
             syncFailures: Array.isArray(result?.items)
               ? result.items.filter((item) => !item.ok)
               : [],
           };
-          await refreshOrders("command-result");
         },
         { exclusiveOrderMutation: true },
       );
@@ -644,7 +641,7 @@ export function createMediaFeature(adapters = {}) {
         () => adapters.cancelOrder(input),
         "ORDER_CANCELLATION_FAILED",
         "取消结果不确定，请人工核对。",
-        () => refreshOrders("command-result"),
+        undefined,
         { exclusiveOrderMutation: true },
       );
     },
@@ -664,7 +661,7 @@ export function createMediaFeature(adapters = {}) {
         () => adapters.confirmCancellationSucceeded(input),
         "ORDER_CANCELLATION_RESOLUTION_FAILED",
         "无法确认订单已取消。",
-        () => refreshOrders("command-result"),
+        undefined,
         { exclusiveOrderMutation: true },
       );
     },
@@ -674,7 +671,7 @@ export function createMediaFeature(adapters = {}) {
         () => adapters.confirmCancellationNotApplied(input),
         "ORDER_CANCELLATION_RESOLUTION_FAILED",
         "无法确认取消未生效。",
-        () => refreshOrders("command-result"),
+        undefined,
         { exclusiveOrderMutation: true },
       );
     },

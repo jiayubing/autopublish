@@ -203,9 +203,9 @@ function createArticleManagementSnapshot(options) {
     return fallback;
   }
 
-  function cacheRevision() {
+  function cacheRevision(clientId) {
     return typeof opts.getCacheRevision === "function"
-      ? opts.getCacheRevision()
+      ? opts.getCacheRevision(clientId)
       : Number(getRevision()) || 0;
   }
 
@@ -214,7 +214,7 @@ function createArticleManagementSnapshot(options) {
       typeof input === "string" ? input : input && input.clientId,
     );
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      const version = cacheRevision();
+      const version = cacheRevision(clientId);
       const cacheKey = key(clientId, version);
       const startedGeneration = generation;
       let serialized = cache.get(cacheKey);
@@ -230,7 +230,7 @@ function createArticleManagementSnapshot(options) {
         }
         serialized = await pending;
       }
-      if (serialized !== null && startedGeneration === generation && version === cacheRevision()) {
+      if (serialized !== null && startedGeneration === generation && version === cacheRevision(clientId)) {
         return { ...JSON.parse(serialized), revision: Number(getRevision()) || 0 };
       }
     }
@@ -443,7 +443,7 @@ function createArticleManagementSnapshot(options) {
       lifecycleVersion: ARTICLE_LIFECYCLE_PROJECTION_VERSION,
       lifecycleCounts: lifecycle.counts,
     };
-    if (generation !== startedGeneration || version !== cacheRevision()) return null;
+    if (generation !== startedGeneration || version !== cacheRevision(clientId)) return null;
     const serialized = JSON.stringify(snapshot);
     // Cache one completed version per client; callers parse independent copies.
     const previousKey = latestCacheKeyByClient.get(clientId);

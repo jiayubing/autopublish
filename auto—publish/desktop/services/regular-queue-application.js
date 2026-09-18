@@ -54,10 +54,10 @@ function createRegularQueueApplication(options) {
     ? value.onDataInvalidated
     : null;
 
-  function notifyDataInvalidated(reasonCode) {
+  function notifyDataInvalidated(reasonCode, affected) {
     if (!onDataInvalidated) return;
     try {
-      onDataInvalidated(reasonCode);
+      onDataInvalidated(reasonCode, affected);
     } catch (error) {
       reportDiagnostic({
         code: "REGULAR_QUEUE_INVALIDATION_LISTENER_FAILED",
@@ -376,7 +376,7 @@ function createRegularQueueApplication(options) {
       reasonCode: retargetConflicts.get(canonicalArticleRefKey(ref)),
     }));
     if (result.admittedCount > 0)
-      notifyDataInvalidated("SUBMISSION_BATCH_CREATED");
+      notifyDataInvalidated("SUBMISSION_BATCH_CREATED", { clientIds: refs.map(ref => ref.clientId) });
     return Object.freeze(Object.assign({}, result, {
       items: Object.freeze([...result.items, ...conflicts]),
       conflictCount: result.conflictCount + conflicts.length,
@@ -436,7 +436,7 @@ function createRegularQueueApplication(options) {
     });
     const result = coordinator.removePendingQueueItems({ items, operationId: request.operationId });
     if (result.removedCount > 0)
-      notifyDataInvalidated("SUBMISSION_BATCH_CANCELLED");
+      notifyDataInvalidated("SUBMISSION_BATCH_CANCELLED", { clientIds: items.map(item => item.articleRef.clientId) });
     return Object.freeze(Object.assign({}, result, {
       items: Object.freeze(result.items || []),
     }));

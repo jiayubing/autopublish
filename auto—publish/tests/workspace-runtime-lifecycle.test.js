@@ -156,6 +156,9 @@ it("maps every production workspace mutation reason explicitly without a broad f
   assert.deepEqual(scopesForReason("CONTENT_EXPORT_QUEUED"), ["articleManagement", "articleAttention", "platformQueue", "mediaWorkbench", "submissionCenter"]);
   assert.deepEqual(scopesForReason("MEDIA_SUBMIT_COMPLETED"), ["articleManagement", "articleAttention", "platformQueue", "orders", "submissionCenter"]);
   assert.deepEqual(scopesForReason("PAID_ORDER_RESOLUTION_CHANGED"), ["articleManagement", "articleAttention", "orders", "submissionCenter"]);
+  assert.deepEqual(scopesForReason("PAID_ORDER_CANCELLATION_CHANGED"), ["articleManagement", "articleAttention", "orders", "submissionCenter"]);
+  assert.deepEqual(scopesForReason("REGULAR_QUEUE_GROUP_SUBMISSION_INTERVAL_UPDATED"), ["platformQueue", "submissionCenter"]);
+  assert.deepEqual(scopesForReason("ARTICLE_ATTENTION_DOMAIN_MUTATION"), ["articleManagement", "articleAttention", "platformQueue", "orders", "submissionCenter"]);
   ["PAID_BATCH_EXECUTION_CHANGED", "PAID_BATCH_REMAINING_CANCELLED"].forEach(function(reasonCode) {
     assert.deepEqual(scopesForReason(reasonCode), ["articleManagement", "articleAttention", "orders", "submissionCenter"], reasonCode);
   });

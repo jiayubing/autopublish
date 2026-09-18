@@ -20,9 +20,7 @@ import {
 import { SettingsFeatureProvider } from "./features/settings/settings-context";
 import { useSubmissionCenterFeature } from "./features/submission-center/use-submission-center-feature";
 import type { ArticleLibraryNavigationIntent } from "./article-library-navigation";
-import { getPoolPage } from "./bridge/media";
-import { DEFAULT_RESOURCE_PAGE_SIZE } from "./features/media/media-feature.js";
-import type { FavoriteMediaPage } from "./components/content/GeneratedArticlesView.types";
+import { useFavoriteMediaQuery } from "./features/media/use-favorite-media-query";
 import {
   articleLibraryBadgeCount,
   ordersBadgeCount,
@@ -46,16 +44,6 @@ const VIEW_LABELS: Record<ViewMode, string> = {
   orders: "订单",
   resources: "媒体资源",
   settings: "设置",
-};
-
-const EMPTY_FAVORITE_MEDIA_PAGE: FavoriteMediaPage = {
-  items: [],
-  total: 0,
-  page: 1,
-  totalPages: 0,
-  hasPrev: false,
-  hasNext: false,
-  loading: false,
 };
 
 type MainNavigationGuard = (action: () => void) => void;
@@ -84,11 +72,7 @@ function rememberLastView(view: ViewMode) {
 }
 
 export default function App() {
-  return (
-    <PlatformFeatureProvider>
-      <AppContent />
-    </PlatformFeatureProvider>
-  );
+  return <AppContent />;
 }
 
 export function WorkspaceScopedConfirmationHost({
@@ -161,9 +145,8 @@ function ArticleLibraryPage({
   onBadgeChange: (count: number) => void;
   onReadinessChange: (readiness: PageReadiness) => void;
 }) {
-  const [favoriteMediaPage, setFavoriteMediaPage] = useState(
-    EMPTY_FAVORITE_MEDIA_PAGE,
-  );
+  const { snapshot: favoriteMediaPage, loadPage: loadFavoriteMediaPage } =
+    useFavoriteMediaQuery();
   useEffect(() => {
     onBadgeChange(articleLibraryBadgeCount(content.snapshot.management));
   }, [content.snapshot.management, onBadgeChange]);
@@ -185,37 +168,6 @@ function ArticleLibraryPage({
     content.snapshot.scope,
     onReadinessChange,
   ]);
-
-  async function loadFavoriteMediaPage(page: number) {
-    setFavoriteMediaPage((current) => ({
-      ...current,
-      page,
-      loading: true,
-      errorMessage: undefined,
-    }));
-    try {
-      const result = await getPoolPage({
-        page,
-        pageSize: DEFAULT_RESOURCE_PAGE_SIZE,
-        resourceIds: [],
-      });
-      setFavoriteMediaPage({
-        items: result.items,
-        total: result.total,
-        page: result.page,
-        totalPages: result.totalPages,
-        hasPrev: result.hasPrev,
-        hasNext: result.hasNext,
-        loading: false,
-      });
-    } catch (_) {
-      setFavoriteMediaPage((current) => ({
-        ...current,
-        loading: false,
-        errorMessage: "无法加载收藏媒体。",
-      }));
-    }
-  }
 
   return (
     <ContentWorkbench
@@ -504,13 +456,15 @@ function AppContent() {
                   transition={{ duration: 0.14 }}
                   className="h-full"
                 >
-                  <ContentProductionPage
-                    content={content}
-                    initialBatchClientIds={batchClientIds}
-                    onOpenArticleLibrary={openArticleLibrary}
-                    onOpenOrders={() => changeView("orders")}
-                    onReadinessChange={reportReadiness}
-                  />
+                  <PlatformFeatureProvider>
+                    <ContentProductionPage
+                      content={content}
+                      initialBatchClientIds={batchClientIds}
+                      onOpenArticleLibrary={openArticleLibrary}
+                      onOpenOrders={() => changeView("orders")}
+                      onReadinessChange={reportReadiness}
+                    />
+                  </PlatformFeatureProvider>
                 </motion.div>
               )}
 
@@ -536,19 +490,21 @@ function AppContent() {
                   transition={{ duration: 0.14 }}
                   className="h-full"
                 >
-                  <ArticleLibraryPage
-                    content={content}
-                    articleIntent={articleLibraryIntent}
-                    onArticleIntentConsumed={consumeArticleLibraryIntent}
-                    onOpenArticleLibrary={openArticleLibrary}
-                    onOpenOrders={() => changeView("orders")}
-                    onOpenAttention={openAttention}
-                    onMainNavigationGuardChange={
-                      registerArticleLibraryNavigationGuard
-                    }
-                    onBadgeChange={reportArticleLibraryBadge}
-                    onReadinessChange={reportReadiness}
-                  />
+                  <PlatformFeatureProvider>
+                    <ArticleLibraryPage
+                      content={content}
+                      articleIntent={articleLibraryIntent}
+                      onArticleIntentConsumed={consumeArticleLibraryIntent}
+                      onOpenArticleLibrary={openArticleLibrary}
+                      onOpenOrders={() => changeView("orders")}
+                      onOpenAttention={openAttention}
+                      onMainNavigationGuardChange={
+                        registerArticleLibraryNavigationGuard
+                      }
+                      onBadgeChange={reportArticleLibraryBadge}
+                      onReadinessChange={reportReadiness}
+                    />
+                  </PlatformFeatureProvider>
                 </motion.div>
               )}
 
@@ -561,19 +517,21 @@ function AppContent() {
                   transition={{ duration: 0.14 }}
                   className="h-full"
                 >
-                  <SubmissionCenterPage
-                    content={content}
-                    onOpenBatchGeneration={(clientIds) => {
-                      setBatchClientIds(clientIds);
-                      changeView("content-production");
-                    }}
-                    initialSection={submissionCenterSection}
-                    onOpenArticleLibrary={openArticleLibrary}
-                    onOpenOrders={() => changeView("orders")}
-                    onOpenSettings={() => changeView("settings")}
-                    onBadgeChange={reportSubmissionCenterBadge}
-                    onReadinessChange={reportReadiness}
-                  />
+                  <PlatformFeatureProvider loadQueue>
+                    <SubmissionCenterPage
+                      content={content}
+                      onOpenBatchGeneration={(clientIds) => {
+                        setBatchClientIds(clientIds);
+                        changeView("content-production");
+                      }}
+                      initialSection={submissionCenterSection}
+                      onOpenArticleLibrary={openArticleLibrary}
+                      onOpenOrders={() => changeView("orders")}
+                      onOpenSettings={() => changeView("settings")}
+                      onBadgeChange={reportSubmissionCenterBadge}
+                      onReadinessChange={reportReadiness}
+                    />
+                  </PlatformFeatureProvider>
                 </motion.div>
               )}
 
@@ -602,7 +560,9 @@ function AppContent() {
                   transition={{ duration: 0.14 }}
                   className="mx-auto h-full w-full max-w-7xl"
                 >
-                  <SettingsView />
+                  <PlatformFeatureProvider>
+                    <SettingsView />
+                  </PlatformFeatureProvider>
                 </motion.div>
               )}
             </AnimatePresence>
