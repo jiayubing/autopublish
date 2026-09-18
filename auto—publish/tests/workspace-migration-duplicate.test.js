@@ -185,3 +185,38 @@ for (const scenario of [
     }
   });
 }
+
+test("current article trash is not legacy deletion evidence", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "migration-current-trash-"));
+  const trash = path.join(root, ".autopublish/article-trash/client");
+  fs.mkdirSync(trash, { recursive: true });
+  fs.writeFileSync(
+    path.join(trash, "article.tombstone.json"),
+    JSON.stringify({
+      version: 1,
+      clientId: "client",
+      articleId: "article",
+      deletedAt: "2026-09-15T00:00:00.000Z",
+      status: "saved",
+      references: [],
+      permanentlyDeleted: true,
+      purgedAt: "2026-09-15T00:01:00.000Z",
+    }),
+  );
+  try {
+    const planner = createLegacyMigrationPlanner({ workspaceRoot: root });
+    const result = planner.planResult();
+    assert.deepEqual(planner.read().deletions, []);
+    assert.equal(result.plan.entries.length, 0);
+    const composition = createWorkspaceMigrationComposition({
+      workspaceRoot: root,
+    });
+    try {
+      assert.equal(composition.run().status, "not_required");
+    } finally {
+      composition.close();
+    }
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

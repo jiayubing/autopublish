@@ -3,6 +3,7 @@
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
+const { assertTombstone } = require("./article-serialization");
 
 const FINGERPRINT = /^[a-f0-9]{64}$/u;
 const SAFE_REFERENCE = /^(?![A-Za-z]:[\\/])(?!(?:\\|\/))[A-Za-z0-9._:@+\-/]+$/u;
@@ -880,6 +881,8 @@ function readDeletionRecords(root, diagnostics) {
     const articleId = String(relativeParts.at(-1) || "")
       .replace(/\.tombstone\.json$/u, "")
       .replace(/\.trash\.journal$/u, "");
+    if (isCurrentArticleTrashArtifact(filename, value, clientId, articleId))
+      continue;
     const sourceRef = relative(root, filename);
     try {
       result.push(
@@ -905,6 +908,30 @@ function readDeletionRecords(root, diagnostics) {
     }
   }
   return result;
+}
+
+function isCurrentArticleTrashArtifact(filename, value, clientId, articleId) {
+  const name = path.basename(filename);
+  if (name.endsWith(".tombstone.json")) {
+    try {
+      assertTombstone(value, clientId, articleId);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+  if (!name.endsWith(".trash.journal") || !value || value.version !== 1)
+    return false;
+  if (value.kind === "move-to-trash") {
+    return Boolean(
+      value.json &&
+        value.json.from === `${articleId}.json` &&
+        value.json.to === `${articleId}.json` &&
+        value.tombstone === `${articleId}.tombstone.json` &&
+        typeof value.temporaryTombstone === "string",
+    );
+  }
+  return ["restore-from-trash", "permanent-delete"].includes(value.kind);
 }
 
 function readRecoveryRecords(root, diagnostics) {
