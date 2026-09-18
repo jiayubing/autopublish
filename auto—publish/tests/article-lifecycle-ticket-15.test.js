@@ -172,6 +172,7 @@ function deferred() {
 
 function observation(value, overrides) {
   const context = value.transitions.getOrderObservationContext("order-15");
+  assert.equal(context.articleIdentityV1.clientId, "client-15");
   const base = {
     version: 1,
     orderIdentityV1: { version: 1, orderId: "order-15" },

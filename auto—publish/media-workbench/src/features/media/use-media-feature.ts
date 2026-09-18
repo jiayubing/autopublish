@@ -57,12 +57,12 @@ export function useMediaFeature(options?: { surface?: MediaFeatureSurface }) {
   useWorkspaceScope("mediaWorkbench", (event) => {
     if (surface !== "resources" || !event.workspaceRuntimeId) return;
     feature.setScope({ workspaceRuntimeId: event.workspaceRuntimeId });
-    void feature.refreshWorkbench(event.kind);
+    return feature.refreshWorkbench(event.kind);
   });
   useWorkspaceScope("orders", (event) => {
     if (surface !== "orders" || !event.workspaceRuntimeId) return;
     feature.setScope({ workspaceRuntimeId: event.workspaceRuntimeId });
-    void feature.refreshOrders(event.kind);
+    return feature.refreshOrders(event.kind);
   });
   useEffect(() => () => feature.dispose(), [feature]);
   return {

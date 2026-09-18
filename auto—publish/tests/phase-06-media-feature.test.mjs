@@ -315,6 +315,7 @@ describe("Phase 06 media feature", () => {
       openPublishedUrl: async () => ({}),
     });
     feature.setScope({ workspaceRuntimeId: "workspace-orders" });
+    await feature.refreshOrders("initial");
     await feature.openOrders();
     await feature.openOrders();
     assert.deepEqual([syncCalls, queryCalls], [1, 1]);

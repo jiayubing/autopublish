@@ -1,4 +1,4 @@
-import { createContext, useContext, useRef, useSyncExternalStore } from 'react';
+import { createContext, useContext, useEffect, useRef, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
 import {
   checkPlatformLogin,
@@ -49,20 +49,27 @@ function createProductionPlatformFeature(): PlatformFeature {
   });
 }
 
-export function PlatformFeatureProvider({ children }: { children: ReactNode }) {
+export function PlatformFeatureProvider({ children, loadQueue = false }: { children: ReactNode; loadQueue?: boolean }) {
   const featureRef = useRef<PlatformFeature | null>(null);
   if (!featureRef.current) featureRef.current = createProductionPlatformFeature();
   const feature = featureRef.current;
+  const effectGeneration = useRef(0);
 
   useWorkspaceScope('platformQueue', (event) => {
     if (!event.workspaceRuntimeId) return;
     feature.setScope({ workspaceRuntimeId: event.workspaceRuntimeId });
-    return Promise.all([feature.refreshQueue(event.kind).catch(() => {
+    return Promise.all([loadQueue ? feature.refreshQueue(event.kind).catch(() => {
       reportRuntimeDiagnostic('PLATFORM_QUEUE_REFRESH_FAILED', 'platform-event');
-    }), feature.refreshAccountProfiles(event.kind).catch(() => {
+    }) : undefined, feature.refreshAccountProfiles(event.kind).catch(() => {
       reportRuntimeDiagnostic('PLATFORM_ACCOUNT_PROFILE_REFRESH_FAILED', 'platform-event');
     })]);
   });
+  useEffect(() => {
+    const generation = ++effectGeneration.current;
+    return () => queueMicrotask(() => {
+      if (effectGeneration.current === generation) feature.dispose();
+    });
+  }, [feature]);
 
   return <PlatformFeatureContext.Provider value={feature}>{children}</PlatformFeatureContext.Provider>;
 }

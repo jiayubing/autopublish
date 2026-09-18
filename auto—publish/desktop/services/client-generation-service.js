@@ -207,7 +207,7 @@ function createClientGenerationService(options) {
     } else {
       contentStore.saveArticle(article);
     }
-    if (typeof value.onDataInvalidated === "function") value.onDataInvalidated("ARTICLE_SAVED");
+    if (typeof value.onDataInvalidated === "function") value.onDataInvalidated("ARTICLE_SAVED", { clientId: article.clientId });
     return article;
   }
 

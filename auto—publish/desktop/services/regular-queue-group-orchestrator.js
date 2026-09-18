@@ -183,18 +183,18 @@ function createRegularQueueGroupOrchestrator(options) {
       ? value.onDataInvalidated
       : null;
 
-  function notifyDataInvalidated(reasonCode) {
+  function notifyDataInvalidated(reasonCode, affected) {
     if (!onDataInvalidated) return;
     try {
-      onDataInvalidated(reasonCode);
+      onDataInvalidated(reasonCode, affected);
     } catch (_) {
       diagnose("REGULAR_DATA_INVALIDATION_FAILED", "data-invalidation");
     }
   }
 
-  function applyOutcome(input) {
+  function applyOutcome(input, claim) {
     const transition = outcomeService.applyRegularOutcome(input);
-    notifyDataInvalidated("PUBLICATION_RECONCILED");
+    notifyDataInvalidated("PUBLICATION_RECONCILED", { clientId: claim?.articleIdentityV1?.clientId });
     return transition;
   }
 
@@ -217,7 +217,7 @@ function createRegularQueueGroupOrchestrator(options) {
       const transition = outcomeRecovery.markOrphanedRegularAttemptUncertain({
         regularPublicationAttemptId: claim.regularPublicationAttemptId,
       });
-      notifyDataInvalidated("PUBLICATION_RECONCILED");
+      notifyDataInvalidated("PUBLICATION_RECONCILED", { clientId: claim?.articleIdentityV1?.clientId });
       return Object.freeze({
         status: "uncertain",
         errorCode: "REGULAR_OUTCOME_COMMIT_FAILED",
@@ -236,7 +236,7 @@ function createRegularQueueGroupOrchestrator(options) {
         transition: applyOutcome({
           regularPublicationAttemptId: claim.regularPublicationAttemptId,
           outcome: observation,
-        }),
+        }, claim),
       });
     } catch (error) {
       if (!error || error.code !== "REGULAR_ADAPTER_OUTCOME_INVALID") {
@@ -253,7 +253,7 @@ function createRegularQueueGroupOrchestrator(options) {
         transition: applyOutcome({
           regularPublicationAttemptId: claim.regularPublicationAttemptId,
           outcome: uncertain,
-        }),
+        }, claim),
       });
     } catch (error) {
       return recoverOutcomeCommitFailure(claim, error);
@@ -329,7 +329,7 @@ function createRegularQueueGroupOrchestrator(options) {
           transition: applyOutcome({
             regularPublicationAttemptId: claim.regularPublicationAttemptId,
             outcome: preparation,
-          }),
+          }, claim),
         });
       }
       prepared = domain.createPreparedSubmission(preparation);
@@ -343,7 +343,7 @@ function createRegularQueueGroupOrchestrator(options) {
         transition: applyOutcome({
           regularPublicationAttemptId: claim.regularPublicationAttemptId,
           outcome: preparationOutcome,
-        }),
+        }, claim),
       });
     } finally {
       clearTimer(timer);
@@ -370,7 +370,7 @@ function createRegularQueueGroupOrchestrator(options) {
         transition: applyOutcome({
           regularPublicationAttemptId: claim.regularPublicationAttemptId,
           outcome: preparationOutcome,
-        }),
+        }, claim),
       });
     }
     let boundary;
@@ -393,7 +393,7 @@ function createRegularQueueGroupOrchestrator(options) {
         transition: applyOutcome({
           regularPublicationAttemptId: claim.regularPublicationAttemptId,
           outcome: preparationOutcome,
-        }),
+        }, claim),
       });
     }
     if (!boundary.submitAuthorized)

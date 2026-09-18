@@ -11,13 +11,11 @@ export default function PlatformAccountSettings() {
   const [selectedProfileId, setSelectedProfileId] = useState("");
 
   useEffect(() => {
+    if (!snapshot.scope?.workspaceRuntimeId) return;
     void feature.refreshQueue("settings-platform-accounts").catch(() => undefined);
-    void feature
-      .refreshAccountProfiles("settings-platform-accounts")
-      .catch(() => undefined);
     feature.clearAccountProfileFeedback();
     return () => feature.clearAccountProfileFeedback();
-  }, [feature]);
+  }, [feature, snapshot.scope?.workspaceRuntimeId]);
 
   useEffect(() => {
     if (

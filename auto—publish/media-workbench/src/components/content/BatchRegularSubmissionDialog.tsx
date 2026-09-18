@@ -240,13 +240,10 @@ export default function BatchRegularSubmissionDialog({
 
   useEffect(() => {
     preserveSelection.current = false;
-    if (!open) return;
+    if (!open || !snapshot.scope?.workspaceRuntimeId) return;
     setIssueFeedback("");
     void feature.refreshQueue("batch-submission-open").catch(() => undefined);
-    void feature
-      .refreshAccountProfiles("batch-submission-open")
-      .catch(() => undefined);
-  }, [batch.id, feature, open]);
+  }, [batch.id, feature, open, snapshot.scope?.workspaceRuntimeId]);
 
   useEffect(() => {
     if (open || !session.snapshot.open) return;

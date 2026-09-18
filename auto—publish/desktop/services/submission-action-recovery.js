@@ -41,9 +41,9 @@ function createSubmissionActionRecovery(options) {
       : `submission-action:${action.batchId}:${action.itemId}:${action.action}`;
   }
 
-  function notify(reasonCode) {
+  function notify(reasonCode, clientId) {
     if (typeof value.onDataInvalidated === "function")
-      value.onDataInvalidated(reasonCode);
+      value.onDataInvalidated(reasonCode, { clientId });
   }
 
   function resumeItemAction(action, item, operation, fingerprints) {
@@ -139,6 +139,7 @@ function createSubmissionActionRecovery(options) {
       action.action === "cancel"
         ? "SUBMISSION_QUEUE_CANCELLED"
         : "SUBMISSION_QUEUE_CLEANED",
+      item.clientId,
     );
     return {
       action: action.action,

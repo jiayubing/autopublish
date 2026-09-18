@@ -53,6 +53,11 @@ describe("renderer page navigation", { concurrency: false }, function () {
         listClients: 0,
         management: 0,
       };
+      window.__platformReads = { queue: 0, profiles: 0 };
+      window.__resourceReads = 0;
+      window.__resourcePending = [];
+      window.__holdResources = false;
+      window.__workspaceRevision = 1;
       window.desktopConsole = {
         auth: {
           getState: () =>
@@ -86,7 +91,10 @@ describe("renderer page navigation", { concurrency: false }, function () {
         workspaceData: {
           getRuntimeIdentity: () =>
             ok({ workspaceRuntimeId: "nav-runtime", revision: 1 }),
-          onInvalidated: () => () => {},
+          onInvalidated: (listener) => {
+            window.__invalidateWorkspace = (scopes) => listener({ schemaVersion: 1, workspaceRuntimeId: "nav-runtime", revision: ++window.__workspaceRevision, scopes, reasonCode: "WORKSPACE_DATA_CHANGED" });
+            return () => {};
+          },
           onInvalidationDiagnostic: () => () => {},
         },
         content: stub({
@@ -144,8 +152,11 @@ describe("renderer page navigation", { concurrency: false }, function () {
           listRegularQueueGroups: () => ok({ items: [] }),
         }),
         media: stub({
-          getResourcePage: () =>
-            ok({ items: [], total: 0, page: 1, pageSize: 50 }),
+          getResourcePage: () => {
+            window.__resourceReads++;
+            if (window.__holdResources) return new Promise(resolve => window.__resourcePending.push(() => resolve({ ok: true, data: { items: [], total: 0, page: 1, pageSize: 50 } })));
+            return ok({ items: [], total: 0, page: 1, pageSize: 50 });
+          },
           searchResourcePage: () =>
             ok({ items: [], total: 0, page: 1, pageSize: 50 }),
           getPool: () =>
@@ -165,8 +176,8 @@ describe("renderer page navigation", { concurrency: false }, function () {
           getOrders: () => ok({ items: [] }),
         }),
         platforms: stub({
-          getQueue: () => ok({ platforms: [], queue: [] }),
-          listAccountProfiles: () => ok({ profiles: [] }),
+          getQueue: () => { window.__platformReads.queue++; return ok({ platforms: [{ id: "hepan", displayName: "蓝色河畔", loginAvailable: true, queueConfigured: true }], queue: [] }); },
+          listAccountProfiles: () => { window.__platformReads.profiles++; return ok({ profiles: [] }); },
           getState: () =>
             ok({
               isPlatformRunning: false,
@@ -281,6 +292,7 @@ describe("renderer page navigation", { concurrency: false }, function () {
       0,
       "article management should stay lazy when there is no selected client",
     );
+    assert.equal(await page.evaluate(() => window.__platformReads.queue), 0);
 
     await page.locator("#nav-item-content-production").click();
     await page.getByText("内容生产", { exact: true }).first().waitFor({
@@ -314,10 +326,12 @@ describe("renderer page navigation", { concurrency: false }, function () {
       ...window.__contentReadCounts,
     }));
     assert.deepEqual(afterLibraryReturnCounts, afterProductionCounts);
+    assert.equal(await page.evaluate(() => window.__platformReads.queue), 0);
 
     const views = [
       ["submission-center", "投稿中心"],
       ["resources", "媒体资源"],
+      ["orders", "订单"],
       ["settings", "设置"],
       ["content-production", "内容生产"],
       ["article-library", "文章库"],
@@ -327,6 +341,34 @@ describe("renderer page navigation", { concurrency: false }, function () {
       await page.getByText(label, { exact: true }).first().waitFor({
         timeout: 15000,
       });
+      if (view === "resources" || view === "orders") {
+        await page.waitForFunction(() => document.querySelector('[role="status"]')?.textContent?.includes("数据已就绪"));
+        const before = await page.evaluate(() => ({ ...window.__platformReads }));
+        await page.evaluate(() => window.__invalidateWorkspace(["platformQueue"]));
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        assert.deepEqual(await page.evaluate(() => window.__platformReads), before, `${view} must not load platform queue/accounts`);
+      }
+      if (view === "resources") {
+        const count = await page.evaluate(() => {
+          window.__holdResources = true;
+          const count = window.__resourceReads;
+          for (let index = 0; index < 20; index++) window.__invalidateWorkspace(["mediaWorkbench"]);
+          return count;
+        });
+        await page.waitForFunction(count => window.__resourceReads === count + 1, count);
+        await page.evaluate(() => window.__resourcePending.shift()());
+        await page.waitForFunction(count => window.__resourceReads === count + 2, count);
+        await page.evaluate(() => { window.__holdResources = false; window.__resourcePending.shift()(); });
+        await page.waitForFunction(() => document.querySelector('[role="status"]')?.textContent?.includes("数据已就绪"));
+        assert.equal(await page.evaluate(() => window.__resourceReads), count + 2);
+      }
+      if (view === "settings") {
+        await page.getByRole("button", { name: "平台账号", exact: true }).click();
+        const select = page.getByLabel("平台账号投稿平台");
+        await select.waitFor();
+        assert.equal(await select.inputValue(), "hepan");
+        assert.equal(await select.isEnabled(), true);
+      }
     }
     await page.evaluate(
       () =>
@@ -348,6 +390,7 @@ describe("renderer page navigation", { concurrency: false }, function () {
       message.includes("already has an owner"),
     );
     assert.deepEqual(ownerCrash, []);
+    assert.deepEqual(pageErrors, []);
     await page.close();
   });
 });

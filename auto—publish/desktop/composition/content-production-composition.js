@@ -124,7 +124,12 @@ async function createContentProductionComposition(options) {
               projectArticleRemovalTransaction(transaction),
             ),
           );
-          value.onDataInvalidated("ARTICLE_REMOVAL_TRANSACTION_CHANGED");
+          value.onDataInvalidated("ARTICLE_REMOVAL_TRANSACTION_CHANGED", {
+            clientIds:
+              transaction.deletionTransactionIdentityV1?.articleIdentitiesV1?.map(
+                (ref) => ref.clientId,
+              ),
+          });
         },
         onDataInvalidated: value.onDataInvalidated,
       }),

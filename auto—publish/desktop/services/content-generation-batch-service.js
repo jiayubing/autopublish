@@ -145,9 +145,9 @@ function createContentGenerationBatchService(options) {
   let sequence = 0;
   const now = typeof opts.now === "function" ? opts.now : function() { return new Date().toISOString(); };
 
-  function notifyData(reasonCode) {
+  function notifyData(reasonCode, batch) {
     if (typeof opts.onDataInvalidated !== "function") return;
-    try { opts.onDataInvalidated(reasonCode); } catch (error) {
+    try { opts.onDataInvalidated(reasonCode, { clientIds: batch?.tasks?.map(task => task.clientId) }); } catch (error) {
       reportDiagnostic({
         code: "GENERATION_BATCH_INVALIDATION_LISTENER_FAILED",
         module: "content-generation-batch-service",
@@ -378,7 +378,7 @@ function createContentGenerationBatchService(options) {
     const batch = batchStore.createBatch({ clientSources: previewResult.clientSources, templates: previewResult.templates,
       aiConfigFingerprint, concurrency: requestedConcurrency });
     emitBatch(batch);
-    notifyData("GENERATION_BATCH_CREATED");
+    notifyData("GENERATION_BATCH_CREATED", batch);
     return enrichBatch(batch);
   }
 
@@ -403,7 +403,7 @@ function createContentGenerationBatchService(options) {
       const work = Promise.resolve(runnerPromise)
         .then(function(result) {
           emitBatch(result, result && result.status);
-          if (result && ["completed", "failed", "abandoned", "interrupted", "paused_configuration", "paused"].includes(result.status)) notifyData("GENERATION_BATCH_TERMINAL");
+          if (result && ["completed", "failed", "abandoned", "interrupted", "paused_configuration", "paused"].includes(result.status)) notifyData("GENERATION_BATCH_TERMINAL", batch);
           return result;
         })
         .catch(function(error) {
@@ -506,7 +506,7 @@ function createContentGenerationBatchService(options) {
     if (!batchStore || typeof batchStore.cancelPending !== "function") throw generationError("GENERATION_BATCH_INVALID");
     const batch = batchStore.cancelPending(batchId);
     emitBatch(batch);
-    notifyData("GENERATION_PENDING_TASKS_CANCELLED");
+    notifyData("GENERATION_PENDING_TASKS_CANCELLED", batch);
     return enrichBatch(batch);
   }
 
@@ -606,7 +606,7 @@ function createContentGenerationBatchService(options) {
       });
       const batch = batchStore.createRegenerationBatch({ id: batchId, tasks, concurrency, aiConfigFingerprint });
       emitBatch(batch);
-      notifyData("GENERATION_BATCH_CREATED");
+      notifyData("GENERATION_BATCH_CREATED", batch);
       preparingRegeneration = false;
       return await runBatch(batch.id, "pending", false);
     } finally {
@@ -626,7 +626,7 @@ function createContentGenerationBatchService(options) {
     if (!batchStore || typeof batchStore.abandonBatch !== "function") throw generationError("GENERATION_BATCH_INVALID");
     const batch = batchStore.abandonBatch(batchId);
     emitBatch(batch, "abandoned");
-    notifyData("GENERATION_BATCH_TERMINAL");
+    notifyData("GENERATION_BATCH_TERMINAL", batch);
     return enrichBatch(batch);
   }
 

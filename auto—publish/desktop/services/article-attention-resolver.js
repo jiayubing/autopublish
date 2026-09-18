@@ -387,7 +387,7 @@ function createArticleAttentionResolver(options) {
       result = await execute(entry, action, resolutionInput, value);
     } catch (error) {
       if (error && error.mutation && error.mutation.changed === true)
-        invalidate("ARTICLE_ATTENTION_DOMAIN_MUTATION");
+        invalidate("ARTICLE_ATTENTION_DOMAIN_MUTATION", { clientId: entry.item.clientId });
       throw error;
     }
     prepared.delete(key(entry.item, action));
@@ -397,7 +397,7 @@ function createArticleAttentionResolver(options) {
         (!Array.isArray(result.changedScopes) ||
           result.changedScopes.length === 0))
     )
-      invalidate("ARTICLE_ATTENTION_RESOLVED");
+      invalidate("ARTICLE_ATTENTION_RESOLVED", { clientId: entry.item.clientId });
     if (
       typeof opts.getRevision !== "function" &&
       query &&
