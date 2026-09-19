@@ -8,7 +8,7 @@ const knowledge = normalizeCandidate(
 knowledge.revision = 1;
 const state = { phase: "idle", running: false };
 const client = { clientId: "client-1" };
-const status = { configured: false, model: "", webSearch: true };
+const status = { configured: false, model: "", webSearch: true, baseUrl: "https://ark.cn-beijing.volces.com/api/coding/v3" };
 const geoKnowledgeIpcContractFixtures = [
   [
     "questionArticles",
@@ -50,7 +50,7 @@ const geoKnowledgeIpcContractFixtures = [
   ["configStatus", {}, status],
   [
     "saveConfig",
-    { model: "synthetic", apiKey: "synthetic-key", webSearch: true },
+    { model: "synthetic", apiKey: "synthetic-key", webSearch: true, baseUrl: status.baseUrl },
     { ...status, configured: true, model: "synthetic" },
   ],
 ].map(([method, request, result]) => ({

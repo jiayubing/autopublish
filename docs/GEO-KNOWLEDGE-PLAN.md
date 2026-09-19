@@ -115,6 +115,16 @@
 
 ## 真实 API 验收 gate（未执行）
 
+### Coding Plan 接口适配（用户追加授权）
+
+- 设置页显式选择 Coding Plan 或标准方舟，并展示 Base URL、套餐外计费和能力未验证提示；保存不发请求。新配置默认 Coding Plan，旧 version 1 配置保持标准地址，显式保存后写 version 2；空密钥保留本机加密凭据。
+- 配置 owner 仅接受两个可信地址；transport 使用所选地址的 `/responses`，禁止重定向，不自动回退标准地址或重试被拒绝请求。
+- Responses/工具请求被拒绝、联网回复无可核验引用均返回安全错误并停止后续研究；无引用不是“不支持联网”的确定证据，不静默当作联网成功。
+- 本地测试使用合成数据和假 transport；真实 Coding Plan、web_search 权限、引用格式及套餐用途尚未验收，不上传用户资料。
+- 最终验证：定向 `node --test`（geo-coding-plan、geo-knowledge、geo-knowledge-research、geo-knowledge-ipc、phase-06-production-ipc-fixture-matrix）23/23；`node --test tests/renderer-geo-knowledge.test.js` 1/1，覆盖保存地址、切换与计费提示；`npm test` 596/596，`npm run test:integration` 1279/1279（239 文件，无跳过）。
+- `npm run lint`、`typecheck:main`、`typecheck:bridge`、`build:renderer`（含 renderer typecheck）、`build:preload` 通过；`format:check` 仅原四个基线失败文件，已再次以 `git diff --exit-code 93bea300 -- <四文件>` 确认未修改。既有 Vite chunk 提示保留。
+- Primary Review 检查配置版本兼容、密钥不回传、可信地址/计费边界、研究停止及直接 IPC/UI 调用方，无已知阻塞 finding；未扩大无关 owner。使用 Playwright 隔离页面测试验证设置交互，无真实外部调用。最终验证后仅更新文档；提交分支 codex/geo-knowledge-base，不 push/merge，用户 DOCX 与 work/ 不提交。
+
 需要用户在本机“设置 → 豆包 GEO”配置 API Key 与支持 Responses/web_search 的模型或 Endpoint ID，并明确授权将指定测试资料发送到服务商以及本次调用费用。不要把 Key 提交到 Git 或写进计划。
 
 授权后先限定一个客户、用户指定 DOCX、单轮最多 8 个研究任务，验证真实响应/引用 metadata、研究质量、来源准确性和成本；遇到鉴权拒绝、模型/工具不支持或请求结果不确定立即停止，不自动重复付费请求。此 gate 未通过前不宣称真实模型效果已验收。

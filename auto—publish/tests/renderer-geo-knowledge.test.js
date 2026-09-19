@@ -11,7 +11,7 @@ function fixture({ document }) {
   const client = { id: "client-1", name: "合成客户", knowledgeFiles: [] };
   let knowledge = null;
   let running = false;
-  let config = { configured: false, model: "", webSearch: true };
+  let config = { configured: false, model: "", webSearch: true, baseUrl: "https://ark.cn-beijing.volces.com/api/coding/v3" };
   window.__geoCalls = { generate: 0, edits: [], config: [] };
   window.desktopConsole = {
     auth: {
@@ -145,6 +145,7 @@ function fixture({ document }) {
           configured: true,
           model: input.model,
           webSearch: input.webSearch,
+          baseUrl: input.baseUrl,
         };
         return ok(config);
       },
@@ -278,6 +279,10 @@ test("knowledge page handles empty, busy, error, editing and encrypted-config in
   await page.getByLabel("API Key", { exact: true }).fill("synthetic-secret");
   await page.getByRole("button", { name: "保存豆包 GEO 配置" }).click();
   await page.getByText("豆包 GEO 配置已保存。").waitFor();
+  assert.equal(await page.evaluate(() => window.__geoCalls.config[0].baseUrl), "https://ark.cn-beijing.volces.com/api/coding/v3");
+  await page.getByLabel("接口 / Base URL").selectOption("https://ark.cn-beijing.volces.com/api/v3");
+  await page.getByText(/标准方舟地址不消耗 Coding Plan/).waitFor();
+  await page.getByLabel("接口 / Base URL").selectOption("https://ark.cn-beijing.volces.com/api/coding/v3");
   assert.equal(
     await page.getByLabel("API Key", { exact: true }).inputValue(),
     "",

@@ -144,11 +144,14 @@ const state = exactObject({
   errorCode: optionalField(text(128, 1)),
 });
 const status = exactObject({
+  baseUrl: text(200, 1),
   configured: "boolean",
   model: text(200),
   webSearch: "boolean",
 });
 const messages = {
+  GEO_CAPABILITY_REJECTED: "当前地址或模型拒绝了 Responses/联网请求，请核对模型和工具支持。系统未切换接口或自动重试。",
+  GEO_SEARCH_UNCONFIRMED: "本次联网请求未返回可核验的网页引用，无法确认联网结果。研究已停止，系统未切换到其他计费接口。",
   GEO_LINK_PARTIAL:
     "部分问题可能已加入采集，但关联未完整保存。请刷新后重新选择加入，已有问题不会重复创建。",
   GEO_CONFIG_REQUIRED: "请先在设置中的豆包 GEO 配置密钥与模型。",
@@ -161,6 +164,8 @@ const messages = {
   GEO_CANCELLED: "知识研究已取消，原有知识保留。",
 };
 const codes = [
+  "GEO_CAPABILITY_REJECTED",
+  "GEO_SEARCH_UNCONFIRMED",
   "GEO_LINK_PARTIAL",
   "AUTH_REQUIRED",
   "IPC_REQUEST_INVALID",
@@ -321,6 +326,7 @@ const geoKnowledgeContracts = [
     "saveConfig",
     "command",
     exactObject({
+      baseUrl: text(200, 1),
       model: text(200, 1),
       apiKey: text(4000),
       webSearch: "boolean",

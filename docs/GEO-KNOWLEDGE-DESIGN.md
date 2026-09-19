@@ -1287,9 +1287,14 @@ GEO问题
 
 必要配置：
 
+- 接口 / Base URL：Coding Plan（`https://ark.cn-beijing.volces.com/api/coding/v3`）或标准方舟（`https://ark.cn-beijing.volces.com/api/v3`），仅允许这两个可信地址
 - API Key
 - 模型 / Endpoint ID（以实际方舟接口要求为准）
 - 联网搜索启用状态
+
+新配置默认 Coding Plan；旧配置保留标准地址，用户显式切换后才改变请求路由。标准地址不使用 Coding Plan 套餐额度，页面须提示额外计费风险。保存只落本机加密配置，不调用接口。
+
+请求使用所选地址的 `/responses`，不自动回退其他计费接口。Responses 协议支持不代表联网工具权限或套餐用途已确认；真实验收前保持未验证状态。接口拒绝或联网回复没有可核验引用时明确报错、停止后续研究，不将无引用回复当作联网成功。
 
 第一版不暴露：
 

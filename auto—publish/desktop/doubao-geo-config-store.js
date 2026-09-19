@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { createAtomicFileWriter } = require("../src/content/content-file-transaction");
 const { geoError } = require("../src/content/geo-knowledge-schema");
+const { CODING_BASE_URL, STANDARD_BASE_URL, normalizeGeoBaseUrl } = require("../src/content/doubao-geo-endpoint");
 
 function createDoubaoGeoConfigStore({ userDataPath, safeStorage }) {
   if (!path.isAbsolute(userDataPath)) throw geoError("GEO_CONFIG_STORAGE_INVALID");
@@ -26,26 +27,28 @@ function createDoubaoGeoConfigStore({ userDataPath, safeStorage }) {
     encryption();
     try {
       const stored = JSON.parse(raw);
-      if (stored.version !== 1 || typeof stored.model !== "string" || !stored.model.trim() || typeof stored.webSearch !== "boolean") throw geoError("GEO_CONFIG_INVALID");
+      if (![1, 2].includes(stored.version) || typeof stored.model !== "string" || !stored.model.trim() || typeof stored.webSearch !== "boolean") throw geoError("GEO_CONFIG_INVALID");
+      const baseUrl = normalizeGeoBaseUrl(stored.version === 1 ? STANDARD_BASE_URL : stored.baseUrl);
       const apiKey = safeStorage.decryptString(Buffer.from(stored.encryptedApiKey, "base64"));
       if (!apiKey) throw geoError("GEO_CONFIG_INVALID");
-      return { model: stored.model, webSearch: stored.webSearch, apiKey };
+      return { model: stored.model, webSearch: stored.webSearch, apiKey, baseUrl };
     } catch (_) { throw geoError("GEO_CONFIG_STORAGE_INVALID"); }
   }
   function status() {
     const value = read();
-    return { configured: Boolean(value), model: value?.model || "", webSearch: value?.webSearch ?? true };
+    return { configured: Boolean(value), model: value?.model || "", webSearch: value?.webSearch ?? true, baseUrl: value?.baseUrl || CODING_BASE_URL };
   }
   function save(input) {
     encryption();
     if (!input || typeof input.model !== "string" || !/^[A-Za-z0-9._:-]{1,200}$/.test(input.model) || typeof input.webSearch !== "boolean" || typeof input.apiKey !== "string" || input.apiKey.length > 4000) throw geoError("GEO_CONFIG_INVALID");
+    const baseUrl = normalizeGeoBaseUrl(input.baseUrl);
     const apiKey = input.apiKey.trim() || read()?.apiKey;
     if (!apiKey) throw geoError("GEO_CONFIG_REQUIRED");
     checkPath(userDataPath, true);
     checkPath(file);
     try {
       fs.mkdirSync(userDataPath, { recursive: true });
-      createAtomicFileWriter().write(file, JSON.stringify({ version: 1, model: input.model, webSearch: input.webSearch, encryptedApiKey: safeStorage.encryptString(apiKey).toString("base64") }), { keepExisting: false });
+      createAtomicFileWriter().write(file, JSON.stringify({ version: 2, baseUrl, model: input.model, webSearch: input.webSearch, encryptedApiKey: safeStorage.encryptString(apiKey).toString("base64") }), { keepExisting: false });
     } catch (_) { throw geoError("GEO_CONFIG_SAVE_FAILED"); }
     return status();
   }

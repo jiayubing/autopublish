@@ -1,25 +1,26 @@
 "use strict";
 
 const { geoError, safeUrl } = require("./geo-knowledge-schema");
-const ENDPOINT = "https://ark.cn-beijing.volces.com/api/v3/responses";
+const { normalizeGeoBaseUrl } = require("./doubao-geo-endpoint");
 
 function createDoubaoGeoClient(options) {
   const transport = options.fetch || globalThis.fetch;
   async function request({ prompt, search = false, signal }) {
     const config = await options.getConfig();
     if (!config?.apiKey || !config?.model) throw geoError("GEO_CONFIG_REQUIRED");
+    const endpoint = normalizeGeoBaseUrl(config.baseUrl) + "/responses";
     if (search && config.webSearch === false) throw geoError("GEO_SEARCH_DISABLED");
     const timeout = AbortSignal.timeout(120000);
     let response;
     let data;
     try {
-      response = await transport(ENDPOINT, {
+      response = await transport(endpoint, {
         method: "POST", redirect: "error",
         headers: { Authorization: "Bearer " + config.apiKey, "Content-Type": "application/json" },
         body: JSON.stringify({ model: config.model, store: false, input: [{ role: "user", content: prompt }], ...(search ? { tools: [{ type: "web_search", max_keyword: 2 }] } : {}) }),
         signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
       });
-      if (!response.ok) throw geoError(response.status === 401 || response.status === 403 ? "GEO_CONFIG_REJECTED" : "GEO_REQUEST_FAILED");
+      if (!response.ok) throw geoError(response.status === 401 || response.status === 403 ? "GEO_CONFIG_REJECTED" : [400, 404, 422].includes(response.status) ? "GEO_CAPABILITY_REJECTED" : "GEO_REQUEST_FAILED");
       data = await response.json();
     } catch (error) {
       if (signal?.aborted) throw geoError("GEO_CANCELLED");
@@ -42,6 +43,7 @@ function createDoubaoGeoClient(options) {
       }
     }
     if (!output.length) throw geoError("GEO_RESPONSE_INVALID");
+    if (search && !citations.length) throw geoError("GEO_SEARCH_UNCONFIRMED");
     return { text: output.join("\n"), citations: [...new Map(citations.map(c => [c.url, c])).values()] };
   }
   return { request };

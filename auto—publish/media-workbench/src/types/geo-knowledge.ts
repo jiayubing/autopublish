@@ -59,11 +59,13 @@ export type KnowledgeState = {
   errorCode?: string;
 };
 export type GeoConfigStatus = {
+  baseUrl: string;
   configured: boolean;
   model: string;
   webSearch: boolean;
 };
 export type GeoConfigInput = {
+  baseUrl: string;
   model: string;
   apiKey: string;
   webSearch: boolean;

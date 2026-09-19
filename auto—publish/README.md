@@ -17,6 +17,9 @@ the installed package.
 
 内容生产 → 选择客户 → 客户知识库。配置入口为“设置 → 豆包 GEO”；保存配置只写本机加密凭据，不调用接口。
 
+- 接口可选 Coding Plan（`https://ark.cn-beijing.volces.com/api/coding/v3`）或标准方舟（`https://ark.cn-beijing.volces.com/api/v3`）。新配置默认 Coding Plan；旧配置保留标准地址，需手动切换并保存。标准地址不使用套餐额度，可能额外计费；系统不会自动切换接口。
+- 请求使用所选地址的 `/responses`。Coding Plan 的实际模型/联网工具权限及套餐用途仍需验证；支持 Responses 不等于支持 web_search。请求被拒绝或联网结果缺少可核验引用时明确提示，不能当成真实联网验收成功。
+
 - “生成知识库 / 重新研究”会向火山方舟发送该客户当前可读取资料并消耗 API 用量；真实使用前配置支持 Responses 与联网搜索的模型及 API Key。第一版本地实现与真实接口验收状态见 [实施计划](../docs/GEO-KNOWLEDGE-PLAN.md)。
 - 人工编辑保存后锁定；再次研究不覆盖锁定项。来源、外部研究与待确认信息分开显示；知识库可导出 Markdown。
 - GEO 问题勾选“加入问题采集”仅创建或复用采集问题，不启动网络采集。真实回答继续在问题采集页操作；问题改名或删除后需重新关联。
