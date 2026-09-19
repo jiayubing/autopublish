@@ -1287,7 +1287,7 @@ GEO问题
 
 必要配置：
 
-- 接口 / Base URL：Coding Plan（`https://ark.cn-beijing.volces.com/api/coding/v3`）或标准方舟（`https://ark.cn-beijing.volces.com/api/v3`），仅允许这两个可信地址
+- 接口 / Base URL：Coding Plan（`https://ark.cn-beijing.volces.com/api/plan/v3`）或标准方舟（`https://ark.cn-beijing.volces.com/api/v3`），仅允许这两个可信地址
 - API Key
 - 模型 / Endpoint ID（以实际方舟接口要求为准）
 - 联网搜索启用状态

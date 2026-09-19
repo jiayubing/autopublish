@@ -127,6 +127,8 @@
 
 ### Coding Plan 接口适配（用户追加授权）
 
+- 用户确认 Coding Plan 正确地址为 `https://ark.cn-beijing.volces.com/api/plan/v3`；此前误用的 `/api/coding/v3` 已从默认值、可信地址、设置页和夹具中移除。读取已保存的旧误配地址时映射到正确地址；标准 `/api/v3` 配置不变。
+
 - 设置页显式选择 Coding Plan 或标准方舟，并展示 Base URL、套餐外计费和能力未验证提示；保存不发请求。新配置默认 Coding Plan，旧 version 1 配置保持标准地址，显式保存后写 version 2；空密钥保留本机加密凭据。
 - 配置 owner 仅接受两个可信地址；transport 使用所选地址的 `/responses`，禁止重定向，不自动回退标准地址或重试被拒绝请求。
 - Responses/工具请求被拒绝、联网回复无可核验引用均返回安全错误并停止后续研究；无引用不是“不支持联网”的确定证据，不静默当作联网成功。
