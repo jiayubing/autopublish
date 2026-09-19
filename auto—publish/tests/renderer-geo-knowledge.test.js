@@ -11,7 +11,7 @@ function fixture({ document }) {
   const client = { id: "client-1", name: "合成客户", knowledgeFiles: [] };
   let knowledge = null;
   let running = false;
-  let config = { configured: false, model: "", webSearch: true, baseUrl: "https://ark.cn-beijing.volces.com/api/coding/v3" };
+  let config = { configured: false, model: "", webSearch: true, baseUrl: "https://ark.cn-beijing.volces.com/api/plan/v3" };
   window.__geoCalls = { generate: 0, edits: [], config: [] };
   window.desktopConsole = {
     auth: {
@@ -292,12 +292,12 @@ test("knowledge page handles empty, busy, error, editing and encrypted-config in
   await page.getByRole("button", { name: "测试连接", exact: true }).click();
   await page.getByText(/鉴权失败（401）/).waitFor();
   assert.equal(await page.getByText("private upstream text").count(), 0);
-  assert.equal(await page.evaluate(() => window.__geoCalls.config[0].baseUrl), "https://ark.cn-beijing.volces.com/api/coding/v3");
+  assert.equal(await page.evaluate(() => window.__geoCalls.config[0].baseUrl), "https://ark.cn-beijing.volces.com/api/plan/v3");
   await page.getByLabel("接口 / Base URL").selectOption("https://ark.cn-beijing.volces.com/api/v3");
   assert.equal(await page.getByRole("button", { name: "测试连接", exact: true }).isDisabled(), true);
   assert.equal(await page.getByText(/鉴权失败（401）/).count(), 0);
   await page.getByText(/标准方舟地址不消耗 Coding Plan/).waitFor();
-  await page.getByLabel("接口 / Base URL").selectOption("https://ark.cn-beijing.volces.com/api/coding/v3");
+  await page.getByLabel("接口 / Base URL").selectOption("https://ark.cn-beijing.volces.com/api/plan/v3");
   assert.equal(
     await page.getByLabel("API Key", { exact: true }).inputValue(),
     "",

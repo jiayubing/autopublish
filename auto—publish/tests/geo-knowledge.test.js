@@ -74,7 +74,7 @@ test("generation rejects duplicates and concurrent edits preserve user changes",
 });
 test("Responses transport separates trusted citations and never retries uncertain requests", async () => {
   let calls = 0;
-  const client = createDoubaoGeoClient({ getConfig: () => ({ apiKey: "synthetic", model: "synthetic-model", baseUrl: "https://ark.cn-beijing.volces.com/api/coding/v3" }), fetch: async (url, options) => {
+  const client = createDoubaoGeoClient({ getConfig: () => ({ apiKey: "synthetic", model: "synthetic-model", baseUrl: "https://ark.cn-beijing.volces.com/api/plan/v3" }), fetch: async (url, options) => {
     calls++; assert.equal(JSON.parse(options.body).tools[0].type, "web_search");
     return { ok: true, json: async () => ({ status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: "{}", annotations: [{ type: "url_citation", title: "来源", url: "https://example.com" }] }] }] }) };
   } });
@@ -87,10 +87,10 @@ test("configuration stores encrypted credentials and status never returns the ke
   const safeStorage = { isEncryptionAvailable: () => true, encryptString: s => Buffer.from(s.split("").reverse().join("")), decryptString: b => b.toString().split("").reverse().join("") };
   const config = createDoubaoGeoConfigStore({ userDataPath: root, safeStorage });
   assert.equal(config.status().configured, false);
-  config.save({ model: "synthetic", apiKey: "secret-fixture", webSearch: true, baseUrl: "https://ark.cn-beijing.volces.com/api/coding/v3" });
+  config.save({ model: "synthetic", apiKey: "secret-fixture", webSearch: true, baseUrl: "https://ark.cn-beijing.volces.com/api/plan/v3" });
   assert.equal(JSON.stringify(config.status()).includes("secret-fixture"), false);
   assert.equal(fs.readFileSync(path.join(root, "doubao-geo.json"), "utf8").includes("secret-fixture"), false);
-  config.save({ model: "changed", apiKey: "", webSearch: false, baseUrl: "https://ark.cn-beijing.volces.com/api/coding/v3" });
+  config.save({ model: "changed", apiKey: "", webSearch: false, baseUrl: "https://ark.cn-beijing.volces.com/api/plan/v3" });
   assert.equal(config.read().apiKey, "secret-fixture");
 });
 
