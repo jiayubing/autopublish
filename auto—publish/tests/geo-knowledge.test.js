@@ -39,6 +39,8 @@ test("manual lock survives research and conflicting facts remain unresolved", t 
   assert.equal(conflict.restrictions[0].type, "conflict");
   saved = store.edit("client-1", saved.revision, "profile", saved.profile.id, { fields: { name: "人工名称" } });
   assert.equal(saved.profile.locked, true);
+  assert.equal(saved.sources.find(source => source.id === saved.profile.sourceIds[0]).title, "人工编辑确认");
+  assert.notDeepEqual(saved.profile.sourceIds, [source.id]);
   assert.equal(mergeKnowledge(saved, document("AI新名称")).profile.fields.name, "人工名称");
 });
 test("unreferenced fact is candidate; invented references cannot enter canonical state", () => {

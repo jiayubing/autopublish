@@ -25,7 +25,7 @@
 | --- | --- | --- |
 | K1 | schema、store、路径、材料提取、豆包配置与基础调用 | COMPLETE |
 | K2 | 有界研究计划、联网引用、部分失败、整理 | COMPLETE |
-| K3 | service/IPC/bridge、知识库页面、编辑锁定、导出 | READY |
+| K3 | service/IPC/bridge、知识库页面、编辑锁定、导出 | COMPLETE |
 | K4 | GEO 问题进入现有采集、关联回答 | PENDING |
 | K5 | 按问题选择知识、生成快照与文章关联 | PENDING |
 | K6 | 组合回归、构建、有限审查与证据收口 | PENDING |
@@ -65,3 +65,12 @@
 - `npm run test:integration`：1264/1265，唯一失败为未修改的 `renderer-history-editor-flow.test.js` 焦点即时断言；独立复跑该文件验证。该阶段没有 renderer 变更，最终 K6 再跑整体 gate。
 - Primary Review 修复 `INTRODUCED_BY_CHANGE`：整理候选 profile 不得覆盖材料提取的事实；补断言后 bounded re-review 通过。
 - 一轮最多 8 个研究任务；引用无官方身份认证时保守登记 third_party；模型只引用程序来源 registry。真实效果留待 API 验收。
+
+### K3
+
+- 知识库入口、分区浏览、进度、取消、人工编辑锁定、Markdown 导出、加密配置设置已接通；设置保存不触发网络。
+- IPC/服务/fixture matrix 8/8，知识库后端回归 13/13，隔离浏览器交互 1/1；截图检查通过。人工改写后来源改为 client_input，不继续假称原文件支持该陈述。
+- `npm test` 596/596。首轮 integration 1266/1268：新增设置命令与类型 owner 未登记到既有合同清单；补齐明确 owner 后定向 10/10，最终整体复跑 1268/1268。
+- lint、main/bridge/renderer typecheck、renderer/preload build 通过。format:check 中本次 transport 格式已修复；剩余四个未修改基线文件格式问题（identities.js、authenticated-runtime、phase-01-domain-contracts、phase-08-content-lifecycle）未扩大修改。
+- K2 唯一失败文件独立复跑 19/19，K3 首轮整体该文件也已通过。
+- Primary Review 与 bounded 修复覆盖鉴权 transport、配置秘密不回传、手动 provenance、revision、页面空态/错误/禁用/保存；无剩余已知阻塞 finding。

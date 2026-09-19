@@ -56,6 +56,7 @@ function emptyQuery() {
 }
 
 const QUERY_DEFINITIONS = Object.freeze({
+  geo: ["getGeoStatus", "GEO_SETTINGS_QUERY_FAILED", "无法读取豆包 GEO 配置。"],
   ai: ["getAiStatus", "AI_SETTINGS_QUERY_FAILED", "无法读取 AI 配置。"],
   media: [
     "getMediaStatus",
@@ -85,6 +86,7 @@ const QUERY_DEFINITIONS = Object.freeze({
 });
 
 const COMMAND_NAMES = Object.freeze([
+  "saveGeo",
   "saveAi",
   "testAi",
   "clearAi",
@@ -129,6 +131,7 @@ export function createSettingsFeature(adapters = {}) {
     snapshot = Object.freeze({
       scope,
       ai: Object.freeze(values.ai),
+      geo: Object.freeze(values.geo),
       media: Object.freeze(values.media),
       hepan: Object.freeze(values.hepan),
       legacy: Object.freeze(values.legacy),
@@ -290,6 +293,8 @@ export function createSettingsFeature(adapters = {}) {
     ensureLoaded,
     refresh,
     refreshAi: (reason = "manual") => runQuery("ai", reason),
+    refreshGeo: (reason = "manual") => runQuery("geo", reason),
+    saveGeo: (input) => execute(owners.saveGeo, adapters.saveGeo, input, "GEO_SETTINGS_SAVE_FAILED", "豆包 GEO 配置保存失败。", status => setDirect("geo", status)),
     refreshMedia: (reason = "manual") => runQuery("media", reason),
     refreshHepan: (reason = "manual") => runQuery("hepan", reason),
     refreshLegacy: (reason = "manual") => runQuery("legacy", reason),

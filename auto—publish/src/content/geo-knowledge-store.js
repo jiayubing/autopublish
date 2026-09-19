@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { createContentPathPolicy } = require("./content-path-policy");
 const { createAtomicFileWriter } = require("./content-file-transaction");
-const { SECTIONS, geoError, validateKnowledge } = require("./geo-knowledge-schema");
+const { SECTIONS, geoError, stableId, validateKnowledge } = require("./geo-knowledge-schema");
 
 function createGeoKnowledgeStore(options) {
   const policy = createContentPathPolicy(options.workspaceRoot, { paths: options.paths });
@@ -51,6 +51,9 @@ function createGeoKnowledgeStore(options) {
     const allowed = section === "profile" ? ["fields"] : ["name", "description"];
     if (!changes || Object.keys(changes).some(key => !allowed.includes(key))) throw geoError("GEO_KNOWLEDGE_INVALID");
     Object.assign(item, structuredClone(changes), { origin: "manual", locked: true });
+    const source = { id: stableId("source", clientId + ":manual:" + revision + ":" + id), type: "client_input", title: "人工编辑确认" };
+    current.sources.push(source);
+    item.sourceIds = [source.id];
     return save(current, revision);
   }
   return { load, save, edit };

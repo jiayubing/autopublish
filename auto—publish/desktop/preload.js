@@ -199,6 +199,16 @@ const api = {
       return ipcRenderer.invoke("ai-provider:clear");
     },
   },
+  geoKnowledge: {
+    state: input => ipcRenderer.invoke("geo-knowledge:state", input),
+    load: input => ipcRenderer.invoke("geo-knowledge:load", input),
+    generate: input => ipcRenderer.invoke("geo-knowledge:generate", input),
+    cancel: input => ipcRenderer.invoke("geo-knowledge:cancel", input),
+    edit: input => ipcRenderer.invoke("geo-knowledge:edit", input),
+    exportMarkdown: input => ipcRenderer.invoke("geo-knowledge:exportMarkdown", input),
+    configStatus: () => ipcRenderer.invoke("geo-knowledge:configStatus"),
+    saveConfig: input => ipcRenderer.invoke("geo-knowledge:saveConfig", input),
+  },
   platformSettings: {
     getStatus: function (platformId) {
       return ipcRenderer.invoke("platform-settings:get-status", {

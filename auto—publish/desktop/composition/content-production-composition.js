@@ -58,6 +58,14 @@ async function createContentProductionComposition(options) {
   }
 
   try {
+    const geoKnowledgeService = ownService(
+      require("../services/geo-knowledge-service").createGeoKnowledgeService({
+        workspaceRoot: value.workspaceRoot,
+        paths: value.paths,
+        userDataPath: value.userDataPath,
+        safeStorage: value.safeStorage,
+      }),
+    );
     const doubaoCollectionService = ownService(
       require("../services/doubao-collection-service").createDoubaoCollectionDesktopService(
         {
@@ -183,6 +191,7 @@ async function createContentProductionComposition(options) {
     );
 
     return Object.freeze({
+      geoKnowledgeService,
       doubaoCollectionService,
       aiProviderService,
       aiExecutionService,

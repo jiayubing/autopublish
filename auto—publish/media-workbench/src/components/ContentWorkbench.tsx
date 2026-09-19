@@ -7,6 +7,7 @@ import ArticleGenerationView from "./content/ArticleGenerationView";
 import GeneratedArticleEditorPanel from "./content/GeneratedArticleEditorPanel";
 import GeneratedArticlesView from "./content/GeneratedArticlesView";
 import QuestionCollectionView from "./content/QuestionCollectionView";
+import GeoKnowledgeView from "./content/GeoKnowledgeView";
 import { CurrentClientSelector, type ClientGrouping } from "./content/ClientSelector";
 import { type ArticleWorkflowFilter } from "../article-workflow";
 import ArticleLibraryFilters from "./content/ArticleLibraryFilters";
@@ -17,7 +18,7 @@ import type { FavoriteMediaPage } from "./content/GeneratedArticlesView.types";
 import type { ArticleLibraryNavigationIntent } from "../article-library-navigation";
 
 type RefreshState = "idle" | "refreshing" | "error";
-type ProductionTab = "questions" | "client" | "batch";
+type ProductionTab = "questions" | "client" | "batch" | "knowledge";
 type WorkbenchTab = ProductionTab | "history";
 type MainNavigationGuard = (action: () => void) => void;
 
@@ -38,7 +39,7 @@ function loadProductionTab(): ProductionTab {
   if (typeof localStorage === "undefined") return "questions";
   const value = localStorage.getItem(PRODUCTION_TAB_KEY);
   if (value === "single") return "client";
-  return value === "client" || value === "batch" || value === "questions"
+  return value === "client" || value === "batch" || value === "questions" || value === "knowledge"
     ? value
     : "questions";
 }
@@ -398,7 +399,7 @@ export default function ContentWorkbench({
       : "idle";
   const visibleError = error || query.error?.userMessage || "";
   const tabs = mode === "production"
-    ? (["questions", "client", "batch"] as const)
+    ? (["questions", "client", "batch", "knowledge"] as const)
     : ([] as const);
   if (loading)
     return (
@@ -416,7 +417,7 @@ export default function ContentWorkbench({
               ? "问题采集"
               : id === "client"
                 ? "客户生成"
-                : "批量生成";
+                : id === "knowledge" ? "客户知识库" : "批量生成";
           return (
             <button
               id={id}
@@ -482,6 +483,7 @@ export default function ContentWorkbench({
             loginQuery={doubaoLoginQuery}
           />
         )}
+        {tab === "knowledge" && <div key={clientId} className="flex min-h-0 flex-1"><GeoKnowledgeView clientId={clientId} /></div>}
         {(tab === "client" || tab === "batch") && (
           <ArticleGenerationView
             initialBatchClientIds={initialBatchClientIds}

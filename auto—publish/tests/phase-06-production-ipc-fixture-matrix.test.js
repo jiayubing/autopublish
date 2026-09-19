@@ -18,6 +18,7 @@ const {
 const { loadPreloadHarness } = require("./helpers/preload-harness");
 
 const productionIpcContractFixtures = Object.freeze([
+  ...require("./fixtures/geo-knowledge-ipc-contract-fixtures").geoKnowledgeIpcContractFixtures,
   ...baseProductionIpcContractFixtures,
   ...clientGenerationIpcContractFixtures,
   ...regularSubmissionPermissionIpcContractFixtures,

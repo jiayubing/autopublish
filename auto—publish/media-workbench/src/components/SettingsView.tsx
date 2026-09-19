@@ -11,6 +11,7 @@ import type { RuntimeCapability, RuntimeDiagnostics } from "../types/workspace";
 import { getSettingsCommandState } from "../workspace-ui-logic.js";
 import { mapRuntimeCapabilityState } from "../runtime-capability-state.cjs";
 import AiProviderSettings from "./AiProviderSettings";
+import DoubaoGeoSettings from "./settings/DoubaoGeoSettings";
 import WorkspaceSelectionPanel from "./WorkspaceSelectionPanel";
 import SettingsNavigation, {
   SettingsSection,
@@ -333,6 +334,8 @@ function SettingsViewContent() {
       <SettingsOverview onSelect={setActive} />
     ) : active === "ai" ? (
       <AiProviderSettings />
+    ) : active === "geo" ? (
+      <DoubaoGeoSettings />
     ) : active === "media" ? (
       <MediaProviderSettings />
     ) : active === "hepan" ? (

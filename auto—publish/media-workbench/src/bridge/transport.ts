@@ -5,6 +5,7 @@ export interface DesktopConsoleApi {
   workspace?: unknown;
   workspaceData?: unknown;
   aiProvider?: unknown;
+  geoKnowledge?: unknown;
   platformSettings?: unknown;
   storageMaintenance?: unknown;
   runtimeDiagnostics?: unknown;

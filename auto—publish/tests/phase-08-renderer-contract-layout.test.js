@@ -9,6 +9,16 @@ const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
 
 const domainTypeSymbols = {
   "types/auth.ts": ["AuthState"],
+  "types/geo-knowledge.ts": [
+    "KnowledgeSection",
+    "KnowledgeItem",
+    "KnowledgeSource",
+    "GeoKnowledge",
+    "KnowledgeState",
+    "GeoConfigStatus",
+    "GeoConfigInput",
+    "KnowledgeEdit",
+  ],
   "types/content.ts": [
     "ContentCommandStaleResult",
     "ContentMaterial",
@@ -177,6 +187,7 @@ const domainTypeSymbols = {
 };
 
 const typeAliasSymbols = new Set([
+  ...domainTypeSymbols["types/geo-knowledge.ts"],
   "PublicationEvidenceSummary",
   "AiProviderSource",
   "ArticleRemovalTransactionStatus",
@@ -307,6 +318,7 @@ test("renderer bridges expose named domain entries without method dispatch", () 
     "content.ts",
     "content-removal.ts",
     "generation.ts",
+    "geo-knowledge.ts",
     "media.ts",
     "platform.ts",
     "publication.ts",

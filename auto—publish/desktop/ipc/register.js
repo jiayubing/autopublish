@@ -177,6 +177,7 @@ function registerIpc(deps) {
     modules.media = require("./media-ipc").registerMediaIpc(guarded);
     modules.platform = require("./platform-ipc").registerPlatformIpc(guarded);
     modules.aiProvider = require("./ai-provider-ipc").registerAiProviderIpc(guarded);
+    if (values.geoKnowledgeService) modules.geoKnowledge = require("./geo-knowledge-ipc").registerGeoKnowledgeIpc(guarded);
     modules.platformSettings = require("./platform-settings-ipc").registerPlatformSettingsIpc(guarded);
     modules.aiContent = require("./ai-content-ipc").registerAiContentIpc(guarded);
     modules.generation = require("./content-generation-batch-ipc").registerContentGenerationBatchIpc(Object.assign({}, guarded, {
