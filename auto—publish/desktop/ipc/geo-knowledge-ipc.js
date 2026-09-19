@@ -9,6 +9,7 @@ function registerGeoKnowledgeIpc({ ipcMain, geoKnowledgeService }) {
     "exportMarkdown",
     "configStatus",
     "saveConfig",
+    "testConnection",
     "linkQuestions",
     "questionDetails",
     "questionArticles",

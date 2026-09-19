@@ -113,7 +113,17 @@
 - K5 `3a04f638`：文章知识快照及关联投影。
 - K6：本计划最终验证与收口提交（hash 见 Git 历史）。
 
-## 真实 API 验收 gate（未执行）
+## 真实 API 验收 gate（未通过）
+
+### 设置页连接测试（用户追加需求）
+
+- 用户手动生成后反馈“豆包拒绝了配置”。旧提示合并了 401/403，仅凭截图不能确定具体状态或断言密钥错误；真实知识库链路尚未验收通过。
+- 此前临时 Electron helper 因加载错误及加密配置读取失败未发起 API 请求（安全观测 calls=0）；用户随后接手手动测试，不自动重试真实请求。
+- 增加已保存配置的单请求连接测试、独立联网测试；固定无客户内容文本，不写配置/客户知识、不显示模型原文；界面明确用量与未保存限制。设置 command owner 复用现有机制；应用服务拥有互斥和销毁取消边界。
+- 401/403 分别提示鉴权/权限；能力拒绝、无引用、网络结果不确定使用安全提示，不暴露服务商原始正文、不自动重试或切换接口。本阶段仅假 transport 和隔离页面验证，真实 Key 留给用户在运行中的开发版手动测试。
+- Primary Review / 首轮集成：1282/1283。`CROSS_COMPONENT_INTERACTION`：固定鉴权提示中的英文 API Key 触发既有敏感词断言；改为等义中文“密钥”，保留原安全断言。Bounded Re-review 仅检查该文案、IPC 安全错误、设置页显示与直接回归；定向安全/连接/IPC 20/20，隔离页面 1/1，未发现剩余阻塞问题。
+- 最终代码验证：`npm test` 596/596；`npm run test:integration` 1283/1283（240 文件，无跳过）；`npm run lint`、`typecheck:main`、`typecheck:bridge`、`build:renderer`（含 renderer typecheck）、`build:preload`、`git diff --check` 通过。Playwright 隔离设置交互验证连接/联网成功、401 安全提示、未保存禁用和编辑后清除旧结果；不使用真实凭据。
+- 格式 gate 仍仅四个未修改基线文件失败，已核对相对 93bea300 无 diff；既有 Vite 大 chunk 提示保留。最终验证后只更新文档/evidence；阶段提交到 codex/geo-knowledge-base，不 push/merge、不提交用户 DOCX、临时 helper 或 work/。用户重启开发版后手动测试真实接口；真实质量/费用与权限仍未通过验收。
 
 ### Coding Plan 接口适配（用户追加授权）
 

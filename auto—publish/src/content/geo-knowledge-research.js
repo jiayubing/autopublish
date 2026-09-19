@@ -69,7 +69,7 @@ function createGeoKnowledgeResearch({ client }) {
         }
         if (result.unresolved.length) warnings.push("研究仍有未确认信息：" + task.topic);
       } catch (error) {
-        if (signal?.aborted || ["GEO_CANCELLED", "GEO_CONFIG_REQUIRED", "GEO_CONFIG_REJECTED", "GEO_SEARCH_DISABLED", "GEO_CAPABILITY_REJECTED", "GEO_SEARCH_UNCONFIRMED"].includes(error.code)) throw error;
+        if (signal?.aborted || ["GEO_CANCELLED", "GEO_CONFIG_REQUIRED", "GEO_CONFIG_REJECTED", "GEO_AUTH_REJECTED", "GEO_PERMISSION_DENIED", "GEO_SEARCH_DISABLED", "GEO_CAPABILITY_REJECTED", "GEO_SEARCH_UNCONFIRMED"].includes(error.code)) throw error;
         warnings.push("研究未完成：" + task.topic);
       }
     }

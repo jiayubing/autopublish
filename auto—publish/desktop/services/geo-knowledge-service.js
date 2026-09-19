@@ -47,6 +47,27 @@ function createGeoKnowledgeService(options) {
     research,
   });
   let active = 0;
+  let testController = null;
+  let disposed = false;
+  async function testConnection({ search = false } = {}) {
+    if (disposed) throw geoError("GEO_CANCELLED");
+    if (active || testController) throw geoError("GEO_ALREADY_RUNNING");
+    const controller = new AbortController();
+    testController = controller;
+    try {
+      const result = await client.request({
+        prompt: search
+          ? "请联网查找火山引擎官网，简短回复并提供网页引用。"
+          : "连接测试：请只回复 OK。",
+        search,
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) throw geoError("GEO_CANCELLED");
+      return { search, citationCount: result.citations.length };
+    } finally {
+      testController = null;
+    }
+  }
   const links = createGeoQuestionLinks({
     store,
     questionService: options.questionService,
@@ -63,6 +84,7 @@ function createGeoKnowledgeService(options) {
     };
   }
   async function generate({ clientId }) {
+    if (testController) throw geoError("GEO_ALREADY_RUNNING");
     active++;
     try {
       return { knowledge: await application.generate(clientId) };
@@ -135,11 +157,16 @@ function createGeoKnowledgeService(options) {
     state: ({ clientId }) => ({ state: application.state(clientId) }),
     cancel: ({ clientId }) => ({ state: application.cancel(clientId) }),
     configStatus: () => config().status(),
+    testConnection,
     saveConfig: (input) => {
-      if (active) throw geoError("GEO_ALREADY_RUNNING");
+      if (active || testController) throw geoError("GEO_ALREADY_RUNNING");
       return config().save(input);
     },
-    dispose: application.dispose,
+    dispose: () => {
+      disposed = true;
+      testController?.abort();
+      application.dispose();
+    },
   };
 }
 module.exports = { createGeoKnowledgeService };

@@ -150,6 +150,9 @@ const status = exactObject({
   webSearch: "boolean",
 });
 const messages = {
+  GEO_AUTH_REJECTED: "鉴权失败（401）：请检查是否使用了当前接口对应的密钥。",
+  GEO_PERMISSION_DENIED: "权限被拒绝（403）：请检查模型权限、套餐状态及接口是否匹配。",
+  GEO_REQUEST_FAILED: "服务端返回失败，请检查服务状态或额度；系统未自动重试。",
   GEO_CAPABILITY_REJECTED: "当前地址或模型拒绝了 Responses/联网请求，请核对模型和工具支持。系统未切换接口或自动重试。",
   GEO_SEARCH_UNCONFIRMED: "本次联网请求未返回可核验的网页引用，无法确认联网结果。研究已停止，系统未切换到其他计费接口。",
   GEO_LINK_PARTIAL:
@@ -157,13 +160,15 @@ const messages = {
   GEO_CONFIG_REQUIRED: "请先在设置中的豆包 GEO 配置密钥与模型。",
   GEO_CONFIG_REJECTED: "豆包拒绝了配置，请检查密钥和模型权限。",
   GEO_SEARCH_DISABLED: "请在豆包 GEO 设置中启用联网搜索。",
-  GEO_ALREADY_RUNNING: "知识研究正在运行，请等待完成。",
+  GEO_ALREADY_RUNNING: "知识研究或连接测试正在运行，请等待完成。",
   GEO_REVISION_CONFLICT: "知识库已被修改，请刷新后再操作。",
   GEO_REQUEST_UNCERTAIN:
     "远端请求结果无法确认，系统未自动重发。请检查配置或稍后手动研究。",
   GEO_CANCELLED: "知识研究已取消，原有知识保留。",
 };
 const codes = [
+  "GEO_AUTH_REJECTED",
+  "GEO_PERMISSION_DENIED",
   "GEO_CAPABILITY_REJECTED",
   "GEO_SEARCH_UNCONFIRMED",
   "GEO_LINK_PARTIAL",
@@ -322,6 +327,7 @@ const geoKnowledgeContracts = [
     exactObject({ markdown: text(4000000) }),
   ),
   contract("configStatus", "query", exactObject({}), status),
+  contract("testConnection", "command", exactObject({ search: "boolean" }), exactObject({ search: "boolean", citationCount: integerField({ min: 0, max: 100000 }) })),
   contract(
     "saveConfig",
     "command",

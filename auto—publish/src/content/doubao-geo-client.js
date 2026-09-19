@@ -20,7 +20,7 @@ function createDoubaoGeoClient(options) {
         body: JSON.stringify({ model: config.model, store: false, input: [{ role: "user", content: prompt }], ...(search ? { tools: [{ type: "web_search", max_keyword: 2 }] } : {}) }),
         signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
       });
-      if (!response.ok) throw geoError(response.status === 401 || response.status === 403 ? "GEO_CONFIG_REJECTED" : [400, 404, 422].includes(response.status) ? "GEO_CAPABILITY_REJECTED" : "GEO_REQUEST_FAILED");
+      if (!response.ok) throw geoError(response.status === 401 ? "GEO_AUTH_REJECTED" : response.status === 403 ? "GEO_PERMISSION_DENIED" : [400, 404, 422].includes(response.status) ? "GEO_CAPABILITY_REJECTED" : "GEO_REQUEST_FAILED");
       data = await response.json();
     } catch (error) {
       if (signal?.aborted) throw geoError("GEO_CANCELLED");

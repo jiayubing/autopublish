@@ -48,6 +48,7 @@ const geoKnowledgeIpcContractFixtures = [
   ],
   ["exportMarkdown", client, { markdown: "# 合成客户\n知识库" }],
   ["configStatus", {}, status],
+  ["testConnection", { search: false }, { search: false, citationCount: 0 }],
   [
     "saveConfig",
     { model: "synthetic", apiKey: "synthetic-key", webSearch: true, baseUrl: status.baseUrl },

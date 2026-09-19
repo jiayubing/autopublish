@@ -11,6 +11,7 @@ import type {
   KnowledgeEdit,
   GeoConfigStatus,
   GeoConfigInput,
+  GeoConnectionResult,
   KnowledgeQuestionDetails,
   KnowledgeQuestionArticles,
 } from "../types/geo-knowledge";
@@ -42,6 +43,9 @@ type Api = {
   exportMarkdown: (input: ClientInput) => Promise<Reply<{ markdown: string }>>;
   configStatus: () => Promise<Reply<GeoConfigStatus>>;
   saveConfig: (input: GeoConfigInput) => Promise<Reply<GeoConfigStatus>>;
+  testConnection: (input: {
+    search: boolean;
+  }) => Promise<Reply<GeoConnectionResult>>;
 };
 async function call<T>(invoke: (api: Api) => Promise<Reply<T>>): Promise<T> {
   const api = requireBridgeCapability<Api>(
@@ -80,3 +84,5 @@ export const getGeoConfig = () =>
   call((api) => requireBridgeMethod(api.configStatus)());
 export const saveGeoConfig = (input: GeoConfigInput) =>
   call((api) => requireBridgeMethod(api.saveConfig)(input));
+export const testGeoConnection = (input: { search: boolean }) =>
+  call((api) => requireBridgeMethod(api.testConnection)(input));

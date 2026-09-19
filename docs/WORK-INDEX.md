@@ -4,7 +4,7 @@
 
 ## 当前执行入口
 
-- [客户 GEO 知识库](GEO-KNOWLEDGE-PLAN.md)：K1–K6 本地实现与阶段提交完成；真实 API 联调待配置与授权。
+- [客户 GEO 知识库](GEO-KNOWLEDGE-PLAN.md)：K1–K6 本地实现完成；Coding Plan 已适配，设置页提供连接/联网测试；用户手动调用被拒绝，真实 API gate 尚未通过。
 
 - [规模审计修复](../.scratch/scale-audit/REMEDIATION.md)：SA-01 / SA-02 / SA-04 及付费页面分页/摘要读取完成；普通队列、全局执行/启动与其余失效优化待后续批次。
 

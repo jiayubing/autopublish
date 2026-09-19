@@ -19,6 +19,7 @@ the installed package.
 
 - 接口可选 Coding Plan（`https://ark.cn-beijing.volces.com/api/coding/v3`）或标准方舟（`https://ark.cn-beijing.volces.com/api/v3`）。新配置默认 Coding Plan；旧配置保留标准地址，需手动切换并保存。标准地址不使用套餐额度，可能额外计费；系统不会自动切换接口。
 - 请求使用所选地址的 `/responses`。Coding Plan 的实际模型/联网工具权限及套餐用途仍需验证；支持 Responses 不等于支持 web_search。请求被拒绝或联网结果缺少可核验引用时明确提示，不能当成真实联网验收成功。
+- 保存后可点“测试连接”检查 Responses 调用，或单独点“测试联网搜索”检查引用返回。每次测试仅发一条固定文本请求、消耗 API 用量，不读取客户资料、不自动重试或切换地址。配置修改未保存时不能测试；测试期间不能保存配置或启动知识生成。连接成功不代表联网成功。
 
 - “生成知识库 / 重新研究”会向火山方舟发送该客户当前可读取资料并消耗 API 用量；真实使用前配置支持 Responses 与联网搜索的模型及 API Key。第一版本地实现与真实接口验收状态见 [实施计划](../docs/GEO-KNOWLEDGE-PLAN.md)。
 - 人工编辑保存后锁定；再次研究不覆盖锁定项。来源、外部研究与待确认信息分开显示；知识库可导出 Markdown。

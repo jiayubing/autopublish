@@ -70,6 +70,7 @@ export type GeoConfigInput = {
   apiKey: string;
   webSearch: boolean;
 };
+export type GeoConnectionResult = { search: boolean; citationCount: number };
 export type KnowledgeEdit = {
   clientId: string;
   revision: number;

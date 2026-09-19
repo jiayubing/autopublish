@@ -61,6 +61,11 @@ function fixture({ document }) {
       onDoubaoQueueState: () => () => {},
     },
     geoKnowledge: {
+      testConnection: async (input) => {
+        await new Promise(resolve => setTimeout(resolve, 150));
+        if (window.__geoTestFail) return { ok: false, error: { code: "GEO_AUTH_REJECTED", userMessage: "private upstream text", category: "authentication", retryability: "never" } };
+        return ok({ search: input.search, citationCount: input.search ? 1 : 0 });
+      },
       questionArticles: () =>
         ok({
           articles: [
@@ -279,8 +284,18 @@ test("knowledge page handles empty, busy, error, editing and encrypted-config in
   await page.getByLabel("API Key", { exact: true }).fill("synthetic-secret");
   await page.getByRole("button", { name: "保存豆包 GEO 配置" }).click();
   await page.getByText("豆包 GEO 配置已保存。").waitFor();
+  await page.getByRole("button", { name: "测试连接", exact: true }).click();
+  await page.getByText(/连接测试通过：/).waitFor();
+  await page.getByRole("button", { name: "测试联网搜索", exact: true }).click();
+  await page.getByText("联网测试通过，返回 1 条可核验引用。").waitFor();
+  await page.evaluate(() => { window.__geoTestFail = true; });
+  await page.getByRole("button", { name: "测试连接", exact: true }).click();
+  await page.getByText(/鉴权失败（401）/).waitFor();
+  assert.equal(await page.getByText("private upstream text").count(), 0);
   assert.equal(await page.evaluate(() => window.__geoCalls.config[0].baseUrl), "https://ark.cn-beijing.volces.com/api/coding/v3");
   await page.getByLabel("接口 / Base URL").selectOption("https://ark.cn-beijing.volces.com/api/v3");
+  assert.equal(await page.getByRole("button", { name: "测试连接", exact: true }).isDisabled(), true);
+  assert.equal(await page.getByText(/鉴权失败（401）/).count(), 0);
   await page.getByText(/标准方舟地址不消耗 Coding Plan/).waitFor();
   await page.getByLabel("接口 / Base URL").selectOption("https://ark.cn-beijing.volces.com/api/coding/v3");
   assert.equal(

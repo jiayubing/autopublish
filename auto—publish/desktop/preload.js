@@ -211,6 +211,7 @@ const api = {
     exportMarkdown: input => ipcRenderer.invoke("geo-knowledge:exportMarkdown", input),
     configStatus: () => ipcRenderer.invoke("geo-knowledge:configStatus"),
     saveConfig: input => ipcRenderer.invoke("geo-knowledge:saveConfig", input),
+    testConnection: input => ipcRenderer.invoke("geo-knowledge:testConnection", input),
   },
   platformSettings: {
     getStatus: function (platformId) {
