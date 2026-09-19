@@ -10,7 +10,7 @@ export default function DoubaoGeoSettings() {
   const status = snapshot.geo.data as GeoConfigStatus | null;
   const [model, setModel] = useState("");
   const [baseUrl, setBaseUrl] = useState(
-    "https://ark.cn-beijing.volces.com/api/plan/v3",
+    "https://ark.cn-beijing.volces.com/api/coding/v3",
   );
   const [apiKey, setApiKey] = useState("");
   const [webSearch, setWebSearch] = useState(true);
@@ -88,7 +88,7 @@ export default function DoubaoGeoSettings() {
             setSaved(false);
           }}
         >
-          <option value="https://ark.cn-beijing.volces.com/api/plan/v3">
+          <option value="https://ark.cn-beijing.volces.com/api/coding/v3">
             Coding Plan（套餐专用）
           </option>
           <option value="https://ark.cn-beijing.volces.com/api/v3">

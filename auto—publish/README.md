@@ -17,7 +17,7 @@ the installed package.
 
 内容生产 → 选择客户 → 客户知识库。配置入口为“设置 → 豆包 GEO”；保存配置只写本机加密凭据，不调用接口。
 
-- 接口可选 Coding Plan（`https://ark.cn-beijing.volces.com/api/plan/v3`）或标准方舟（`https://ark.cn-beijing.volces.com/api/v3`）。新配置默认 Coding Plan；旧配置保留标准地址，需手动切换并保存。标准地址不使用套餐额度，可能额外计费；系统不会自动切换接口。
+- 接口可选 Coding Plan（`https://ark.cn-beijing.volces.com/api/coding/v3`）或标准方舟（`https://ark.cn-beijing.volces.com/api/v3`）。新配置默认 Coding Plan；旧配置保留标准地址，需手动切换并保存。标准地址不使用套餐额度，可能额外计费；系统不会自动切换接口。
 - 请求使用所选地址的 `/responses`。Coding Plan 的实际模型/联网工具权限及套餐用途仍需验证；支持 Responses 不等于支持 web_search。请求被拒绝或联网结果缺少可核验引用时明确提示，不能当成真实联网验收成功。
 - 保存后可点“测试连接”检查 Responses 调用，或单独点“测试联网搜索”检查引用返回。每次测试仅发一条固定文本请求、消耗 API 用量，不读取客户资料、不自动重试或切换地址。配置修改未保存时不能测试；测试期间不能保存配置或启动知识生成。连接成功不代表联网成功。
 
