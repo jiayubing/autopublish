@@ -31,6 +31,10 @@ function createWorkspaceMigrationComposition(options) {
     values.inspectMigrationJournals ||
     require("../../src/infrastructure/operational-store/operational-store")
       .inspectOperationalStoreMigrationJournals;
+  const inspectImports =
+    values.inspectMigrationImports ||
+    require("../../src/infrastructure/operational-store/operational-store")
+      .inspectOperationalStoreImportedMigrationEntries;
   const acquireMigrationLease =
     values.acquireMigrationLease ||
     require("../../src/infrastructure/operational-store/operational-store")
@@ -50,6 +54,26 @@ function createWorkspaceMigrationComposition(options) {
       (Number.isSafeInteger(counts.unplanned) && counts.unplanned > 0) ||
       (Number.isSafeInteger(counts.corrupt) && counts.corrupt > 0)
     );
+  }
+
+  function unresolvedLegacyCount(report) {
+    const counts = (report && report.counts) || {};
+    return ["unplanned", "corrupt"].reduce(
+      (total, key) =>
+        total +
+        (Number.isSafeInteger(counts[key]) && counts[key] > 0
+          ? counts[key]
+          : 0),
+      0,
+    );
+  }
+
+  function allPlannedEntriesAlreadyImported(plan, importedEntries) {
+    if (plan.entries.length === 0) return false;
+    const imported = new Set(
+      (importedEntries || []).map((entry) => JSON.stringify(entry)),
+    );
+    return plan.entries.every((entry) => imported.has(JSON.stringify(entry)));
   }
 
   function createGate() {
@@ -123,14 +147,19 @@ function createWorkspaceMigrationComposition(options) {
       }
     }
     const planned = planner.planResult();
-    const migrationRequired = needsMigration(planned);
+    const plan = planned.plan;
+    const allAlreadyImported = allPlannedEntriesAlreadyImported(
+      plan,
+      inspectImports({ workspaceRoot: values.workspaceRoot }),
+    );
+    const migrationRequired = needsMigration(planned) && !allAlreadyImported;
     const journals = inspectJournals({ workspaceRoot: values.workspaceRoot });
     const matchingJournal = journals.find(
       (journal) =>
-        journal.migrationRunId === planned.plan.migrationRunId &&
-        journal.workspaceFingerprint === planned.plan.workspaceFingerprint &&
-        journal.sourceFingerprint === planned.plan.sourceFingerprint &&
-        journal.planFingerprint === planned.plan.planFingerprint &&
+        journal.migrationRunId === plan.migrationRunId &&
+        journal.workspaceFingerprint === plan.workspaceFingerprint &&
+        journal.sourceFingerprint === plan.sourceFingerprint &&
+        journal.planFingerprint === plan.planFingerprint &&
         journal.sourceVersion === 1,
     );
     // Ignored source content can change the scan fingerprint without changing
@@ -250,6 +279,24 @@ function createWorkspaceMigrationComposition(options) {
         repair: null,
       });
     }
+    if (
+      !migrationRequired &&
+      allAlreadyImported &&
+      unresolvedLegacyCount(planned.report) === 0
+    ) {
+      return Object.freeze({
+        allowed: true,
+        status: "already_imported_legacy_ignored",
+        code: null,
+        phase: journals.some(
+          (journal) => journal && journal.phase === "verified",
+        )
+          ? "verified"
+          : null,
+        executionGroupsPaused: true,
+        repair: null,
+      });
+    }
     if (!migrationRequired && !matchingJournal) {
       return Object.freeze({
         allowed: false,
@@ -265,15 +312,15 @@ function createWorkspaceMigrationComposition(options) {
     // this same artifact before moving detected -> backed_up.
     if (migrationRequired) {
       backup.ensure({
-        migrationRunId: planned.plan.migrationRunId,
-        workspaceFingerprint: planned.plan.workspaceFingerprint,
-        sourceFingerprint: planned.plan.sourceFingerprint,
-        planFingerprint: planned.plan.planFingerprint,
+        migrationRunId: plan.migrationRunId,
+        workspaceFingerprint: plan.workspaceFingerprint,
+        sourceFingerprint: plan.sourceFingerprint,
+        planFingerprint: plan.planFingerprint,
       });
     }
     const gate = createGate();
     return gate.run({
-      plan: planned.plan,
+      plan,
       report: planned.report,
       confirmationFingerprint:
         input && typeof input.confirmationFingerprint === "string"
