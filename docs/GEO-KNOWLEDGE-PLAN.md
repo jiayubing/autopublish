@@ -24,8 +24,8 @@
 | 阶段 | 范围 | 状态 |
 | --- | --- | --- |
 | K1 | schema、store、路径、材料提取、豆包配置与基础调用 | COMPLETE |
-| K2 | 有界研究计划、联网引用、部分失败、整理 | READY |
-| K3 | service/IPC/bridge、知识库页面、编辑锁定、导出 | PENDING |
+| K2 | 有界研究计划、联网引用、部分失败、整理 | COMPLETE |
+| K3 | service/IPC/bridge、知识库页面、编辑锁定、导出 | READY |
 | K4 | GEO 问题进入现有采集、关联回答 | PENDING |
 | K5 | 按问题选择知识、生成快照与文章关联 | PENDING |
 | K6 | 组合回归、构建、有限审查与证据收口 | PENDING |
@@ -58,3 +58,10 @@
 - Primary Review：原子写返回 false、stale 保存、锁定/冲突、来源引用、取消迟到结果、路径链接均有行为覆盖；无未关闭阻塞 finding。
 - 网络调用仅实现请求合同和合成 transport 验证，真实 API 尚未执行。官方接口参考：https://www.volcengine.com/docs/82379/1585128 。
 - commit：本阶段提交 `feat: add GEO knowledge storage and material extraction`（具体 hash 由 Git 历史记录）。
+
+### K2
+
+- 定向 `node --test tests/geo-knowledge.test.js tests/geo-knowledge-research.test.js`：12/12；定向 ESLint 和 diff 检查通过；`npm test`：596/596。
+- `npm run test:integration`：1264/1265，唯一失败为未修改的 `renderer-history-editor-flow.test.js` 焦点即时断言；独立复跑该文件验证。该阶段没有 renderer 变更，最终 K6 再跑整体 gate。
+- Primary Review 修复 `INTRODUCED_BY_CHANGE`：整理候选 profile 不得覆盖材料提取的事实；补断言后 bounded re-review 通过。
+- 一轮最多 8 个研究任务；引用无官方身份认证时保守登记 third_party；模型只引用程序来源 registry。真实效果留待 API 验收。

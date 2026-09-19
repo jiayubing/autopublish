@@ -46,6 +46,7 @@ function mergeKnowledge(current, incoming) {
   function mergeItem(old, next) {
     if (!old) return next;
     if (old.locked) return old;
+    if (old.basis === "fact" && next.basis !== "fact") return old;
     const oldContent = JSON.stringify(old.fields || { name: old.name, description: old.description });
     const nextContent = JSON.stringify(next.fields || { name: next.name, description: next.description });
     if (old.basis === "fact" && next.basis === "fact" && oldContent !== nextContent) {
