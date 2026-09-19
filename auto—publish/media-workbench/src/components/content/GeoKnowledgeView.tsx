@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import GeoKnowledgeQuestions from "./GeoKnowledgeQuestions";
 import { useGeoKnowledge } from "../../features/content/use-geo-knowledge";
 import type {
   KnowledgeItem,
@@ -355,12 +356,12 @@ export default function GeoKnowledgeView({ clientId }: { clientId: string }) {
             </div>
           )}
           {tab === "questions" && (
-            <div className="grid gap-2">
-              {knowledge.geoQuestions.map((item) =>
-                renderItem("geoQuestions", item),
-              )}
-              {!knowledge.geoQuestions.length && <p>暂无 GEO 问题。</p>}
-            </div>
+            <GeoKnowledgeQuestions
+              knowledge={knowledge}
+              busy={feature.busy || feature.state.running || Boolean(editing)}
+              link={feature.link}
+              renderItem={(item) => renderItem("geoQuestions", item)}
+            />
           )}
           {tab === "sources" && (
             <div className="grid gap-3">

@@ -58,14 +58,6 @@ async function createContentProductionComposition(options) {
   }
 
   try {
-    const geoKnowledgeService = ownService(
-      require("../services/geo-knowledge-service").createGeoKnowledgeService({
-        workspaceRoot: value.workspaceRoot,
-        paths: value.paths,
-        userDataPath: value.userDataPath,
-        safeStorage: value.safeStorage,
-      }),
-    );
     const doubaoCollectionService = ownService(
       require("../services/doubao-collection-service").createDoubaoCollectionDesktopService(
         {
@@ -74,6 +66,15 @@ async function createContentProductionComposition(options) {
           onDataInvalidated: value.onDataInvalidated,
         },
       ),
+    );
+    const geoKnowledgeService = ownService(
+      require("../services/geo-knowledge-service").createGeoKnowledgeService({
+        workspaceRoot: value.workspaceRoot,
+        paths: value.paths,
+        userDataPath: value.userDataPath,
+        safeStorage: value.safeStorage,
+        questionService: doubaoCollectionService,
+      }),
     );
     const generationScheduler = ownService(
       require("../../src/content/generation-execution-scheduler").createGenerationExecutionScheduler(

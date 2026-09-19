@@ -79,3 +79,16 @@ export type KnowledgeEdit = {
     fields?: Record<string, string>;
   };
 };
+export type KnowledgeQuestionDetails = {
+  id: string;
+  linkStatus: "unlinked" | "linked" | "stale";
+  enabled: boolean | null;
+  clientMentioned: boolean | null;
+  research: null | {
+    question: string;
+    answerText: string;
+    collectedAt: string;
+    collectionMethod: string;
+    references: { title: string; url: string }[];
+  };
+};

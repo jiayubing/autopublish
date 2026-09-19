@@ -11,10 +11,20 @@ import type {
   KnowledgeEdit,
   GeoConfigStatus,
   GeoConfigInput,
+  KnowledgeQuestionDetails,
 } from "../types/geo-knowledge";
 type Reply<T> = { ok: true; data: T } | { ok: false; error: IpcError };
 type ClientInput = { clientId: string };
 type Api = {
+  linkQuestions: (input: {
+    clientId: string;
+    revision: number;
+    ids: string[];
+  }) => Promise<Reply<{ knowledge: GeoKnowledge }>>;
+  questionDetails: (input: {
+    clientId: string;
+    id: string;
+  }) => Promise<Reply<KnowledgeQuestionDetails>>;
   load: (
     input: ClientInput,
   ) => Promise<
@@ -39,6 +49,16 @@ async function call<T>(invoke: (api: Api) => Promise<Reply<T>>): Promise<T> {
 }
 export const loadKnowledge = (clientId: string) =>
   call((api) => requireBridgeMethod(api.load)({ clientId }));
+export const linkKnowledgeQuestions = (
+  clientId: string,
+  revision: number,
+  ids: string[],
+) =>
+  call((api) =>
+    requireBridgeMethod(api.linkQuestions)({ clientId, revision, ids }),
+  );
+export const getKnowledgeQuestionDetails = (clientId: string, id: string) =>
+  call((api) => requireBridgeMethod(api.questionDetails)({ clientId, id }));
 export const knowledgeState = (clientId: string) =>
   call((api) => requireBridgeMethod(api.state)({ clientId }));
 export const generateKnowledge = (clientId: string) =>

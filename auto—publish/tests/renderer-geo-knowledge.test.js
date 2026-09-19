@@ -61,6 +61,29 @@ function fixture({ document }) {
       onDoubaoQueueState: () => () => {},
     },
     geoKnowledge: {
+      linkQuestions: ({ ids }) => {
+        knowledge.geoQuestions.forEach((q) => {
+          if (ids.includes(q.id)) q.questionId = "question-1";
+        });
+        knowledge.revision++;
+        return ok({ knowledge });
+      },
+      questionDetails: ({ id }) =>
+        ok({
+          id,
+          linkStatus: "linked",
+          enabled: true,
+          clientMentioned: true,
+          research: {
+            question: "如何选择服务？",
+            answerText: "合成客户提供服务，详情以实际核对为准。",
+            references: [
+              { title: "测试来源", url: "https://example.com/source" },
+            ],
+            collectedAt: "2026-09-19T00:00:00.000Z",
+            collectionMethod: "manual",
+          },
+        }),
       load: () =>
         ok({
           knowledge,
@@ -167,7 +190,10 @@ test("knowledge page handles empty, busy, error, editing and encrypted-config in
   );
   t.after(() => page.close());
   const document = normalizeCandidate(
-    { profile: { fields: { name: "合成客户" } } },
+    {
+      profile: { fields: { name: "合成客户" } },
+      geoQuestions: [{ name: "如何选择服务？", intent: "selection" }],
+    },
     [],
     "client-1",
   );
@@ -206,6 +232,17 @@ test("knowledge page handles empty, busy, error, editing and encrypted-config in
       fullPage: true,
     });
   }
+  await page.getByRole("button", { name: "GEO 问题", exact: true }).click();
+  await page.getByRole("checkbox", { name: "选择 如何选择服务？" }).check();
+  await page.getByRole("button", { name: "加入问题采集（1）" }).click();
+  await page.getByText(/已加入问题采集；/).waitFor();
+  await page
+    .getByRole("button", { name: "查看回答与关联：如何选择服务？" })
+    .click();
+  await page
+    .getByText("合成客户提供服务，详情以实际核对为准。", { exact: true })
+    .waitFor();
+  await page.getByText(/客户名称字面出现：是/).waitFor();
   await page.locator("#nav-item-settings").click();
   await page.getByRole("button", { name: "豆包 GEO", exact: true }).click();
   await page.getByLabel("模型 / Endpoint ID").fill("synthetic-model");

@@ -149,6 +149,8 @@ const status = exactObject({
   webSearch: "boolean",
 });
 const messages = {
+  GEO_LINK_PARTIAL:
+    "部分问题可能已加入采集，但关联未完整保存。请刷新后重新选择加入，已有问题不会重复创建。",
   GEO_CONFIG_REQUIRED: "请先在设置中的豆包 GEO 配置密钥与模型。",
   GEO_CONFIG_REJECTED: "豆包拒绝了配置，请检查密钥和模型权限。",
   GEO_SEARCH_DISABLED: "请在豆包 GEO 设置中启用联网搜索。",
@@ -159,6 +161,7 @@ const messages = {
   GEO_CANCELLED: "知识研究已取消，原有知识保留。",
 };
 const codes = [
+  "GEO_LINK_PARTIAL",
   "AUTH_REQUIRED",
   "IPC_REQUEST_INVALID",
   "IPC_RESULT_INVALID",
@@ -217,6 +220,39 @@ function contract(method, kind, request, success) {
   });
 }
 const geoKnowledgeContracts = [
+  contract(
+    "linkQuestions",
+    "command",
+    exactObject({
+      clientId: id,
+      revision: integerField({ min: 1, max: Number.MAX_SAFE_INTEGER }),
+      ids: arrayField(id, { min: 1, max: 500 }),
+    }),
+    exactObject({ knowledge }),
+  ),
+  contract(
+    "questionDetails",
+    "query",
+    exactObject({ clientId: id, id }),
+    exactObject({
+      id,
+      linkStatus: enumField(["unlinked", "linked", "stale"]),
+      enabled: nullableField("boolean"),
+      clientMentioned: nullableField("boolean"),
+      research: nullableField(
+        exactObject({
+          question: text(2000, 1),
+          answerText: text(200000, 1),
+          collectedAt: text(100),
+          collectionMethod: enumField(["automatic", "manual", "legacy"]),
+          references: arrayField(
+            exactObject({ title: text(10000, 1), url: text(10000, 1) }),
+            { max: 1000 },
+          ),
+        }),
+      ),
+    }),
+  ),
   contract(
     "load",
     "query",

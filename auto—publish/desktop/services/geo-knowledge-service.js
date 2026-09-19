@@ -18,6 +18,10 @@ const {
 } = require("../../src/content/geo-knowledge-application");
 const { createDoubaoGeoConfigStore } = require("../doubao-geo-config-store");
 const { geoError } = require("../../src/content/geo-knowledge-schema");
+const {
+  createGeoQuestionLinks,
+} = require("../../src/content/geo-question-links");
+const { createResearchStore } = require("../../src/content/research-store");
 
 function createGeoKnowledgeService(options) {
   const store = options.store || createGeoKnowledgeStore(options);
@@ -39,6 +43,14 @@ function createGeoKnowledgeService(options) {
     research,
   });
   let active = 0;
+  const links = createGeoQuestionLinks({
+    store,
+    questionService: options.questionService,
+    researchStore:
+      options.researchStore ||
+      createResearchStore(options.workspaceRoot, { paths: options.paths }),
+    getClient: resolveClient,
+  });
   function load({ clientId }) {
     resolveClient(clientId);
     return {
@@ -103,6 +115,7 @@ function createGeoKnowledgeService(options) {
     return { markdown: lines.join("\n") };
   }
   return {
+    ...links,
     load,
     generate,
     edit,

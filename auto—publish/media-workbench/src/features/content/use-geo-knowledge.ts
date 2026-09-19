@@ -6,6 +6,7 @@ import {
   cancelKnowledge,
   editKnowledge,
   exportKnowledge,
+  linkKnowledgeQuestions,
 } from "../../bridge/geo-knowledge";
 import type {
   GeoKnowledge,
@@ -133,5 +134,11 @@ export function useGeoKnowledge(clientId: string) {
     download,
     generate: () => command(() => generateKnowledge(clientId)),
     edit: (input: KnowledgeEdit) => command(() => editKnowledge(input)),
+    link: (ids: string[]) =>
+      knowledge
+        ? command(() =>
+            linkKnowledgeQuestions(clientId, knowledge.revision, ids),
+          )
+        : Promise.resolve(false),
   };
 }

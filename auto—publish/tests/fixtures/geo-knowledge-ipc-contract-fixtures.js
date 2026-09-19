@@ -10,6 +10,22 @@ const state = { phase: "idle", running: false };
 const client = { clientId: "client-1" };
 const status = { configured: false, model: "", webSearch: true };
 const geoKnowledgeIpcContractFixtures = [
+  [
+    "linkQuestions",
+    { ...client, revision: 1, ids: ["geo-question-1"] },
+    { knowledge },
+  ],
+  [
+    "questionDetails",
+    { ...client, id: "geo-question-1" },
+    {
+      id: "geo-question-1",
+      linkStatus: "unlinked",
+      enabled: null,
+      research: null,
+      clientMentioned: null,
+    },
+  ],
   ["load", client, { knowledge, state }],
   ["state", client, { state }],
   ["generate", client, { knowledge }],

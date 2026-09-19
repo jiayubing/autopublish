@@ -10,6 +10,7 @@ const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
 const domainTypeSymbols = {
   "types/auth.ts": ["AuthState"],
   "types/geo-knowledge.ts": [
+    "KnowledgeQuestionDetails",
     "KnowledgeSection",
     "KnowledgeItem",
     "KnowledgeSource",

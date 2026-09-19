@@ -26,7 +26,7 @@
 | K1 | schema、store、路径、材料提取、豆包配置与基础调用 | COMPLETE |
 | K2 | 有界研究计划、联网引用、部分失败、整理 | COMPLETE |
 | K3 | service/IPC/bridge、知识库页面、编辑锁定、导出 | COMPLETE |
-| K4 | GEO 问题进入现有采集、关联回答 | PENDING |
+| K4 | GEO 问题进入现有采集、关联回答 | COMPLETE |
 | K5 | 按问题选择知识、生成快照与文章关联 | PENDING |
 | K6 | 组合回归、构建、有限审查与证据收口 | PENDING |
 
@@ -74,3 +74,11 @@
 - lint、main/bridge/renderer typecheck、renderer/preload build 通过。format:check 中本次 transport 格式已修复；剩余四个未修改基线文件格式问题（identities.js、authenticated-runtime、phase-01-domain-contracts、phase-08-content-lifecycle）未扩大修改。
 - K2 唯一失败文件独立复跑 19/19，K3 首轮整体该文件也已通过。
 - Primary Review 与 bounded 修复覆盖鉴权 transport、配置秘密不回传、手动 provenance、revision、页面空态/错误/禁用/保存；无剩余已知阻塞 finding。
+
+### K4
+
+- 复用现有采集 service 创建问题；文本规范化去重，已有停用项不自动启用。写入前验证全部选择与 revision，跨文件失败显式 GEO_LINK_PARTIAL，重试复用已落盘问题。
+- 真实回答只读 research-store，不写入知识库；采集问题改名/删除、知识库问题改名均使旧关联失效；“客户出现”仅代表客户名称字面匹配。
+- 新增行为测试 3/3；IPC/fixture matrix 与 service 8/8；隔离页面测试 1/1（选题加入、回答详情、原有编辑/设置）。lint、三项 typecheck、preload 构建、diff 检查通过。
+- `npm test` 596/596；`npm run test:integration` 1271/1271。
+- Primary Review：单 writer、无真实网络、跨 owner partial/retry、旧回答隔离；无未关闭阻塞 finding。选择问题不会自动启动真实采集。
