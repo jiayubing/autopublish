@@ -28,7 +28,7 @@
 | K3 | service/IPC/bridge、知识库页面、编辑锁定、导出 | COMPLETE |
 | K4 | GEO 问题进入现有采集、关联回答 | COMPLETE |
 | K5 | 按问题选择知识、生成快照与文章关联 | COMPLETE |
-| K6 | 组合回归、构建、有限审查与证据收口 | PENDING |
+| K6 | 组合回归、构建、有限审查与证据收口 | COMPLETE_LOCAL |
 
 每阶段：实现 → 定向行为测试 → Primary Review → 修复阻塞问题 → Bounded Re-review → 提交。
 提交前按应用 README 运行 core 与 integration；UI 阶段加类型检查、构建和页面交互验证。
@@ -92,3 +92,31 @@
 - 新增选择/生成持久化/文章关联 3/3；摘要与类型 owner 回归合计 15/15；生成/prompt/IPC fixture 34/34；隔离页面 1/1。lint、三项 typecheck、preload/renderer build、diff 检查通过。
 - `npm test` 596/596；`npm run test:integration` 1274/1274。
 - Primary Review 与直接边界检查：快照不可变、旧流程无知识可用、摘要 transport 显式合同、发布事实唯一 owner；无未关闭阻塞 finding。
+
+### K6
+
+- 本地完整闭环使用合成数据：资料提取/整理 → 保存 → 加入现有采集 → 保存合成回答 → 生成文章 → 重启 → 查询文章与发布状态；外部模型和发布 observation 均为 fixture，无真实外部副作用。
+- Integration Review 发现并修复 `CROSS_COMPONENT_INTERACTION / P2`：profile 补充新字段不应制造整对象冲突。现在逐字段保留旧冲突值、补充非冲突值，仅记录冲突字段；人工锁定规则不变。bounded 回归与闭环合计 17/17。
+- 最终 `npm test` 596/596；`npm run test:integration` 1276/1276（238 文件，零跳过）；`npm run lint`、`typecheck:main`、`typecheck:bridge`、`build:renderer`（包含 renderer typecheck）、`build:preload`、`git diff --check` 通过。最终验证后仅更新文档/evidence，未再修改生产源码或测试。
+- `GEO_CAPTURE_SCREENSHOT=1 node --test tests/renderer-geo-knowledge.test.js` 1/1；已检查客户知识与问题详情截图，选择/禁用/回答/关联文章均可见。截图只含合成数据，保存于 ignored build/test-results，不作为客户原文 evidence。
+- `npm run format:check` 仅剩 K3 记录的四个基线文件失败；`git diff --exit-code 93bea300 -- <上述四文件>` 为 0，未将无关格式债混入功能。Vite 仍有既有大 chunk 提示，不影响构建成功。
+- 未运行 release/unpacked/真实账号验收：本次未打包发行，也未取得真实外部操作授权。用户 DOCX 仅验证本地解析，尚未验证真实 AI 提取/联网质量。
+- Bounded Re-review 仅检查 profile 修复 diff、来源/锁定不变量与直接提取/整理/生成回归；无剩余已知阻塞 finding。未引入旁路事实 writer，未迁移或删除生产数据，未 push/merge。
+- 交接 Git 状态：阶段改动全部提交到 codex/geo-knowledge-base；用户原有未跟踪 DOCX 与根 work/ 保留且未提交。K1–K6 本地范围完成，真实 API gate 仍待用户配置与授权，不声称端到端真实模型验收完成。
+
+## 阶段提交
+
+- K1 `c788c995`：存储、材料提取、配置基础。
+- K2 `6449c00f`：有界联网研究与整理。
+- K3 `9b0deb3b`：工作台、编辑、导出、设置。
+- K4 `2d3c896e`：问题采集及真实回答关联。
+- K5 `3a04f638`：文章知识快照及关联投影。
+- K6：本计划最终验证与收口提交（hash 见 Git 历史）。
+
+## 真实 API 验收 gate（未执行）
+
+需要用户在本机“设置 → 豆包 GEO”配置 API Key 与支持 Responses/web_search 的模型或 Endpoint ID，并明确授权将指定测试资料发送到服务商以及本次调用费用。不要把 Key 提交到 Git 或写进计划。
+
+授权后先限定一个客户、用户指定 DOCX、单轮最多 8 个研究任务，验证真实响应/引用 metadata、研究质量、来源准确性和成本；遇到鉴权拒绝、模型/工具不支持或请求结果不确定立即停止，不自动重复付费请求。此 gate 未通过前不宣称真实模型效果已验收。
+
+当前已知边界：对象去重依赖稳定 identity，并非语义相似度去重；外部引用保守标为 third_party，不凭搜索引用直接认定官网/权威；第一版导出 Markdown，细分业务属性记录在对象说明中，不建立行业特化 schema。

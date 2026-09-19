@@ -3,8 +3,24 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const { createGeoKnowledgeResearch } = require("../src/content/geo-knowledge-research");
 const { normalizeCandidate } = require("../src/content/geo-knowledge-merge");
+const { mergeKnowledge } = require("../src/content/geo-knowledge-merge");
 const { stableId } = require("../src/content/geo-knowledge-schema");
 const facts = () => normalizeCandidate({ profile: { fields: {} } }, [], "client-1");
+test("profile enrichment adds non-conflicting fields and reports only contradictory fields", () => {
+  const source = [{id: "s", type: "client_input", title: "合成资料"}];
+  const make = fields => normalizeCandidate({profile: {fields, basis: "fact", sourceIds: ["s"]}}, source, "client-1");
+  const original = make({name: "合成客户", location: "郑州"});
+  const added = mergeKnowledge(original, make({location: "郑州", name: "合成客户", serviceArea: "本地"}));
+  assert.deepEqual(added.profile.fields, {location: "郑州", name: "合成客户", serviceArea: "本地"});
+  assert.equal(added.restrictions.length, 0);
+  const conflict = mergeKnowledge(original, make({name: "合成客户", location: "洛阳", serviceArea: "本地"}));
+  assert.equal(conflict.profile.fields.location, "郑州");
+  assert.equal(conflict.profile.fields.serviceArea, "本地");
+  assert.equal(conflict.restrictions.length, 1);
+  assert.match(conflict.restrictions[0].description, /郑州/);
+  assert.match(conflict.restrictions[0].description, /洛阳/);
+  assert.doesNotMatch(conflict.restrictions[0].description, /serviceArea/);
+});
 test("partial research keeps trusted citations and does not promote invented URLs", async () => {
   let count = 0;
   const client = { async request(input) {

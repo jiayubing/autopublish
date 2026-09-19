@@ -47,8 +47,16 @@ function mergeKnowledge(current, incoming) {
     if (!old) return next;
     if (old.locked) return old;
     if (old.basis === "fact" && next.basis !== "fact") return old;
-    const oldContent = JSON.stringify(old.fields || { name: old.name, description: old.description });
-    const nextContent = JSON.stringify(next.fields || { name: next.name, description: next.description });
+    let retained = old;
+    let oldContent = JSON.stringify(old.fields || { name: old.name, description: old.description });
+    let nextContent = JSON.stringify(next.fields || { name: next.name, description: next.description });
+    if (old.fields && next.fields && old.basis === "fact" && next.basis === "fact") {
+      const conflictingKeys = Object.keys(next.fields).filter(key => Object.hasOwn(old.fields, key) && old.fields[key] !== next.fields[key]);
+      retained = { ...old, fields: { ...next.fields, ...old.fields }, sourceIds: [...new Set([...old.sourceIds, ...next.sourceIds])] };
+      if (!conflictingKeys.length) return retained;
+      oldContent = JSON.stringify(Object.fromEntries(conflictingKeys.map(key => [key, old.fields[key]])));
+      nextContent = JSON.stringify(Object.fromEntries(conflictingKeys.map(key => [key, next.fields[key]])));
+    }
     if (old.basis === "fact" && next.basis === "fact" && oldContent !== nextContent) {
       const identity = old.id + ":" + nextContent;
       conflicts.push({
@@ -56,7 +64,7 @@ function mergeKnowledge(current, incoming) {
         type: "conflict", basis: "candidate", origin: "ai", locked: false,
         sourceIds: [...new Set([...old.sourceIds, ...next.sourceIds])], relatedOfferingIds: [], relatedScenarioIds: [],
       });
-      return old;
+      return retained;
     }
     return { ...next, id: old.id, identity: old.identity, ...(old.questionId ? { questionId: old.questionId } : {}) };
   }

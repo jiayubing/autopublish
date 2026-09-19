@@ -257,6 +257,21 @@ test("knowledge page handles empty, busy, error, editing and encrypted-config in
     .waitFor();
   await page.getByText(/客户名称字面出现：是/).waitFor();
   await page.getByText("关联文章：1 篇 · 已发布：1 篇").waitFor();
+  if (process.env.GEO_CAPTURE_SCREENSHOT === "1") {
+    await page
+      .getByRole("region", { name: "GEO 问题详情" })
+      .scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: path.join(
+        __dirname,
+        "..",
+        "build",
+        "test-results",
+        "geo-knowledge-question.png",
+      ),
+      fullPage: true,
+    });
+  }
   await page.locator("#nav-item-settings").click();
   await page.getByRole("button", { name: "豆包 GEO", exact: true }).click();
   await page.getByLabel("模型 / Endpoint ID").fill("synthetic-model");
