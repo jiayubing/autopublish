@@ -1,9 +1,13 @@
 import React, { useEffect, useState } from "react";
-import { getKnowledgeQuestionDetails } from "../../bridge/geo-knowledge";
+import {
+  getKnowledgeQuestionDetails,
+  getKnowledgeQuestionArticles,
+} from "../../bridge/geo-knowledge";
 import type {
   GeoKnowledge,
   KnowledgeItem,
   KnowledgeQuestionDetails,
+  KnowledgeQuestionArticles,
 } from "../../types/geo-knowledge";
 
 const buttonClass =
@@ -22,17 +26,27 @@ export default function GeoKnowledgeQuestions({
   const [selected, setSelected] = useState<string[]>([]);
   const [active, setActive] = useState("");
   const [detail, setDetail] = useState<KnowledgeQuestionDetails | null>(null);
+  const [articles, setArticles] = useState<KnowledgeQuestionArticles | null>(
+    null,
+  );
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [refresh, setRefresh] = useState(0);
   useEffect(() => {
     let live = true;
     setDetail(null);
+    setArticles(null);
     setError("");
     if (active)
-      void getKnowledgeQuestionDetails(knowledge.clientId, active).then(
-        (result) => {
-          if (live) setDetail(result);
+      void Promise.all([
+        getKnowledgeQuestionDetails(knowledge.clientId, active),
+        getKnowledgeQuestionArticles(knowledge.clientId, active),
+      ]).then(
+        ([result, relatedArticles]) => {
+          if (live) {
+            setDetail(result);
+            setArticles(relatedArticles);
+          }
         },
         (reason) => {
           if (live)
@@ -160,6 +174,24 @@ export default function GeoKnowledgeQuestions({
           <p>
             关联产品与场景：{related.map((q) => q.name).join("、") || "暂无"}
           </p>
+          {articles && (
+            <div className="grid gap-2">
+              <p>
+                关联文章：{articles.total} 篇 · 已发布：
+                {articles.publishedCount} 篇
+              </p>
+              {articles.articles.map((article) => (
+                <p key={article.id}>
+                  {article.title} · {article.label}
+                </p>
+              ))}
+              {articles.total > articles.articles.length && (
+                <p>
+                  仅展示前 {articles.articles.length} 篇；完整列表请查看文章库。
+                </p>
+              )}
+            </div>
+          )}
         </section>
       )}
     </div>

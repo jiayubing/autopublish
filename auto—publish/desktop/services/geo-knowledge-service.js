@@ -22,6 +22,10 @@ const {
   createGeoQuestionLinks,
 } = require("../../src/content/geo-question-links");
 const { createResearchStore } = require("../../src/content/research-store");
+const {
+  selectGeoKnowledge,
+} = require("../../src/content/geo-generation-context");
+const { queryGeoArticles } = require("../../src/content/geo-article-links");
 
 function createGeoKnowledgeService(options) {
   const store = options.store || createGeoKnowledgeStore(options);
@@ -115,6 +119,14 @@ function createGeoKnowledgeService(options) {
     return { markdown: lines.join("\n") };
   }
   return {
+    questionArticles: ({ clientId, id }) => {
+      const document = load({ clientId }).knowledge;
+      if (!document?.geoQuestions.some((q) => q.id === id))
+        throw geoError("GEO_ITEM_NOT_FOUND");
+      return queryGeoArticles(options, clientId, id);
+    },
+    getGenerationContext: (clientId, researches, ids) =>
+      selectGeoKnowledge(store.load(clientId), researches, ids),
     ...links,
     load,
     generate,

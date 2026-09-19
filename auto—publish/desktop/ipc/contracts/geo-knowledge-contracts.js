@@ -221,6 +221,30 @@ function contract(method, kind, request, success) {
 }
 const geoKnowledgeContracts = [
   contract(
+    "questionArticles",
+    "query",
+    exactObject({ clientId: id, id }),
+    exactObject({
+      articles: arrayField(
+        exactObject({
+          id,
+          title: text(10000),
+          stage: enumField([
+            "pending_submission",
+            "needs_completion",
+            "in_submission",
+            "published",
+            "trash",
+          ]),
+          label: text(100),
+        }),
+        { max: 100 },
+      ),
+      total: integerField({ min: 0, max: Number.MAX_SAFE_INTEGER }),
+      publishedCount: integerField({ min: 0, max: Number.MAX_SAFE_INTEGER }),
+    }),
+  ),
+  contract(
     "linkQuestions",
     "command",
     exactObject({

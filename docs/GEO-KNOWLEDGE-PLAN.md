@@ -27,7 +27,7 @@
 | K2 | 有界研究计划、联网引用、部分失败、整理 | COMPLETE |
 | K3 | service/IPC/bridge、知识库页面、编辑锁定、导出 | COMPLETE |
 | K4 | GEO 问题进入现有采集、关联回答 | COMPLETE |
-| K5 | 按问题选择知识、生成快照与文章关联 | PENDING |
+| K5 | 按问题选择知识、生成快照与文章关联 | COMPLETE |
 | K6 | 组合回归、构建、有限审查与证据收口 | PENDING |
 
 每阶段：实现 → 定向行为测试 → Primary Review → 修复阻塞问题 → Bounded Re-review → 提交。
@@ -82,3 +82,13 @@
 - 新增行为测试 3/3；IPC/fixture matrix 与 service 8/8；隔离页面测试 1/1（选题加入、回答详情、原有编辑/设置）。lint、三项 typecheck、preload 构建、diff 检查通过。
 - `npm test` 596/596；`npm run test:integration` 1271/1271。
 - Primary Review：单 writer、无真实网络、跨 owner partial/retry、旧回答隔离；无未关闭阻塞 finding。选择问题不会自动启动真实采集。
+
+### K5
+
+- 两条现有生成用例均注入同一知识库读取 owner；只选择与当前 research 身份/问题文本匹配的 GEO 问题，按 relatedOfferingIds / relatedScenarioIds 选择知识。没有知识库/匹配问题仍走原生成流程，资料和回答前置条件不变。
+- 候选宣传不作正向事实；相关能力只接纳 fact，外部背景只接纳 research；全量 restrictions 优先于材料/模板。上下文超过 100000 字符明确失败，不截断限制。
+- article.knowledgeSnapshot 保存实际输入 context、知识版本及问题身份，后续知识更新不修改历史快照；普通文章编辑仅修改原有 title/content，不覆盖 provenance。
+- 文章摘要从快照投影 geoQuestionIds；知识库问题详情只读摘要并复用 ArticleLifecycle projection 获取状态，最多展示 100 篇，统计全部关联文章，不读取正文，不写回 articleIds/发布计数。
+- 新增选择/生成持久化/文章关联 3/3；摘要与类型 owner 回归合计 15/15；生成/prompt/IPC fixture 34/34；隔离页面 1/1。lint、三项 typecheck、preload/renderer build、diff 检查通过。
+- `npm test` 596/596；`npm run test:integration` 1274/1274。
+- Primary Review 与直接边界检查：快照不可变、旧流程无知识可用、摘要 transport 显式合同、发布事实唯一 owner；无未关闭阻塞 finding。

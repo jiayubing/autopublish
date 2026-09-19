@@ -74,6 +74,8 @@ async function createContentProductionComposition(options) {
         userDataPath: value.userDataPath,
         safeStorage: value.safeStorage,
         questionService: doubaoCollectionService,
+        contentStore: value.contentStore,
+        operationalStore: value.operationalStore,
       }),
     );
     const generationScheduler = ownService(
@@ -154,6 +156,7 @@ async function createContentProductionComposition(options) {
           aiClientFactory: function (groupId) {
             return aiExecutionService.createClient(groupId);
           },
+          getGeoKnowledgeContext: geoKnowledgeService.getGenerationContext,
         },
       ),
     );
@@ -185,6 +188,7 @@ async function createContentProductionComposition(options) {
           contentStore: value.contentStore,
           articleMutationCoordinator: value.articleMutationCoordinator,
           aiProviderService: batchAiProvider,
+          getGeoKnowledgeContext: geoKnowledgeService.getGenerationContext,
           getAttentionItems: value.getAttentionItems,
           onDataInvalidated: value.onDataInvalidated,
         },

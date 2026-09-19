@@ -1,4 +1,5 @@
 const { assertContentSegment, clone } = require("./content-identity");
+const { validateGeoSnapshot } = require("./geo-generation-context");
 
 const LEGACY_ARTICLE = Symbol("legacyArticle");
 const RETIRED_ARTICLE_FIELDS = ["reviewedAt", "sourceArticleId", "version"];
@@ -282,6 +283,8 @@ function normalizeArticle(article) {
   }
 
   const normalized = Object.assign({}, article);
+  if (article.knowledgeSnapshot !== undefined)
+    normalized.knowledgeSnapshot = validateGeoSnapshot(article.knowledgeSnapshot, article.clientId, researchIds.ids);
   ["platform", "scenario", "templateId"].forEach(function (field) {
     if (normalized[field] === undefined) delete normalized[field];
   });

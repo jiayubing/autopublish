@@ -339,6 +339,7 @@ function createContentGenerationBatchService(options) {
     const generator = generatorFactory({
       getClient: function(clientId) { return clientKnowledge.getClient(clientId); },
       researchStore: scopedResearchStore, materialStore: scopedMaterialStore, templateStore: templateStore,
+      getGeoKnowledgeContext: opts.getGeoKnowledgeContext,
       buildPrompt: promptFactory, aiClient: signalClient, createId: createId, seenIds: seenIds
     });
     const article = await generator.generateArticle({ clientId: task.clientId, materialIds: task.materialIds,

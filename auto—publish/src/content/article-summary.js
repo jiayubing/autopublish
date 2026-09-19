@@ -14,6 +14,8 @@ function projectArticleSummary(article) {
       if (article.templateSnapshot[field] !== undefined)
         summary.templateSnapshot[field] = article.templateSnapshot[field];
   }
+  if (article.knowledgeSnapshot) summary.geoQuestionIds = article.knowledgeSnapshot.questions.map(q => q.id);
+  else if (article.summaryVersion === 1 && Array.isArray(article.geoQuestionIds)) summary.geoQuestionIds = article.geoQuestionIds.slice();
   return summary;
 }
 

@@ -200,6 +200,7 @@ const api = {
     },
   },
   geoKnowledge: {
+    questionArticles: (input) => ipcRenderer.invoke("geo-knowledge:questionArticles", input),
     linkQuestions: (input) => ipcRenderer.invoke("geo-knowledge:linkQuestions", input),
     questionDetails: (input) => ipcRenderer.invoke("geo-knowledge:questionDetails", input),
     state: input => ipcRenderer.invoke("geo-knowledge:state", input),

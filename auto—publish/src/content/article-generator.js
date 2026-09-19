@@ -198,8 +198,11 @@ function createArticleGenerator(deps) {
     });
     const scenario = input.scenario || template.scenario || template.displayName || input.templateId;
     const templateSnapshot = snapshotTemplate(template, input.platform, input.templateId);
+    const knowledgeSnapshot = typeof deps.getGeoKnowledgeContext === "function"
+      ? cloneValue(await deps.getGeoKnowledgeContext(input.clientId, researches, researchQueryIds)) : null;
     const prompt = deps.buildPrompt({
       client: client,
+      knowledgeSnapshot,
       materialItems: materials,
       research: researches[0],
       researchItems: researches,
@@ -216,6 +219,7 @@ function createArticleGenerator(deps) {
     const timestamp = now();
     return {
       id: createUniqueId(),
+      ...(knowledgeSnapshot ? { knowledgeSnapshot } : {}),
       clientId: input.clientId,
       researchQueryIds: researchQueryIds,
       researchSnapshots: researches.map(function(research, index) { return snapshotResearch(researchQueryIds[index], research); }),

@@ -219,6 +219,7 @@ function createClientGenerationService(options) {
     const generator = articleGeneratorFactory({
       getClient: function(id) { return clientKnowledge.getClient(id); },
       researchStore: researchStore,
+      getGeoKnowledgeContext: value.getGeoKnowledgeContext,
       materialStore: materialStore,
       templateStore: templateStore,
       buildPrompt: promptBuilder,

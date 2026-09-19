@@ -92,3 +92,8 @@ export type KnowledgeQuestionDetails = {
     references: { title: string; url: string }[];
   };
 };
+export type KnowledgeQuestionArticles = {
+  articles: { id: string; title: string; stage: string; label: string }[];
+  total: number;
+  publishedCount: number;
+};

@@ -11,6 +11,7 @@ const domainTypeSymbols = {
   "types/auth.ts": ["AuthState"],
   "types/geo-knowledge.ts": [
     "KnowledgeQuestionDetails",
+    "KnowledgeQuestionArticles",
     "KnowledgeSection",
     "KnowledgeItem",
     "KnowledgeSource",

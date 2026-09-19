@@ -11,6 +11,7 @@ function registerGeoKnowledgeIpc({ ipcMain, geoKnowledgeService }) {
     "saveConfig",
     "linkQuestions",
     "questionDetails",
+    "questionArticles",
   ]) {
     ipcMain.handle("geo-knowledge:" + method, (_event, input) =>
       geoKnowledgeService[method](input),

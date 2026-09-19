@@ -61,6 +61,19 @@ function fixture({ document }) {
       onDoubaoQueueState: () => () => {},
     },
     geoKnowledge: {
+      questionArticles: () =>
+        ok({
+          articles: [
+            {
+              id: "article-1",
+              title: "合成文章",
+              stage: "published",
+              label: "已发布",
+            },
+          ],
+          total: 1,
+          publishedCount: 1,
+        }),
       linkQuestions: ({ ids }) => {
         knowledge.geoQuestions.forEach((q) => {
           if (ids.includes(q.id)) q.questionId = "question-1";
@@ -243,6 +256,7 @@ test("knowledge page handles empty, busy, error, editing and encrypted-config in
     .getByText("合成客户提供服务，详情以实际核对为准。", { exact: true })
     .waitFor();
   await page.getByText(/客户名称字面出现：是/).waitFor();
+  await page.getByText("关联文章：1 篇 · 已发布：1 篇").waitFor();
   await page.locator("#nav-item-settings").click();
   await page.getByRole("button", { name: "豆包 GEO", exact: true }).click();
   await page.getByLabel("模型 / Endpoint ID").fill("synthetic-model");

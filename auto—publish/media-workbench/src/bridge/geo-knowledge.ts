@@ -12,10 +12,15 @@ import type {
   GeoConfigStatus,
   GeoConfigInput,
   KnowledgeQuestionDetails,
+  KnowledgeQuestionArticles,
 } from "../types/geo-knowledge";
 type Reply<T> = { ok: true; data: T } | { ok: false; error: IpcError };
 type ClientInput = { clientId: string };
 type Api = {
+  questionArticles: (input: {
+    clientId: string;
+    id: string;
+  }) => Promise<Reply<KnowledgeQuestionArticles>>;
   linkQuestions: (input: {
     clientId: string;
     revision: number;
@@ -49,6 +54,8 @@ async function call<T>(invoke: (api: Api) => Promise<Reply<T>>): Promise<T> {
 }
 export const loadKnowledge = (clientId: string) =>
   call((api) => requireBridgeMethod(api.load)({ clientId }));
+export const getKnowledgeQuestionArticles = (clientId: string, id: string) =>
+  call((api) => requireBridgeMethod(api.questionArticles)({ clientId, id }));
 export const linkKnowledgeQuestions = (
   clientId: string,
   revision: number,

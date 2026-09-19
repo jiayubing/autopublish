@@ -111,6 +111,7 @@ export interface ResearchSnapshot {
   collectionMethod: "automatic" | "manual" | "legacy";
 }
 export interface ArticleSummary {
+  geoQuestionIds?: string[];
   summaryVersion?: 1;
   hasContent?: boolean;
   id: string;
