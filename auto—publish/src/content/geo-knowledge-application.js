@@ -2,8 +2,9 @@
 
 const { geoError } = require("./geo-knowledge-schema");
 const { mergeKnowledge } = require("./geo-knowledge-merge");
+const { createRequestBudget } = require("./geo-knowledge-research");
 
-function createGeoKnowledgeApplication({ store, materialStore, getClient, research, onChange = () => {} }) {
+function createGeoKnowledgeApplication({ store, materialStore, getClient, research, request, onChange = () => {} }) {
   const running = new Map();
   const states = new Map();
   let disposed = false;
@@ -17,6 +18,7 @@ function createGeoKnowledgeApplication({ store, materialStore, getClient, resear
     if (initial.status === "invalid") throw geoError("GEO_KNOWLEDGE_INVALID");
     const current = initial.knowledge;
     const controller = new AbortController();
+    const budget = typeof request === "function" ? createRequestBudget(request) : null;
     running.set(clientId, controller);
     function progress(phase, extra = {}) { states.set(clientId, { phase, running: true, ...extra }); }
     try {
@@ -24,8 +26,8 @@ function createGeoKnowledgeApplication({ store, materialStore, getClient, resear
       const materials = await materialStore.listMaterials(clientId);
       controller.signal.throwIfAborted();
       progress("extracting");
-      let document = await research.extract({ clientId, clientName: client.name || client.displayName || clientId, materials, signal: controller.signal });
-      if (online && research.enrich) document = await research.enrich(document, { signal: controller.signal, progress, current });
+      let document = await research.extract({ clientId, clientName: client.name || client.displayName || clientId, materials, signal: controller.signal, budgetedRequest: budget?.request, budget });
+      if (online && research.enrich) document = await research.enrich(document, { signal: controller.signal, progress, current, budgetedRequest: budget?.request, budget });
       if (materials.some(item => item.status !== "ready")) {
         document.status.outcome = "partial";
         document.status.warnings.push("部分客户资料未能读取");

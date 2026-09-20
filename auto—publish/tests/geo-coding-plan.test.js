@@ -121,8 +121,8 @@ test("unverified web output stops all remaining research tasks instead of preten
         calls === 1
           ? {
               tasks: [
-                { type: "industry", topic: "测试一", queries: ["一"] },
-                { type: "industry", topic: "测试二", queries: ["二"] },
+                { type: "customer_entity", topic: "测试一", queries: ["一"] },
+                { type: "generic_industry", topic: "测试二", queries: ["二"] },
               ],
             }
           : { findings: [], unresolved: [] };

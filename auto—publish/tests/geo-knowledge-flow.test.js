@@ -55,7 +55,13 @@ test("local material-to-knowledge-to-collection-to-article flow survives service
       },
     ],
   };
-  const replies = [extracted, { tasks: [] }, synthesized];
+  const replies = [
+    extracted,
+    { tasks: [{ type: "customer_entity", topic: "客户实体", queries: ["合成客户"] }] },
+    { findings: [], discoveries: [], unresolved: [] },
+    { tasks: [] },
+    synthesized,
+  ];
   const client = {
     request: async () => {
       assert.ok(replies.length, "unexpected extra model request");

@@ -674,7 +674,7 @@ V2-0 不阻塞本地 V2 开发，只阻塞以下声明：
 ## 19. Progress
 
 - [x] V2-1 Schema、Claims、Conflict、V1 安全替换
-- [ ] V2-2 客户实体优先研究与请求预算
+- [x] V2-2 客户实体优先研究与请求预算
 - [ ] V2-3 Prompt 与维护 UI
 - [ ] V2-4 Generation Context 与收口
 - [ ] V2-0 真实能力受限验证（等待用户逐次授权）
@@ -705,5 +705,14 @@ V2-0 不阻塞本地 V2 开发，只阻塞以下声明：
 - Primary Review 检查 accepted basis、投影一致性、V1 原文件保留、source conversion、conflict observation 保留、stale revision 和新 section 证据边界；修复 recommendationAngle 人工编辑仍须保持 derived，并补 source/relation 数组去重 validator。无剩余已知阻塞 finding。
 
 后续每阶段继续记录：提交、定向测试、完整 gate、审查 finding、未运行项目及原因。
+
+### V2-2
+
+- 研究升级为 Customer Entity Discovery 与 follow-up/differentiation 两轮；Round 1 `tasks<=6/industry<=1` 且至少一个客户实体任务，Round 2 `tasks<=4/industry<=1`，均由程序 validator 执行。
+- discovery 只有绑定真实 citation 才登记并进入第二轮；query 使用 NFKC/trim/空白折叠跨轮 exact dedupe，URL 规范化协议、host、默认端口和 fragment，保留 query。
+- `geo-knowledge-application` 为每次 generation 创建唯一 budgeted request；正常最大路径实测 14 次，非 synthesis 请求在 16 次停止，最终 synthesis 保留 2 次，transport 硬上限 18。JSON/schema repair 计数，网络不确定不重试。
+- 定向 research/flow/Coding Plan/store 26/26；`npm test` 596/596；`npm run test:integration` 1305/1305；lint 与 main typecheck 通过。
+- Primary Review 检查两轮输入边界、未引用 discovery 丢弃、重复 discovery 合并、partial warning、reserve 和实际 service wiring；第二轮规划失败收敛为 partial 后使用现有 findings 进入 synthesis。bounded re-review 无剩余阻塞 finding。
+- 未运行真实 API/账号验收，未发送客户资料。
 
 当前剩余外部风险：Doubao Responses、Web Search、citation metadata、Coding Plan 权限、抖音/地图/点评覆盖和真实调用成本均未完成真实验收。

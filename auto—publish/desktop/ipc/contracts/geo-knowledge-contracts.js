@@ -163,8 +163,8 @@ const state = exactObject({
     "failed",
   ]),
   running: "boolean",
-  completed: optionalField(integerField({ min: 0, max: 8 })),
-  total: optionalField(integerField({ min: 0, max: 8 })),
+  completed: optionalField(integerField({ min: 0, max: 10 })),
+  total: optionalField(integerField({ min: 0, max: 10 })),
   errorCode: optionalField(text(128, 1)),
 });
 const status = exactObject({
@@ -215,6 +215,7 @@ const codes = [
   "GEO_ALREADY_RUNNING",
   "GEO_REVISION_CONFLICT",
   "GEO_REQUEST_UNCERTAIN",
+  "GEO_REQUEST_BUDGET_EXHAUSTED",
   "GEO_REQUEST_FAILED",
   "GEO_RESPONSE_INVALID",
   "GEO_RESPONSE_INCOMPLETE",

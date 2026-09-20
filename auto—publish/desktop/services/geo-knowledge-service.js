@@ -45,6 +45,7 @@ function createGeoKnowledgeService(options) {
     materialStore,
     getClient: resolveClient,
     research,
+    request: (input) => client.request(input),
   });
   let active = 0;
   let testController = null;
