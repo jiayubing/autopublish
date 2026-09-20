@@ -2,6 +2,7 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const {
+  adaptModelCandidate,
   createGeoKnowledgeResearch,
   createRequestBudget,
   parseJsonObject,
@@ -25,6 +26,95 @@ test("JSON parser accepts one object in common model wrappers without weakening 
   assert.throws(() => parseJsonObject("{not-json}"), {
     code: "GEO_SCHEMA_INVALID",
   });
+});
+
+test("model adapter keeps only registered evidence and resolvable relations", () => {
+  const sources = [
+    {
+      id: "source-file",
+      type: "client_file",
+      title: "客户资料",
+      materialId: "material-1",
+      fileName: "资料.docx",
+      contentHash: "abc123",
+    },
+  ];
+  const adapted = adaptModelCandidate(
+    {
+      businessType: "service",
+      profile: {
+        客户名称: "合成牙科",
+        fields: { 主营品类: "口腔诊疗" },
+        basis: "fact",
+        sourceIds: ["资料.docx", "invented-source"],
+      },
+      offerings: [
+        {
+          identity: "implant",
+          name: "种植牙",
+          basis: "fact",
+          sourceIds: ["客户资料"],
+        },
+      ],
+      cases: [
+        {
+          name: "有效案例",
+          basis: "fact",
+          sourceIds: ["客户资料"],
+          relatedOfferingIds: [stableId("offerings", "implant")],
+        },
+      ],
+      history: [{ name: "无来源历史", basis: "research" }],
+      onlinePresence: [
+        {
+          name: "错误网址",
+          basis: "research",
+          sourceIds: ["客户资料"],
+          platform: "官网",
+          url: "javascript:alert(1)",
+        },
+      ],
+      recommendationAngles: [
+        {
+          name: "悬空角度",
+          basis: "derived",
+          relatedOfferingNames: ["不存在的服务"],
+        },
+      ],
+      competitors: [
+        {
+          name: "伪造来源竞对",
+          basis: "research",
+          sourceIds: ["invented-source"],
+        },
+      ],
+      geoQuestions: [
+        {
+          name: "如何选择种植牙？",
+          intent: "selection",
+          knowledgeCoverage: "未知",
+          relatedOfferingNames: ["种植牙"],
+        },
+      ],
+    },
+    sources,
+  );
+  const normalized = normalizeCandidate(adapted, sources, "client-1");
+  assert.deepEqual(normalized.profile.fields, {
+    name: "合成牙科",
+    category: "口腔诊疗",
+  });
+  assert.deepEqual(normalized.profile.sourceIds, ["source-file"]);
+  assert.deepEqual(normalized.cases.map((item) => item.name), ["有效案例"]);
+  assert.equal(
+    normalized.cases[0].relatedOfferingIds[0],
+    normalized.offerings[0].id,
+  );
+  assert.equal(normalized.geoQuestions[0].knowledgeCoverage, "insufficient");
+  assert.deepEqual(normalized.history, []);
+  assert.deepEqual(normalized.onlinePresence, []);
+  assert.deepEqual(normalized.recommendationAngles, []);
+  assert.deepEqual(normalized.competitors, []);
 });
 
 test("profile enrichment adds non-conflicting fields and reports only contradictory fields", () => {
