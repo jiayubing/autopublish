@@ -5,6 +5,10 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { normalizeCandidate } = require("../src/content/geo-knowledge-merge");
+const {
+  profileProjection,
+  stableId,
+} = require("../src/content/geo-knowledge-schema");
 const { selectGeoKnowledge } = require("../src/content/geo-generation-context");
 const { createArticleGenerator } = require("../src/content/article-generator");
 const { buildPrompt } = require("../src/content/prompt-builder");
@@ -69,6 +73,116 @@ const research = {
   collectedAt: "2026-09-19T00:00:00.000Z",
   collectionMethod: "manual",
 };
+
+function addV2BriefKnowledge(doc) {
+  doc.sources.push(
+    {
+      id: "source-public",
+      type: "client_public",
+      title: "客户公开账号",
+      url: "https://example.com/client",
+      fetchedAt: "2026-09-19T00:00:00.000Z",
+      citationVerified: true,
+    },
+    {
+      id: "source-web",
+      type: "official_web",
+      title: "客户官网",
+      url: "https://example.com/official",
+      fetchedAt: "2026-09-19T00:00:00.000Z",
+      citationVerified: true,
+    },
+  );
+  doc.profile.claims.push(
+    {
+      id: stableId("claim", "slogan:公开口号"),
+      field: "slogan",
+      value: "公开口号",
+      status: "accepted",
+      basis: "research",
+      origin: "ai",
+      locked: false,
+      sourceIds: ["source-public"],
+    },
+    {
+      id: stableId("claim", "address:候选地址"),
+      field: "address",
+      value: "候选地址",
+      status: "candidate",
+      basis: "candidate",
+      origin: "ai",
+      locked: false,
+      sourceIds: ["source-public"],
+    },
+  );
+  doc.profile = profileProjection(doc.profile.claims);
+  const relatedOfferingIds = [doc.offerings[0].id];
+  const unrelatedOfferingIds = [doc.offerings[1].id];
+  const common = (section, name, options = {}) => ({
+    id: stableId(section, name),
+    identity: name,
+    basis: options.basis || "research",
+    origin: "ai",
+    locked: false,
+    sourceIds: options.sourceIds || ["source-web"],
+    relatedOfferingIds: options.relatedOfferingIds || [],
+    relatedScenarioIds: options.relatedScenarioIds || [],
+    name,
+    description: name + "说明",
+    ...(options.extra || {}),
+  });
+  doc.onlinePresence.push(
+    common("onlinePresence", "相关公开账号", {
+      sourceIds: ["source-public"],
+      relatedOfferingIds,
+      extra: { platform: "微信公众号", url: "https://example.com/account" },
+    }),
+    ...Array.from({ length: 4 }, (_, index) =>
+      common("onlinePresence", "全局账号" + (index + 1), {
+        extra: {
+          platform: "平台" + (index + 1),
+          url: "https://example.com/account-" + (index + 1),
+        },
+      }),
+    ),
+  );
+  doc.history.push(
+    common("history", "相关历史", { relatedOfferingIds }),
+    ...Array.from({ length: 3 }, (_, index) =>
+      common("history", "全局历史" + (index + 1)),
+    ),
+  );
+  doc.cases.push(
+    common("cases", "相关案例", { relatedOfferingIds }),
+    common("cases", "候选案例", {
+      basis: "candidate",
+      relatedOfferingIds,
+    }),
+    common("cases", "无关案例", { relatedOfferingIds: unrelatedOfferingIds }),
+  );
+  doc.recommendationAngles.push(
+    ...Array.from({ length: 4 }, (_, index) =>
+      common("recommendationAngles", "推荐角度" + (index + 1), {
+        basis: "derived",
+        sourceIds: [],
+        relatedOfferingIds,
+      }),
+    ),
+    common("recommendationAngles", "无关推荐角度", {
+      basis: "derived",
+      sourceIds: [],
+      relatedOfferingIds: unrelatedOfferingIds,
+    }),
+  );
+  doc.competitors.push(
+    common("competitors", "关联竞对", { relatedOfferingIds }),
+    ...Array.from({ length: 5 }, (_, index) =>
+      common("competitors", "文字竞对" + (index + 1)),
+    ),
+    common("competitors", "未提及竞对"),
+  );
+  return doc;
+}
 test("selection excludes unrelated and candidate claims, includes all restrictions, and rejects obsolete question text", () => {
   const doc = library();
   const selected = selectGeoKnowledge(doc, [research], ["query-1"]);
@@ -99,6 +213,64 @@ test("selection excludes unrelated and candidate claims, includes all restrictio
   assert.throws(() => selectGeoKnowledge(doc, [research], ["query-1"]), {
     code: "GEO_CONTEXT_TOO_LARGE",
   });
+});
+test("V2 brief selects accepted claims and bounded related knowledge with deterministic attribution", () => {
+  const doc = addV2BriefKnowledge(library());
+  const selected = selectGeoKnowledge(
+    doc,
+    [
+      {
+        ...research,
+        answerText: "可比较文字竞对1、文字竞对2、文字竞对3、文字竞对4和文字竞对5。",
+        references: [{ title: "文字竞对5资料", url: "https://example.com/ref" }],
+      },
+    ],
+    ["query-1"],
+  );
+  const context = JSON.parse(selected.context);
+  assert.deepEqual(
+    context.profile.claims.map((claim) => [
+      claim.field,
+      claim.evidenceClass,
+      claim.attributionRequired,
+    ]),
+    [
+      ["name", "fact", false],
+      ["slogan", "research", true],
+    ],
+  );
+  assert.equal(context.profile.fields.address, undefined);
+  assert.deepEqual(context.cases.map((item) => item.name), ["相关案例"]);
+  assert.deepEqual(
+    context.recommendationAngles.map((item) => item.name),
+    ["推荐角度1", "推荐角度2", "推荐角度3"],
+  );
+  assert.deepEqual(
+    context.competitors.map((item) => item.name),
+    ["关联竞对", "文字竞对1", "文字竞对2", "文字竞对3", "文字竞对4"],
+  );
+  assert.equal(context.onlinePresence[0].attributionRequired, true);
+  assert.equal(
+    context.sources.some((source) => source.id === "source-public"),
+    true,
+  );
+});
+test("brand questions add only the stable client-wide history and presence allowances", () => {
+  const doc = addV2BriefKnowledge(library());
+  doc.geoQuestions[0].intent = "brand";
+  const context = JSON.parse(
+    selectGeoKnowledge(doc, [research], ["query-1"]).context,
+  );
+  assert.deepEqual(
+    context.history.map((item) => item.name),
+    ["相关历史", "全局历史1", "全局历史2"],
+  );
+  assert.deepEqual(
+    context.onlinePresence.map((item) => item.name),
+    ["相关公开账号", "全局账号1", "全局账号2", "全局账号3"],
+  );
+  assert.deepEqual(context.recommendationAngles, []);
+  assert.deepEqual(context.competitors, []);
 });
 test("generation records the actual bounded knowledge input and persistence survives later knowledge changes", async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "geo-article-"));
@@ -145,6 +317,7 @@ test("generation records the actual bounded knowledge input and persistence surv
     templateId: "template-1",
   });
   assert.match(messages[0].content, /restrictions 优先/);
+  assert.match(messages[0].content, /attributionRequired=true/);
   assert.ok(messages[1].content.endsWith(article.knowledgeSnapshot.context));
   const store = createArticleStore(root);
   store.createArticle(article);

@@ -676,7 +676,7 @@ V2-0 不阻塞本地 V2 开发，只阻塞以下声明：
 - [x] V2-1 Schema、Claims、Conflict、V1 安全替换
 - [x] V2-2 客户实体优先研究与请求预算
 - [x] V2-3 Prompt 与维护 UI
-- [ ] V2-4 Generation Context 与收口
+- [x] V2-4 Generation Context 与收口
 - [ ] V2-0 真实能力受限验证（等待用户逐次授权）
 
 ---
@@ -723,5 +723,14 @@ V2-0 不阻塞本地 V2 开发，只阻塞以下声明：
 - 定向 GEO/IPC/Renderer/类型 owner 回归 32/32；`npm test` 596/596；`npm run test:integration` 1307/1307；lint、main/bridge/renderer typecheck、renderer/preload build 通过。
 - Primary Review 检查 Prompt snapshot、临时值不持久化、作用域禁用、来源确认与冲突裁决调用链、revision 后详情同步；修复详情抽屉在 revision 更新后可能保留旧对象的问题。bounded re-review 无剩余阻塞 finding。
 - 未运行真实 API/账号验收，未发送客户资料；真实模型对三层 Prompt 的遵循质量仍属于 V2-0 外部 gate。
+
+### V2-4
+
+- 继续使用现有 `geo-generation-context` 作为唯一 Article Brief owner：Profile 只投影 accepted fact/research claim，逐 claim 输出 `evidenceClass`；candidate/rejected 不作为正向事实进入 context。
+- 仅由 `client_public` 支持的已选 claim/item 派生 `attributionRequired=true`，现有文章 Prompt 增加最小归因表达规则；未新增 prompt transport 层或第二套事实 owner。
+- cases 只按显式 relation；brand history 额外最多 2 条 client-wide；brand/local onlinePresence 额外最多 3 条 client-wide；recommendationAngles 仅适用 intent、按 relation 最多 3 条；competitors 仅适用 intent 且按 relation 或当前回答/参考标题 normalized literal match，最多 5 条。所有 capped 选择保持 knowledge 数组顺序，candidate 普通项不作为正向知识，restrictions 继续全量保留。
+- 定向 Article Brief/generation/prompt/flow 回归 33/33；`npm test` 596/596；`npm run test:integration` 1309/1309；lint、main/bridge/renderer typecheck、renderer/preload build 通过。Renderer 构建仅保留既有大 chunk 提示。
+- Primary Review 检查无关知识排除、client-wide 上限、竞对文字匹配、来源归因、100000 字符拒绝、旧文章 snapshot 持久副本与 restrictions 不截断；补充阻止 common section candidate 作为正向知识进入。bounded re-review 无剩余阻塞 finding。
+- V2-1～V2-4 本地实现合同已经完成。未运行真实 API/账号验收，未发送客户资料；V2-0 仍等待用户逐次授权，不影响本地 V2 完成，但不得据此承诺真实站点覆盖、模型质量或调用成本。
 
 当前剩余外部风险：Doubao Responses、Web Search、citation metadata、Coding Plan 权限、抖音/地图/点评覆盖和真实调用成本均未完成真实验收。
