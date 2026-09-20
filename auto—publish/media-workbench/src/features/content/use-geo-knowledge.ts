@@ -98,6 +98,7 @@ export function useGeoKnowledge(clientId: string) {
         setKnowledge(result.knowledge);
         setStorageStatus("current_v2");
         setState({ phase: "complete", running: false });
+        setError("");
       }
       return true;
     } catch (e) {

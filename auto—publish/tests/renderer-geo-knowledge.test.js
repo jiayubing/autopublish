@@ -113,12 +113,23 @@ function fixture({ document }) {
             ? { phase: "extracting", running: true }
             : failedState || { phase: "idle", running: false },
         }),
-      state: () =>
-        ok({
+      state: () => {
+        if (window.__failNextGeoState) {
+          window.__failNextGeoState = false;
+          return Promise.resolve({
+            ok: false,
+            error: {
+              code: "IPC_INTERNAL",
+              userMessage: "临时进度读取失败。",
+            },
+          });
+        }
+        return ok({
           state: running
             ? { phase: "extracting", running: true }
             : failedState || { phase: "complete", running: false },
-        }),
+        });
+      },
       generate: (input) => {
         window.__geoCalls.generate++;
         window.__geoCalls.temporaryPrompt = input.temporaryPrompt;
@@ -286,7 +297,10 @@ test("knowledge page handles empty, busy, error, editing and encrypted-config in
   await page.getByText(/GEO_CONFIG_REQUIRED/).waitFor();
   await page.getByText(/失败阶段：正在提取客户事实/).waitFor();
   await page.getByRole("button", { name: "保存要求并开始研究" }).click();
+  await page.evaluate(() => { window.__failNextGeoState = true; });
+  await page.getByRole("alert").filter({ hasText: "临时进度读取失败" }).waitFor();
   await page.evaluate(() => window.__finishGeo(false));
+  await page.getByRole("alert").waitFor({ state: "detached" });
   await page.getByRole("button", { name: /客户基本信息/ }).first().click();
   await page.getByRole("button", { name: "编辑并锁定" }).click();
   await page.getByLabel("客户名称", { exact: true }).fill("人工合成名称");
