@@ -675,7 +675,7 @@ V2-0 不阻塞本地 V2 开发，只阻塞以下声明：
 
 - [x] V2-1 Schema、Claims、Conflict、V1 安全替换
 - [x] V2-2 客户实体优先研究与请求预算
-- [ ] V2-3 Prompt 与维护 UI
+- [x] V2-3 Prompt 与维护 UI
 - [ ] V2-4 Generation Context 与收口
 - [ ] V2-0 真实能力受限验证（等待用户逐次授权）
 
@@ -714,5 +714,14 @@ V2-0 不阻塞本地 V2 开发，只阻塞以下声明：
 - 定向 research/flow/Coding Plan/store 26/26；`npm test` 596/596；`npm run test:integration` 1305/1305；lint 与 main typecheck 通过。
 - Primary Review 检查两轮输入边界、未引用 discovery 丢弃、重复 discovery 合并、partial warning、reserve 和实际 service wiring；第二轮规划失败收敛为 partial 后使用现有 findings 进入 synthesis。bounded re-review 无剩余阻塞 finding。
 - 未运行真实 API/账号验收，未发送客户资料。
+
+### V2-3
+
+- 固定 application contract prompt、全局、客户、本次临时 Prompt 按固定顺序组合，仍作为现有 transport 的普通模型输入发送；generation 启动时只读取一次 snapshot，临时 Prompt 不落盘。
+- 全局设置写入应用配置目录，客户设置写入既有 GEO knowledge 目录的独立 policy sidecar；两者均原子写入，保存失败不修改 knowledge，运行期间按全局/客户作用域禁止修改。
+- 知识库页面收敛为紧凑列表、右侧详情抽屉和 Profile 待确认工作台；来源详情提供官网/公开账号确认动作，冲突采用 A/B 或手工值时只调用既有 store command，没有新增 Renderer writer。
+- 定向 GEO/IPC/Renderer/类型 owner 回归 32/32；`npm test` 596/596；`npm run test:integration` 1307/1307；lint、main/bridge/renderer typecheck、renderer/preload build 通过。
+- Primary Review 检查 Prompt snapshot、临时值不持久化、作用域禁用、来源确认与冲突裁决调用链、revision 后详情同步；修复详情抽屉在 revision 更新后可能保留旧对象的问题。bounded re-review 无剩余阻塞 finding。
+- 未运行真实 API/账号验收，未发送客户资料；真实模型对三层 Prompt 的遵循质量仍属于 V2-0 外部 gate。
 
 当前剩余外部风险：Doubao Responses、Web Search、citation metadata、Coding Plan 权限、抖音/地图/点评覆盖和真实调用成本均未完成真实验收。

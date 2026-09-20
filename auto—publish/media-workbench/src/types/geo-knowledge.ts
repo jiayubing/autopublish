@@ -104,6 +104,11 @@ export type GeoConfigInput = {
   webSearch: boolean;
 };
 export type GeoConnectionResult = { search: boolean; citationCount: number };
+export type GeoPromptSettings = {
+  defaultGlobalPrompt: string;
+  globalPrompt: string;
+  clientPrompt: string;
+};
 export type KnowledgeEdit = {
   clientId: string;
   revision: number;

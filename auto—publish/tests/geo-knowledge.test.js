@@ -10,6 +10,8 @@ const { createGeoKnowledgeApplication } = require("../src/content/geo-knowledge-
 const { createGeoKnowledgeResearch } = require("../src/content/geo-knowledge-research");
 const { createDoubaoGeoClient } = require("../src/content/doubao-geo-client");
 const { validateKnowledge } = require("../src/content/geo-knowledge-schema");
+const { buildApplicationPrompt } = require("../src/content/geo-knowledge-research");
+const { createGeoKnowledgePromptStore } = require("../desktop/geo-knowledge-prompt-store");
 const source = { id: "source-1", type: "client_input", title: "客户填写" };
 function candidate(name = "合成门店") { return { profile: { fields: { name }, basis: "fact", sourceIds: [source.id] } }; }
 function document(name) { return normalizeCandidate(candidate(name), [source], "client-1"); }
@@ -202,4 +204,50 @@ test("manual conflict resolution creates a fact claim and preserves the selected
   assert.equal(resolved.sources.find(value => value.id === accepted.sourceIds[0]).type, "client_input");
   const reopened = mergeKnowledge(resolved, document("名称丙"));
   assert.equal(reopened.restrictions.find(item => item.id === conflict.id).conflictStatus, "open");
+});
+
+test("global and client prompt policies persist atomically without changing knowledge", t => {
+  const root = workspace(t);
+  const store = createGeoKnowledgeStore({ workspaceRoot: root });
+  const saved = store.save(document("合成客户"), 0);
+  assert.deepEqual(store.loadPolicy("client-1"), { researchPrompt: "" });
+  assert.deepEqual(store.savePolicy("client-1", "客户长期要求"), { researchPrompt: "客户长期要求" });
+  assert.deepEqual(store.loadPolicy("client-1"), { researchPrompt: "客户长期要求" });
+  assert.deepEqual(store.load("client-1"), saved);
+
+  const global = createGeoKnowledgePromptStore({ userDataPath: path.join(root, "config") });
+  assert.deepEqual(global.load(), { researchPromptOverride: "" });
+  global.save("全局要求");
+  assert.deepEqual(global.load(), { researchPromptOverride: "全局要求" });
+  global.save("");
+  assert.deepEqual(global.load(), { researchPromptOverride: "" });
+  assert.throws(() => store.savePolicy("client-1", "x".repeat(4001)), { code: "GEO_POLICY_INVALID" });
+});
+
+test("generation snapshots prompt layers once and temporary prompt is not persisted", async t => {
+  const store = createGeoKnowledgeStore({ workspaceRoot: workspace(t) });
+  let reads = 0;
+  let snapshot;
+  const application = createGeoKnowledgeApplication({
+    store,
+    getClient: () => ({ name: "合成客户" }),
+    materialStore: { async listMaterials() { return []; } },
+    getPromptSnapshot: (_clientId, temporaryPrompt) => {
+      reads++;
+      return { globalPrompt: "全局", clientPrompt: "客户", temporaryPrompt };
+    },
+    research: {
+      async extract(input) { snapshot = input.promptSnapshot; return document("合成客户"); },
+      async enrich(value, input) { assert.equal(input.promptSnapshot, snapshot); return value; },
+    },
+  });
+  await application.generate("client-1", { temporaryPrompt: "临时" });
+  assert.equal(reads, 1);
+  assert.deepEqual(snapshot, { globalPrompt: "全局", clientPrompt: "客户", temporaryPrompt: "临时" });
+  assert.equal(JSON.stringify(store.load("client-1")).includes("临时"), false);
+  const prompt = buildApplicationPrompt("当前任务", snapshot);
+  assert.ok(prompt.indexOf("[全局研究要求]") < prompt.indexOf("[客户补充要求]"));
+  assert.ok(prompt.indexOf("[客户补充要求]") < prompt.indexOf("[本次临时要求]"));
+  assert.ok(prompt.indexOf("[本次临时要求]") < prompt.indexOf("[当前任务]"));
+  assert.match(prompt, /schema.*来源政策.*请求预算/s);
 });

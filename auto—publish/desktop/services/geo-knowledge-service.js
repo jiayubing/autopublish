@@ -26,6 +26,8 @@ const {
   selectGeoKnowledge,
 } = require("../../src/content/geo-generation-context");
 const { queryGeoArticles } = require("../../src/content/geo-article-links");
+const { DEFAULT_RESEARCH_PROMPT } = require("../../src/content/geo-knowledge-research");
+const { createGeoKnowledgePromptStore } = require("../geo-knowledge-prompt-store");
 
 function createGeoKnowledgeService(options) {
   const store = options.store || createGeoKnowledgeStore(options);
@@ -40,12 +42,18 @@ function createGeoKnowledgeService(options) {
     options.client ||
     createDoubaoGeoClient({ getConfig: () => config().read() });
   const research = options.research || createGeoKnowledgeResearch({ client });
+  const promptStore = options.promptStore || createGeoKnowledgePromptStore(options);
   const application = createGeoKnowledgeApplication({
     store,
     materialStore,
     getClient: resolveClient,
     research,
     request: (input) => client.request(input),
+    getPromptSnapshot: (clientId, temporaryPrompt) => ({
+      globalPrompt: promptStore.load().researchPromptOverride || DEFAULT_RESEARCH_PROMPT,
+      clientPrompt: store.loadPolicy(clientId).researchPrompt,
+      temporaryPrompt,
+    }),
   });
   let active = 0;
   let testController = null;
@@ -87,11 +95,11 @@ function createGeoKnowledgeService(options) {
       state: application.state(clientId),
     };
   }
-  async function generate({ clientId }) {
+  async function generate({ clientId, temporaryPrompt = "" }) {
     if (testController) throw geoError("GEO_ALREADY_RUNNING");
     active++;
     try {
-      return { knowledge: await application.generate(clientId) };
+      return { knowledge: await application.generate(clientId, { temporaryPrompt }) };
     } finally {
       active--;
     }
@@ -107,6 +115,24 @@ function createGeoKnowledgeService(options) {
   function resolveConflict({ clientId, revision, conflictId, claimId, value }) {
     resolveClient(clientId);
     return { knowledge: store.resolveConflict(clientId, revision, conflictId, { claimId, value }) };
+  }
+  function promptSettings({ clientId }) {
+    resolveClient(clientId);
+    return {
+      defaultGlobalPrompt: DEFAULT_RESEARCH_PROMPT,
+      globalPrompt: promptStore.load().researchPromptOverride,
+      clientPrompt: store.loadPolicy(clientId).researchPrompt,
+    };
+  }
+  function saveGlobalPrompt({ researchPromptOverride }) {
+    if (active) throw geoError("GEO_ALREADY_RUNNING");
+    promptStore.save(researchPromptOverride);
+    return { defaultGlobalPrompt: DEFAULT_RESEARCH_PROMPT, globalPrompt: researchPromptOverride };
+  }
+  function saveClientPrompt({ clientId, researchPrompt }) {
+    resolveClient(clientId);
+    if (application.state(clientId).running) throw geoError("GEO_ALREADY_RUNNING");
+    return store.savePolicy(clientId, researchPrompt);
   }
   function exportMarkdown({ clientId }) {
     const document = load({ clientId }).knowledge;
@@ -172,6 +198,9 @@ function createGeoKnowledgeService(options) {
     edit,
     confirmSourceType,
     resolveConflict,
+    promptSettings,
+    saveGlobalPrompt,
+    saveClientPrompt,
     exportMarkdown,
     state: ({ clientId }) => ({ state: application.state(clientId) }),
     cancel: ({ clientId }) => ({ state: application.cancel(clientId) }),

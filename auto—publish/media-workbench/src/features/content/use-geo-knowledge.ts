@@ -7,11 +7,18 @@ import {
   editKnowledge,
   exportKnowledge,
   linkKnowledgeQuestions,
+  confirmKnowledgeSourceType,
+  resolveKnowledgeConflict,
+  getGeoPromptSettings,
+  saveGeoGlobalPrompt,
+  saveGeoClientPrompt,
 } from "../../bridge/geo-knowledge";
 import type {
   GeoKnowledge,
   KnowledgeState,
   KnowledgeEdit,
+  KnowledgeStorageStatus,
+  GeoPromptSettings,
 } from "../../types/geo-knowledge";
 
 export function useGeoKnowledge(clientId: string) {
@@ -20,6 +27,8 @@ export function useGeoKnowledge(clientId: string) {
     phase: "idle",
     running: false,
   });
+  const [storageStatus, setStorageStatus] = useState<KnowledgeStorageStatus>("missing");
+  const [promptSettings, setPromptSettings] = useState<GeoPromptSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -33,9 +42,11 @@ export function useGeoKnowledge(clientId: string) {
     const version = epoch.current;
     setLoading(true);
     try {
-      const result = await loadKnowledge(clientId);
+      const [result, prompts] = await Promise.all([loadKnowledge(clientId), getGeoPromptSettings(clientId)]);
       if (version === epoch.current) {
         setKnowledge(result.knowledge);
+        setStorageStatus(result.storageStatus);
+        setPromptSettings(prompts);
         setState(result.state);
         setError("");
       }
@@ -85,6 +96,7 @@ export function useGeoKnowledge(clientId: string) {
       const result = await action();
       if (version === epoch.current) {
         setKnowledge(result.knowledge);
+        setStorageStatus("current_v2");
         setState({ phase: "complete", running: false });
       }
       return true;
@@ -99,6 +111,22 @@ export function useGeoKnowledge(clientId: string) {
         locked.current = false;
         setBusy(false);
       }
+    }
+  }
+  async function promptCommand(action: () => Promise<void>) {
+    if (locked.current) return false;
+    locked.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      await action();
+      return true;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "研究要求保存失败。");
+      return false;
+    } finally {
+      locked.current = false;
+      setBusy(false);
     }
   }
   async function cancel() {
@@ -125,6 +153,8 @@ export function useGeoKnowledge(clientId: string) {
   }
   return {
     knowledge,
+    storageStatus,
+    promptSettings,
     state,
     loading,
     busy,
@@ -132,8 +162,20 @@ export function useGeoKnowledge(clientId: string) {
     reload,
     cancel,
     download,
-    generate: () => command(() => generateKnowledge(clientId)),
+    generate: (temporaryPrompt = "") => command(() => generateKnowledge(clientId, temporaryPrompt)),
     edit: (input: KnowledgeEdit) => command(() => editKnowledge(input)),
+    confirmSourceType: (sourceId: string, targetType: "official_web" | "client_public") =>
+      knowledge ? command(() => confirmKnowledgeSourceType({ clientId, revision: knowledge.revision, sourceId, targetType })) : Promise.resolve(false),
+    resolveConflict: (conflictId: string, resolution: { claimId?: string; value?: string }) =>
+      knowledge ? command(() => resolveKnowledgeConflict({ clientId, revision: knowledge.revision, conflictId, ...resolution })) : Promise.resolve(false),
+    saveGlobalPrompt: (value: string) => promptCommand(async () => {
+        const result = await saveGeoGlobalPrompt(value);
+        setPromptSettings(current => current ? { ...current, ...result } : current);
+      }),
+    saveClientPrompt: (value: string) => promptCommand(async () => {
+        await saveGeoClientPrompt(clientId, value);
+        setPromptSettings(current => current ? { ...current, clientPrompt: value } : current);
+      }),
     link: (ids: string[]) =>
       knowledge
         ? command(() =>

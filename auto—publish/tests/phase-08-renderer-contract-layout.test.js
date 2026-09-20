@@ -22,6 +22,7 @@ const domainTypeSymbols = {
     "GeoConfigStatus",
     "GeoConfigInput",
     "GeoConnectionResult",
+    "GeoPromptSettings",
     "KnowledgeEdit",
   ],
   "types/content.ts": [

@@ -225,6 +225,8 @@ const codes = [
   "GEO_READ_FAILED",
   "GEO_NOT_FOUND",
   "GEO_ITEM_NOT_FOUND",
+  "GEO_POLICY_INVALID",
+  "GEO_POLICY_SAVE_FAILED",
   "GEO_MATERIAL_TOO_LARGE",
   "GEO_GENERATION_FAILED",
 ];
@@ -319,7 +321,7 @@ const geoKnowledgeContracts = [
     exactObject({ knowledge: nullableField(knowledge), storageStatus: enumField(["missing", "legacy_v1", "current_v2", "invalid"]), state }),
   ),
   contract("state", "query", clientRequest, exactObject({ state })),
-  contract("generate", "command", clientRequest, exactObject({ knowledge })),
+  contract("generate", "command", exactObject({ clientId: id, temporaryPrompt: optionalField(text(2000)) }), exactObject({ knowledge })),
   contract("cancel", "command", clientRequest, exactObject({ state })),
   contract(
     "edit",
@@ -372,6 +374,24 @@ const geoKnowledgeContracts = [
       value: optionalField(text(2000, 1)),
     }),
     exactObject({ knowledge }),
+  ),
+  contract(
+    "promptSettings",
+    "query",
+    clientRequest,
+    exactObject({ defaultGlobalPrompt: text(8000, 1), globalPrompt: text(8000), clientPrompt: text(4000) }),
+  ),
+  contract(
+    "saveGlobalPrompt",
+    "command",
+    exactObject({ researchPromptOverride: text(8000) }),
+    exactObject({ defaultGlobalPrompt: text(8000, 1), globalPrompt: text(8000) }),
+  ),
+  contract(
+    "saveClientPrompt",
+    "command",
+    exactObject({ clientId: id, researchPrompt: text(4000) }),
+    exactObject({ researchPrompt: text(4000) }),
   ),
   contract(
     "exportMarkdown",

@@ -56,6 +56,21 @@ const geoKnowledgeIpcContractFixtures = [
     { ...client, revision: 1, conflictId: "restrictions-1", claimId: "claim-1" },
     { knowledge },
   ],
+  [
+    "promptSettings",
+    client,
+    { defaultGlobalPrompt: "默认研究要求", globalPrompt: "", clientPrompt: "" },
+  ],
+  [
+    "saveGlobalPrompt",
+    { researchPromptOverride: "自定义全局要求" },
+    { defaultGlobalPrompt: "默认研究要求", globalPrompt: "自定义全局要求" },
+  ],
+  [
+    "saveClientPrompt",
+    { ...client, researchPrompt: "客户长期要求" },
+    { researchPrompt: "客户长期要求" },
+  ],
   ["exportMarkdown", client, { markdown: "# 合成客户\n知识库" }],
   ["configStatus", {}, status],
   ["testConnection", { search: false }, { search: false, citationCount: 0 }],

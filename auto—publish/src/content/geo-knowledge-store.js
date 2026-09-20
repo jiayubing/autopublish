@@ -22,6 +22,16 @@ function createGeoKnowledgeStore(options) {
     policy.assertRegularFile(file, { boundary: directory, allowMissing: true, code: "GEO_PATH_UNSAFE", label: "Knowledge file" });
     return file;
   }
+  function policyFilename(clientId, create) {
+    if (!policy.isSafeSegment(clientId)) throw geoError("GEO_PATH_UNSAFE");
+    const directory = policy.assertDirectory(policy.workspace.geoKnowledge, {
+      boundary: policy.root, create, returnMissing: false, code: "GEO_PATH_UNSAFE", label: "Knowledge directory",
+    });
+    if (!directory) return null;
+    const file = path.join(directory, clientId + ".policy.json");
+    policy.assertRegularFile(file, { boundary: directory, allowMissing: true, code: "GEO_PATH_UNSAFE", label: "Knowledge policy file" });
+    return file;
+  }
   function readRaw(clientId) {
     const file = filename(clientId, false);
     if (!file) return null;
@@ -149,6 +159,26 @@ function createGeoKnowledgeStore(options) {
     conflict.sourceIds = [...new Set([...conflict.sourceIds, source.id])];
     return save(current, revision);
   }
-  return { inspect, load, save, replaceLegacy, edit, confirmSourceType, resolveConflict };
+  function loadPolicy(clientId) {
+    const file = policyFilename(clientId, false);
+    if (!file) return { researchPrompt: "" };
+    let document;
+    try { document = JSON.parse(fs.readFileSync(file, "utf8")); }
+    catch (error) {
+      if (error.code === "ENOENT") return { researchPrompt: "" };
+      throw geoError("GEO_POLICY_INVALID");
+    }
+    if (!document || document.version !== 1 || typeof document.researchPrompt !== "string" || document.researchPrompt.length > 4000) throw geoError("GEO_POLICY_INVALID");
+    return { researchPrompt: document.researchPrompt };
+  }
+  function savePolicy(clientId, researchPrompt) {
+    if (typeof researchPrompt !== "string" || researchPrompt.length > 4000) throw geoError("GEO_POLICY_INVALID");
+    const file = policyFilename(clientId, true);
+    try {
+      if (writer.write(file, JSON.stringify({ version: 1, researchPrompt }, null, 2) + "\n", { keepExisting: false }) !== true) throw geoError("GEO_POLICY_SAVE_FAILED");
+    } catch (_) { throw geoError("GEO_POLICY_SAVE_FAILED"); }
+    return { researchPrompt };
+  }
+  return { inspect, load, save, replaceLegacy, edit, confirmSourceType, resolveConflict, loadPolicy, savePolicy };
 }
 module.exports = { createGeoKnowledgeStore };

@@ -5,6 +5,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { startRenderer, closeRenderer } = require("./helpers/renderer-harness");
 const { normalizeCandidate } = require("../src/content/geo-knowledge-merge");
+const { mergeKnowledge } = require("../src/content/geo-knowledge-merge");
 
 function fixture({ document }) {
   const ok = (data) => Promise.resolve({ ok: true, data });
@@ -12,7 +13,8 @@ function fixture({ document }) {
   let knowledge = null;
   let running = false;
   let config = { configured: false, model: "", webSearch: true, baseUrl: "https://ark.cn-beijing.volces.com/api/plan/v3" };
-  window.__geoCalls = { generate: 0, edits: [], config: [] };
+  let prompts = { defaultGlobalPrompt: "默认要求", globalPrompt: "", clientPrompt: "" };
+  window.__geoCalls = { generate: 0, edits: [], config: [], prompts: [], sources: [], conflicts: [], temporaryPrompt: "" };
   window.desktopConsole = {
     auth: {
       getState: () =>
@@ -105,12 +107,14 @@ function fixture({ document }) {
       load: () =>
         ok({
           knowledge,
+          storageStatus: knowledge ? "current_v2" : "missing",
           state: { phase: running ? "extracting" : "idle", running },
         }),
       state: () =>
         ok({ state: { phase: running ? "extracting" : "complete", running } }),
-      generate: () => {
+      generate: (input) => {
         window.__geoCalls.generate++;
+        window.__geoCalls.temporaryPrompt = input.temporaryPrompt;
         running = true;
         return new Promise((resolve) => {
           window.__finishGeo = (fail) => {
@@ -136,6 +140,29 @@ function fixture({ document }) {
           locked: true,
           origin: "manual",
         });
+        knowledge.revision++;
+        return ok({ knowledge });
+      },
+      promptSettings: () => ok(prompts),
+      saveGlobalPrompt: ({ researchPromptOverride }) => {
+        prompts = { ...prompts, globalPrompt: researchPromptOverride };
+        window.__geoCalls.prompts.push(["global", researchPromptOverride]);
+        return ok({ defaultGlobalPrompt: prompts.defaultGlobalPrompt, globalPrompt: prompts.globalPrompt });
+      },
+      saveClientPrompt: ({ researchPrompt }) => {
+        prompts = { ...prompts, clientPrompt: researchPrompt };
+        window.__geoCalls.prompts.push(["client", researchPrompt]);
+        return ok({ researchPrompt });
+      },
+      confirmSourceType: (input) => {
+        window.__geoCalls.sources.push(input);
+        knowledge.sources.find(source => source.id === input.sourceId).type = input.targetType;
+        knowledge.revision++;
+        return ok({ knowledge });
+      },
+      resolveConflict: (input) => {
+        window.__geoCalls.conflicts.push(input);
+        knowledge.restrictions.find(item => item.id === input.conflictId).conflictStatus = "resolved";
         knowledge.revision++;
         return ok({ knowledge });
       },
@@ -208,14 +235,19 @@ test("knowledge page handles empty, busy, error, editing and encrypted-config in
     console.error("Renderer error:", error.message),
   );
   t.after(() => page.close());
-  const document = normalizeCandidate(
+  const sources = [
+    { id: "client-source", type: "client_input", title: "客户填写" },
+    { id: "web-source", type: "third_party", title: "搜索发现", url: "https://example.com", fetchedAt: "2026-09-20T00:00:00.000Z", citationVerified: true },
+  ];
+  const original = normalizeCandidate(
     {
-      profile: { fields: { name: "合成客户" } },
+      profile: { fields: { name: "合成客户" }, basis: "fact", sourceIds: ["client-source"] },
       geoQuestions: [{ name: "如何选择服务？", intent: "selection" }],
     },
-    [],
+    sources,
     "client-1",
   );
+  const document = mergeKnowledge(original, normalizeCandidate({ profile: { fields: { name: "候选名称" }, basis: "fact", sourceIds: ["client-source"] } }, sources, "client-1"));
   document.revision = 1;
   await page.addInitScript(fixture, { document });
   await page.goto(url);
@@ -227,18 +259,23 @@ test("knowledge page handles empty, busy, error, editing and encrypted-config in
     exact: true,
   });
   await generate.click();
+  await page.getByRole("dialog", { name: "研究要求" }).waitFor();
+  await page.getByLabel(/此客户长期补充要求/).fill("长期要求");
+  await page.getByLabel(/本次临时要求/).fill("临时要求");
+  await page.getByRole("button", { name: "保存要求并开始研究" }).click();
   assert.equal(await generate.isDisabled(), true);
   await page.evaluate(() => window.__finishGeo(true));
   await page
     .getByRole("alert")
     .filter({ hasText: "请先配置豆包 GEO" })
     .waitFor();
-  await generate.click();
+  await page.getByRole("button", { name: "保存要求并开始研究" }).click();
   await page.evaluate(() => window.__finishGeo(false));
-  await page.getByRole("button", { name: "编辑 客户基本信息" }).click();
+  await page.getByRole("button", { name: /客户基本信息/ }).first().click();
+  await page.getByRole("button", { name: "编辑并锁定" }).click();
   await page.getByLabel("客户名称", { exact: true }).fill("人工合成名称");
   await page.getByRole("button", { name: "保存并锁定" }).click();
-  await page.getByText("人工合成名称", { exact: true }).waitFor();
+  await page.getByLabel("知识详情").getByText("人工合成名称", { exact: true }).waitFor();
   assert.equal(
     await page.evaluate(() => window.__geoCalls.edits[0].revision),
     1,
@@ -263,6 +300,12 @@ test("knowledge page handles empty, busy, error, editing and encrypted-config in
     .waitFor();
   await page.getByText(/客户名称字面出现：是/).waitFor();
   await page.getByText("关联文章：1 篇 · 已发布：1 篇").waitFor();
+  await page.getByRole("button", { name: "来源", exact: true }).click();
+  await page.getByRole("button", { name: "确认是客户官网" }).click();
+  assert.equal(await page.evaluate(() => window.__geoCalls.sources[0].targetType), "official_web");
+  await page.getByRole("button", { name: "待确认", exact: true }).click();
+  await page.getByRole("button", { name: /采用：/ }).first().click();
+  assert.equal(await page.evaluate(() => window.__geoCalls.conflicts.length), 1);
   if (process.env.GEO_CAPTURE_SCREENSHOT === "1") {
     await page
       .getByRole("region", { name: "GEO 问题详情" })
@@ -303,4 +346,6 @@ test("knowledge page handles empty, busy, error, editing and encrypted-config in
     "",
   );
   assert.equal(await page.evaluate(() => window.__geoCalls.generate), 2);
+  assert.equal(await page.evaluate(() => window.__geoCalls.temporaryPrompt), "临时要求");
+  assert.deepEqual(await page.evaluate(() => window.__geoCalls.prompts), [["global", ""], ["client", "长期要求"], ["global", ""], ["client", "长期要求"]]);
 });
