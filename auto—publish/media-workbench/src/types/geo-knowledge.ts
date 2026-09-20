@@ -97,6 +97,8 @@ export type GeoConfigStatus = {
   configured: boolean;
   model: string;
   webSearch: boolean;
+  defaultGlobalPrompt: string;
+  globalPrompt: string;
 };
 export type GeoConfigInput = {
   baseUrl: string;

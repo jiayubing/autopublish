@@ -129,6 +129,13 @@ function createGeoKnowledgeService(options) {
     promptStore.save(researchPromptOverride);
     return { defaultGlobalPrompt: DEFAULT_RESEARCH_PROMPT, globalPrompt: researchPromptOverride };
   }
+  function configStatus() {
+    return {
+      ...config().status(),
+      defaultGlobalPrompt: DEFAULT_RESEARCH_PROMPT,
+      globalPrompt: promptStore.load().researchPromptOverride,
+    };
+  }
   function saveClientPrompt({ clientId, researchPrompt }) {
     resolveClient(clientId);
     if (application.state(clientId).running) throw geoError("GEO_ALREADY_RUNNING");
@@ -204,11 +211,12 @@ function createGeoKnowledgeService(options) {
     exportMarkdown,
     state: ({ clientId }) => ({ state: application.state(clientId) }),
     cancel: ({ clientId }) => ({ state: application.cancel(clientId) }),
-    configStatus: () => config().status(),
+    configStatus,
     testConnection,
     saveConfig: (input) => {
       if (active || testController) throw geoError("GEO_ALREADY_RUNNING");
-      return config().save(input);
+      config().save(input);
+      return configStatus();
     },
     dispose: () => {
       disposed = true;

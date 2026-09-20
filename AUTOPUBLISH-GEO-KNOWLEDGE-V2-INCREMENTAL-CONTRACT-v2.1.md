@@ -438,6 +438,8 @@ roamingConfig/geo-knowledge-policy.json
 
 只保存可选 `researchPromptOverride`，最大 8000 字符。“恢复默认”删除 override，回到软件内置默认。继续使用原子写入，不增加 revision。
 
+全局 Prompt 的查看、编辑和“恢复内置默认”入口放在“设置 → 豆包 GEO”，适用于所有客户。客户知识库的研究弹窗不重复显示或编辑全局 Prompt。
+
 ### 11.2 客户 Prompt
 
 由现有 `geo-knowledge-store` 模块在 workspace 内保存 sidecar：
@@ -447,6 +449,8 @@ roamingConfig/geo-knowledge-policy.json
 ```
 
 只保存 `researchPrompt`，最大 4000 字符。继续使用 path policy 和原子写入，不增加 revision。
+
+客户知识库的研究弹窗只显示“此客户长期补充要求”和“本次临时要求”。
 
 ### 11.3 临时 Prompt
 

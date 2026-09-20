@@ -182,6 +182,8 @@ const status = exactObject({
   configured: "boolean",
   model: text(200),
   webSearch: "boolean",
+  defaultGlobalPrompt: text(8000, 1),
+  globalPrompt: text(8000),
 });
 const messages = {
   GEO_AUTH_REJECTED: "鉴权失败（401）：请检查是否使用了当前接口对应的密钥。",

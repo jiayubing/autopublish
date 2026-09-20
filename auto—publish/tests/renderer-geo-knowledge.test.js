@@ -195,7 +195,11 @@ function fixture({ document }) {
         running = false;
         return ok({ state: { phase: "failed", running: false } });
       },
-      configStatus: () => ok(config),
+      configStatus: () => ok({
+        ...config,
+        defaultGlobalPrompt: prompts.defaultGlobalPrompt,
+        globalPrompt: prompts.globalPrompt,
+      }),
       saveConfig: (input) => {
         window.__geoCalls.config.push(input);
         config = {
@@ -204,7 +208,11 @@ function fixture({ document }) {
           webSearch: input.webSearch,
           baseUrl: input.baseUrl,
         };
-        return ok(config);
+        return ok({
+          ...config,
+          defaultGlobalPrompt: prompts.defaultGlobalPrompt,
+          globalPrompt: prompts.globalPrompt,
+        });
       },
     },
     aiProvider: {
@@ -353,6 +361,19 @@ test("knowledge page handles empty, busy, error, editing and encrypted-config in
   }
   await page.locator("#nav-item-settings").click();
   await page.getByRole("button", { name: "豆包 GEO", exact: true }).click();
+  assert.equal(
+    await page.getByLabel("全局研究要求").inputValue(),
+    "默认要求",
+  );
+  await page.getByLabel("全局研究要求").fill("设置中的全局要求");
+  await page.getByRole("button", { name: "保存全局研究要求" }).click();
+  await page.getByText("全局研究要求已保存。").waitFor();
+  await page.getByRole("button", { name: "恢复内置默认" }).click();
+  await page.waitForFunction(() => window.__geoCalls.prompts.length === 4);
+  assert.equal(
+    await page.getByLabel("全局研究要求").inputValue(),
+    "默认要求",
+  );
   await page.getByLabel("模型 / Endpoint ID").fill("synthetic-model");
   await page.getByLabel("API Key", { exact: true }).fill("synthetic-secret");
   await page.getByRole("button", { name: "保存豆包 GEO 配置" }).click();
@@ -377,5 +398,5 @@ test("knowledge page handles empty, busy, error, editing and encrypted-config in
   );
   assert.equal(await page.evaluate(() => window.__geoCalls.generate), 2);
   assert.equal(await page.evaluate(() => window.__geoCalls.temporaryPrompt), "临时要求");
-  assert.deepEqual(await page.evaluate(() => window.__geoCalls.prompts), [["global", ""], ["client", "长期要求"], ["global", ""], ["client", "长期要求"]]);
+  assert.deepEqual(await page.evaluate(() => window.__geoCalls.prompts), [["client", "长期要求"], ["client", "长期要求"], ["global", "设置中的全局要求"], ["global", ""]]);
 });

@@ -14,7 +14,9 @@ export default function DoubaoGeoSettings() {
   );
   const [apiKey, setApiKey] = useState("");
   const [webSearch, setWebSearch] = useState(true);
+  const [researchPrompt, setResearchPrompt] = useState("");
   const [saved, setSaved] = useState(false);
+  const [promptSaved, setPromptSaved] = useState(false);
   const [testVisible, setTestVisible] = useState(false);
   useEffect(() => {
     void feature.refreshGeo("page-open");
@@ -24,6 +26,7 @@ export default function DoubaoGeoSettings() {
       setModel(status.model);
       setBaseUrl(status.baseUrl);
       setWebSearch(status.webSearch);
+      setResearchPrompt(status.globalPrompt || status.defaultGlobalPrompt);
     }
   }, [status]);
   const testState = snapshot.commands.testGeo;
@@ -31,16 +34,22 @@ export default function DoubaoGeoSettings() {
   const busy =
     snapshot.geo.query.loading ||
     snapshot.commands.saveGeo.busy ||
+    snapshot.commands.saveGeoPrompt.busy ||
     testState.busy;
-  const dirty =
+  const configDirty =
     !status?.configured ||
     baseUrl !== status.baseUrl ||
     model.trim() !== status.model ||
     webSearch !== status.webSearch ||
     apiKey.length > 0;
+  const effectivePrompt = status
+    ? status.globalPrompt || status.defaultGlobalPrompt
+    : "";
+  const promptDirty = researchPrompt !== effectivePrompt;
   const error =
     snapshot.geo.query.error?.userMessage ||
-    snapshot.commands.saveGeo.error?.userMessage;
+    snapshot.commands.saveGeo.error?.userMessage ||
+    snapshot.commands.saveGeoPrompt.error?.userMessage;
   async function save() {
     setTestVisible(false);
     setSaved(false);
@@ -56,9 +65,19 @@ export default function DoubaoGeoSettings() {
     }
   }
   async function test(search: boolean) {
-    if (busy || dirty) return;
+    if (busy || configDirty) return;
     setTestVisible(true);
     await feature.testGeo({ search });
+  }
+  async function savePrompt(value = researchPrompt) {
+    setPromptSaved(false);
+    if (!status || !value.trim()) return;
+    const override = value === status.defaultGlobalPrompt ? "" : value;
+    const result = await feature.saveGeoPrompt(override);
+    if (result) {
+      setResearchPrompt(result.globalPrompt || result.defaultGlobalPrompt);
+      setPromptSaved(true);
+    }
   }
   return (
     <form
@@ -141,6 +160,44 @@ export default function DoubaoGeoSettings() {
         />
         启用联网搜索
       </label>
+      <section className="grid gap-3 rounded border bg-slate-50 p-4">
+        <div>
+          <h3 className="font-semibold">全局研究要求</h3>
+          <p className="mt-1 text-xs text-slate-500">
+            适用于所有客户；每个客户的长期补充要求会在此基础上追加。
+          </p>
+        </div>
+        <textarea
+          aria-label="全局研究要求"
+          className="block min-h-32 w-full rounded border bg-white p-2"
+          maxLength={8000}
+          value={researchPrompt}
+          disabled={busy || !status}
+          onChange={(event) => {
+            setResearchPrompt(event.target.value);
+            setPromptSaved(false);
+          }}
+        />
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="rounded border px-4 py-2 disabled:opacity-40"
+            disabled={busy || !status || !researchPrompt.trim() || !promptDirty}
+            onClick={() => void savePrompt()}
+          >
+            保存全局研究要求
+          </button>
+          <button
+            type="button"
+            className="rounded border px-4 py-2 disabled:opacity-40"
+            disabled={busy || !status || !status.globalPrompt}
+            onClick={() => void savePrompt(status?.defaultGlobalPrompt || "")}
+          >
+            恢复内置默认
+          </button>
+        </div>
+        {promptSaved && <p role="status">全局研究要求已保存。</p>}
+      </section>
       {error && (
         <p role="alert" className="text-rose-700">
           {error}
@@ -162,7 +219,7 @@ export default function DoubaoGeoSettings() {
         <button
           type="button"
           className="rounded border px-4 py-2 disabled:opacity-40"
-          disabled={busy || dirty}
+          disabled={busy || configDirty}
           onClick={() => void test(false)}
         >
           测试连接
@@ -170,7 +227,7 @@ export default function DoubaoGeoSettings() {
         <button
           type="button"
           className="rounded border px-4 py-2 disabled:opacity-40"
-          disabled={busy || dirty || !webSearch}
+          disabled={busy || configDirty || !webSearch}
           onClick={() => void test(true)}
         >
           测试联网搜索

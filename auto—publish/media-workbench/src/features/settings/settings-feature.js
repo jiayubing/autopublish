@@ -98,6 +98,7 @@ const QUERY_DEFINITIONS = Object.freeze({
 const COMMAND_NAMES = Object.freeze([
   "testGeo",
   "saveGeo",
+  "saveGeoPrompt",
   "saveAi",
   "testAi",
   "clearAi",
@@ -306,6 +307,7 @@ export function createSettingsFeature(adapters = {}) {
     refreshAi: (reason = "manual") => runQuery("ai", reason),
     refreshGeo: (reason = "manual") => runQuery("geo", reason),
     saveGeo: (input) => execute(owners.saveGeo, adapters.saveGeo, input, "GEO_SETTINGS_SAVE_FAILED", "豆包 GEO 配置保存失败。", status => setDirect("geo", status)),
+    saveGeoPrompt: (value) => execute(owners.saveGeoPrompt, adapters.saveGeoPrompt, value, "GEO_SETTINGS_SAVE_FAILED", "全局研究要求保存失败。", prompt => setDirect("geo", { ...values.geo.data, ...prompt })),
     testGeo: (input) => execute(owners.testGeo, adapters.testGeo, input, "GEO_SETTINGS_TEST_FAILED", "豆包 GEO 测试失败；未自动重试。"),
     refreshMedia: (reason = "manual") => runQuery("media", reason),
     refreshHepan: (reason = "manual") => runQuery("hepan", reason),

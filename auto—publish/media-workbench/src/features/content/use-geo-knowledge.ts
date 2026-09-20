@@ -10,7 +10,6 @@ import {
   confirmKnowledgeSourceType,
   resolveKnowledgeConflict,
   getGeoPromptSettings,
-  saveGeoGlobalPrompt,
   saveGeoClientPrompt,
 } from "../../bridge/geo-knowledge";
 import type {
@@ -177,10 +176,6 @@ export function useGeoKnowledge(clientId: string) {
       knowledge ? command(() => confirmKnowledgeSourceType({ clientId, revision: knowledge.revision, sourceId, targetType })) : Promise.resolve(false),
     resolveConflict: (conflictId: string, resolution: { claimId?: string; value?: string }) =>
       knowledge ? command(() => resolveKnowledgeConflict({ clientId, revision: knowledge.revision, conflictId, ...resolution })) : Promise.resolve(false),
-    saveGlobalPrompt: (value: string) => promptCommand(async () => {
-        const result = await saveGeoGlobalPrompt(value);
-        setPromptSettings(current => current ? { ...current, ...result } : current);
-      }),
     saveClientPrompt: (value: string) => promptCommand(async () => {
         await saveGeoClientPrompt(clientId, value);
         setPromptSettings(current => current ? { ...current, clientPrompt: value } : current);

@@ -33,14 +33,12 @@ export default function GeoKnowledgeView({ clientId }: { clientId: string }) {
   const [description, setDescription] = useState("");
   const [fields, setFields] = useState<Record<string, string>>({});
   const [researchOpen, setResearchOpen] = useState(false);
-  const [globalPrompt, setGlobalPrompt] = useState("");
   const [clientPrompt, setClientPrompt] = useState("");
   const [temporaryPrompt, setTemporaryPrompt] = useState("");
   const [manualValues, setManualValues] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!feature.promptSettings) return;
-    setGlobalPrompt(feature.promptSettings.globalPrompt);
     setClientPrompt(feature.promptSettings.clientPrompt);
   }, [feature.promptSettings]);
   useEffect(() => {
@@ -68,7 +66,6 @@ export default function GeoKnowledgeView({ clientId }: { clientId: string }) {
     if (ok) setEditing(null);
   }
   async function startResearch() {
-    if (!(await feature.saveGlobalPrompt(globalPrompt))) return;
     if (!(await feature.saveClientPrompt(clientPrompt))) return;
     if (await feature.generate(temporaryPrompt)) {
       setResearchOpen(false);
@@ -140,8 +137,6 @@ export default function GeoKnowledgeView({ clientId }: { clientId: string }) {
       {researchOpen && (
         <div className="mb-4 grid gap-3 rounded border bg-white p-4" role="dialog" aria-label="研究要求">
           <h3 className="font-semibold">研究要求</h3>
-          <label>全局研究要求（留空恢复内置默认）<textarea className="mt-1 block min-h-20 w-full border p-2" maxLength={8000} value={globalPrompt} disabled={disabled} onChange={event => setGlobalPrompt(event.target.value)} /></label>
-          {!globalPrompt && feature.promptSettings && <p className="text-xs text-slate-500">当前默认：{feature.promptSettings.defaultGlobalPrompt}</p>}
           <label>此客户长期补充要求<textarea className="mt-1 block min-h-20 w-full border p-2" maxLength={4000} value={clientPrompt} disabled={disabled} onChange={event => setClientPrompt(event.target.value)} /></label>
           <label>本次临时要求（不会保存）<textarea className="mt-1 block min-h-20 w-full border p-2" maxLength={2000} value={temporaryPrompt} disabled={disabled} onChange={event => setTemporaryPrompt(event.target.value)} /></label>
           <p className="text-xs text-slate-500">客户实体优先，最多两轮；正常约 14 次请求，格式修复时程序硬上限 18 次。</p>
