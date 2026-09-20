@@ -358,7 +358,7 @@ Conflict 继续使用 `restrictions` owner，不增加独立 conflict store。
 
 预算：total tasks ≤ 6，每 task 最多 3 个 query，generic industry tasks ≤ 1。第一轮核心任务必须是 Customer Entity Discovery。
 
-第一轮 planner 输出必须由程序 validator 检查 task 总数、每 task query 数和 generic industry task 数；不满足时属于 schema 错误，不能仅依赖 Prompt 约束。
+第一轮 planner 输出先经过有限白名单 type 归一化、exact topic/group 合并、query 去重与确定性裁剪，再由程序 validator 检查 task 总数、每 task query 数和 generic industry task 数。未知 type 不得猜测；归一化后仍不满足合同时才属于 schema 错误。
 
 第一轮可输出带 citation 的 discovery：
 
@@ -382,7 +382,7 @@ history_keyword
 
 预算：total tasks ≤ 4，每 task 最多 3 个 query，generic industry tasks ≤ 1。第二轮结束即停止。
 
-第二轮 planner 输出同样由程序 validator 检查 task、query 和 industry 上限。
+第二轮 planner 输出同样先做有限归一化和确定性压缩，再由程序 validator 检查 task、query 和 industry 上限。
 
 ### 9.3 Query 和 URL 去重
 
@@ -405,7 +405,7 @@ history_keyword
 
 硬 transport request 上限为 18。`geo-knowledge-application` 创建本次 budget，并向 research 传入唯一的 `budgetedRequest()`；所有 plan、search、repair 和 synthesis 都必须通过它。只有该函数能增加计数。
 
-两轮 planner 的 task/industry validator 失败可在剩余预算内走一次 JSON/schema repair；repair 仍计入 18 次 transport 上限，不改变 Round 1 ≤6/industry ≤1、Round 2 ≤4/industry ≤1 的最终任务合同。
+两轮 planner 的归一化/validator 失败可在剩余预算内走一次 JSON/schema repair；repair 只携带上一次原始输出并修复结构，不重新携带全局/客户/临时 Prompt 发散规划。repair 仍计入 18 次 transport 上限，不改变 Round 1 ≤6/industry ≤1、Round 2 ≤4/industry ≤1 的最终任务合同。
 
 始终为最终 synthesis 保留 2 次请求。前置阶段即将占用 reserve 时，停止后续可选 research，写入 partial warning，并用已有 findings 进入 synthesis。
 

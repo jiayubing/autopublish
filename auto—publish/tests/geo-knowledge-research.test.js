@@ -5,6 +5,7 @@ const {
   adaptModelCandidate,
   createGeoKnowledgeResearch,
   createRequestBudget,
+  normalizePlannerTasks,
   parseJsonObject,
   validateTasks,
 } = require("../src/content/geo-knowledge-research");
@@ -179,12 +180,102 @@ test("round validators enforce task and generic-industry limits", () => {
   assert.throws(() => validateTasks({ tasks: Array.from({ length: 5 }, () => ({ type: "follow_up", topic: "跟进", queries: ["跟进"] })) }, 2), { code: "GEO_SCHEMA_INVALID" });
 });
 
-test("invalid round-one plan gets one budgeted repair and cannot launch search", async () => {
+test("detailed research directions normalize and compress a natural round-one plan", () => {
+  const plan = normalizePlannerTasks(
+    {
+      tasks: [
+        ["identity", "名称与别名"],
+        ["online_presence", "官网与公开账号"],
+        ["people", "公开负责人"],
+        ["address", "经营地址"],
+        ["service", "产品与服务"],
+        ["history", "历史与搬迁"],
+        ["cases", "公开案例"],
+        ["brand", "品牌合作"],
+        ["competitor", "本地竞对"],
+        ["industry", "行业背景"],
+      ].map(([type, topic], index) => ({
+        type,
+        topic,
+        queries: ["查询 " + index, "查询  " + index, "验证 " + index, "超量 " + index],
+      })),
+    },
+    1,
+  );
+  assert.ok(plan.length <= 6);
+  assert.ok(plan.every(task => ["customer_entity", "generic_industry"].includes(task.type)));
+  assert.ok(plan.every(task => task.queries.length >= 1 && task.queries.length <= 3));
+  assert.ok(plan.filter(task => task.type === "generic_industry").length <= 1);
+});
+
+test("natural planner types map only through the bounded round aliases", () => {
+  const round1 = normalizePlannerTasks({ tasks: ["identity", "online_presence", "history", "cases"].map(type => ({ type, topic: type, queries: [type] })) }, 1);
+  assert.ok(round1.every(task => task.type === "customer_entity"));
+  const round2 = normalizePlannerTasks({ tasks: ["identity", "history", "competitor", "market"].map(type => ({ type, topic: type, queries: [type] })) }, 2);
+  assert.ok(round2.some(task => task.type === "follow_up"));
+  assert.equal(round2.filter(task => task.type === "generic_industry").length, 1);
+  assert.throws(() => normalizePlannerTasks({ tasks: [{ type: "anything_goes", topic: "未知", queries: ["未知"] }] }, 1), { code: "GEO_SCHEMA_INVALID" });
+});
+
+test("detailed global prompt survives round-one planning without repair", async () => {
+  const searches = [];
   let count = 0;
+  const detailedPrompt = "详细全局要求：" + "名称别名、线上账号、负责人、地址、历史、案例、竞对、行业背景。".repeat(40);
   const client = { async request(input) {
     count++;
-    assert.equal(input.search, undefined);
-    return { text: JSON.stringify({ tasks: Array.from({ length: 7 }, () => ({ type: "customer_entity", topic: "过量", queries: ["测试"] })) }) };
+    if (count === 1) {
+      assert.match(input.prompt, /研究维度不等于独立任务/);
+      assert.match(input.prompt, /详细全局要求/);
+      return { text: JSON.stringify({ tasks: [
+        ["identity", "名称与别名"], ["online_presence", "线上账号"],
+        ["people", "负责人"], ["address", "地址"], ["service", "产品服务"],
+        ["history", "历史"], ["cases", "案例"], ["competitor", "竞对"], ["industry", "行业"],
+      ].map(([type, topic], index) => ({ type, topic, queries: ["查询" + index, "验证" + index, "补充" + index, "超量" + index] })) }) };
+    }
+    if (input.search) {
+      const match = input.prompt.match(/\{"round":1,"task":(\{.*\})\}\s*$/s);
+      assert.ok(match);
+      searches.push(JSON.parse(match[1]));
+      return { text: JSON.stringify(emptySearch), citations: [] };
+    }
+    if (input.prompt.includes("第二轮")) return { text: JSON.stringify({ tasks: [] }) };
+    return { text: JSON.stringify({ profile: { fields: {} } }) };
+  } };
+  await createGeoKnowledgeResearch({ client }).enrich(facts(), { promptSnapshot: { globalPrompt: detailedPrompt } });
+  assert.ok(searches.length <= 6);
+  assert.ok(searches.every(task => task.queries.length <= 3));
+  assert.equal(count, searches.length + 3);
+});
+
+test("unknown planner type gets one structure-only repair without replanning", async () => {
+  let count = 0;
+  const detailedMarker = "DO_NOT_REPEAT_LONG_GLOBAL_PROMPT".repeat(50);
+  const client = { async request(input) {
+    count++;
+    if (count === 1) return { text: JSON.stringify({ tasks: [{ type: "mystery", topic: "保留的研究意图", queries: ["客户查询"] }] }) };
+    if (count === 2) {
+      assert.equal(input.search, undefined);
+      assert.match(input.prompt, /只修复上一次输出的结构/);
+      assert.match(input.prompt, /mystery/);
+      assert.doesNotMatch(input.prompt, /DO_NOT_REPEAT_LONG_GLOBAL_PROMPT/);
+      return { text: JSON.stringify({ tasks: [{ type: "customer_entity", topic: "保留的研究意图", queries: ["客户查询"] }] }) };
+    }
+    if (count === 3) {
+      assert.equal(input.search, true);
+      return { text: JSON.stringify(emptySearch), citations: [] };
+    }
+    if (count === 4) return { text: JSON.stringify({ tasks: [] }) };
+    return { text: JSON.stringify({ profile: { fields: {} } }) };
+  } };
+  await createGeoKnowledgeResearch({ client }).enrich(facts(), { promptSnapshot: { globalPrompt: detailedMarker } });
+  assert.equal(count, 5);
+});
+
+test("a truly unknown planner type fails closed after one controlled repair", async () => {
+  let count = 0;
+  const client = { async request() {
+    count++;
+    return { text: JSON.stringify({ tasks: [{ type: "anything_goes", topic: "未知", queries: ["未知"] }] }) };
   } };
   await assert.rejects(createGeoKnowledgeResearch({ client }).enrich(facts()), { code: "GEO_SCHEMA_INVALID" });
   assert.equal(count, 2);

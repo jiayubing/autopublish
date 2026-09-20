@@ -319,13 +319,82 @@ function validateTasks(value, round) {
   return value.tasks;
 }
 
+const INDUSTRY_TASK_TYPES = new Set([
+  "generic_industry",
+  "industry",
+  "market",
+  "industry_background",
+  "market_background",
+  "category_background",
+]);
+const ROUND_ONE_TASK_GROUPS = new Map([
+  ...["identity", "entity", "customer", "client", "address", "people", "person"].map(type => [type, "entity"]),
+  ...["online_presence", "online", "website", "social", "public_account"].map(type => [type, "online"]),
+  ...["service", "services", "offering", "offerings", "product", "products", "capability", "capabilities"].map(type => [type, "offerings"]),
+  ...["history", "history_event"].map(type => [type, "history"]),
+  ...["case", "cases", "brand", "competitor", "competition"].map(type => [type, "evidence"]),
+]);
+const ROUND_TWO_TASK_GROUPS = new Map([
+  ...["identity", "entity", "customer", "client", "address", "people", "person", "online_presence", "online", "website", "social", "public_account"].map(type => [type, "entity_follow_up"]),
+  ...["service", "services", "offering", "offerings", "product", "products", "capability", "capabilities", "history", "case", "cases", "brand"].map(type => [type, "evidence_follow_up"]),
+  ...["competitor", "competition", "differentiation", "difference"].map(type => [type, "differentiation"]),
+]);
+
+function normalizeTaskType(value, round) {
+  if (typeof value !== "string") throw geoError("GEO_SCHEMA_INVALID");
+  const type = value.normalize("NFKC").trim().toLowerCase().replace(/[\s-]+/gu, "_");
+  if (INDUSTRY_TASK_TYPES.has(type)) return { type: "generic_industry", group: "industry" };
+  const coreType = round === 1 ? "customer_entity" : "follow_up";
+  if (type === coreType || (round === 2 && type === "followup")) return { type: coreType, group: null };
+  const group = (round === 1 ? ROUND_ONE_TASK_GROUPS : ROUND_TWO_TASK_GROUPS).get(type);
+  if (!group) throw geoError("GEO_SCHEMA_INVALID");
+  return { type: coreType, group };
+}
+
+function normalizePlannerTasks(value, round) {
+  if (!value || !Array.isArray(value.tasks)) throw geoError("GEO_SCHEMA_INVALID");
+  const normalized = [];
+  const groups = new Map();
+  for (const task of value.tasks) {
+    if (!task || typeof task !== "object" || Array.isArray(task)) throw geoError("GEO_SCHEMA_INVALID");
+    const mapped = normalizeTaskType(task.type, round);
+    if (typeof task.topic !== "string" || !task.topic.trim() || task.topic.length > 500 || !Array.isArray(task.queries) || task.queries.length < 1) throw geoError("GEO_SCHEMA_INVALID");
+    const queries = [...new Set(task.queries.map(query => {
+      if (typeof query !== "string" || !query.trim() || query.length > 500) throw geoError("GEO_SCHEMA_INVALID");
+      return normalizeQuery(query);
+    }))];
+    if (!queries.length) throw geoError("GEO_SCHEMA_INVALID");
+    const topic = task.topic.trim();
+    const group = mapped.group || "topic:" + normalizeQuery(topic).toLowerCase();
+    const key = mapped.type + "\0" + group;
+    const existing = groups.get(key);
+    if (existing) existing.queries = [...new Set([...existing.queries, ...queries])].slice(0, 3);
+    else {
+      const next = { type: mapped.type, topic, queries: queries.slice(0, 3) };
+      groups.set(key, next);
+      normalized.push(next);
+    }
+  }
+  const industry = normalized.filter(task => task.type === "generic_industry");
+  const core = normalized.filter(task => task.type !== "generic_industry");
+  const industryTask = industry.length
+    ? [{ ...industry[0], queries: [...new Set(industry.flatMap(task => task.queries))].slice(0, 3) }]
+    : [];
+  const limit = round === 1 ? 6 : 4;
+  const selectedCore = core.slice(0, limit);
+  const tasks = selectedCore.length < limit
+    ? [...selectedCore, ...industryTask]
+    : selectedCore;
+  return validateTasks({ tasks }, round);
+}
+
 function normalizeQuery(value) { return value.normalize("NFKC").trim().replace(/\s+/gu, " "); }
-function buildApplicationPrompt(taskPrompt, snapshot = {}) {
+function buildApplicationPrompt(taskPrompt, snapshot = {}, includeResearchPrompts = true) {
   return [
     APPLICATION_CONTRACT_PROMPT,
-    "[全局研究要求]\n" + (snapshot.globalPrompt || DEFAULT_RESEARCH_PROMPT),
-    snapshot.clientPrompt ? "[客户补充要求]\n" + snapshot.clientPrompt : "",
-    snapshot.temporaryPrompt ? "[本次临时要求]\n" + snapshot.temporaryPrompt : "",
+    includeResearchPrompts ? "[全局研究要求]\n" + (snapshot.globalPrompt || DEFAULT_RESEARCH_PROMPT) : "",
+    includeResearchPrompts && snapshot.clientPrompt ? "[客户补充要求]\n" + snapshot.clientPrompt : "",
+    includeResearchPrompts && snapshot.temporaryPrompt ? "[本次临时要求]\n" + snapshot.temporaryPrompt : "",
     "[当前任务]\n" + taskPrompt,
   ].filter(Boolean).join("\n\n");
 }
@@ -350,9 +419,15 @@ function createGeoKnowledgeResearch({ client }) {
     delete transportOptions.budget;
     delete transportOptions.useReserve;
     delete transportOptions.promptSnapshot;
+    delete transportOptions.repairPrompt;
+    let previousText = "";
     for (let attempt = 0; attempt < 2; attempt++) {
-      const taskPrompt = prompt + (attempt ? "\n上次输出格式不合要求，请严格按 JSON 合同重新输出。" : "");
-      const response = await request({ ...transportOptions, prompt: buildApplicationPrompt(taskPrompt, options.promptSnapshot) }, { useReserve: useReserve === true });
+      const structuralRepair = attempt > 0 && typeof options.repairPrompt === "function";
+      const taskPrompt = structuralRepair
+        ? options.repairPrompt(previousText)
+        : prompt + (attempt ? "\n上次输出格式不合要求，请严格按 JSON 合同重新输出。" : "");
+      const response = await request({ ...transportOptions, prompt: buildApplicationPrompt(taskPrompt, options.promptSnapshot, !structuralRepair) }, { useReserve: useReserve === true });
+      previousText = typeof response.text === "string" ? response.text : "";
       try {
         const parsed = parseJsonObject(response.text);
         return validate(parsed, response);
@@ -389,6 +464,21 @@ function createGeoKnowledgeResearch({ client }) {
     const warnings = [];
     let completed = 0;
     function optionalAvailable() { return !budget || budget.snapshot().optionalRemaining > 0; }
+    function plannerRepairPrompt(previousText, round) {
+      const limit = round === 1 ? 6 : 4;
+      const coreType = round === 1 ? "customer_entity" : "follow_up";
+      return "只修复上一次输出的结构，不要重新规划研究方向，不要添加新内容。保留原有研究意图，合并为最多 " + limit + " 个 task；type 只能是 " + coreType + " 或 generic_industry，generic_industry 最多 1 个，每个 task 保留 1–3 条 query。只输出 {tasks:[{type,topic,queries}]} JSON。\n[上一次原始输出]\n" + previousText.slice(0, 50000);
+    }
+    function plan(round, input) {
+      const firstRound = round === 1;
+      const prompt = firstRound
+        ? "制定第一轮客户实体优先研究计划。全局研究要求描述的是研究维度，研究维度不等于独立任务；必须合并相关维度为少量 task。名称/别名/主体/地址可合并；官网/抖音/小红书/地图可合并；产品/服务/能力/设备可合并；历史/搬迁/扩店/业务变化可合并；案例/品牌合作/授权可合并。返回 {tasks:[{type:customer_entity/generic_industry,topic,queries:[字符串]}]}。总任务最多6，generic_industry最多1，且必须至少一个 customer_entity，每 task 1–3 条 query。"
+        : "仅根据已登记 discovery 和原始客户事实制定第二轮跟进/差异研究。研究维度不等于独立任务，必须合并相关维度。返回 {tasks:[{type:follow_up/generic_industry,topic,queries:[字符串]}]}。总任务最多4，generic_industry最多1，每 task 1–3 条 query。不得使用未登记发现。";
+      return json(prompt + "\n" + JSON.stringify(input), value => normalizePlannerTasks(value, round), {
+        ...requestOptions,
+        repairPrompt: previousText => plannerRepairPrompt(previousText, round),
+      });
+    }
     function dedupeTasks(tasks) {
       return tasks.map(task => ({
         ...task,
@@ -451,14 +541,14 @@ function createGeoKnowledgeResearch({ client }) {
     }
 
     progress("planning");
-    const round1 = await json("制定第一轮客户实体优先研究计划。返回 {tasks:[{type:customer_entity/generic_industry,topic,queries:[字符串]}]}。总任务最多6，generic_industry最多1，且必须至少一个 customer_entity。\n" + JSON.stringify({ profile: facts.profile.fields, offerings: facts.offerings }), value => validateTasks(value, 1), requestOptions);
+    const round1 = await plan(1, { profile: facts.profile.fields, offerings: facts.offerings });
     await execute(round1, 1);
 
     let round2 = [];
     if (optionalAvailable()) {
       progress("planning");
       try {
-        round2 = await json("仅根据已登记 discovery 和原始客户事实制定第二轮跟进/差异研究。返回 {tasks:[{type:follow_up/generic_industry,topic,queries:[字符串]}]}。总任务最多4，generic_industry最多1。不得使用未登记发现。\n" + JSON.stringify({ profile: facts.profile.fields, offerings: facts.offerings, discoveries }), value => validateTasks(value, 2), requestOptions);
+        round2 = await plan(2, { profile: facts.profile.fields, offerings: facts.offerings, discoveries });
         await execute(round2, 2);
       } catch (error) {
         if (signal?.aborted || ["GEO_CANCELLED", "GEO_CONFIG_REQUIRED", "GEO_CONFIG_REJECTED", "GEO_AUTH_REJECTED", "GEO_PERMISSION_DENIED", "GEO_SEARCH_DISABLED", "GEO_CAPABILITY_REJECTED", "GEO_SEARCH_UNCONFIRMED"].includes(error.code)) throw error;
@@ -484,4 +574,4 @@ function createGeoKnowledgeResearch({ client }) {
   }
   return { extract, enrich, json };
 }
-module.exports = { APPLICATION_CONTRACT_PROMPT, CANDIDATE_CONTRACT, DEFAULT_RESEARCH_PROMPT, adaptModelCandidate, buildApplicationPrompt, createGeoKnowledgeResearch, createRequestBudget, normalizeQuery, normalizeUrl, parseJsonObject, validateTasks };
+module.exports = { APPLICATION_CONTRACT_PROMPT, CANDIDATE_CONTRACT, DEFAULT_RESEARCH_PROMPT, adaptModelCandidate, buildApplicationPrompt, createGeoKnowledgeResearch, createRequestBudget, normalizePlannerTasks, normalizeQuery, normalizeUrl, parseJsonObject, validateTasks };
