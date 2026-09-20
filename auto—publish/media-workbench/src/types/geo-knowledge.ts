@@ -1,8 +1,13 @@
 export type KnowledgeSection =
   | "profile"
+  | "onlinePresence"
+  | "history"
   | "offerings"
   | "capabilities"
+  | "cases"
   | "scenarios"
+  | "recommendationAngles"
+  | "competitors"
   | "geoQuestions"
   | "externalResearch"
   | "restrictions";
@@ -22,6 +27,24 @@ export type KnowledgeItem = {
   knowledgeCoverage?: string;
   type?: string;
   questionId?: string | null;
+  platform?: string;
+  url?: string;
+  dateText?: string;
+  claims?: ProfileClaim[];
+  target?: { section: "profile"; field: string };
+  claimIds?: string[];
+  conflictStatus?: "open" | "resolved";
+  resolution?: { acceptedClaimId: string; resolvedAt: string } | null;
+};
+export type ProfileClaim = {
+  id: string;
+  field: string;
+  value: string;
+  status: "accepted" | "candidate" | "rejected";
+  basis: "fact" | "research" | "derived" | "candidate";
+  origin: "ai" | "manual";
+  locked: boolean;
+  sourceIds: string[];
 };
 export type KnowledgeSource = {
   id: string;
@@ -43,14 +66,24 @@ export type GeoKnowledge = {
   updatedAt: string;
   status: { outcome: "complete" | "partial"; warnings: string[] };
   profile: KnowledgeItem;
+  onlinePresence: KnowledgeItem[];
+  history: KnowledgeItem[];
   offerings: KnowledgeItem[];
   capabilities: KnowledgeItem[];
+  cases: KnowledgeItem[];
   scenarios: KnowledgeItem[];
+  recommendationAngles: KnowledgeItem[];
+  competitors: KnowledgeItem[];
   geoQuestions: KnowledgeItem[];
   externalResearch: KnowledgeItem[];
   restrictions: KnowledgeItem[];
   sources: KnowledgeSource[];
 };
+export type KnowledgeStorageStatus =
+  | "missing"
+  | "legacy_v1"
+  | "current_v2"
+  | "invalid";
 export type KnowledgeState = {
   phase: string;
   running: boolean;

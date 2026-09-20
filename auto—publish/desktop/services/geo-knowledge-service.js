@@ -78,8 +78,11 @@ function createGeoKnowledgeService(options) {
   });
   function load({ clientId }) {
     resolveClient(clientId);
+    const inspected = store.inspect ? store.inspect(clientId) : { status: "current_v2", knowledge: store.load(clientId) };
+    if (inspected.status === "invalid") throw geoError("GEO_KNOWLEDGE_INVALID");
     return {
-      knowledge: store.load(clientId),
+      knowledge: inspected.knowledge,
+      storageStatus: inspected.status,
       state: application.state(clientId),
     };
   }
@@ -96,6 +99,14 @@ function createGeoKnowledgeService(options) {
     resolveClient(clientId);
     return { knowledge: store.edit(clientId, revision, section, id, changes) };
   }
+  function confirmSourceType({ clientId, revision, sourceId, targetType }) {
+    resolveClient(clientId);
+    return { knowledge: store.confirmSourceType(clientId, revision, sourceId, targetType) };
+  }
+  function resolveConflict({ clientId, revision, conflictId, claimId, value }) {
+    resolveClient(clientId);
+    return { knowledge: store.resolveConflict(clientId, revision, conflictId, { claimId, value }) };
+  }
   function exportMarkdown({ clientId }) {
     const document = load({ clientId }).knowledge;
     if (!document) throw geoError("GEO_NOT_FOUND");
@@ -110,9 +121,14 @@ function createGeoKnowledgeService(options) {
       ),
     ];
     for (const [section, label] of Object.entries({
+      onlinePresence: "线上身份",
+      history: "客户历史",
       offerings: "产品与服务",
       capabilities: "能力与证据",
+      cases: "客户案例",
       scenarios: "场景",
+      recommendationAngles: "推荐角度",
+      competitors: "竞对",
       geoQuestions: "GEO 问题",
       externalResearch: "外部研究",
       restrictions: "待确认与限制",
@@ -153,6 +169,8 @@ function createGeoKnowledgeService(options) {
     load,
     generate,
     edit,
+    confirmSourceType,
+    resolveConflict,
     exportMarkdown,
     state: ({ clientId }) => ({ state: application.state(clientId) }),
     cancel: ({ clientId }) => ({ state: application.cancel(clientId) }),

@@ -14,6 +14,7 @@ import type {
   GeoConnectionResult,
   KnowledgeQuestionDetails,
   KnowledgeQuestionArticles,
+  KnowledgeStorageStatus,
 } from "../types/geo-knowledge";
 type Reply<T> = { ok: true; data: T } | { ok: false; error: IpcError };
 type ClientInput = { clientId: string };
@@ -34,12 +35,14 @@ type Api = {
   load: (
     input: ClientInput,
   ) => Promise<
-    Reply<{ knowledge: GeoKnowledge | null; state: KnowledgeState }>
+    Reply<{ knowledge: GeoKnowledge | null; storageStatus: KnowledgeStorageStatus; state: KnowledgeState }>
   >;
   state: (input: ClientInput) => Promise<Reply<{ state: KnowledgeState }>>;
   generate: (input: ClientInput) => Promise<Reply<{ knowledge: GeoKnowledge }>>;
   cancel: (input: ClientInput) => Promise<Reply<{ state: KnowledgeState }>>;
   edit: (input: KnowledgeEdit) => Promise<Reply<{ knowledge: GeoKnowledge }>>;
+  confirmSourceType: (input: { clientId: string; revision: number; sourceId: string; targetType: "official_web" | "client_public" }) => Promise<Reply<{ knowledge: GeoKnowledge }>>;
+  resolveConflict: (input: { clientId: string; revision: number; conflictId: string; claimId?: string; value?: string }) => Promise<Reply<{ knowledge: GeoKnowledge }>>;
   exportMarkdown: (input: ClientInput) => Promise<Reply<{ markdown: string }>>;
   configStatus: () => Promise<Reply<GeoConfigStatus>>;
   saveConfig: (input: GeoConfigInput) => Promise<Reply<GeoConfigStatus>>;
@@ -78,6 +81,10 @@ export const cancelKnowledge = (clientId: string) =>
   call((api) => requireBridgeMethod(api.cancel)({ clientId }));
 export const editKnowledge = (input: KnowledgeEdit) =>
   call((api) => requireBridgeMethod(api.edit)(input));
+export const confirmKnowledgeSourceType = (input: { clientId: string; revision: number; sourceId: string; targetType: "official_web" | "client_public" }) =>
+  call((api) => requireBridgeMethod(api.confirmSourceType)(input));
+export const resolveKnowledgeConflict = (input: { clientId: string; revision: number; conflictId: string; claimId?: string; value?: string }) =>
+  call((api) => requireBridgeMethod(api.resolveConflict)(input));
 export const exportKnowledge = (clientId: string) =>
   call((api) => requireBridgeMethod(api.exportMarkdown)({ clientId }));
 export const getGeoConfig = () =>

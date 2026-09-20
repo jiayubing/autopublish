@@ -13,7 +13,9 @@ function createGeoKnowledgeApplication({ store, materialStore, getClient, resear
     if (running.has(clientId)) throw geoError("GEO_ALREADY_RUNNING");
     const client = getClient(clientId);
     if (!client) throw geoError("CLIENT_NOT_FOUND");
-    const current = store.load(clientId);
+    const initial = store.inspect ? store.inspect(clientId) : { status: "current_v2", knowledge: store.load(clientId) };
+    if (initial.status === "invalid") throw geoError("GEO_KNOWLEDGE_INVALID");
+    const current = initial.knowledge;
     const controller = new AbortController();
     running.set(clientId, controller);
     function progress(phase, extra = {}) { states.set(clientId, { phase, running: true, ...extra }); }
@@ -30,7 +32,10 @@ function createGeoKnowledgeApplication({ store, materialStore, getClient, resear
       }
       controller.signal.throwIfAborted();
       progress("saving");
-      const saved = store.save(mergeKnowledge(current, document), current?.revision || 0);
+      const merged = mergeKnowledge(current, document);
+      const saved = initial.status === "legacy_v1"
+        ? store.replaceLegacy(merged)
+        : store.save(merged, current?.revision || 0);
       states.set(clientId, { phase: "complete", running: false });
       onChange(clientId);
       return saved;

@@ -12,8 +12,10 @@ const domainTypeSymbols = {
   "types/geo-knowledge.ts": [
     "KnowledgeQuestionDetails",
     "KnowledgeQuestionArticles",
+    "KnowledgeStorageStatus",
     "KnowledgeSection",
     "KnowledgeItem",
+    "ProfileClaim",
     "KnowledgeSource",
     "GeoKnowledge",
     "KnowledgeState",

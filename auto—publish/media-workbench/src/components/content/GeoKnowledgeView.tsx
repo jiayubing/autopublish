@@ -8,9 +8,14 @@ import type {
 
 const sectionLabels: Record<KnowledgeSection, string> = {
   profile: "基础信息",
+  onlinePresence: "线上身份",
+  history: "客户历史",
   offerings: "产品与服务",
   capabilities: "能力与证据",
+  cases: "客户案例",
   scenarios: "场景",
+  recommendationAngles: "推荐角度",
+  competitors: "竞对",
   geoQuestions: "GEO 问题",
   externalResearch: "外部研究",
   restrictions: "待确认与限制",
@@ -97,9 +102,14 @@ export default function GeoKnowledgeView({ clientId }: { clientId: string }) {
   const items = knowledge
     ? [
         knowledge.profile,
+        ...knowledge.onlinePresence,
+        ...knowledge.history,
         ...knowledge.offerings,
         ...knowledge.capabilities,
+        ...knowledge.cases,
         ...knowledge.scenarios,
+        ...knowledge.recommendationAngles,
+        ...knowledge.competitors,
         ...knowledge.geoQuestions,
         ...knowledge.externalResearch,
         ...knowledge.restrictions,

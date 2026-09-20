@@ -6,6 +6,8 @@ function registerGeoKnowledgeIpc({ ipcMain, geoKnowledgeService }) {
     "generate",
     "cancel",
     "edit",
+    "confirmSourceType",
+    "resolveConflict",
     "exportMarkdown",
     "configStatus",
     "saveConfig",
