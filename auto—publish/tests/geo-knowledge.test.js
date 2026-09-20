@@ -167,6 +167,12 @@ test("legacy V1 is detected and replaced only after valid V2 generation", async 
     research: { async extract() { throw Object.assign(new Error(), { code: "GEO_SCHEMA_INVALID" }); } },
   });
   await assert.rejects(failed.generate("client-1"), { code: "GEO_SCHEMA_INVALID" });
+  assert.deepEqual(failed.state("client-1"), {
+    phase: "failed",
+    running: false,
+    failedPhase: "extracting",
+    errorCode: "GEO_SCHEMA_INVALID",
+  });
   assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")), legacy);
   const application = createGeoKnowledgeApplication({
     store, getClient: () => ({ name: "合成客户" }), materialStore: { async listMaterials() { return []; } },

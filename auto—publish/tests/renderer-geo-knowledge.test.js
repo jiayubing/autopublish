@@ -12,6 +12,7 @@ function fixture({ document }) {
   const client = { id: "client-1", name: "合成客户", knowledgeFiles: [] };
   let knowledge = null;
   let running = false;
+  let failedState = null;
   let config = { configured: false, model: "", webSearch: true, baseUrl: "https://ark.cn-beijing.volces.com/api/plan/v3" };
   let prompts = { defaultGlobalPrompt: "默认要求", globalPrompt: "", clientPrompt: "" };
   window.__geoCalls = { generate: 0, edits: [], config: [], prompts: [], sources: [], conflicts: [], temporaryPrompt: "" };
@@ -108,10 +109,16 @@ function fixture({ document }) {
         ok({
           knowledge,
           storageStatus: knowledge ? "current_v2" : "missing",
-          state: { phase: running ? "extracting" : "idle", running },
+          state: running
+            ? { phase: "extracting", running: true }
+            : failedState || { phase: "idle", running: false },
         }),
       state: () =>
-        ok({ state: { phase: running ? "extracting" : "complete", running } }),
+        ok({
+          state: running
+            ? { phase: "extracting", running: true }
+            : failedState || { phase: "complete", running: false },
+        }),
       generate: (input) => {
         window.__geoCalls.generate++;
         window.__geoCalls.temporaryPrompt = input.temporaryPrompt;
@@ -119,7 +126,13 @@ function fixture({ document }) {
         return new Promise((resolve) => {
           window.__finishGeo = (fail) => {
             running = false;
-            if (fail)
+            if (fail) {
+              failedState = {
+                phase: "failed",
+                running: false,
+                failedPhase: "extracting",
+                errorCode: "GEO_CONFIG_REQUIRED",
+              };
               resolve({
                 ok: false,
                 error: {
@@ -127,7 +140,8 @@ function fixture({ document }) {
                   userMessage: "请先配置豆包 GEO。",
                 },
               });
-            else {
+            } else {
+              failedState = null;
               knowledge = structuredClone(document);
               resolve({ ok: true, data: { knowledge } });
             }
@@ -269,6 +283,8 @@ test("knowledge page handles empty, busy, error, editing and encrypted-config in
     .getByRole("alert")
     .filter({ hasText: "请先配置豆包 GEO" })
     .waitFor();
+  await page.getByText(/GEO_CONFIG_REQUIRED/).waitFor();
+  await page.getByText(/失败阶段：正在提取客户事实/).waitFor();
   await page.getByRole("button", { name: "保存要求并开始研究" }).click();
   await page.evaluate(() => window.__finishGeo(false));
   await page.getByRole("button", { name: /客户基本信息/ }).first().click();

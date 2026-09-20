@@ -102,8 +102,16 @@ export function useGeoKnowledge(clientId: string) {
       return true;
     } catch (e) {
       if (version === epoch.current) {
-        setError(e instanceof Error ? e.message : "知识库操作未完成。");
-        setState({ phase: "failed", running: false });
+        const code = e && typeof e === "object" && "code" in e && typeof e.code === "string" ? e.code : "";
+        const message = e instanceof Error ? e.message : "知识库操作未完成。";
+        setError(code ? `${message}（${code}）` : message);
+        try {
+          const latest = await knowledgeState(clientId);
+          if (version === epoch.current) setState(latest.state);
+        } catch {
+          if (version === epoch.current)
+            setState({ phase: "failed", running: false, ...(code ? { errorCode: code } : {}) });
+        }
       }
       return false;
     } finally {

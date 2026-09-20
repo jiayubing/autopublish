@@ -166,6 +166,16 @@ const state = exactObject({
   completed: optionalField(integerField({ min: 0, max: 10 })),
   total: optionalField(integerField({ min: 0, max: 10 })),
   errorCode: optionalField(text(128, 1)),
+  failedPhase: optionalField(
+    enumField([
+      "materials",
+      "extracting",
+      "planning",
+      "researching",
+      "synthesizing",
+      "saving",
+    ]),
+  ),
 });
 const status = exactObject({
   baseUrl: text(200, 1),
@@ -189,6 +199,19 @@ const messages = {
   GEO_REQUEST_UNCERTAIN:
     "远端请求结果无法确认，系统未自动重发。请检查配置或稍后手动研究。",
   GEO_CANCELLED: "知识研究已取消，原有知识保留。",
+  GEO_SCHEMA_INVALID:
+    "模型连续两次未返回符合知识库合同的 JSON，原有知识未修改。",
+  GEO_RESPONSE_INVALID:
+    "模型响应中没有可用文本，原有知识未修改。",
+  GEO_RESPONSE_INCOMPLETE:
+    "模型响应未完整结束，原有知识未修改。",
+  GEO_REQUEST_BUDGET_EXHAUSTED:
+    "本次研究已达到请求上限，且未能完成最终整理；原有知识未修改。",
+  GEO_MATERIAL_TOO_LARGE:
+    "客户资料超过单次知识提取上限，请减少或拆分资料后重试。",
+  GEO_SAVE_FAILED: "知识库保存失败，原有知识保持不变。",
+  GEO_GENERATION_FAILED:
+    "知识研究发生未分类错误，原有知识未修改。",
 };
 const codes = [
   "GEO_AUTH_REJECTED",

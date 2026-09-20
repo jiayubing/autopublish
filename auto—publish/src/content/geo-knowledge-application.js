@@ -3,6 +3,14 @@
 const { geoError } = require("./geo-knowledge-schema");
 const { mergeKnowledge } = require("./geo-knowledge-merge");
 const { createRequestBudget } = require("./geo-knowledge-research");
+const FAILURE_PHASES = new Set([
+  "materials",
+  "extracting",
+  "planning",
+  "researching",
+  "synthesizing",
+  "saving",
+]);
 
 function createGeoKnowledgeApplication({ store, materialStore, getClient, research, request, getPromptSnapshot = () => ({}), onChange = () => {} }) {
   const running = new Map();
@@ -44,7 +52,15 @@ function createGeoKnowledgeApplication({ store, materialStore, getClient, resear
       return saved;
     } catch (error) {
       const failure = controller.signal.aborted ? geoError("GEO_CANCELLED") : error;
-      states.set(clientId, { phase: "failed", running: false, errorCode: /^GEO_|^CLIENT_/.test(failure.code || "") ? failure.code : "GEO_GENERATION_FAILED" });
+      const failedPhase = states.get(clientId)?.phase;
+      states.set(clientId, {
+        phase: "failed",
+        running: false,
+        ...(FAILURE_PHASES.has(failedPhase) ? { failedPhase } : {}),
+        errorCode: /^GEO_|^CLIENT_/.test(failure.code || "")
+          ? failure.code
+          : "GEO_GENERATION_FAILED",
+      });
       throw geoError(states.get(clientId).errorCode);
     } finally { running.delete(clientId); }
   }

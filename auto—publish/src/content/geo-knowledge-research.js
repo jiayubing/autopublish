@@ -26,6 +26,50 @@ function createRequestBudget(request, { hardLimit = 18, synthesisReserve = 2 } =
   };
 }
 
+function parseJsonObject(value) {
+  if (typeof value !== "string" || !value.trim())
+    throw geoError("GEO_SCHEMA_INVALID");
+  const trimmed = value.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/iu);
+  const candidates = fenced ? [fenced[1]] : [trimmed];
+  if (!fenced) {
+    let start = -1;
+    let depth = 0;
+    let quoted = false;
+    let escaped = false;
+    for (let index = 0; index < trimmed.length; index++) {
+      const character = trimmed[index];
+      if (quoted) {
+        if (escaped) escaped = false;
+        else if (character === "\\") escaped = true;
+        else if (character === '"') quoted = false;
+        continue;
+      }
+      if (character === '"') quoted = true;
+      else if (character === "{") {
+        if (depth === 0) start = index;
+        depth++;
+      } else if (character === "}" && depth > 0) {
+        depth--;
+        if (depth === 0 && start >= 0) {
+          candidates.push(trimmed.slice(start, index + 1));
+          start = -1;
+        }
+      }
+    }
+  }
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
+        return parsed;
+    } catch (_) {
+      // A bounded format repair request handles malformed JSON.
+    }
+  }
+  throw geoError("GEO_SCHEMA_INVALID");
+}
+
 function validateTasks(value, round) {
   const limit = round === 1 ? 6 : 4;
   const coreType = round === 1 ? "customer_entity" : "follow_up";
@@ -77,7 +121,7 @@ function createGeoKnowledgeResearch({ client }) {
       const taskPrompt = prompt + (attempt ? "\n上次输出格式不合要求，请严格按 JSON 合同重新输出。" : "");
       const response = await request({ ...transportOptions, prompt: buildApplicationPrompt(taskPrompt, options.promptSnapshot) }, { useReserve: useReserve === true });
       try {
-        const parsed = JSON.parse(response.text.replace(/^```(?:json)?\s*|\s*```$/g, ""));
+        const parsed = parseJsonObject(response.text);
         return validate(parsed, response);
       } catch (error) {
         if (attempt === 1) throw geoError("GEO_SCHEMA_INVALID");
@@ -195,4 +239,4 @@ function createGeoKnowledgeResearch({ client }) {
   }
   return { extract, enrich, json };
 }
-module.exports = { APPLICATION_CONTRACT_PROMPT, CANDIDATE_CONTRACT, DEFAULT_RESEARCH_PROMPT, buildApplicationPrompt, createGeoKnowledgeResearch, createRequestBudget, normalizeQuery, normalizeUrl, validateTasks };
+module.exports = { APPLICATION_CONTRACT_PROMPT, CANDIDATE_CONTRACT, DEFAULT_RESEARCH_PROMPT, buildApplicationPrompt, createGeoKnowledgeResearch, createRequestBudget, normalizeQuery, normalizeUrl, parseJsonObject, validateTasks };

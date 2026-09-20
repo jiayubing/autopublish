@@ -4,12 +4,28 @@ const assert = require("node:assert/strict");
 const {
   createGeoKnowledgeResearch,
   createRequestBudget,
+  parseJsonObject,
   validateTasks,
 } = require("../src/content/geo-knowledge-research");
 const { normalizeCandidate, mergeKnowledge } = require("../src/content/geo-knowledge-merge");
 const { stableId } = require("../src/content/geo-knowledge-schema");
 const facts = () => normalizeCandidate({ profile: { fields: {} } }, [], "client-1");
 const emptySearch = { findings: [], discoveries: [], unresolved: [] };
+
+test("JSON parser accepts one object in common model wrappers without weakening validation", () => {
+  assert.deepEqual(parseJsonObject("```JSON\n{\"tasks\":[]}\n```"), {
+    tasks: [],
+  });
+  assert.deepEqual(parseJsonObject("以下是结果：\n{\"tasks\":[]}"), {
+    tasks: [],
+  });
+  assert.throws(() => parseJsonObject("[1,2,3]"), {
+    code: "GEO_SCHEMA_INVALID",
+  });
+  assert.throws(() => parseJsonObject("{not-json}"), {
+    code: "GEO_SCHEMA_INVALID",
+  });
+});
 
 test("profile enrichment adds non-conflicting fields and reports only contradictory fields", () => {
   const source = [{ id: "s", type: "client_input", title: "合成资料" }];

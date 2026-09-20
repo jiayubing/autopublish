@@ -133,7 +133,7 @@ export default function GeoKnowledgeView({ clientId }: { clientId: string }) {
       </header>
       {feature.loading && <p role="status">正在读取知识库…</p>}
       {feature.error && <p role="alert" className="mb-3 text-rose-700">{feature.error}</p>}
-      <p role="status" className="mb-3">{phaseLabels[feature.state.phase] || "正在处理"}{feature.state.total !== undefined ? ` ${feature.state.completed || 0} / ${feature.state.total}` : ""}</p>
+      <p role="status" className="mb-3">{phaseLabels[feature.state.phase] || "正在处理"}{feature.state.failedPhase ? ` · 失败阶段：${phaseLabels[feature.state.failedPhase] || feature.state.failedPhase}` : ""}{feature.state.total !== undefined ? ` ${feature.state.completed || 0} / ${feature.state.total}` : ""}</p>
       {feature.storageStatus === "legacy_v1" && !knowledge && <p className="mb-4 rounded border border-amber-300 bg-amber-50 p-4">旧版知识库需要重新研究。新版完整生成前，旧文件会保持不变。</p>}
       {knowledge && <p className="mb-4 text-xs text-slate-500">{knowledge.status.outcome === "partial" ? "知识库已保存，部分研究未完成" : "知识库已保存"} · 来源 {knowledge.sources.length} 个 · GEO 问题 {knowledge.geoQuestions.length} 个 · 待确认 {knowledge.restrictions.filter(item => item.type === "conflict" && item.conflictStatus === "open").length} 项</p>}
 

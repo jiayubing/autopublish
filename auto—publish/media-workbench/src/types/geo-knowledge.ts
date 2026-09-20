@@ -90,6 +90,7 @@ export type KnowledgeState = {
   completed?: number;
   total?: number;
   errorCode?: string;
+  failedPhase?: "materials" | "extracting" | "planning" | "researching" | "synthesizing" | "saving";
 };
 export type GeoConfigStatus = {
   baseUrl: string;
