@@ -8,6 +8,10 @@
 
 关联功能合同：[客户生成任务化与并发](../.scratch/client-generation-tasks/CLIENT-GENERATION-TASKS-PLAN.md)，只在涉及其行为时读取。
 
+## 已就绪、未启动
+
+- [GEO 内容生产闭环实施方案 v1.4](../AutoPublish-GEO-Content-Production-Implementation-Plan-v1.4.md)：最终文档合同已收口并处于 `READY`，按 CP-0～CP-5 串行实施；不与规模审计修复并行，启动时先选择包含 GEO V2 与主线修复的唯一干净 integration baseline。
+
 已完成计划和 handoff 通过[历史资料归档索引](../.scratch/ARCHIVE-INDEX.md)定位。
 
 ## 等待用户明确外部授权

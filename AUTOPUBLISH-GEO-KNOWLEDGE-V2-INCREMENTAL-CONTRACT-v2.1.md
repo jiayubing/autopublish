@@ -39,6 +39,8 @@ V2 不新增 SQLite knowledge DB、向量库、通用 facts DB、Article Brief s
 
 V1 knowledge 不迁移、不参与 V2 merge。旧 article `knowledgeSnapshot.version === 1` 是独立合同，继续可读，不批量改写。
 
+> **历史保留与 supersede 说明（2026-09-22）**：本节 3.1/3.2 以及相关验收、Progress、Decision Log 原样记录 2026-09-20 已完成的 V1 安全替换行为，不倒改历史。面向后续实现的 V1 Knowledge 处理合同已由 `AutoPublish-GEO-Content-Production-Implementation-Plan-v1.4.md` supersede：V2 完成切换后必须删除 V1 reader/migration/compat 路径，并删除位于既有 path owner 管辖路径下、已成功解析且明确满足 `schemaVersion === 1` 的 legacy 文件。JSON 损坏、无法解析、schemaVersion 缺失/未知/大于 1 或文件来源/owner 不明确时禁止猜测删除，必须显式报错或进入已有异常处理路径。该说明只保留决策追踪关系，不引入 migration framework、quarantine、backup 或其他兼容机制。
+
 ### 3.1 读取状态
 
 `geo-knowledge-store` 增加轻量检查：
@@ -682,6 +684,7 @@ V2-0 不阻塞本地 V2 开发，只阻塞以下声明：
 - [x] V2-3 Prompt 与维护 UI
 - [x] V2-4 Generation Context 与收口
 - [ ] V2-0 真实能力受限验证（等待用户逐次授权）
+- 2026-09-22：上述已完成 Progress 原样保留；其中 V1 安全替换的后续产品行为由 `AutoPublish-GEO-Content-Production-Implementation-Plan-v1.4.md` 最终决策 supersede。
 
 ---
 
@@ -690,6 +693,7 @@ V2-0 不阻塞本地 V2 开发，只阻塞以下声明：
 - 2026-09-20：V2 只做现有 owner 上的增量升级，不重新实现 V1。
 - 2026-09-20：按少量用户、本地单机实际规模设计，删除复杂迁移、Prompt revision、来源审批和精细 conflict reopen。
 - 2026-09-20：旧 V1 knowledge 不迁移；仅在 V2 研究成功并通过 schema 后原子替换。
+- 2026-09-22：上一条 V1 安全替换决策作为历史事实原样保留；后续 V1 Knowledge 行为由 `AutoPublish-GEO-Content-Production-Implementation-Plan-v1.4.md` 最终决策 supersede。
 - 2026-09-20：Profile claims 是字段事实真源；fields 是严格投影。
 - 2026-09-20：正常请求最多约 14 次，硬上限 18 次，并保留 synthesis reserve。
 - 2026-09-20：真实 API gate 与本地实现 gate 分离。
