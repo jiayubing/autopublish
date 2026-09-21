@@ -76,6 +76,7 @@ async function createContentProductionComposition(options) {
         questionService: doubaoCollectionService,
         contentStore: value.contentStore,
         operationalStore: value.operationalStore,
+        onDataInvalidated: value.onDataInvalidated,
       }),
     );
     const generationScheduler = ownService(

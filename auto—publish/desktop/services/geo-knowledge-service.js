@@ -28,6 +28,7 @@ const {
 const { queryGeoArticles } = require("../../src/content/geo-article-links");
 const { DEFAULT_RESEARCH_PROMPT } = require("../../src/content/geo-knowledge-research");
 const { createGeoKnowledgePromptStore } = require("../geo-knowledge-prompt-store");
+const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
 function createGeoKnowledgeService(options) {
   const store = options.store || createGeoKnowledgeStore(options);
@@ -85,6 +86,32 @@ function createGeoKnowledgeService(options) {
       createResearchStore(options.workspaceRoot, { paths: options.paths }),
     getClient: resolveClient,
   });
+  function linkQuestions(input) {
+    const result = links.linkQuestions(input);
+    if (typeof options.onDataInvalidated === "function") {
+      try {
+        options.onDataInvalidated("GEO_QUESTIONS_LINKED", {
+          clientId: input.clientId,
+        });
+      } catch (error) {
+        reportDiagnostic({
+          code: "GEO_QUESTION_LINK_INVALIDATION_FAILED",
+          module: "geo-knowledge-service",
+          category: "internal",
+          operationId: "geo-question-link-invalidation",
+          metadata: {
+            operation: "question-link-invalidation",
+            outcome: "listener-isolated",
+            errorCode:
+              error && /^[A-Z][A-Z0-9_]{1,127}$/.test(error.code || "")
+                ? error.code
+                : "LISTENER_FAILED",
+          },
+        });
+      }
+    }
+    return result;
+  }
   function load({ clientId }) {
     resolveClient(clientId);
     const inspected = store.inspect ? store.inspect(clientId) : { status: "current_v2", knowledge: store.load(clientId) };
@@ -200,6 +227,7 @@ function createGeoKnowledgeService(options) {
     getGenerationContext: (clientId, researches, ids) =>
       selectGeoKnowledge(store.load(clientId), researches, ids),
     ...links,
+    linkQuestions,
     load,
     generate,
     edit,

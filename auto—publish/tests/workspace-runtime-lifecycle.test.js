@@ -167,6 +167,7 @@ it("maps every production workspace mutation reason explicitly without a broad f
     "CONTENT_QUESTION_CREATED",
     "CONTENT_QUESTION_UPDATED",
     "CONTENT_QUESTION_DELETED",
+    "GEO_QUESTIONS_LINKED",
     "CONTENT_RESEARCH_COLLECTED",
     "CONTENT_RESEARCH_MANUAL_SAVED"
   ].forEach(function(reasonCode) {

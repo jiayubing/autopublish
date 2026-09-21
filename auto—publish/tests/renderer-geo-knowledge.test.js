@@ -13,6 +13,8 @@ function fixture({ document }) {
   let knowledge = null;
   let running = false;
   let failedState = null;
+  let workspaceInvalidated = null;
+  const questions = [];
   let config = { configured: false, model: "", webSearch: true, baseUrl: "https://ark.cn-beijing.volces.com/api/plan/v3" };
   let prompts = { defaultGlobalPrompt: "默认要求", globalPrompt: "", clientPrompt: "" };
   window.__geoCalls = { generate: 0, edits: [], config: [], prompts: [], sources: [], conflicts: [], temporaryPrompt: "" };
@@ -39,12 +41,17 @@ function fixture({ document }) {
     workspaceData: {
       getRuntimeIdentity: () =>
         ok({ workspaceRuntimeId: "runtime-1", revision: 1 }),
-      onInvalidated: () => () => {},
+      onInvalidated: (listener) => {
+        workspaceInvalidated = listener;
+        return () => {
+          if (workspaceInvalidated === listener) workspaceInvalidated = null;
+        };
+      },
     },
     content: {
       listClients: () => ok({ clients: [client] }),
       getClientDetails: () => ok({ client, research: [] }),
-      listQuestions: () => ok({ questions: [] }),
+      listQuestions: () => ok({ questions }),
       listResearch: () => ok({ research: [] }),
       listResearchMetadata: () => ok({ research: [] }),
       listTemplateCatalog: () =>
@@ -84,9 +91,29 @@ function fixture({ document }) {
         }),
       linkQuestions: ({ ids }) => {
         knowledge.geoQuestions.forEach((q) => {
-          if (ids.includes(q.id)) q.questionId = "question-1";
+          if (ids.includes(q.id)) {
+            q.questionId = "question-1";
+            if (!questions.some((item) => item.id === q.questionId)) {
+              questions.push({
+                id: q.questionId,
+                clientId: knowledge.clientId,
+                text: q.name,
+                enabled: true,
+                createdAt: "2026-09-21T00:00:00.000Z",
+              });
+            }
+          }
         });
         knowledge.revision++;
+        queueMicrotask(() =>
+          workspaceInvalidated?.({
+            schemaVersion: 1,
+            workspaceRuntimeId: "runtime-1",
+            revision: 2,
+            scopes: ["contentSources"],
+            reasonCode: "GEO_QUESTIONS_LINKED",
+          }),
+        );
         return ok({ knowledge });
       },
       questionDetails: ({ id }) =>
@@ -330,6 +357,10 @@ test("knowledge page handles empty, busy, error, editing and encrypted-config in
   await page.getByRole("checkbox", { name: "选择 如何选择服务？" }).check();
   await page.getByRole("button", { name: "加入问题采集（1）" }).click();
   await page.getByText(/已加入问题采集；/).waitFor();
+  await page.getByRole("button", { name: "问题采集", exact: true }).click();
+  await page.getByText("如何选择服务？", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "客户知识库", exact: true }).click();
+  await page.getByRole("button", { name: "GEO 问题", exact: true }).click();
   await page
     .getByRole("button", { name: "查看回答与关联：如何选择服务？" })
     .click();
@@ -361,6 +392,10 @@ test("knowledge page handles empty, busy, error, editing and encrypted-config in
   }
   await page.locator("#nav-item-settings").click();
   await page.getByRole("button", { name: "豆包 GEO", exact: true }).click();
+  await page.waitForFunction(() => {
+    const field = document.querySelector('textarea[aria-label="全局研究要求"]');
+    return field && field.value === "默认要求";
+  });
   assert.equal(
     await page.getByLabel("全局研究要求").inputValue(),
     "默认要求",

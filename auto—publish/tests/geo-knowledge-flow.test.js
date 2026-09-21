@@ -85,6 +85,7 @@ test("local material-to-knowledge-to-collection-to-article flow survives service
         : [],
     }),
   };
+  const invalidations = [];
   const options = {
     workspaceRoot,
     materialStore,
@@ -94,6 +95,8 @@ test("local material-to-knowledge-to-collection-to-article flow survives service
     operationalStore,
     client,
     getClient: () => ({ name: "合成客户" }),
+    onDataInvalidated: (reasonCode, affected) =>
+      invalidations.push({ reasonCode, affected }),
   };
   const service = createGeoKnowledgeService(options);
   const generated = (await service.generate({ clientId: "client-1" }))
@@ -107,6 +110,12 @@ test("local material-to-knowledge-to-collection-to-article flow survives service
     ids: [id],
   }).knowledge;
   const questionId = linked.geoQuestions[0].questionId;
+  assert.deepEqual(invalidations, [
+    {
+      reasonCode: "GEO_QUESTIONS_LINKED",
+      affected: { clientId: "client-1" },
+    },
+  ]);
   researchStore.saveResearch("client-1", {
     id: questionId,
     question: linked.geoQuestions[0].name,
