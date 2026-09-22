@@ -180,6 +180,7 @@ function selectGeoKnowledge(document, researches, researchIds) {
   };
 }
 function validateGeoSnapshot(value, clientId, researchIds) {
+  if (value?.version === 2) return validateArticleBriefV2(value, clientId, researchIds);
   if (
     !value ||
     value.version !== 1 ||
@@ -209,4 +210,165 @@ function validateGeoSnapshot(value, clientId, researchIds) {
     throw geoError("ARTICLE_INVALID");
   return structuredClone(value);
 }
-module.exports = { selectGeoKnowledge, validateGeoSnapshot };
+
+function literalMention(answer, value) {
+  const needle = normalizedLiteral(value);
+  return needle.length >= 2 && normalizedLiteral(answer).includes(needle);
+}
+
+function splitAliases(value) {
+  return String(value || "")
+    .split(/[、,，;；\n]/u)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function deriveDecisionDimensions(answer) {
+  const values = [];
+  for (const line of String(answer || "").split(/\r?\n/u)) {
+    const match = line.match(/^\s*(?:[-*]|\d+[.、])\s*([^：:]{2,40})[：:]/u);
+    if (match) values.push(match[1].trim());
+  }
+  return [...new Set(values)].slice(0, 20);
+}
+
+function buildArticleBriefV2({ document, knowledgeRevision, geoQuestionId, collectionQuestion, research }) {
+  const knowledge = validateKnowledge(document);
+  const question = knowledge.geoQuestions.find((item) => item.id === geoQuestionId);
+  if (
+    knowledgeRevision !== knowledge.revision ||
+    !question ||
+    !question.questionId ||
+    !collectionQuestion ||
+    collectionQuestion.id !== question.questionId ||
+    collectionQuestion.clientId !== knowledge.clientId ||
+    !research ||
+    research.id !== collectionQuestion.id ||
+    research.clientId !== knowledge.clientId ||
+    normalizeQuestionText(question.name) !== normalizeQuestionText(collectionQuestion.text) ||
+    normalizeQuestionText(question.name) !== normalizeQuestionText(research.question)
+  )
+    throw geoError("GENERATION_SOURCE_STALE");
+  const oneQuestionDocument = structuredClone(knowledge);
+  oneQuestionDocument.geoQuestions = [structuredClone(question)];
+  const legacySelection = selectGeoKnowledge(
+    oneQuestionDocument,
+    [research],
+    [collectionQuestion.id],
+  );
+  if (!legacySelection) throw geoError("GENERATION_SOURCE_STALE");
+  const selected = JSON.parse(legacySelection.context);
+  const fields = selected.profile?.fields || {};
+  const aliases = splitAliases(fields.aliases);
+  const primaryName = fields.name || "";
+  const knownEntities = [
+    primaryName,
+    ...aliases,
+    ...selected.competitors.map((item) => item.name),
+    ...research.references.map((reference) => reference.title),
+  ].filter((value) => literalMention(research.answerText, value));
+  const selectedKnowledge = {
+    profileFacts: selected.profile?.claims || [],
+    offerings: selected.offerings,
+    capabilities: selected.capabilities,
+    scenarios: selected.scenarios,
+    cases: selected.cases,
+    recommendationAngles: selected.recommendationAngles,
+    onlinePresence: selected.onlinePresence,
+    history: selected.history,
+  };
+  const positiveItems = Object.values(selectedKnowledge)
+    .flat()
+    .filter((item) => item && typeof item.name === "string");
+  const sourceIds = new Set(
+    [...positiveItems, ...selected.competitors, ...selected.restrictions]
+      .flatMap((item) => item.sourceIds || []),
+  );
+  for (const claim of selectedKnowledge.profileFacts)
+    for (const id of claim.sourceIds || []) sourceIds.add(id);
+  const brief = {
+    version: 2,
+    clientId: knowledge.clientId,
+    knowledgeRevision: knowledge.revision,
+    targetQuestion: {
+      geoQuestionId: question.id,
+      collectionQuestionId: collectionQuestion.id,
+      text: question.name,
+      intent: question.intent,
+    },
+    client: {
+      primaryName,
+      aliases,
+      ...(fields.location ? { location: fields.location } : {}),
+    },
+    selectedKnowledge,
+    competitors: selected.competitors,
+    restrictions: selected.restrictions,
+    evidence: {
+      sources: selected.sources.filter((source) => sourceIds.has(source.id)),
+      attributionRequiredIds: [
+        ...new Set(
+          [...selectedKnowledge.profileFacts, ...positiveItems, ...selected.competitors]
+            .filter((item) => item.attributionRequired)
+            .map((item) => item.id),
+        ),
+      ],
+    },
+    currentResearch: {
+      question: research.question,
+      answer: research.answerText,
+      references: structuredClone(research.references),
+      capturedAt: research.collectedAt,
+      clientMentioned: [primaryName, ...aliases].some((value) =>
+        literalMention(research.answerText, value),
+      ),
+      mentionedEntities: [...new Set(knownEntities)],
+      decisionDimensions: deriveDecisionDimensions(research.answerText),
+      answerGaps: positiveItems
+        .filter((item) => !literalMention(research.answerText, item.name))
+        .map((item) => item.id),
+    },
+  };
+  if (JSON.stringify(brief).length > 100000) throw geoError("GEO_CONTEXT_TOO_LARGE");
+  return brief;
+}
+
+function validateArticleBriefV2(value, clientId, researchIds) {
+  const target = value?.targetQuestion;
+  const current = value?.currentResearch;
+  const arrays = value?.selectedKnowledge;
+  if (
+    !value || value.version !== 2 || value.clientId !== clientId ||
+    !Number.isSafeInteger(value.knowledgeRevision) || value.knowledgeRevision < 1 ||
+    !target || !/^geoQuestions-[a-f0-9]{24}$/.test(target.geoQuestionId || "") ||
+    !Array.isArray(researchIds) || researchIds.length !== 1 ||
+    researchIds[0] !== target.collectionQuestionId ||
+    typeof target.text !== "string" || !target.text.trim() ||
+    !current || normalizeQuestionText(current.question) !== normalizeQuestionText(target.text) ||
+    typeof current.answer !== "string" || !current.answer.trim() ||
+    typeof current.capturedAt !== "string" || !current.capturedAt.trim() ||
+    !Array.isArray(current.references) || current.references.some((reference) =>
+      !reference || typeof reference.title !== "string" || !reference.title.trim() ||
+      typeof reference.url !== "string" || !reference.url.trim()) ||
+    !Array.isArray(current.mentionedEntities) ||
+    !Array.isArray(current.decisionDimensions) || !Array.isArray(current.answerGaps) ||
+    typeof current.clientMentioned !== "boolean" ||
+    !value.client || typeof value.client.primaryName !== "string" ||
+    !Array.isArray(value.client.aliases) || !arrays ||
+    ["profileFacts", "offerings", "capabilities", "scenarios", "cases", "recommendationAngles", "onlinePresence", "history"].some((key) => !Array.isArray(arrays[key])) ||
+    !Array.isArray(value.competitors) || !Array.isArray(value.restrictions) ||
+    !value.evidence || !Array.isArray(value.evidence.sources) ||
+    !Array.isArray(value.evidence.attributionRequiredIds) ||
+    JSON.stringify(value).length > 100000
+  )
+    throw geoError("ARTICLE_INVALID");
+  return structuredClone(value);
+}
+
+module.exports = {
+  selectGeoKnowledge,
+  buildArticleBriefV2,
+  validateGeoSnapshot,
+  validateArticleBriefV2,
+  deriveDecisionDimensions,
+};

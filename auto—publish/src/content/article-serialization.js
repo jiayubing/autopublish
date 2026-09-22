@@ -334,6 +334,20 @@ function normalizeArticle(article) {
       article.researchSnapshots,
       researchIds.ids,
     );
+    if (normalized.knowledgeSnapshot?.version === 2) {
+      const snapshot = normalized.researchSnapshots[0];
+      const current = normalized.knowledgeSnapshot.currentResearch;
+      if (
+        snapshot.question !== current.question ||
+        snapshot.answerText !== current.answer ||
+        snapshot.collectedAt !== current.capturedAt ||
+        JSON.stringify(snapshot.references) !== JSON.stringify(current.references)
+      )
+        throw storeError(
+          "ARTICLE_INVALID",
+          "Article Brief research does not match its source snapshot",
+        );
+    }
   }
   return normalized;
 }

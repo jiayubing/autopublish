@@ -9,7 +9,12 @@ const {
   profileProjection,
   stableId,
 } = require("../src/content/geo-knowledge-schema");
-const { selectGeoKnowledge } = require("../src/content/geo-generation-context");
+const {
+  selectGeoKnowledge,
+  buildArticleBriefV2,
+  validateArticleBriefV2,
+} = require("../src/content/geo-generation-context");
+const { projectArticleSummary } = require("../src/content/article-summary");
 const { createArticleGenerator } = require("../src/content/article-generator");
 const { buildPrompt } = require("../src/content/prompt-builder");
 const { createArticleStore } = require("../src/content/article-store");
@@ -271,6 +276,78 @@ test("brand questions add only the stable client-wide history and presence allow
   );
   assert.deepEqual(context.recommendationAngles, []);
   assert.deepEqual(context.competitors, []);
+});
+test("Article Brief v2 binds one GEO question to collection research and persists as a v2 article snapshot", (t) => {
+  const doc = addV2BriefKnowledge(library());
+  const currentResearch = {
+    id: "query-1",
+    clientId: "client-1",
+    question: "如何选择服务？",
+    answerText: "合成客户可参考关联竞对。\n1. 服务范围：核对实际范围",
+    references: [{ title: "未在正文出现的参考标题", url: "https://example.com/ref" }],
+    collectedAt: "2026-09-19T00:00:00.000Z",
+    collectionMethod: "manual",
+  };
+  const input = {
+    document: doc,
+    knowledgeRevision: doc.revision,
+    geoQuestionId: doc.geoQuestions[0].id,
+    collectionQuestion: { id: "query-1", clientId: "client-1", text: " 如何选择服务？ " },
+    research: currentResearch,
+  };
+  const brief = buildArticleBriefV2(input);
+  assert.equal(brief.targetQuestion.geoQuestionId, doc.geoQuestions[0].id);
+  assert.equal(brief.targetQuestion.collectionQuestionId, currentResearch.id);
+  assert.equal(brief.currentResearch.clientMentioned, true);
+  assert.deepEqual(brief.currentResearch.decisionDimensions, ["服务范围"]);
+  assert.equal(brief.currentResearch.mentionedEntities.includes("关联竞对"), true);
+  assert.equal(brief.currentResearch.mentionedEntities.includes("未在正文出现的参考标题"), false);
+  assert.deepEqual(validateArticleBriefV2(brief, "client-1", ["query-1"]), brief);
+  assert.deepEqual(
+    projectArticleSummary({ id: "a", clientId: "client-1", title: "A", content: "B", knowledgeSnapshot: brief }).geoQuestionIds,
+    [doc.geoQuestions[0].id],
+  );
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "geo-brief-v2-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const store = createArticleStore(root);
+  store.createArticle({
+    id: "article-v2",
+    clientId: "client-1",
+    researchQueryIds: ["query-1"],
+    researchSnapshots: [{
+      questionId: "query-1",
+      question: currentResearch.question,
+      answerText: currentResearch.answerText,
+      references: currentResearch.references,
+      collectedAt: currentResearch.collectedAt,
+      collectionMethod: currentResearch.collectionMethod,
+    }],
+    title: "V2 article",
+    content: "V2 body",
+    status: "generated",
+    createdAt: "2026-09-22T00:00:00.000Z",
+    knowledgeSnapshot: brief,
+  });
+  assert.equal(store.getArticle("client-1", "article-v2").knowledgeSnapshot.version, 2);
+  assert.deepEqual(store.getArticleSummary("client-1", "article-v2").geoQuestionIds, [doc.geoQuestions[0].id]);
+  assert.throws(() => store.createArticle({
+    ...store.getArticle("client-1", "article-v2"),
+    id: "article-v2-mismatch",
+    researchSnapshots: [{
+      ...store.getArticle("client-1", "article-v2").researchSnapshots[0],
+      answerText: "不同回答",
+    }],
+  }), { code: "ARTICLE_INVALID" });
+  for (const changed of [
+    { knowledgeRevision: doc.revision + 1 },
+    { collectionQuestion: { id: "query-2", clientId: "client-1", text: "如何选择服务？" } },
+    { research: { ...currentResearch, id: "query-2" } },
+    { research: { ...currentResearch, clientId: "other" } },
+    { research: { ...currentResearch, question: "已变化的问题" } },
+  ])
+    assert.throws(() => buildArticleBriefV2({ ...input, ...changed }), {
+      code: "GENERATION_SOURCE_STALE",
+    });
 });
 test("generation records the actual bounded knowledge input and persistence survives later knowledge changes", async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "geo-article-"));

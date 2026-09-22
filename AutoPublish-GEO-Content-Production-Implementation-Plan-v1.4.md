@@ -1,6 +1,6 @@
 # AutoPublish GEO 内容生产闭环实施方案 v1.4
 
-**状态**：IN PROGRESS / CP-2 Closure；CP-3 待开始
+**状态**：IN PROGRESS / CP-3 Closure；CP-4 待开始
 
 **产品依据**：`AutoPublish-GEO-Content-Production-Product-Design-v1.0.md`
 
@@ -750,6 +750,8 @@ P0/P1 必须关闭；P2 只有直接影响当前 acceptance、事实一致性、
 
 ## 10. Progress
 
+- 2026-09-22：CP-3 Closure。`geo-generation-context` 新增单问题结构化 Article Brief v2 owner，严格区分 `geoQuestionId` 与 `collectionQuestionId/research.id`，并校验 client、Knowledge revision 及三方规范化问题文本。Brief 复用既有关系选择规则，输出 accepted profile facts、相关知识、竞对、全量 restrictions、证据和当前 Research；`clientMentioned`/`mentionedEntities` 只做字面匹配，`decisionDimensions` 只提取明确枚举标题，无法确定时保持空数组，`answerGaps` 只引用已选知识身份。
+- 2026-09-22：CP-3 Primary Review 与 bounded re-review 关闭。Article serialization 同时接受历史 v1 snapshot 与 v2 Brief；v2 强制 exactly-one Research ID，并要求 Brief 的 question/answer/capturedAt/references 与文章 Research snapshot 一致。Article summary 从 v2 `targetQuestion.geoQuestionId` 投影关联；100000 字符上限继续 fail closed，不截断 restrictions。定向 Brief/article store 回归 40/40 通过。
 - 2026-09-22：CP-2 Closure。新增一次性 Question Workflow query，复用 Question、Research metadata、Article summaries 与 lifecycle projection owner；列表最多返回 500 项，只含研究元数据、文章总数/已发布数和稳定 readiness code，不读取 Research 正文。详情继续按需读取单题正文，`clientMentioned` 覆盖客户名称、展示名、Knowledge accepted name 与别名的 NFKC/大小写归一字面匹配。
 - 2026-09-22：CP-2 Primary Review 与 bounded re-review 关闭。stale/deleted/text mismatch 均不暴露旧回答；停用但已有当前 Research 的问题仍可进入生成前检查，再采集则导航现有采集页并展开对应问题；生成动作只打开现有生成向导。0/1/多文章计数、published projection、无逐行 IPC/正文读取、别名匹配及 renderer 详情回归均纳入验证。
 - 2026-09-22：CP-1 Closure。新增纯函数 `geo-confirmation-model` 作为 15 章节、来源追踪、资料缺口与确认请求的唯一 owner；`geo-knowledge-service` 只编排当前 revision 的 preview/export，Markdown 直接渲染同一 model。IPC/preload/bridge/types 与 `GeoKnowledgeView` 已接通“客户确认稿”tab，原顶部通用导出入口移除；来源页从同一 model 反向显示支持内容。
