@@ -87,6 +87,7 @@ function fixture(t, options = {}) {
   const batchStore = createGenerationBatchStore({ workspaceRoot: root });
   function createService() {
     return createContentGenerationBatchService({
+      allowLegacyV1Execution: true,
       workspaceRoot: root,
       batchStore,
       contentStore: store,

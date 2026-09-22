@@ -619,6 +619,7 @@ describe("persisted generation configuration recovery", function() {
     const events = [];
     let fingerprint = "fp-original";
     const service = h.track(createContentGenerationBatchService({
+      allowLegacyV1Execution: true,
       batchStore: store, contentStore,
       clientKnowledge: {}, materialStore: {}, researchStore: {}, templateStore: {},
       aiProviderService: { getFingerprint: function() { return fingerprint; } },

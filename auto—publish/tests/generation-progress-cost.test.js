@@ -66,6 +66,7 @@ function createFixture(taskCount, concurrency, beforeGenerate = null) {
     });
     batchStore = createGenerationBatchStore({ workspaceRoot: root, fs: batchFs, now: () => FIXED_TIME, createId: () => "batch-progress" });
     service = createContentGenerationBatchService({
+      allowLegacyV1Execution: true,
       workspaceRoot: root,
       batchStore,
       contentStore: titleStore,

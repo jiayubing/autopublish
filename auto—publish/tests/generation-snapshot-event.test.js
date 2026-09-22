@@ -53,6 +53,7 @@ function createEventFixture(options) {
     },
   };
   const service = createContentGenerationBatchService({
+    allowLegacyV1Execution: true,
     batchStore,
     clientKnowledge: { getClient: () => null },
     materialStore: { listMaterials: async () => [] },

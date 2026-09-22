@@ -1,6 +1,6 @@
 # AutoPublish GEO 内容生产闭环实施方案 v1.4
 
-**状态**：READY / CP-0 未开始；规范文件已登记到 WORK-INDEX
+**状态**：IN PROGRESS / CP-0 Closure；CP-1 待开始
 
 **产品依据**：`AutoPublish-GEO-Content-Production-Product-Design-v1.0.md`
 
@@ -750,6 +750,10 @@ P0/P1 必须关闭；P2 只有直接影响当前 acceptance、事实一致性、
 
 ## 10. Progress
 
+- 2026-09-22：CP-0 Closure。选定 `codex/geo-knowledge-base` @ `ffafbc667cb1914eb2f1881d50deba9acee434a7` 为唯一 integration HEAD；`master` 与 `codex/refresh-invalidation-owner-fixes` 均为该 HEAD 祖先，无需合并。启动时工作树仅有未跟踪的旧 v1.3 计划；它不属于当前 Git 基线，保持用户文件原样且不纳入提交，WORK-INDEX 只登记规范 v1.4，不包含其他用户改动。
+- 2026-09-22：完成长期合同对齐：`CONTEXT.md`、文章生命周期 SPEC 与应用 README 统一为问题 × 模板、单问题 Article Brief、store-level create 幂等、Research fingerprint、terminal uncertain 与 v2 running identity recovery；WORK-INDEX 只保留规范 v1.4 为当前入口。
+- 2026-09-22：只读盘点两个本机已登记内容库中的 29 个 generation v1 批次：28 个 `completed`、1 个 `abandoned`、非终态 0；未修改任何真实批次文件。生产 composition 已关闭 v1 新建/启动/继续/失败重试和 attention regeneration 的 AI 执行入口，历史 batch/article reader 与明确结束能力保留；旧 runner 仅通过显式测试开关供 CP-4 删除前的历史回归使用。
+- 2026-09-22：CP-0 Primary Review 发现生产装配禁用策略需要架构门禁，且 legacy runner 的测试开关应 fail closed；补充 production composition legacy-absence test、改为仅显式 `true` 才允许历史 runner 后 bounded re-review PASS。定向回归 `node --test tests/content-generation-batch-service.test.js tests/content-generation-batch-ipc.test.js tests/renderer-client-generation.test.js` 31/31 通过；核心门禁 `npm test` 597/597 通过；`npm run typecheck:main`、`npm run typecheck:bridge`、`npm run typecheck:renderer`、`npm run lint` 与 `git diff --check` 通过。
 - 2026-09-21：完成产品设计、现有 owner、当前生成合同、Knowledge/Question/Research/Article snapshot 和 Renderer 调用链对照。
 - 2026-09-21：结论为产品方向可实施；将问题身份、任务基数、Brief 非持久化和 Research 保守派生固化为实施合同。
 - 2026-09-21：完成 v1.1 收口修订：修正 Research 身份合同、Question Workflow 轻量读取、Research 洞察 fallback、Confirmation 真实丰富度验收、Batch v2 去重持久化和保守 revision invalidation。

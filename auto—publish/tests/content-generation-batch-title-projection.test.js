@@ -47,6 +47,7 @@ describe("generation batch article title projection", function () {
       content: "正文不应该被复制进 generation batch task。",
     };
     const service = createContentGenerationBatchService({
+      allowLegacyV1Execution: true,
       batchStore: {
         getBatch: () => persistedBatch,
         listBatches: () => [persistedBatch],
@@ -127,6 +128,7 @@ describe("generation batch article title projection", function () {
       },
     };
     const service = createContentGenerationBatchService({
+      allowLegacyV1Execution: true,
       batchStore: {
         getBatch: () => persistedBatch,
         listBatches: () => [persistedBatch],

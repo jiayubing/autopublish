@@ -20,6 +20,7 @@ function createService(articleTitle, counters) {
   };
 
   return createContentGenerationBatchService({
+    allowLegacyV1Execution: true,
     batchStore: {
       getBatch: function(id) { return id === batch.id ? batch : null; },
       listBatches: function() { return [batch]; },
@@ -88,6 +89,7 @@ describe("generation title projection", function() {
       tasks: [{ id: "task-1", clientId: "client-1", status: "succeeded", articleId: "article-1" }],
     };
     const service = createContentGenerationBatchService({
+      allowLegacyV1Execution: true,
       batchStore: { getBatch: function() { return batch; }, listBatches: function() { return [batch]; } },
       contentStore: {
         saveArticle: function(article) { return article; },

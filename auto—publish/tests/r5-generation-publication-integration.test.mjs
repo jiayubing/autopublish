@@ -130,6 +130,7 @@ test("R5 generated articles cross ordinary submission and partial admission surv
         },
       }).orchestrator;
       generation = createContentGenerationBatchService({
+        allowLegacyV1Execution: true,
         workspaceRoot: root,
         contentStore,
         templateStore: createTemplateStore(root, { builtinRoot: null }),

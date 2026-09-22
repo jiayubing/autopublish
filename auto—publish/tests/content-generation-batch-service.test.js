@@ -106,7 +106,8 @@ function makeHarness(options) {
     articleGeneratorFactory: settings.articleGeneratorFactory || function() { return { generateArticle: async function(input) { calls.generate.push(input); return { id: "article-1", clientId: input.clientId, title: "Title", content: "Body", status: "generated" }; } }; },
     aiProviderService: { getFingerprint: function() { return currentFingerprint; }, createClient: function() { return {}; } },
     batchStore: batchStore,
-    runnerFactory: settings.runnerFactory || function(options) { runnerOptions = options; return runner; }
+    runnerFactory: settings.runnerFactory || function(options) { runnerOptions = options; return runner; },
+    allowLegacyV1Execution: settings.allowLegacyV1Execution !== false,
   });
 
   return { service, batchStore, calls, savedArticles, setFingerprint: function(value) { currentFingerprint = value; } };
@@ -122,6 +123,43 @@ async function waitForBatch(service, batchId, predicate) {
 }
 
 describe("content generation batch service", function() {
+  it("keeps legacy v1 batches readable but blocks every AI execution entry", async function() {
+    const harness = makeHarness({ allowLegacyV1Execution: false });
+    await assert.rejects(
+      harness.service.createAndStartBatch({
+        clientIds: ["c1"],
+        templates: [{ platform: "ctrip", templateId: "guide" }],
+      }),
+      { code: "GENERATION_V1_EXECUTION_DISABLED" },
+    );
+
+    const legacy = harness.batchStore.createBatch({
+      clientSources: [
+        {
+          clientId: "c1",
+          materialIds: ["brand.md"],
+          researchQueryIds: ["q1"],
+        },
+      ],
+      templates: [{ platform: "ctrip", templateId: "guide" }],
+      concurrency: 1,
+      aiConfigFingerprint: "legacy-fingerprint",
+    });
+    legacy.version = 1;
+
+    assert.equal(harness.service.getBatch(legacy.id).id, legacy.id);
+    for (const command of [
+      () => harness.service.startBatch({ batchId: legacy.id }),
+      () => harness.service.resumeBatch({ batchId: legacy.id }),
+      () => harness.service.retryFailed({ batchId: legacy.id }),
+    ]) {
+      await assert.rejects(command(), {
+        code: "GENERATION_V1_EXECUTION_DISABLED",
+      });
+    }
+    assert.deepEqual(harness.calls.run, []);
+  });
+
   it("passes the requested batch concurrency to the runner and defaults to two", async function() {
     const observed = [];
     const harness = makeHarness({
@@ -229,6 +267,7 @@ describe("content generation batch service", function() {
       findByGenerationTaskId: function() { return null; }
     };
     const service = createContentGenerationBatchService({
+      allowLegacyV1Execution: true,
       workspaceRoot: workspaceRoot,
       batchStore: createGenerationBatchStore({ workspaceRoot: workspaceRoot, createId: function() { return "batch-1"; } }),
       clientKnowledge: { getClient: function(clientId) { return { id: clientId, name: "Client 1" }; } },
@@ -275,6 +314,7 @@ describe("content generation batch service", function() {
       findByGenerationTaskId: function() { throw lookupError; }
     };
     const service = createContentGenerationBatchService({
+      allowLegacyV1Execution: true,
       workspaceRoot: workspaceRoot,
       batchStore: createGenerationBatchStore({ workspaceRoot: workspaceRoot, createId: function() { return "batch-1"; } }),
       clientKnowledge: { getClient: function(clientId) { return { id: clientId, name: "Client 1" }; } },
@@ -311,6 +351,7 @@ describe("content generation batch service", function() {
       fs.writeFileSync(path.join(physicalDirectory, "client.json"), JSON.stringify({ id: "logical-client", name: "Logical Client" }), "utf8");
       fs.writeFileSync(path.join(physicalDirectory, "brand.md"), "batch generation facts", "utf8");
       const service = createContentGenerationBatchService({
+        allowLegacyV1Execution: true,
         workspaceRoot: workspaceRoot,
         clientKnowledge: { getClient: function(id) { return getClient(workspaceRoot, id); } },
         materialStore: createClientMaterialStore({ workspaceRoot: workspaceRoot }),

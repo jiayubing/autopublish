@@ -192,6 +192,7 @@ async function createContentProductionComposition(options) {
           getGeoKnowledgeContext: geoKnowledgeService.getGenerationContext,
           getAttentionItems: value.getAttentionItems,
           onDataInvalidated: value.onDataInvalidated,
+          allowLegacyV1Execution: false,
         },
       ),
     );

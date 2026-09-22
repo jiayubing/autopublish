@@ -29,6 +29,7 @@ const SAFE_MESSAGES = {
   GENERATION_TEMPLATE_STALE: "模板目录已变化，请刷新后重新选择模板",
   GENERATION_NO_EXECUTABLE_TASKS: "No executable generation tasks are available",
   GENERATION_BATCH_BUSY: "Generation batch is already running",
+  GENERATION_V1_EXECUTION_DISABLED: "Legacy generation batches are read-only",
   GENERATION_BATCH_NOT_FOUND: "Generation batch was not found",
   GENERATION_AI_CONFIG_CHANGED: "AI configuration changed; confirm before continuing",
   AI_CONFIG_NOT_SET: "AI provider configuration is not set",
@@ -144,6 +145,12 @@ function createContentGenerationBatchService(options) {
   const runtimeId = opts.runtimeId || crypto.randomUUID();
   let sequence = 0;
   const now = typeof opts.now === "function" ? opts.now : function() { return new Date().toISOString(); };
+
+  function assertLegacyExecutionEnabled() {
+    if (opts.allowLegacyV1Execution !== true) {
+      throw generationError("GENERATION_V1_EXECUTION_DISABLED");
+    }
+  }
 
   function notifyData(reasonCode, batch) {
     if (typeof opts.onDataInvalidated !== "function") return;
@@ -369,6 +376,7 @@ function createContentGenerationBatchService(options) {
   }
 
   async function createBatch(input) {
+    assertLegacyExecutionEnabled();
     assertAvailable();
     const previewResult = await preview(input);
     if (!previewResult.executableTaskCount) throw generationError("GENERATION_NO_EXECUTABLE_TASKS");
@@ -387,6 +395,7 @@ function createContentGenerationBatchService(options) {
     assertAvailable();
     const batch = batchStore.getBatch(batchId);
     if (!batch) throw generationError("GENERATION_BATCH_NOT_FOUND");
+    if (batch.version === 1) assertLegacyExecutionEnabled();
     const reservation = { batchId: batchId, selection: selection, promise: null };
     activeRun = reservation;
     activeBatchId = batchId;
@@ -549,6 +558,7 @@ function createContentGenerationBatchService(options) {
   }
 
   async function regenerateAttentionItems(input) {
+    assertLegacyExecutionEnabled();
     const value = assertObject(input);
     assertId(value.requestId, "request id");
     if (value.confirmed !== true || !Array.isArray(value.attentionIds) || value.attentionIds.length < 1 || value.attentionIds.length > 100 ||

@@ -60,10 +60,20 @@ AutoPublish 使用一条清楚、可恢复、不会重复投稿的主链路：
 职责：
 
 - 收集生成输入；
-- 创建和恢复生成批次；
+- 按知识库 GEO 问题预检来源并实时派生 Article Brief；
+- 以问题 × 模板创建生成批次，并通过独立幂等启动命令执行；
 - 保存成功文章；
 - 展示任务级失败、暂停、继续和取消。
 - 失败或已暂停的生成批次可以明确结束；结束保留成功文章、失败/中断证据，并取消尚未开始的任务。
+
+新生成合同：
+
+- 一个任务只绑定一个知识库 GEO 问题、一个与其 `collectionQuestionId` 匹配的 Research 和一个写作模板；Collection Question 只拥有采集执行身份，不成为客户知识 owner。
+- 创建命令必须携带调用方生成的 `requestId`；批次 store 以包含稳定排序 `(clientId, geoQuestionId)` 与模板选择的 fingerprint 原子 `createOrGetV2`。同 requestId 同输入返回原批次，不同输入稳定冲突；create 不调用 AI。
+- Research 完整性由唯一版本化 `researchFingerprint` helper 证明，Knowledge 使用 revision。执行前任一不一致都使任务 stale，不静默换用新事实。
+- v2 任务的远端结果无法确认时进入 terminal `uncertain`，不得自动 retry/resume。用户重新生成必须重新预检并创建新 requestId/new task，原 uncertain 记录保留。
+- 重启发现 v2 `running` 时先按 `generationTaskId` 查找本地 Article：唯一 Article 记为成功，无 Article 记为 uncertain，多 Article 记为 identity conflict；不得转为可恢复 `interrupted` 后再次调用 AI。
+- generation/article v1 只保留历史读取；不再新建或执行 v1 批次。GEO Knowledge V1 是另一类历史数据，按其独立合同删除 reader/compat 和已确认 `schemaVersion === 1` 的 owner 内文件，不得扩大到历史文章、发布记录或 generation batch。
 
 不负责：
 
@@ -241,7 +251,7 @@ AutoPublish 使用一条清楚、可恢复、不会重复投稿的主链路：
 
 - 不确定结果永远没有“直接重试投稿/下单”；
 - 明确失败的再次投稿必须回到统一发起投稿入口，不建立专用 retry 状态机；
-- 内容审核明确失败可在需处理页勾选 1–100 项，点击批量重新生成后进入现有批量生成向导，按所选文章的客户去重预选；混合非内容失败项不能执行。用户可修改客户、选择模板并检查当前来源，确认后才创建普通生成批次；任务数量按客户×模板计算，不按失败文章数强制一对一生成。
+- 内容审核明确失败可在需处理页勾选 1–100 项，点击批量重新生成后进入现有批量生成向导；混合非内容失败项不能执行。能从原文章来源快照唯一确定知识库 GEO 问题时预选该问题；旧文章无法唯一映射时必须由用户显式选择，不能猜测或继续混合多条回答。用户可调整问题、选择模板并检查当前来源，确认后才创建普通生成批次；任务数量按问题×模板计算，不按失败文章数强制一对一生成。
 - 需处理页不直接发起 AI 生成、不显示生成进度。批次创建、并发、进度与结果统一由现有批量生成流程负责；生成批次运行不得阻止原失败文章改投。运行中可准备新批次选择，但不能并行启动另一个生成批次。
 - 重新生成不修改原文章或 publication failure；原需处理事项继续保留。不得为隐藏待办改写原投稿事实。改投平台为空时区分原平台冲突、平台配置未完成、当前内容库账号未绑定或目录不可用，并可刷新平台账号或进入设置；不得为让选项出现而绕过后台入队权限。
 - 明确失败向 publication、文章/投稿快照和需处理事项投影同一稳定安全原因码与受控用户摘要；不得透出供应商原始异常、响应正文、Cookie、请求头或任意 metadata。未知安全码使用受控摘要，不由 Renderer 自行维护 code 表；
@@ -287,7 +297,7 @@ AutoPublish 使用一条清楚、可恢复、不会重复投稿的主链路：
 
 ### 9.1 内容生成模块
 
-拥有生成批次、任务恢复、AI 输入和成功文章创建。公开接口只覆盖预检、启动、暂停、继续、取消和读取批次；不依赖投稿队列或订单能力。
+拥有生成批次、任务恢复、AI 输入和成功文章创建。`geo-generation-context` 是 Article Brief 的唯一派生 owner；generation batch store 原子拥有 create request 幂等，Research owner 提供唯一 fingerprint 规则。公开接口覆盖预检、创建、启动、暂停、继续、取消和读取批次；create 与 start 分离，Renderer 可一键顺序编排，但不能把持久化与远端 AI 调用伪装成一个不可恢复原子动作。该模块不依赖投稿队列或订单能力。
 
 ### 9.2 文章内容与变更协调模块
 
