@@ -29,6 +29,10 @@ const { queryGeoArticles } = require("../../src/content/geo-article-links");
 const { DEFAULT_RESEARCH_PROMPT } = require("../../src/content/geo-knowledge-research");
 const { createGeoKnowledgePromptStore } = require("../geo-knowledge-prompt-store");
 const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
+const {
+  buildCustomerConfirmationModel,
+  renderCustomerConfirmationMarkdown,
+} = require("../../src/content/geo-confirmation-model");
 
 function createGeoKnowledgeService(options) {
   const store = options.store || createGeoKnowledgeStore(options);
@@ -168,54 +172,27 @@ function createGeoKnowledgeService(options) {
     if (application.state(clientId).running) throw geoError("GEO_ALREADY_RUNNING");
     return store.savePolicy(clientId, researchPrompt);
   }
-  function exportMarkdown({ clientId }) {
+  function confirmation({ clientId, revision }) {
     const document = load({ clientId }).knowledge;
     if (!document) throw geoError("GEO_NOT_FOUND");
-    const lines = [
-      "# 客户 GEO 知识库",
-      "",
-      "更新时间：" + document.updatedAt,
-      "",
-      "## 客户基本信息",
-      ...Object.entries(document.profile.fields).map(
-        ([key, value]) => "- " + key + "：" + value,
-      ),
-    ];
-    for (const [section, label] of Object.entries({
-      onlinePresence: "线上身份",
-      history: "客户历史",
-      offerings: "产品与服务",
-      capabilities: "能力与证据",
-      cases: "客户案例",
-      scenarios: "场景",
-      recommendationAngles: "推荐角度",
-      competitors: "竞对",
-      geoQuestions: "GEO 问题",
-      externalResearch: "外部研究",
-      restrictions: "待确认与限制",
-    })) {
-      lines.push("", "## " + label);
-      for (const item of document[section])
-        lines.push(
-          "",
-          "### " + item.name,
-          item.description,
-          "性质：" + item.basis + "；来源：" + item.sourceIds.join("、"),
-        );
-    }
-    lines.push(
-      "",
-      "## 来源",
-      ...document.sources.map(
-        (source) =>
-          "- " +
-          source.id +
-          "：" +
-          source.title +
-          (source.url ? " " + source.url : ""),
-      ),
-    );
-    return { markdown: lines.join("\n") };
+    if (revision !== document.revision) throw geoError("GEO_REVISION_CONFLICT");
+    return {
+      document,
+      model: buildCustomerConfirmationModel(document),
+      client: resolveClient(clientId),
+    };
+  }
+  function previewConfirmation(input) {
+    return { model: confirmation(input).model };
+  }
+  function exportMarkdown(input) {
+    const current = confirmation(input);
+    return {
+      markdown: renderCustomerConfirmationMarkdown(current.model, {
+        clientName: current.client.name,
+        sources: current.document.sources,
+      }),
+    };
   }
   return {
     questionArticles: ({ clientId, id }) => {
@@ -236,6 +213,7 @@ function createGeoKnowledgeService(options) {
     promptSettings,
     saveGlobalPrompt,
     saveClientPrompt,
+    previewConfirmation,
     exportMarkdown,
     state: ({ clientId }) => ({ state: application.state(clientId) }),
     cancel: ({ clientId }) => ({ state: application.cancel(clientId) }),

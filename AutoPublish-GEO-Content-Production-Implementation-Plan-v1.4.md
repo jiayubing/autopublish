@@ -1,6 +1,6 @@
 # AutoPublish GEO 内容生产闭环实施方案 v1.4
 
-**状态**：IN PROGRESS / CP-0 Closure；CP-1 待开始
+**状态**：IN PROGRESS / CP-1 Closure；CP-2 待开始
 
 **产品依据**：`AutoPublish-GEO-Content-Production-Product-Design-v1.0.md`
 
@@ -750,6 +750,9 @@ P0/P1 必须关闭；P2 只有直接影响当前 acceptance、事实一致性、
 
 ## 10. Progress
 
+- 2026-09-22：CP-1 Closure。新增纯函数 `geo-confirmation-model` 作为 15 章节、来源追踪、资料缺口与确认请求的唯一 owner；`geo-knowledge-service` 只编排当前 revision 的 preview/export，Markdown 直接渲染同一 model。IPC/preload/bridge/types 与 `GeoKnowledgeView` 已接通“客户确认稿”tab，原顶部通用导出入口移除；来源页从同一 model 反向显示支持内容。
+- 2026-09-22：CP-1 Primary Review 通过；本地只读产品验收发现逐条 candidate 产生 55–61 条确认请求，修复为同章节聚合后降至 20–21 条。两份有效 V2 Knowledge 分别形成 6/7 个正向章节，覆盖产品/服务、能力、场景、案例与推荐角度；历史、线上身份、团队、资质等缺口保留为 Knowledge research/synthesis 输入问题，不在 Confirmation 层扩写。另有一份现有文件不满足当前 V2 schema，保持原样且未猜测修复或删除。
+- 2026-09-22：CP-1 bounded re-review 发现 preview 与编辑交错时可能接受旧 revision 响应；以当前 Knowledge revision ref 丢弃迟到结果并增加 UI race 回归后 PASS。定向 owner/service/IPC/flow/UI 回归 6/6 通过；main/bridge/renderer typecheck、lint、renderer build、preload build 与 `git diff --check` 通过，Renderer build 仅有既有大 chunk 提示。
 - 2026-09-22：CP-0 Closure。选定 `codex/geo-knowledge-base` @ `ffafbc667cb1914eb2f1881d50deba9acee434a7` 为唯一 integration HEAD；`master` 与 `codex/refresh-invalidation-owner-fixes` 均为该 HEAD 祖先，无需合并。启动时工作树仅有未跟踪的旧 v1.3 计划；它不属于当前 Git 基线，保持用户文件原样且不纳入提交，WORK-INDEX 只登记规范 v1.4，不包含其他用户改动。
 - 2026-09-22：完成长期合同对齐：`CONTEXT.md`、文章生命周期 SPEC 与应用 README 统一为问题 × 模板、单问题 Article Brief、store-level create 幂等、Research fingerprint、terminal uncertain 与 v2 running identity recovery；WORK-INDEX 只保留规范 v1.4 为当前入口。
 - 2026-09-22：只读盘点两个本机已登记内容库中的 29 个 generation v1 批次：28 个 `completed`、1 个 `abandoned`、非终态 0；未修改任何真实批次文件。生产 composition 已关闭 v1 新建/启动/继续/失败重试和 attention regeneration 的 AI 执行入口，历史 batch/article reader 与明确结束能力保留；旧 runner 仅通过显式测试开关供 CP-4 删除前的历史回归使用。

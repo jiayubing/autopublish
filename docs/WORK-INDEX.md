@@ -4,7 +4,7 @@
 
 ## 当前执行入口
 
-- [GEO 内容生产闭环实施方案 v1.4](../AutoPublish-GEO-Content-Production-Implementation-Plan-v1.4.md)：已启动串行实施；CP-0 合同与基线对齐完成，下一阶段为 CP-1 Customer Confirmation Brief。
+- [GEO 内容生产闭环实施方案 v1.4](../AutoPublish-GEO-Content-Production-Implementation-Plan-v1.4.md)：已启动串行实施；CP-0、CP-1 完成，下一阶段为 CP-2 GEO Question 工作台。
 
 关联功能合同：[客户生成任务化与并发](../.scratch/client-generation-tasks/CLIENT-GENERATION-TASKS-PLAN.md)，只在涉及其行为时读取。
 

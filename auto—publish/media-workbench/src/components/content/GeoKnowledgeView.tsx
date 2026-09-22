@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import GeoKnowledgeQuestions from "./GeoKnowledgeQuestions";
 import { useGeoKnowledge } from "../../features/content/use-geo-knowledge";
-import type { KnowledgeItem, KnowledgeSection } from "../../types/geo-knowledge";
+import type { ConfirmationEntry, KnowledgeItem, KnowledgeSection } from "../../types/geo-knowledge";
 
 const sectionLabels: Record<KnowledgeSection, string> = {
   profile: "基础信息", onlinePresence: "线上身份", history: "客户历史",
@@ -21,12 +21,15 @@ const fieldLabels: Record<string, string> = {
   serviceArea: "服务区域", aliases: "别名", phone: "联系电话", contact: "联系方式", foundedYear: "成立年份",
 };
 const buttonClass = "rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40";
+const confirmationKindLabels: Record<ConfirmationEntry["kind"], string> = {
+  fact: "客户事实", research: "公开研究", derived: "推荐角度 / 场景分析", gap: "资料缺口", caution: "谨慎使用",
+};
 
 export default function GeoKnowledgeView({ clientId }: { clientId: string }) {
   const feature = useGeoKnowledge(clientId);
   const knowledge = feature.knowledge;
   const disabled = feature.busy || feature.state.running;
-  const [tab, setTab] = useState<"knowledge" | "questions" | "sources" | "restrictions">("knowledge");
+  const [tab, setTab] = useState<"knowledge" | "confirmation" | "questions" | "sources" | "restrictions">("knowledge");
   const [selected, setSelected] = useState<{ section: KnowledgeSection; item: KnowledgeItem } | null>(null);
   const [editing, setEditing] = useState<{ section: KnowledgeSection; item: KnowledgeItem } | null>(null);
   const [name, setName] = useState("");
@@ -48,6 +51,10 @@ export default function GeoKnowledgeView({ clientId }: { clientId: string }) {
       : knowledge[selected.section].find(value => value.id === selected.item.id);
     if (item && item !== selected.item) setSelected({ section: selected.section, item });
   }, [knowledge?.revision]);
+  useEffect(() => {
+    if (!knowledge || !["confirmation", "sources"].includes(tab)) return;
+    void feature.previewConfirmation();
+  }, [clientId, knowledge?.revision, tab]);
 
   function beginEdit(section: KnowledgeSection, item: KnowledgeItem) {
     setEditing({ section, item });
@@ -124,7 +131,6 @@ export default function GeoKnowledgeView({ clientId }: { clientId: string }) {
         <div className="flex gap-2">
           <button className={buttonClass} disabled={feature.loading || disabled || Boolean(editing)} onClick={() => setResearchOpen(true)}>{knowledge ? "重新研究" : "生成知识库"}</button>
           <button className={buttonClass} disabled={disabled} onClick={() => void feature.reload()}>刷新</button>
-          {knowledge && <button className={buttonClass} disabled={disabled} onClick={() => void feature.download()}>导出 Markdown</button>}
           {disabled && <button className={buttonClass} onClick={() => void feature.cancel()}>取消研究</button>}
         </div>
       </header>
@@ -157,15 +163,32 @@ export default function GeoKnowledgeView({ clientId }: { clientId: string }) {
       {!knowledge && !feature.loading && feature.storageStatus !== "legacy_v1" && <p className="rounded border border-dashed p-6 text-slate-500">暂无知识库。点击“生成知识库”，从当前客户资料开始整理。</p>}
       {knowledge && <>
         <nav className="mb-4 flex flex-wrap gap-2" aria-label="知识库内容">
-          {([ ["knowledge", "客户知识"], ["questions", "GEO 问题"], ["sources", "来源"], ["restrictions", "待确认"] ] as const).map(([id, label]) => <button key={id} className={buttonClass + (tab === id ? " bg-slate-100" : "")} onClick={() => setTab(id)}>{label}</button>)}
+          {([ ["knowledge", "客户知识"], ["confirmation", "客户确认稿"], ["questions", "GEO 问题"], ["sources", "来源"], ["restrictions", "待确认"] ] as const).map(([id, label]) => <button key={id} className={buttonClass + (tab === id ? " bg-slate-100" : "")} onClick={() => setTab(id)}>{label}</button>)}
         </nav>
         {tab === "knowledge" && <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]"><div className="grid gap-4">
           <section><h3 className="mb-2 font-semibold">基础信息</h3>{compactItem("profile", knowledge.profile)}</section>
           {knowledgeSections.map(section => <section key={section}><h3 className="mb-2 font-semibold">{sectionLabels[section]}</h3><div className="grid gap-2">{knowledge[section].map(item => compactItem(section, item))}{!knowledge[section].length && <p className="text-slate-500">暂无信息</p>}</div></section>)}
         </div>{detailDrawer()}</div>}
+        {tab === "confirmation" && <section aria-label="客户确认稿" className="grid gap-4">
+          <header className="flex flex-wrap items-center justify-between gap-3 rounded border bg-white p-4">
+            <div><h3 className="font-semibold">客户确认稿</h3><p className="mt-1 text-xs text-slate-500">仅重组当前客户知识，不调用 AI，也不会回写知识库。</p></div>
+            <button className={buttonClass} disabled={disabled || feature.confirmationLoading || !feature.confirmation} onClick={() => void feature.download()}>导出 Markdown</button>
+          </header>
+          {feature.confirmationLoading && <p role="status">正在整理客户确认稿…</p>}
+          {feature.confirmation?.sections.map(section => <article key={section.id} className="rounded border bg-white p-4">
+            <h3 className="font-semibold">{section.title}</h3>
+            <div className="mt-3 grid gap-3">{section.entries.map((entry, index) => <div key={`${entry.title}-${index}`} className={"rounded p-3 " + (entry.kind === "gap" || entry.kind === "caution" ? "bg-amber-50" : "bg-slate-50")}>
+              <div className="flex flex-wrap items-center justify-between gap-2"><strong>{entry.title}</strong><span className="text-xs text-slate-500">{confirmationKindLabels[entry.kind]}</span></div>
+              <p className="mt-2 whitespace-pre-wrap break-words">{entry.body}</p>
+              {entry.attributionRequired && <p className="mt-2 text-xs text-amber-800">对外使用时请保留来源或限定表述。</p>}
+            </div>)}</div>
+          </article>)}
+          {!feature.confirmationLoading && !feature.confirmation && <p className="rounded border border-dashed p-6 text-slate-500">确认稿暂不可用，请刷新后重试。</p>}
+        </section>}
         {tab === "questions" && <GeoKnowledgeQuestions knowledge={knowledge} busy={disabled || Boolean(editing)} link={feature.link} renderItem={item => compactItem("geoQuestions", item)} />}
         {tab === "sources" && <div className="grid gap-3">{knowledge.externalResearch.map(item => compactItem("externalResearch", item))}{knowledge.sources.map(source => (
           <article key={source.id} className="rounded border bg-white p-3"><h3>{source.title}</h3><p className="break-all text-xs text-slate-500">{source.fileName || source.url} · {source.type}</p>
+            <div className="mt-2 text-xs text-slate-600"><strong>支持的确认稿内容：</strong>{feature.confirmation?.sections.flatMap(section => section.entries.filter(entry => entry.sourceIds.includes(source.id)).map(entry => `${section.title}：${entry.title}`)).join("；") || (feature.confirmationLoading ? "正在读取…" : "暂无正向知识引用")}</div>
             {source.url && <div className="mt-2 flex gap-2">{source.type === "third_party" && <button className={buttonClass} disabled={disabled} onClick={() => void feature.confirmSourceType(source.id, "official_web")}>确认是客户官网</button>}{["third_party", "platform"].includes(source.type) && <button className={buttonClass} disabled={disabled} onClick={() => void feature.confirmSourceType(source.id, "client_public")}>确认是客户公开账号</button>}</div>}
           </article>
         ))}</div>}

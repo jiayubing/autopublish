@@ -213,6 +213,7 @@ const api = {
     promptSettings: input => ipcRenderer.invoke("geo-knowledge:promptSettings", input),
     saveGlobalPrompt: input => ipcRenderer.invoke("geo-knowledge:saveGlobalPrompt", input),
     saveClientPrompt: input => ipcRenderer.invoke("geo-knowledge:saveClientPrompt", input),
+    previewConfirmation: input => ipcRenderer.invoke("geo-knowledge:previewConfirmation", input),
     exportMarkdown: input => ipcRenderer.invoke("geo-knowledge:exportMarkdown", input),
     configStatus: () => ipcRenderer.invoke("geo-knowledge:configStatus"),
     saveConfig: input => ipcRenderer.invoke("geo-knowledge:saveConfig", input),

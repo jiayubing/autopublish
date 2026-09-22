@@ -267,6 +267,28 @@ const errors = Object.fromEntries(
   ]),
 );
 const clientRequest = exactObject({ clientId: id });
+const confirmationEntry = exactObject({
+  kind: enumField(["fact", "research", "derived", "gap", "caution"]),
+  title: text(2000, 1),
+  body: text(12000, 1),
+  sourceIds: arrayField(id, { max: 100 }),
+  attributionRequired: "boolean",
+  relatedKnowledgeIds: arrayField(id, { max: 500 }),
+});
+const confirmationModel = exactObject({
+  version: literalField(1),
+  clientId: id,
+  knowledgeRevision: integerField({ min: 0, max: Number.MAX_SAFE_INTEGER }),
+  generatedAt: text(100, 1),
+  sections: arrayField(
+    exactObject({ id, title: text(200, 1), entries: arrayField(confirmationEntry, { max: 1000 }) }),
+    { min: 15, max: 15 },
+  ),
+  confirmationRequests: arrayField(
+    exactObject({ topic: text(2000, 1), reason: text(12000, 1), relatedKnowledgeIds: arrayField(id, { max: 500 }) }),
+    { max: 2000 },
+  ),
+});
 function contract(method, kind, request, success) {
   return defineContract({
     capability: "content.geo" + method[0].toUpperCase() + method.slice(1),
@@ -419,9 +441,15 @@ const geoKnowledgeContracts = [
     exactObject({ researchPrompt: text(4000) }),
   ),
   contract(
+    "previewConfirmation",
+    "query",
+    exactObject({ clientId: id, revision: integerField({ min: 0, max: Number.MAX_SAFE_INTEGER }) }),
+    exactObject({ model: confirmationModel }),
+  ),
+  contract(
     "exportMarkdown",
     "query",
-    clientRequest,
+    exactObject({ clientId: id, revision: integerField({ min: 0, max: Number.MAX_SAFE_INTEGER }) }),
     exactObject({ markdown: text(4000000) }),
   ),
   contract("configStatus", "query", exactObject({}), status),

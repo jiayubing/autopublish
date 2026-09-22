@@ -71,7 +71,25 @@ const geoKnowledgeIpcContractFixtures = [
     { ...client, researchPrompt: "客户长期要求" },
     { researchPrompt: "客户长期要求" },
   ],
-  ["exportMarkdown", client, { markdown: "# 合成客户\n知识库" }],
+  [
+    "previewConfirmation",
+    { ...client, revision: 1 },
+    {
+      model: {
+        version: 1,
+        clientId: "client-1",
+        knowledgeRevision: 1,
+        generatedAt: knowledge.updatedAt,
+        sections: Array.from({ length: 15 }, (_, index) => ({
+          id: "section-" + index,
+          title: "章节 " + index,
+          entries: [],
+        })),
+        confirmationRequests: [],
+      },
+    },
+  ],
+  ["exportMarkdown", { ...client, revision: 1 }, { markdown: "# 合成客户\n确认稿" }],
   ["configStatus", {}, status],
   ["testConnection", { search: false }, { search: false, citationCount: 0 }],
   [

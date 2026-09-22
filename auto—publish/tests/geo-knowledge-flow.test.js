@@ -171,7 +171,7 @@ test("local material-to-knowledge-to-collection-to-article flow survives service
     questionId,
   );
   assert.match(
-    restarted.exportMarkdown({ clientId: "client-1" }).markdown,
+    restarted.exportMarkdown({ clientId: "client-1", revision: linked.revision }).markdown,
     /保养服务/,
   );
   assert.equal(

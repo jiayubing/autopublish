@@ -16,6 +16,7 @@ import type {
   KnowledgeQuestionArticles,
   KnowledgeStorageStatus,
   GeoPromptSettings,
+  CustomerConfirmationModel,
 } from "../types/geo-knowledge";
 type Reply<T> = { ok: true; data: T } | { ok: false; error: IpcError };
 type ClientInput = { clientId: string };
@@ -47,7 +48,8 @@ type Api = {
   promptSettings: (input: ClientInput) => Promise<Reply<GeoPromptSettings>>;
   saveGlobalPrompt: (input: { researchPromptOverride: string }) => Promise<Reply<{ defaultGlobalPrompt: string; globalPrompt: string }>>;
   saveClientPrompt: (input: { clientId: string; researchPrompt: string }) => Promise<Reply<{ researchPrompt: string }>>;
-  exportMarkdown: (input: ClientInput) => Promise<Reply<{ markdown: string }>>;
+  previewConfirmation: (input: ClientInput & { revision: number }) => Promise<Reply<{ model: CustomerConfirmationModel }>>;
+  exportMarkdown: (input: ClientInput & { revision: number }) => Promise<Reply<{ markdown: string }>>;
   configStatus: () => Promise<Reply<GeoConfigStatus>>;
   saveConfig: (input: GeoConfigInput) => Promise<Reply<GeoConfigStatus>>;
   testConnection: (input: {
@@ -95,8 +97,10 @@ export const saveGeoGlobalPrompt = (researchPromptOverride: string) =>
   call((api) => requireBridgeMethod(api.saveGlobalPrompt)({ researchPromptOverride }));
 export const saveGeoClientPrompt = (clientId: string, researchPrompt: string) =>
   call((api) => requireBridgeMethod(api.saveClientPrompt)({ clientId, researchPrompt }));
-export const exportKnowledge = (clientId: string) =>
-  call((api) => requireBridgeMethod(api.exportMarkdown)({ clientId }));
+export const previewCustomerConfirmation = (clientId: string, revision: number) =>
+  call((api) => requireBridgeMethod(api.previewConfirmation)({ clientId, revision }));
+export const exportKnowledge = (clientId: string, revision: number) =>
+  call((api) => requireBridgeMethod(api.exportMarkdown)({ clientId, revision }));
 export const getGeoConfig = () =>
   call((api) => requireBridgeMethod(api.configStatus)());
 export const saveGeoConfig = (input: GeoConfigInput) =>

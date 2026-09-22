@@ -17,7 +17,7 @@ function fixture({ document }) {
   const questions = [];
   let config = { configured: false, model: "", webSearch: true, baseUrl: "https://ark.cn-beijing.volces.com/api/plan/v3" };
   let prompts = { defaultGlobalPrompt: "默认要求", globalPrompt: "", clientPrompt: "" };
-  window.__geoCalls = { generate: 0, edits: [], config: [], prompts: [], sources: [], conflicts: [], temporaryPrompt: "" };
+  window.__geoCalls = { generate: 0, edits: [], config: [], prompts: [], sources: [], conflicts: [], confirmations: [], exports: [], temporaryPrompt: "" };
   window.desktopConsole = {
     auth: {
       getState: () =>
@@ -206,6 +206,35 @@ function fixture({ document }) {
         window.__geoCalls.prompts.push(["client", researchPrompt]);
         return ok({ researchPrompt });
       },
+      previewConfirmation: (input) => {
+        window.__geoCalls.confirmations.push(input);
+        const titles = ["客户 / 品牌概况", "主要产品与服务", "产品 / 服务特点", "品牌故事与发展历史", "线上公开身份", "用户需求与典型场景", "核心能力与差异化", "团队 / 负责人", "资质、授权与信任背书", "客户案例", "竞对与市场位置", "推荐定位 / GEO 推荐角度", "核心 GEO 问题", "禁止或谨慎使用的表述", "请客户确认 / 补充"];
+        const result = { model: {
+          version: 1,
+          clientId: knowledge.clientId,
+          knowledgeRevision: knowledge.revision,
+          generatedAt: knowledge.updatedAt,
+          sections: titles.map((title, index) => ({
+            id: "section-" + index,
+            title,
+            entries: index === 0
+              ? [{ kind: "fact", title: "客户名称", body: knowledge.profile.fields.name, sourceIds: ["client-source"], attributionRequired: false, relatedKnowledgeIds: [knowledge.profile.id] }]
+              : index === 14
+                ? [{ kind: "gap", title: "客户案例", body: "当前资料不足，建议补充。", sourceIds: [], attributionRequired: false, relatedKnowledgeIds: [] }]
+                : [],
+          })),
+          confirmationRequests: [{ topic: "客户案例", reason: "当前资料不足，建议补充。", relatedKnowledgeIds: [] }],
+        } };
+        if (window.__delayConfirmationPreview) {
+          return new Promise(resolve => { window.__finishConfirmationPreview = () => resolve(ok(result)); });
+        }
+        return ok(result);
+      },
+      exportMarkdown: (input) => {
+        window.__geoCalls.exports.push(input);
+        if (window.__failConfirmationExport) return Promise.resolve({ ok: false, error: { code: "GEO_SAVE_FAILED", userMessage: "确认稿导出失败。" } });
+        return ok({ markdown: "# 合成客户客户确认稿" });
+      },
       confirmSourceType: (input) => {
         window.__geoCalls.sources.push(input);
         knowledge.sources.find(source => source.id === input.sourceId).type = input.targetType;
@@ -345,6 +374,23 @@ test("knowledge page handles empty, busy, error, editing and encrypted-config in
     await page.evaluate(() => window.__geoCalls.edits[0].revision),
     1,
   );
+  await page.evaluate(() => { window.__delayConfirmationPreview = true; });
+  await page.getByRole("button", { name: "客户确认稿", exact: true }).click();
+  await page.waitForFunction(() => window.__geoCalls.confirmations.length === 1);
+  await page.getByRole("button", { name: "客户知识", exact: true }).click();
+  await page.getByRole("button", { name: "编辑并锁定" }).click();
+  await page.getByLabel("客户名称", { exact: true }).fill("并发后名称");
+  await page.getByRole("button", { name: "保存并锁定" }).click();
+  await page.evaluate(() => { window.__delayConfirmationPreview = false; window.__finishConfirmationPreview(); });
+  await page.waitForTimeout(20);
+  await page.getByRole("button", { name: "客户确认稿", exact: true }).click();
+  await page.getByRole("region", { name: "客户确认稿" }).getByText("并发后名称", { exact: true }).waitFor();
+  await page.getByText("当前资料不足，建议补充。", { exact: true }).waitFor();
+  assert.equal(await page.evaluate(() => window.__geoCalls.confirmations.at(-1).revision), 3);
+  await page.evaluate(() => { window.__failConfirmationExport = true; });
+  await page.getByRole("button", { name: "导出 Markdown" }).click();
+  await page.getByRole("alert").filter({ hasText: "确认稿导出失败" }).waitFor();
+  await page.evaluate(() => { window.__failConfirmationExport = false; });
   if (process.env.GEO_CAPTURE_SCREENSHOT === "1") {
     const directory = path.join(__dirname, "..", "build", "test-results");
     fs.mkdirSync(directory, { recursive: true });
@@ -370,6 +416,7 @@ test("knowledge page handles empty, busy, error, editing and encrypted-config in
   await page.getByText(/客户名称字面出现：是/).waitFor();
   await page.getByText("关联文章：1 篇 · 已发布：1 篇").waitFor();
   await page.getByRole("button", { name: "来源", exact: true }).click();
+  await page.getByText(/支持的确认稿内容：客户 \/ 品牌概况：客户名称/).waitFor();
   await page.getByRole("button", { name: "确认是客户官网" }).click();
   assert.equal(await page.evaluate(() => window.__geoCalls.sources[0].targetType), "official_web");
   await page.getByRole("button", { name: "待确认", exact: true }).click();

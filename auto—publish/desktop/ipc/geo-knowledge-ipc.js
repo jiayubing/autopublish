@@ -11,6 +11,7 @@ function registerGeoKnowledgeIpc({ ipcMain, geoKnowledgeService }) {
     "promptSettings",
     "saveGlobalPrompt",
     "saveClientPrompt",
+    "previewConfirmation",
     "exportMarkdown",
     "configStatus",
     "saveConfig",

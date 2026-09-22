@@ -141,3 +141,23 @@ export type KnowledgeQuestionArticles = {
   total: number;
   publishedCount: number;
 };
+export type ConfirmationEntry = {
+  kind: "fact" | "research" | "derived" | "gap" | "caution";
+  title: string;
+  body: string;
+  sourceIds: string[];
+  attributionRequired: boolean;
+  relatedKnowledgeIds: string[];
+};
+export type CustomerConfirmationModel = {
+  version: 1;
+  clientId: string;
+  knowledgeRevision: number;
+  generatedAt: string;
+  sections: { id: string; title: string; entries: ConfirmationEntry[] }[];
+  confirmationRequests: {
+    topic: string;
+    reason: string;
+    relatedKnowledgeIds: string[];
+  }[];
+};
