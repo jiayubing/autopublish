@@ -10,6 +10,7 @@ import { isContentCommandStaleResult } from '../../content-command-result';
 
 interface ArticleGenerationViewProps {
   initialBatchClientIds?: string[];
+  initialBatchQuestions?: Array<{ clientId: string; geoQuestionId: string }>;
   clientId: string;
   client?: ContentClient;
   clients?: ContentClient[];
@@ -255,7 +256,7 @@ export default function ArticleGenerationView(props: ArticleGenerationViewProps)
     onViewBatchArticles,
   } = props;
   if (generationMode === 'batch') {
-    return <div className="min-h-0 flex-1"><BatchGenerationView initialClientIds={props.initialBatchClientIds} clients={clients} grouping={grouping} currentClientId={clientId} researchByClient={researchByClient} getClientDetails={getClientDetails} templateCatalog={templateCatalog} commands={{ retryMaterial: commands.retryMaterial }} commandStates={commandStates} onViewBatchArticles={onViewBatchArticles} /></div>;
+    return <div className="min-h-0 flex-1"><BatchGenerationView initialClientIds={props.initialBatchClientIds} initialQuestions={props.initialBatchQuestions} clients={clients} grouping={grouping} currentClientId={clientId} researchByClient={researchByClient} getClientDetails={getClientDetails} templateCatalog={templateCatalog} commands={{ retryMaterial: commands.retryMaterial }} commandStates={commandStates} onViewBatchArticles={onViewBatchArticles} /></div>;
   }
   return <ClientGenerationView {...props} />;
 }

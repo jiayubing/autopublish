@@ -134,6 +134,7 @@ test('article attention actions produce visible publication/detail results', asy
       window.desktopConsole = {
         auth: { getState: () => ok({ authenticated: true, user: { loginName: 'admin' }, entitlements: [{ product: 'AutoPublish', enabled: true, expiresAt: null }] }), login: () => ok({ authenticated: true }), refresh: () => ok({ authenticated: true }), logout: () => ok({ authenticated: false }), onStateChanged: () => () => {} },
         content, articleAttention: { list: content.listArticleAttention, get: content.getArticleAttention, preview: content.previewArticleAttention, resolve: content.resolveArticleAttention },
+        geoKnowledge: { questionWorkflow: ({ clientId }) => ok({ clientId, knowledgeRevision: 1, items: [{ id: 'geo-1', name: '必须人工选择的问题', intent: 'comparison', knowledgeCoverage: 'enough', linkStatus: 'linked', questionId: 'research-1', collectionEnabled: true, research: { collectedAt: '2026-09-22T00:00:00.000Z', answerLength: 10, referenceCount: 0 }, articles: { total: 1, publishedCount: 0 }, generation: { ready: true, code: 'GEO_GENERATION_READY' } }] }) },
         workspace: { getBootstrapState: () => ok({ state: 'ready' }), getCurrent: () => ok({}), openCurrent: () => ok(undefined), onInvalidated: () => () => {} },
         workspaceData: { getRuntimeIdentity: () => ok({ workspaceRuntimeId: 'attention-runtime', revision: 1 }), onInvalidated: () => () => {} }, platforms: { getQueue: () => ok({ platforms: [], queue: [] }), listAccountProfiles: () => ok({ profiles: [] }), getState: () => ok({ phase: 'idle' }), onState: () => () => {} },
         runtimeDiagnostics: { get: () => ok({ ok: true, buildInfo: {}, capabilities: {}, errors: [], warnings: [] }) }, media: {  getResourcePage: () => ok({ items: [], total: 0, page: 1, pageSize: 100 }), getPool: () => ok([]), getBalance: () => ok({ balance: '0' }) }, orders: { getOrders: () => ok([]) },
@@ -208,7 +209,7 @@ test('article attention actions produce visible publication/detail results', asy
     // Navigation preselects clients; it never starts AI on the attention page.
     await attentionCheckboxes.nth(0).check();
     await attentionRegion.getByRole('button', { name: '批量重新生成（1）', exact: true }).click();
-    await page.getByRole('heading', { name: '选择批次客户', exact: true }).waitFor();
+    await page.getByRole('heading', { name: '选择客户', exact: true }).waitFor();
     await page.getByRole('button', { name: '选择部分客户…', exact: true }).click();
     assert.equal(await page.getByRole('checkbox', { name: /测试客户/ }).isChecked(), true);
     assert.equal(await page.getByRole('checkbox', { name: /另一个客户/ }).isChecked(), false);
@@ -217,7 +218,8 @@ test('article attention actions produce visible publication/detail results', asy
     await page.getByRole('heading', { name: '选择跨平台写作模板', exact: true }).waitFor();
     await page.getByRole('checkbox', { name: /可选写作模板/ }).check();
     assert.equal(await page.getByRole('checkbox', { name: /可选写作模板/ }).isChecked(), true);
-    assert.ok(await page.getByText(/已有批次正在生成/).isVisible());
+    await page.getByRole('button', { name: '下一步', exact: true }).click();
+    assert.equal(await page.getByRole('checkbox', { name: /必须人工选择的问题/ }).isChecked(), false);
     assert.deepEqual(await page.evaluate(() => window.__regenerationCalls), []);
     assert.equal(await page.getByRole('heading', { name: '重新生成进度', exact: true }).count(), 0);
     await page.getByRole('button', { name: '投稿中心', exact: true }).click();
@@ -275,7 +277,7 @@ test('article attention actions produce visible publication/detail results', asy
     await attentionCheckboxes.nth(0).check();
     await attentionCheckboxes.nth(1).check();
     await attentionRegion.getByRole('button', { name: '批量重新生成（2）', exact: true }).click();
-    await page.getByRole('heading', { name: '选择批次客户', exact: true }).waitFor();
+    await page.getByRole('heading', { name: '选择客户', exact: true }).waitFor();
     await page.getByRole('button', { name: '选择部分客户…', exact: true }).click();
     assert.equal(await page.getByRole('checkbox', { name: /测试客户/ }).isChecked(), true);
     await page.getByRole('button', { name: '完成选择', exact: true }).click();

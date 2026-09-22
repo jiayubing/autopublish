@@ -155,6 +155,10 @@ function createArticleAttentionQuery(options) {
             exists: true,
             status: article.status || null,
             title: article.title || null,
+            geoQuestionId: article.knowledgeSnapshot && article.knowledgeSnapshot.version === 2 &&
+              article.knowledgeSnapshot.targetQuestion && typeof article.knowledgeSnapshot.targetQuestion.geoQuestionId === "string"
+              ? article.knowledgeSnapshot.targetQuestion.geoQuestionId
+              : null,
             submissionEligible:
               evaluateArticleSubmissionEligibility(article).eligible,
             lookupStatus: "available",
@@ -375,6 +379,7 @@ function createArticleAttentionQuery(options) {
       reasonSummary: safeText(value.reasonSummary, 1000),
       updatedAt: safeText(value.updatedAt || value.observedAt, 64),
       articleStatus: safeText(normalizedFacts.articleStatus, 80),
+      geoQuestionId: safeText(articleState && articleState.geoQuestionId, 200),
     };
     const copy = {
       kind,
@@ -385,6 +390,7 @@ function createArticleAttentionQuery(options) {
       safeFacts,
       articleId: safeText(value.articleId, 200),
       titleSnapshot: titleFor(value, articleState),
+      geoQuestionId: safeText(articleState && articleState.geoQuestionId, 200),
       clientId: safeText(value.clientId, 100),
       platformId: safeText(value.platformId || value.targetPlatformId, 100),
       accountProfileId: safeText(value.accountProfileId, 160),

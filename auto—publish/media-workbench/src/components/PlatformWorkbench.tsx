@@ -30,7 +30,7 @@ interface PlatformWorkbenchProps {
   onOpenArticleLibrary: (intent?: ArticleLibraryNavigationIntent) => void;
   onOpenOrders: () => void;
   onOpenSettings: () => void;
-  onOpenBatchGeneration?: (clientIds: string[]) => void;
+  onOpenBatchGeneration?: (intent: { clientIds: string[]; selectedQuestions: Array<{ clientId: string; geoQuestionId: string }> }) => void;
 }
 
 const SECTIONS: Array<{
@@ -554,9 +554,14 @@ export default function PlatformWorkbench({
               onRetarget={setRetargetItems}
               onRegenerate={onOpenBatchGeneration ? async (attentionIds) => {
                 const ids = new Set(attentionIds);
-                onOpenBatchGeneration([...new Set((attentionSnapshot.items as ArticleAttentionItem[])
-                  .filter((item) => ids.has(item.attentionId) && item.clientId)
-                  .map((item) => item.clientId!))]);
+                const selected = (attentionSnapshot.items as ArticleAttentionItem[])
+                  .filter((item) => ids.has(item.attentionId) && item.clientId);
+                onOpenBatchGeneration({
+                  clientIds: [...new Set(selected.map((item) => item.clientId!))],
+                  selectedQuestions: [...new Map(selected
+                    .filter((item) => item.geoQuestionId)
+                    .map((item) => [item.clientId + "\0" + item.geoQuestionId, { clientId: item.clientId!, geoQuestionId: item.geoQuestionId! }])).values()],
+                });
               } : undefined}
               extraActionBusy={Boolean(retargetItems)}
               snapshot={attentionSnapshot}

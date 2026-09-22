@@ -579,15 +579,6 @@ const api = {
         input,
       );
     },
-    createAndStartGenerationBatch: function (input) {
-      return ipcRenderer.invoke(
-        "content:create-and-start-generation-batch",
-        input || {},
-      );
-    },
-    regenerateAttentionItems: function (input) {
-      return ipcRenderer.invoke("content:regenerate-attention-items", input || {});
-    },
     pauseGenerationBatch: function (input) {
       return ipcRenderer.invoke("content:pause-generation-batch", input || {});
     },

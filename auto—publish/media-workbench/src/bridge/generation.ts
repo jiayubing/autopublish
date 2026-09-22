@@ -27,13 +27,6 @@ type SafeGenerationIpcError = {
 type GenerationIpcResponse<T> =
   { ok: true; data?: T } | { ok: false; error?: SafeGenerationIpcError };
 
-type GenerationPlanInput = {
-  concurrency?: number;
-  clientIds: string[];
-  templates: GenerationBatchTemplateSelection[];
-  clientSources?: GenerationBatchSourceSelection[];
-  templateCatalogRevision?: string;
-};
 export type GenerationV2PlanInput = {
   requestId?: string;
   selectedQuestions: Array<{ clientId: string; geoQuestionId: string }>;
@@ -49,9 +42,6 @@ type GenerationRuntimeSnapshot = {
   capabilities: GenerationBatchState["capabilities"];
 };
 type GenerationContentApi = {
-  regenerateAttentionItems: (
-    input: AttentionRegenerationInput,
-  ) => Promise<GenerationIpcResponse<{ batch: GenerationBatch }>>;
   generateArticle: (input: {
     generationOperationId?: string;
     articleCount?: number;
@@ -100,7 +90,7 @@ type GenerationContentApi = {
     }>
   >;
   previewGenerationBatch: (
-    input: GenerationPlanInput | GenerationV2PlanInput,
+    input: GenerationV2PlanInput,
   ) => Promise<GenerationIpcResponse<GenerationBatchPreview>>;
   createGenerationBatchV2: (
     input: GenerationV2PlanInput & { requestId: string },
@@ -110,9 +100,6 @@ type GenerationContentApi = {
   ) => Promise<GenerationIpcResponse<{ batch: GenerationBatch }>>;
   checkUncertainGenerationBatchV2: (
     input: { batchId: string },
-  ) => Promise<GenerationIpcResponse<{ batch: GenerationBatch }>>;
-  createAndStartGenerationBatch: (
-    input: GenerationPlanInput,
   ) => Promise<GenerationIpcResponse<{ batch: GenerationBatch }>>;
   pauseGenerationBatch: (input?: {
     batchId?: string;
@@ -226,7 +213,7 @@ export async function saveContentArticle(
 }
 
 export async function previewGenerationBatch(
-  input: GenerationPlanInput | GenerationV2PlanInput,
+  input: GenerationV2PlanInput,
 ): Promise<GenerationBatchPreview> {
   return callGeneration(
     (api) => requireBridgeMethod(api.previewGenerationBatch)(input),
@@ -256,33 +243,6 @@ export async function checkUncertainGenerationBatchV2(input: {
   return callGeneration(
     (api) => requireBridgeMethod(api.checkUncertainGenerationBatchV2)(input),
     "Unable to check uncertain generation results",
-    { map: (data) => data.batch },
-  );
-}
-
-export async function createAndStartGenerationBatch(
-  input: GenerationPlanInput,
-): Promise<GenerationBatch> {
-  return callGeneration(
-    (api) => requireBridgeMethod(api.createAndStartGenerationBatch)(input),
-    "Unable to create and start generation batch",
-    { map: (data) => data.batch },
-  );
-}
-
-export type AttentionRegenerationInput = {
-  requestId: string;
-  attentionIds: string[];
-  confirmed: true;
-  concurrency?: number;
-};
-
-export async function regenerateAttentionItems(
-  input: AttentionRegenerationInput,
-): Promise<GenerationBatch> {
-  return callGeneration(
-    (api) => requireBridgeMethod(api.regenerateAttentionItems)(input),
-    "Unable to regenerate attention items",
     { map: (data) => data.batch },
   );
 }

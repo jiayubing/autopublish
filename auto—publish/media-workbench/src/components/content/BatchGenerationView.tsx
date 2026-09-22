@@ -35,6 +35,7 @@ import BatchRegularSubmissionDialog from "./BatchRegularSubmissionDialog";
 
 interface BatchGenerationViewProps {
   initialClientIds?: string[];
+  initialQuestions?: SelectedQuestion[];
   clients: ContentClient[];
   grouping?: ClientGrouping;
   currentClientId?: string;
@@ -68,6 +69,7 @@ const questionKey = (value: SelectedQuestion) =>
 
 export default function BatchGenerationView({
   initialClientIds,
+  initialQuestions,
   clients,
   grouping,
   currentClientId,
@@ -97,10 +99,11 @@ export default function BatchGenerationView({
   const [showBuiltinTemplates, setShowBuiltinTemplates] = useState(false);
   const [batchSubmissionOpen, setBatchSubmissionOpen] = useState(false);
   const [batchSubmissionFeedback, setBatchSubmissionFeedback] = useState("");
-  const selectionTouched = useRef(Boolean(initialClientIds));
+  const selectionTouched = useRef(Boolean(initialClientIds || initialQuestions));
   const initialApplied = useRef(false);
+  const initialQuestionsApplied = useRef(false);
   const workflowRequest = useRef(0);
-  const newBatchWizard = useRef(Boolean(initialClientIds));
+  const newBatchWizard = useRef(Boolean(initialClientIds || initialQuestions));
 
   const catalog = templateCatalog || {
     revision: "",
@@ -210,6 +213,12 @@ export default function BatchGenerationView({
             .filter((item) => item.generation.ready)
             .map((item) => questionKey({ clientId, geoQuestionId: item.id })),
         );
+        if (initialQuestions && !initialQuestionsApplied.current) {
+          initialQuestionsApplied.current = true;
+          const requested = initialQuestions.map(questionKey);
+          setSelectedQuestionKeys(ready.filter((key) => requested.includes(key)));
+          return;
+        }
         setSelectedQuestionKeys((current) =>
           current
             .filter((key) => ready.includes(key))
@@ -228,7 +237,7 @@ export default function BatchGenerationView({
     return () => {
       workflowRequest.current += 1;
     };
-  }, [selectedClientIds]);
+  }, [selectedClientIds, initialQuestions]);
 
   useEffect(() => {
     if (batch && !newBatchWizard.current) setViewMode("monitoring");

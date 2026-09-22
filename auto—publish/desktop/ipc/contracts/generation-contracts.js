@@ -468,14 +468,10 @@ function contract(input, ownedErrors) {
 }
 
 const generationContracts = Object.freeze([
-  contract({ capability: "generation.regenerateAttentionItems", channel: "content:regenerate-attention-items", kind: "command",
-    request: exactObject({ requestId: id, attentionIds: arrayField(displayText(512), { min: 1, max: 100 }), confirmed: literalField(true), concurrency: optionalField(integerField({ min: 1, max: 4 })) }),
-    success: batchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),
   contract({ capability: "generation.previewBatch", channel: "content:preview-generation-batch", kind: "query", request: combinedPlanRequest, success: combinedPreview, fromArgs: directArgs, toArgs: directInput }, generationErrors),
   contract({ capability: "generation.createBatchV2", channel: "content:create-generation-batch-v2", kind: "command", request: v2CreateRequest, success: batchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),
   contract({ capability: "generation.startBatchV2", channel: "content:start-generation-batch-v2", kind: "command", request: batchIdRequest, success: batchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),
   contract({ capability: "generation.checkUncertainBatchV2", channel: "content:check-uncertain-generation-batch-v2", kind: "command", request: batchIdRequest, success: batchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),
-  contract({ capability: "generation.createAndStartBatch", channel: "content:create-and-start-generation-batch", kind: "command", request: planRequest, success: batchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),
   contract({ capability: "generation.pauseBatch", channel: "content:pause-generation-batch", kind: "command", request: stopRequest, success: nullableBatchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),
   contract({ capability: "generation.abandonBatch", channel: "content:abandon-generation-batch", kind: "command", request: exactObject({ batchId: id, confirmed: literalField(true) }), success: nullableBatchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),
   contract({ capability: "generation.resumeBatch", channel: "content:resume-generation-batch", kind: "command", request: continuationRequest, success: batchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),

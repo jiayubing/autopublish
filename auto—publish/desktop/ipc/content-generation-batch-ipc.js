@@ -203,10 +203,6 @@ function registerContentGenerationBatchIpc(deps) {
   ipcMain.handle("content:create-generation-batch-v2", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.createBatchV2(input(value))) }; }); });
   ipcMain.handle("content:start-generation-batch-v2", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.startBatchV2(input(value))) }; }); });
   ipcMain.handle("content:check-uncertain-generation-batch-v2", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.checkUncertainBatchV2(input(value))) }; }); });
-  ipcMain.handle("content:create-and-start-generation-batch", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.createAndStartBatch(input(value))) }; }); });
-  ipcMain.handle("content:regenerate-attention-items", function(event, value) { return invoke(async function() {
-    return { batch: safeBatch(await service.regenerateAttentionItems(input(value))) };
-  }); });
   ipcMain.handle("content:pause-generation-batch", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.pauseBatch(value === undefined ? undefined : input(value))) }; }); });
   ipcMain.handle("content:abandon-generation-batch", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.abandonBatch(input(value))) }; }); });
   ipcMain.handle("content:resume-generation-batch", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.resumeBatch(input(value))) }; }); });

@@ -3,7 +3,6 @@ import {
   cancelPendingGenerationBatch,
   checkUncertainGenerationBatchV2,
   createAndStartGenerationBatchV2,
-  regenerateAttentionItems,
   getGenerationRuntimeSnapshot,
   pauseGenerationBatch,
   resumeGenerationBatch,
@@ -23,7 +22,6 @@ export function useGenerationFeature(enabled = true) {
   if (!featureRef.current) {
     featureRef.current = createGenerationFeature({
       start: createAndStartGenerationBatchV2,
-      regenerate: regenerateAttentionItems,
       checkUncertain: checkUncertainGenerationBatchV2,
       previewBatch: previewGenerationBatch,
       pause: pauseGenerationBatch,
@@ -51,7 +49,6 @@ export function useGenerationFeature(enabled = true) {
   return {
     snapshot,
     start: feature.start,
-    regenerate: feature.regenerate,
     checkUncertain: feature.checkUncertain,
     refresh: feature.hydrate,
     previewBatch: feature.previewBatch,

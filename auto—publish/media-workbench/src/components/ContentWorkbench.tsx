@@ -69,6 +69,7 @@ function remember(key: string, value: string) {
 interface ContentWorkbenchProps {
   content: ContentWorkbenchFeature;
   initialBatchClientIds?: string[];
+  initialBatchQuestions?: Array<{ clientId: string; geoQuestionId: string }>;
   mode?: "production" | "library";
   articleIntent?: ArticleLibraryNavigationIntent | null;
   onArticleIntentConsumed?: () => void;
@@ -83,6 +84,7 @@ interface ContentWorkbenchProps {
 export default function ContentWorkbench({
   content,
   initialBatchClientIds,
+  initialBatchQuestions,
   mode = "production",
   articleIntent,
   onArticleIntentConsumed,
@@ -489,6 +491,7 @@ export default function ContentWorkbench({
         {(tab === "client" || tab === "batch") && (
           <ArticleGenerationView
             initialBatchClientIds={initialBatchClientIds}
+            initialBatchQuestions={initialBatchQuestions}
             grouping={grouping}
             client={clients.find((item) => item.id === clientId)}
             clients={clients}
