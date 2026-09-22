@@ -1,6 +1,6 @@
 # AutoPublish GEO 内容生产闭环实施方案 v1.4
 
-**状态**：IN PROGRESS / CP-3 Closure；CP-4 待开始
+**状态**：IN PROGRESS / CP-4 COMPLETE；CP-5 待开始
 
 **产品依据**：`AutoPublish-GEO-Content-Production-Product-Design-v1.0.md`
 
@@ -750,6 +750,10 @@ P0/P1 必须关闭；P2 只有直接影响当前 acceptance、事实一致性、
 
 ## 10. Progress
 
+- 2026-09-22：CP-4 Closure。Generation Batch v2 以 `(clientId, geoQuestionId) × (platform, templateId)` 建立任务；store 原子持久化 `requestId/requestFingerprint`、question source、显式 `startState` 与 terminal `uncertain`。create 重放先按 canonical intent 返回原批次，不因 Knowledge/Research 后续变化失败；create 与 start 已拆为独立 typed IPC，Renderer 一键操作按 create → start 编排，pending 批次可显式继续。
+- 2026-09-22：v2 runner 每个 task 执行前重新校验 Knowledge revision 与 Research fingerprint，仅向 Prompt v2 发送单篇 Article Brief、template 和写作约束；timeout/network/5xx、执行中停止、AI 返回后 Article 落盘失败均保守保存为 `uncertain`，不进入 retry/resume。启动恢复和用户“检查结果”只按 `generationTaskId` 做本地 0/1/多 Article identity recovery；“重新生成”建立新 requestId/new batch，原 task 保留。
+- 2026-09-22：生成向导已改为客户 → 可生成 GEO Question → template → 确认，默认并发 2，任务数按问题 × 模板展示。attention regeneration 不再调用旧 v1 AI command：Article snapshot v2 能证明唯一问题时预选该问题；历史文章不能唯一映射时只预选客户并要求用户选题。Renderer/IPC/preload 已删除 v1 create-and-start 与旧 attention regeneration 公开入口，历史 v1 batch/article reader 保留，生产 v1 AI 执行继续不可达。
+- 2026-09-22：CP-4 Primary Review 发现 AI 已返回但 Article 持久化失败会被误记为可重试 `failed`；修复为 `GENERATION_RESULT_UNCERTAIN` 并增加故障注入。bounded re-review 仅复核该副作用边界、runner 分类和直接回归后 PASS。最终 HEAD 上 `npm test` 606/606、`npm run test:integration` 1321/1321；`npm run lint`、main/bridge/renderer typecheck、`npm run build:renderer`、`npm run build:preload`、`npm run format:check` 与 `git diff --check` 均通过。Renderer build 仅保留既有 chunk > 500 kB 非阻塞警告。
 - 2026-09-22：CP-3 Closure。`geo-generation-context` 新增单问题结构化 Article Brief v2 owner，严格区分 `geoQuestionId` 与 `collectionQuestionId/research.id`，并校验 client、Knowledge revision 及三方规范化问题文本。Brief 复用既有关系选择规则，输出 accepted profile facts、相关知识、竞对、全量 restrictions、证据和当前 Research；`clientMentioned`/`mentionedEntities` 只做字面匹配，`decisionDimensions` 只提取明确枚举标题，无法确定时保持空数组，`answerGaps` 只引用已选知识身份。
 - 2026-09-22：CP-3 Primary Review 与 bounded re-review 关闭。Article serialization 同时接受历史 v1 snapshot 与 v2 Brief；v2 强制 exactly-one Research ID，并要求 Brief 的 question/answer/capturedAt/references 与文章 Research snapshot 一致。Article summary 从 v2 `targetQuestion.geoQuestionId` 投影关联；100000 字符上限继续 fail closed，不截断 restrictions。定向 Brief/article store 回归 40/40 通过。
 - 2026-09-22：CP-2 Closure。新增一次性 Question Workflow query，复用 Question、Research metadata、Article summaries 与 lifecycle projection owner；列表最多返回 500 项，只含研究元数据、文章总数/已发布数和稳定 readiness code，不读取 Research 正文。详情继续按需读取单题正文，`clientMentioned` 覆盖客户名称、展示名、Knowledge accepted name 与别名的 NFKC/大小写归一字面匹配。
