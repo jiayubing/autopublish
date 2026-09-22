@@ -199,6 +199,33 @@ describe("content generation batch service", function() {
     await service.dispose();
   });
 
+  it("keeps a v2 task uncertain when article persistence fails after AI returns", async function() {
+    const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "generation-v2-persist-uncertain-"));
+    let aiCalls = 0;
+    const brief = { version: 2, clientId: "c1", knowledgeRevision: 2, targetQuestion: { geoQuestionId: "geo-1", collectionQuestionId: "q1", text: "Q1" }, currentResearch: { question: "Q1", answer: "Answer", references: [], capturedAt: "2026-09-22T00:00:00.000Z" } };
+    const service = createContentGenerationBatchService({
+      workspaceRoot,
+      clientKnowledge: { getClient: function() { return { id: "c1" }; }, listClients: function() { return []; } },
+      materialStore: { listMaterials: async function() { return []; }, getSelectedMaterials: async function() { return []; } },
+      researchStore: { listResearch: function() { return []; }, getResearch: function() { return null; } },
+      templateStore: { getCatalogTemplate: function() { return { id: "guide", body: "Write" }; } },
+      contentStore: {
+        saveArticle: function() { throw Object.assign(new Error("disk write failed"), { code: "EIO" }); },
+        findByGenerationTaskId: function() { return { kind: "none" }; },
+      },
+      getGenerationBriefV2: async function() { return { brief, researchFingerprint: "b".repeat(64) }; },
+      articleGeneratorFactory: function() { return { generateArticle: async function() { aiCalls += 1; return { id: "article-1", clientId: "c1", title: "Title", content: "Body", status: "generated" }; } }; },
+      aiProviderService: { getFingerprint: function() { return "fp"; }, createClient: function() { return {}; } },
+    });
+    const batch = await service.createBatchV2({ requestId: "request-persist-uncertain", selectedQuestions: [{ clientId: "c1", geoQuestionId: "geo-1" }], templates: [{ platform: "media", templateId: "guide" }], concurrency: 1 });
+    await service.startBatchV2({ batchId: batch.id });
+    const uncertain = await waitForBatch(service, batch.id, function(value) { return value.status === "uncertain"; });
+    assert.equal(uncertain.tasks[0].error.code, "GENERATION_RESULT_UNCERTAIN");
+    await service.retryFailed({ batchId: batch.id });
+    assert.equal(aiCalls, 1);
+    await service.dispose();
+  });
+
   it("recovers v2 running tasks by 0/1/many local article identity without AI", async function() {
     for (const scenario of ["none", "one", "many"]) {
       const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "generation-v2-recovery-"));

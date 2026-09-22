@@ -446,12 +446,17 @@ function createContentGenerationBatchService(options) {
     article.status = "generated";
     article.generationBatchId = activeBatchId;
     article.generationTaskId = task.id;
-    if (articleMutationCoordinator && typeof articleMutationCoordinator.createArticle === "function") {
-      articleMutationCoordinator.createArticle(article);
-    } else if (typeof contentStore.createArticle === "function") {
-      contentStore.createArticle(article);
-    } else {
-      contentStore.saveArticle(article);
+    try {
+      if (articleMutationCoordinator && typeof articleMutationCoordinator.createArticle === "function") {
+        articleMutationCoordinator.createArticle(article);
+      } else if (typeof contentStore.createArticle === "function") {
+        contentStore.createArticle(article);
+      } else {
+        contentStore.saveArticle(article);
+      }
+    } catch (error) {
+      if (isV2) throw generationError("GENERATION_RESULT_UNCERTAIN", undefined, error);
+      throw error;
     }
     return { id: article.id, articleId: article.id };
   }
