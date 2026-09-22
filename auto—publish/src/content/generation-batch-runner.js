@@ -28,6 +28,12 @@ function isRetryable(error) {
   return error.status === 429 || (Number.isInteger(error.status) && error.status >= 500 && error.status <= 599);
 }
 
+function isUncertain(error) {
+  if (!error) return false;
+  if (["AI_TIMEOUT", "AI_NETWORK_ERROR", "AI_SERVER_ERROR", "AI_REQUEST_FAILED", "ECONNRESET", "ECONNREFUSED", "ENETUNREACH", "ETIMEDOUT", "EAI_AGAIN"].includes(error.code)) return true;
+  return Number.isInteger(error.status) && error.status >= 500 && error.status <= 599;
+}
+
 function isConfigurationError(error) {
   if (!error) return false;
   return CONFIGURATION_ERRORS.has(error.code) || error.status === 401 || error.status === 403 || error.status === 404;
@@ -162,12 +168,13 @@ function createGenerationBatchRunner(options) {
       .finally(function() { if (removeListener) removeListener(); });
   }
 
-  async function executeWithRetry(task, signal) {
+  async function executeWithRetry(task, signal, batchVersion) {
     for (let attempt = 0; ; attempt += 1) {
       try {
         return await deps.executeTask(task, { signal: signal });
       } catch (error) {
         if (isAborted(error, signal)) throw abortError();
+        if (batchVersion === 2) throw error;
         if (!isRetryable(error) || attempt >= RETRY_DELAYS.length) throw error;
         await wait(RETRY_DELAYS[attempt], signal);
       }
@@ -203,19 +210,30 @@ function createGenerationBatchRunner(options) {
         if (error && (error.code === "GENERATION_TASK_ALREADY_SUCCEEDED" || error.code === "GENERATION_TASK_BUSY" || error.code === "GENERATION_TASK_CANCELLED")) return;
         throw error;
       }
-      const result = await executeWithRetry(task, controller.signal);
+      const batchVersion = deps.batchStore.getBatch(batchId).version;
+      const result = await executeWithRetry(task, controller.signal, batchVersion);
       if (stopSignal.aborted) throw abortError();
       const articleId = articleIdFromResult(result);
       deps.batchStore.markTaskSucceeded(batchId, task.id, articleId);
     } catch (error) {
       if (stopSignal.aborted || isAborted(error, controller.signal)) {
-        if (claimed) deps.batchStore.markTaskInterrupted(batchId, task.id);
+        if (claimed) {
+          const stoppedBatch = deps.batchStore.getBatch(batchId);
+          if (stoppedBatch.version === 2)
+            deps.batchStore.markTaskUncertain(batchId, task.id, { code: "GENERATION_RESULT_UNCERTAIN", message: "Generation was stopped after the provider request may have started" });
+          else deps.batchStore.markTaskInterrupted(batchId, task.id);
+        }
         return;
       }
       if (isConfigurationError(error)) {
         deps.batchStore.markTaskFailed(batchId, task.id, safeError(error));
         deps.batchStore.updateBatchStatus(batchId, "paused_configuration");
         throw error;
+      }
+      const currentBatch = deps.batchStore.getBatch(batchId);
+      if (currentBatch.version === 2 && isUncertain(error)) {
+        deps.batchStore.markTaskUncertain(batchId, task.id, safeError(error));
+        return;
       }
       deps.batchStore.markTaskFailed(batchId, task.id, safeError(error));
     } finally {
@@ -239,6 +257,10 @@ function createGenerationBatchRunner(options) {
       return deps.batchStore.getBatch(batchId);
     }
     if (batch.status === "paused_configuration") return batch;
+    if (batch.version === 2 && batch.tasks.some(function(task) { return task.status === "uncertain"; })) {
+      if (batch.status !== "uncertain") deps.batchStore.updateBatchStatus(batchId, "uncertain");
+      return deps.batchStore.getBatch(batchId);
+    }
     if (batch.tasks.every(function(task) { return task.status === "succeeded" || task.status === "cancelled"; })) {
       if (batch.status !== "completed") deps.batchStore.updateBatchStatus(batchId, "completed");
     } else if (batch.tasks.some(function(task) { return task.status === "failed"; })) {

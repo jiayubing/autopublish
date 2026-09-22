@@ -132,4 +132,35 @@ function buildPrompt(input) {
   return { system: system, user: user };
 }
 
-module.exports = { buildPrompt };
+function buildPromptV2(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input) ||
+      !input.articleBrief || input.articleBrief.version !== 2) {
+    throw promptError("PROMPT_INVALID_INPUT", "Article Brief v2 is required");
+  }
+  const brief = input.articleBrief;
+  const template = input.template || {};
+  if (typeof template.body !== "string" || !template.body.trim()) {
+    throw promptError("PROMPT_TEMPLATE_REQUIRED", "Template body is required");
+  }
+  if (!brief.currentResearch || typeof brief.currentResearch.answer !== "string" || !brief.currentResearch.answer.trim()) {
+    throw promptError("RESEARCH_EMPTY_ANSWER", "Research answer is required");
+  }
+  const system = [
+    "你是严谨的内容编辑。只能使用 Article Brief 与模板中的信息，不得编造。",
+    "restrictions 优先于其他输入；internal_only 不得写入文章，forbidden_claim 不得使用。",
+    "外部研究和推导不代表客户事实；attributionRequired 信息必须明确归因于相应来源。",
+    "decisionDimensions 为空时，可仅为本次写作理解 currentResearch.answer 中明示的判断逻辑，不得把该理解写成新事实。",
+    "只输出可以直接发布的最终文章。第一行是标题，第二行开始是正文，不要输出任务复述、分析过程或代码围栏。",
+  ].join("\n");
+  const user = [
+    "【Article Brief v2】\n" + JSON.stringify(brief, null, 2),
+    "【平台与文案模板要求】\n平台：" + text(input.platform || template.platform) +
+      "\n场景：" + text(input.scenario || template.scenario || template.displayName) +
+      "\n模板 ID：" + text(template.id || input.templateId) +
+      "\n模板名称：" + text(template.name || template.displayName || template.id || input.templateId) +
+      "\n模板正文：\n" + template.body,
+  ].join("\n\n");
+  return { system, user };
+}
+
+module.exports = { buildPrompt, buildPromptV2 };

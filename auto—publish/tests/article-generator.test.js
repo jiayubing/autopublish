@@ -28,6 +28,35 @@ function dependencies(overrides) {
 }
 
 describe("article generator", function() {
+  it("generates and snapshots one Article Brief v2 without reading legacy materials or research", async function() {
+    let promptInput;
+    const deps = dependencies({
+      materialStore: { getSelectedMaterials: async function() { throw new Error("must not read materials"); } },
+      researchStore: { getResearch: function() { throw new Error("must not read research"); } },
+      buildPrompt: function(value) { promptInput = value; return { system: "System", user: "User" }; },
+      templateStore: { getCatalogTemplate: function() { return { id: "template-1", name: "Guide", scenario: "Guide", body: "Template" }; } },
+    });
+    const brief = {
+      version: 2,
+      clientId: "client-1",
+      targetQuestion: { geoQuestionId: "geo-1", collectionQuestionId: "question-1", text: "Question", intent: "comparison" },
+      currentResearch: { question: "Question", answer: "Answer", references: [{ title: "Source", url: "https://example.com" }], capturedAt: "2026-09-22T00:00:00.000Z" },
+    };
+    const article = await createArticleGenerator(deps).generateArticle({
+      articleBrief: brief,
+      clientId: "client-1",
+      platform: "ctrip",
+      templateId: "template-1",
+      generationBatchId: "batch-1",
+      generationTaskId: "task-1",
+    });
+    assert.deepEqual(promptInput.articleBrief, brief);
+    assert.equal(article.knowledgeSnapshot.version, 2);
+    assert.deepEqual(article.researchQueryIds, ["question-1"]);
+    assert.equal(article.materialSnapshots, undefined);
+    assert.equal(article.source.client_material, false);
+  });
+
   it("loads dependencies in order, cleans markdown, and returns a generated article", async function() {
     const deps = dependencies();
     const article = await createArticleGenerator(deps).generateArticle({

@@ -1,3 +1,6 @@
+const crypto = require("node:crypto");
+const { fingerprintCreateIntent } = require("../../src/content/generation-v2");
+
 const MAX_CLIENTS = 1000;
 const MAX_TEMPLATES = 1000;
 const MAX_SOURCE_ITEMS = 50;
@@ -12,6 +15,7 @@ function createGenerationBatchPreview(options) {
     generationError,
     assertObject,
     assertId,
+    getGenerationBriefV2,
   } = options;
 
   function arrayInput(value, code, label, required) {
@@ -242,6 +246,7 @@ function createGenerationBatchPreview(options) {
 
   async function preview(input) {
     const value = assertObject(input);
+    if (Array.isArray(value.selectedQuestions)) return previewV2(value);
     const clientInput =
       value.clientIds === undefined && Array.isArray(value.clientSources)
         ? value.clientSources.map(function (source) {
@@ -287,6 +292,62 @@ function createGenerationBatchPreview(options) {
       templates: templates,
       clientSources: resolved.sources,
       tasks: tasks,
+    };
+  }
+
+  async function previewV2(value) {
+    if (typeof getGenerationBriefV2 !== "function")
+      throw generationError("GENERATION_SOURCE_INVALID", "Article Brief v2 is unavailable");
+    const selections = arrayInput(value.selectedQuestions, "GENERATION_QUESTIONS_REQUIRED", "Selected questions", true);
+    const seen = new Set();
+    const selectedQuestions = selections.map(function(item) {
+      assertObject(item);
+      const selection = { clientId: assertId(item.clientId, "client id"), geoQuestionId: assertId(item.geoQuestionId, "GEO question id") };
+      const key = selection.clientId + "\0" + selection.geoQuestionId;
+      if (seen.has(key)) throw generationError("GENERATION_INPUT_INVALID", "Question is duplicated");
+      seen.add(key);
+      return selection;
+    });
+    validateCatalogRevision(value);
+    const templates = await validateTemplates(normalizeTemplates(value.templates));
+    const concurrency = value.concurrency === undefined ? 2 : value.concurrency;
+    if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 4)
+      throw generationError("GENERATION_CONCURRENCY_INVALID");
+    if (selectedQuestions.length * templates.length > MAX_TASKS)
+      throw generationError("GENERATION_TASK_LIMIT");
+    const questionSources = [];
+    for (const selection of selectedQuestions) {
+      const resolved = await getGenerationBriefV2(selection);
+      const brief = resolved && resolved.brief;
+      if (!brief || brief.version !== 2 || !brief.targetQuestion || !brief.currentResearch)
+        throw generationError("GENERATION_SOURCE_INVALID");
+      questionSources.push({
+        id: "source-" + crypto.createHash("sha256").update(selection.clientId + "\0" + selection.geoQuestionId).digest("hex").slice(0, 32),
+        clientId: selection.clientId,
+        geoQuestionId: selection.geoQuestionId,
+        collectionQuestionId: brief.targetQuestion.collectionQuestionId,
+        questionText: brief.targetQuestion.text,
+        knowledgeRevision: brief.knowledgeRevision,
+        researchCapturedAt: brief.currentResearch.capturedAt,
+        researchFingerprint: resolved.researchFingerprint,
+      });
+    }
+    const tasks = questionSources.flatMap(function(source) {
+      return templates.map(function(template) {
+        return { questionSourceId: source.id, clientId: source.clientId, geoQuestionId: source.geoQuestionId, platform: template.platform, templateId: template.templateId };
+      });
+    });
+    return {
+      version: 2,
+      questionCount: questionSources.length,
+      taskCount: tasks.length,
+      executableTaskCount: tasks.length,
+      excludedTaskCount: 0,
+      excludedQuestions: [],
+      questionSources,
+      templates,
+      tasks,
+      requestFingerprint: fingerprintCreateIntent({ selectedQuestions, selectedTemplates: templates, concurrency }),
     };
   }
 

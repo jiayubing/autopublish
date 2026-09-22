@@ -123,6 +123,117 @@ async function waitForBatch(service, batchId, predicate) {
 }
 
 describe("content generation batch service", function() {
+  it("creates and explicitly starts one idempotent v2 question-template batch", async function() {
+    const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "generation-v2-service-"));
+    const saved = [];
+    const generated = [];
+    const brief = {
+      version: 2,
+      clientId: "c1",
+      knowledgeRevision: 2,
+      targetQuestion: { geoQuestionId: "geo-1", collectionQuestionId: "q1", text: "Q1", intent: "comparison" },
+      currentResearch: { question: "Q1", answer: "Answer", references: [], capturedAt: "2026-09-22T00:00:00.000Z" },
+    };
+    const service = createContentGenerationBatchService({
+      workspaceRoot,
+      clientKnowledge: { getClient: function() { return { id: "c1" }; }, listClients: function() { return [{ id: "c1" }]; } },
+      materialStore: { listMaterials: async function() { return []; }, getSelectedMaterials: async function() { throw new Error("legacy material path"); } },
+      researchStore: { listResearch: function() { return []; }, getResearch: function() { throw new Error("legacy research path"); } },
+      templateStore: { getCatalogTemplate: function() { return { id: "guide", name: "Guide", scenario: "Guide", body: "Write" }; } },
+      contentStore: { saveArticle: function(article) { saved.push(article); }, findByGenerationTaskId: function() { return null; } },
+      getGenerationBriefV2: async function() { return { brief, researchFingerprint: "b".repeat(64) }; },
+      articleGeneratorFactory: function() { return { generateArticle: async function(input) { generated.push(input); return { id: "article-1", clientId: "c1", title: "Title", content: "Body", status: "generated" }; } }; },
+      aiProviderService: { getFingerprint: function() { return "fp"; }, createClient: function() { return {}; } },
+    });
+    const input = { requestId: "request-1", selectedQuestions: [{ clientId: "c1", geoQuestionId: "geo-1" }], templates: [{ platform: "media", templateId: "guide" }], concurrency: 1 };
+    const created = await service.createBatchV2(input);
+    assert.equal(created.version, 2);
+    assert.equal(created.startState, "not_started");
+    assert.equal(service.getRuntimeSnapshot().capabilities.canStart, true);
+    assert.equal((await service.createBatchV2(input)).id, created.id);
+    const accepted = await service.startBatchV2({ batchId: created.id });
+    assert.equal(accepted.status, "running");
+    const completed = await waitForBatch(service, created.id, function(batch) { return batch.status === "completed"; });
+    assert.equal(completed.startState, "started");
+    assert.equal(generated.length, 1);
+    assert.equal(generated[0].articleBrief.targetQuestion.geoQuestionId, "geo-1");
+    assert.equal(saved.length, 1);
+    await service.dispose();
+  });
+
+  it("persists an uncertain v2 provider result and never retries the original task", async function() {
+    const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "generation-v2-uncertain-"));
+    let calls = 0;
+    const brief = { version: 2, clientId: "c1", knowledgeRevision: 2, targetQuestion: { geoQuestionId: "geo-1", collectionQuestionId: "q1", text: "Q1" }, currentResearch: { question: "Q1", answer: "Answer", references: [], capturedAt: "2026-09-22T00:00:00.000Z" } };
+    const service = createContentGenerationBatchService({
+      workspaceRoot,
+      clientKnowledge: { getClient: function() { return { id: "c1" }; }, listClients: function() { return []; } },
+      materialStore: { listMaterials: async function() { return []; }, getSelectedMaterials: async function() { return []; } },
+      researchStore: { listResearch: function() { return []; }, getResearch: function() { return null; } },
+      templateStore: { getCatalogTemplate: function() { return { id: "guide", body: "Write" }; } },
+      contentStore: { saveArticle: function() {}, findByGenerationTaskId: function() { return null; } },
+      getGenerationBriefV2: async function() { return { brief, researchFingerprint: "b".repeat(64) }; },
+      articleGeneratorFactory: function() { return { generateArticle: async function() { calls += 1; throw Object.assign(new Error("timeout"), { code: "AI_TIMEOUT" }); } }; },
+      aiProviderService: { getFingerprint: function() { return "fp"; }, createClient: function() { return {}; } },
+    });
+    const batch = await service.createBatchV2({ requestId: "request-uncertain", selectedQuestions: [{ clientId: "c1", geoQuestionId: "geo-1" }], templates: [{ platform: "media", templateId: "guide" }], concurrency: 1 });
+    await service.startBatchV2({ batchId: batch.id });
+    const uncertain = await waitForBatch(service, batch.id, function(value) { return value.status === "uncertain"; });
+    assert.equal(uncertain.tasks[0].status, "uncertain");
+    assert.equal(calls, 1);
+    await service.retryFailed({ batchId: batch.id });
+    await new Promise(function(resolve) { setTimeout(resolve, 10); });
+    assert.equal(calls, 1);
+    await service.dispose();
+  });
+
+  it("recovers v2 running tasks by 0/1/many local article identity without AI", async function() {
+    for (const scenario of ["none", "one", "many"]) {
+      const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "generation-v2-recovery-"));
+      const batchStore = createGenerationBatchStore({ workspaceRoot });
+      const batch = batchStore.createOrGetV2({
+        requestId: "request-" + scenario,
+        requestFingerprint: "a".repeat(64),
+        concurrency: 1,
+        aiConfigFingerprint: "fp",
+        questionSources: [{ id: "source-1", clientId: "c1", geoQuestionId: "geo-1", collectionQuestionId: "q1", questionText: "Q1", knowledgeRevision: 2, researchCapturedAt: "2026-09-22T00:00:00.000Z", researchFingerprint: "b".repeat(64) }],
+        templates: [{ platform: "media", templateId: "guide" }],
+      });
+      batchStore.markTaskRunning(batch.id, batch.tasks[0].id);
+      let aiCalls = 0;
+      const service = createContentGenerationBatchService({
+        workspaceRoot,
+        batchStore,
+        clientKnowledge: { getClient: function() { return { id: "c1" }; }, listClients: function() { return []; } },
+        materialStore: { listMaterials: async function() { return []; }, getSelectedMaterials: async function() { return []; } },
+        researchStore: { listResearch: function() { return []; }, getResearch: function() { return null; } },
+        templateStore: { getCatalogTemplate: function() { return { id: "guide", body: "Write" }; } },
+        contentStore: {
+          saveArticle: function() {},
+          findByGenerationTaskId: function() {
+            if (scenario === "one") return { kind: "one", article: { id: "article-1" } };
+            if (scenario === "many") return { kind: "many", articles: [{ id: "a" }, { id: "b" }] };
+            return null;
+          },
+        },
+        articleGeneratorFactory: function() { return { generateArticle: async function() { aiCalls += 1; return { id: "unexpected" }; } }; },
+        aiProviderService: { getFingerprint: function() { return "fp"; }, createClient: function() { return {}; } },
+      });
+      await service.recoverStartup();
+      const recovered = service.getBatch(batch.id);
+      assert.equal(aiCalls, 0);
+      if (scenario === "one") {
+        assert.equal(recovered.status, "completed");
+        assert.equal(recovered.tasks[0].articleId, "article-1");
+      } else {
+        assert.equal(recovered.status, "uncertain");
+        assert.equal(recovered.tasks[0].status, "uncertain");
+        assert.equal(recovered.tasks[0].error.code, scenario === "many" ? "GENERATION_ARTICLE_IDENTITY_CONFLICT" : "GENERATION_RESULT_UNCERTAIN");
+      }
+      await service.dispose();
+    }
+  });
+
   it("keeps legacy v1 batches readable but blocks every AI execution entry", async function() {
     const harness = makeHarness({ allowLegacyV1Execution: false });
     await assert.rejects(
