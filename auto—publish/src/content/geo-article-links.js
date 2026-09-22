@@ -32,4 +32,35 @@ async function queryGeoArticles(
   }
   return { articles, total: matched.length, publishedCount };
 }
-module.exports = { queryGeoArticles };
+
+async function queryGeoArticleCounts(
+  { contentStore, operationalStore },
+  clientId,
+  questionIds,
+) {
+  const requested = new Set(questionIds);
+  const counts = Object.fromEntries(
+    questionIds.map((id) => [id, { total: 0, publishedCount: 0 }]),
+  );
+  const summaries = await contentStore.listArticleSummariesAsync(clientId);
+  const matched = summaries.filter((article) =>
+    article.geoQuestionIds?.some((id) => requested.has(id)),
+  );
+  for (let offset = 0; offset < matched.length; offset += 500) {
+    const batch = matched.slice(offset, offset + 500);
+    const facts = operationalStore.listArticleLifecycleFacts({
+      articleIds: batch.map((article) => article.id),
+    });
+    const projection = projectArticleLifecycle({ ...facts, articles: batch });
+    for (const article of batch) {
+      for (const id of new Set(article.geoQuestionIds || [])) {
+        if (!requested.has(id)) continue;
+        counts[id].total++;
+        if (projection.byArticle[article.id].stage === "published")
+          counts[id].publishedCount++;
+      }
+    }
+  }
+  return counts;
+}
+module.exports = { queryGeoArticles, queryGeoArticleCounts };

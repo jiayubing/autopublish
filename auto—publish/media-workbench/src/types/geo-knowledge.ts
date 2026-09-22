@@ -141,6 +141,34 @@ export type KnowledgeQuestionArticles = {
   total: number;
   publishedCount: number;
 };
+export type KnowledgeQuestionWorkflow = {
+  clientId: string;
+  knowledgeRevision: number;
+  items: Array<{
+    id: string;
+    name: string;
+    intent: string;
+    knowledgeCoverage: string;
+    linkStatus: "unlinked" | "linked" | "stale";
+    questionId: string | null;
+    collectionEnabled: boolean | null;
+    research: null | {
+      collectedAt: string;
+      answerLength: number;
+      referenceCount: number;
+    };
+    articles: { total: number; publishedCount: number };
+    generation: {
+      ready: boolean;
+      code:
+        | "GEO_QUESTION_UNLINKED"
+        | "GEO_QUESTION_LINK_STALE"
+        | "GEO_RESEARCH_MISSING"
+        | "GEO_RESEARCH_STALE"
+        | "GEO_GENERATION_READY";
+    };
+  }>;
+};
 export type ConfirmationEntry = {
   kind: "fact" | "research" | "derived" | "gap" | "caution";
   title: string;

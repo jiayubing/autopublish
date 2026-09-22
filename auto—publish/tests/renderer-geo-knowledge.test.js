@@ -140,6 +140,28 @@ function fixture({ document }) {
             ? { phase: "extracting", running: true }
             : failedState || { phase: "idle", running: false },
         }),
+      questionWorkflow: () =>
+        ok({
+          clientId: "client-1",
+          knowledgeRevision: knowledge?.revision || 0,
+          items: (knowledge?.geoQuestions || []).map((item) => ({
+            id: item.id,
+            name: item.name,
+            intent: item.intent || "",
+            knowledgeCoverage: item.knowledgeCoverage || "",
+            linkStatus: item.questionId ? "linked" : "unlinked",
+            questionId: item.questionId || null,
+            collectionEnabled: item.questionId ? true : null,
+            research: item.questionId
+              ? { collectedAt: "2026-09-19T00:00:00.000Z", answerLength: 20, referenceCount: 1 }
+              : null,
+            articles: { total: 1, publishedCount: 1 },
+            generation: {
+              ready: Boolean(item.questionId),
+              code: item.questionId ? "GEO_GENERATION_READY" : "GEO_QUESTION_UNLINKED",
+            },
+          })),
+        }),
       state: () => {
         if (window.__failNextGeoState) {
           window.__failNextGeoState = false;

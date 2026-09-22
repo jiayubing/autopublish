@@ -5,6 +5,21 @@ const normalizeQuestionText = (value) =>
   String(value || "")
     .trim()
     .replace(/\s+/g, " ");
+const normalizeMentionText = (value) =>
+  String(value || "")
+    .normalize("NFKC")
+    .toLocaleLowerCase("zh-CN")
+    .replace(/\s+/g, " ");
+
+function acceptedClientNames(document, client) {
+  const aliases = String(document.profile?.fields?.aliases || "")
+    .split(/[、,，;；\n]/u)
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return [...new Set([client.name, client.displayName, document.profile?.fields?.name, ...aliases]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean))];
+}
 
 function createGeoQuestionLinks({
   store,
@@ -96,10 +111,13 @@ function createGeoQuestionLinks({
     )
       return { ...result, linkStatus: "stale" };
     const client = getClient(clientId);
-    const name = String(client.name || client.displayName || "").trim();
+    const names = acceptedClientNames(document, client);
+    const answer = normalizeMentionText(research.answerText);
     return {
       ...result,
-      clientMentioned: name ? research.answerText.includes(name) : null,
+      clientMentioned: names.length
+        ? names.some((name) => answer.includes(normalizeMentionText(name)))
+        : null,
       research: {
         question: research.question,
         answerText: research.answerText,
@@ -114,4 +132,4 @@ function createGeoQuestionLinks({
   }
   return { linkQuestions, questionDetails };
 }
-module.exports = { createGeoQuestionLinks, normalizeQuestionText };
+module.exports = { createGeoQuestionLinks, normalizeQuestionText, acceptedClientNames };

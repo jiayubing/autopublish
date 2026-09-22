@@ -25,7 +25,8 @@ const { createResearchStore } = require("../../src/content/research-store");
 const {
   selectGeoKnowledge,
 } = require("../../src/content/geo-generation-context");
-const { queryGeoArticles } = require("../../src/content/geo-article-links");
+const { queryGeoArticles, queryGeoArticleCounts } = require("../../src/content/geo-article-links");
+const { buildGeoQuestionWorkflow } = require("../../src/content/geo-question-workflow");
 const { DEFAULT_RESEARCH_PROMPT } = require("../../src/content/geo-knowledge-research");
 const { createGeoKnowledgePromptStore } = require("../geo-knowledge-prompt-store");
 const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
@@ -82,12 +83,13 @@ function createGeoKnowledgeService(options) {
       testController = null;
     }
   }
+  const researchStore =
+    options.researchStore ||
+    createResearchStore(options.workspaceRoot, { paths: options.paths });
   const links = createGeoQuestionLinks({
     store,
     questionService: options.questionService,
-    researchStore:
-      options.researchStore ||
-      createResearchStore(options.workspaceRoot, { paths: options.paths }),
+    researchStore,
     getClient: resolveClient,
   });
   function linkQuestions(input) {
@@ -195,6 +197,23 @@ function createGeoKnowledgeService(options) {
     };
   }
   return {
+    questionWorkflow: async ({ clientId }) => {
+      const document = load({ clientId }).knowledge;
+      if (!document) throw geoError("GEO_NOT_FOUND");
+      const questions = options.questionService.listQuestions({ clientId });
+      const researchMetadata = researchStore.listResearchMetadata(clientId);
+      const articleCounts = await queryGeoArticleCounts(
+        options,
+        clientId,
+        document.geoQuestions.map((item) => item.id),
+      );
+      return buildGeoQuestionWorkflow({
+        document,
+        questions,
+        research: researchMetadata,
+        articleCounts,
+      });
+    },
     questionArticles: ({ clientId, id }) => {
       const document = load({ clientId }).knowledge;
       if (!document?.geoQuestions.some((q) => q.id === id))

@@ -11,6 +11,11 @@ const client = { clientId: "client-1" };
 const status = { configured: false, model: "", webSearch: true, baseUrl: "https://ark.cn-beijing.volces.com/api/plan/v3", defaultGlobalPrompt: "默认研究要求", globalPrompt: "" };
 const geoKnowledgeIpcContractFixtures = [
   [
+    "questionWorkflow",
+    client,
+    { clientId: "client-1", knowledgeRevision: 1, items: [] },
+  ],
+  [
     "questionArticles",
     { ...client, id: "geo-question-1" },
     { articles: [], total: 0, publishedCount: 0 },

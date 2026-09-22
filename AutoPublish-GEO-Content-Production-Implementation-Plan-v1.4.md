@@ -1,6 +1,6 @@
 # AutoPublish GEO 内容生产闭环实施方案 v1.4
 
-**状态**：IN PROGRESS / CP-1 Closure；CP-2 待开始
+**状态**：IN PROGRESS / CP-2 Closure；CP-3 待开始
 
 **产品依据**：`AutoPublish-GEO-Content-Production-Product-Design-v1.0.md`
 
@@ -750,6 +750,8 @@ P0/P1 必须关闭；P2 只有直接影响当前 acceptance、事实一致性、
 
 ## 10. Progress
 
+- 2026-09-22：CP-2 Closure。新增一次性 Question Workflow query，复用 Question、Research metadata、Article summaries 与 lifecycle projection owner；列表最多返回 500 项，只含研究元数据、文章总数/已发布数和稳定 readiness code，不读取 Research 正文。详情继续按需读取单题正文，`clientMentioned` 覆盖客户名称、展示名、Knowledge accepted name 与别名的 NFKC/大小写归一字面匹配。
+- 2026-09-22：CP-2 Primary Review 与 bounded re-review 关闭。stale/deleted/text mismatch 均不暴露旧回答；停用但已有当前 Research 的问题仍可进入生成前检查，再采集则导航现有采集页并展开对应问题；生成动作只打开现有生成向导。0/1/多文章计数、published projection、无逐行 IPC/正文读取、别名匹配及 renderer 详情回归均纳入验证。
 - 2026-09-22：CP-1 Closure。新增纯函数 `geo-confirmation-model` 作为 15 章节、来源追踪、资料缺口与确认请求的唯一 owner；`geo-knowledge-service` 只编排当前 revision 的 preview/export，Markdown 直接渲染同一 model。IPC/preload/bridge/types 与 `GeoKnowledgeView` 已接通“客户确认稿”tab，原顶部通用导出入口移除；来源页从同一 model 反向显示支持内容。
 - 2026-09-22：CP-1 Primary Review 通过；本地只读产品验收发现逐条 candidate 产生 55–61 条确认请求，修复为同章节聚合后降至 20–21 条。两份有效 V2 Knowledge 分别形成 6/7 个正向章节，覆盖产品/服务、能力、场景、案例与推荐角度；历史、线上身份、团队、资质等缺口保留为 Knowledge research/synthesis 输入问题，不在 Confirmation 层扩写。另有一份现有文件不满足当前 V2 schema，保持原样且未猜测修复或删除。
 - 2026-09-22：CP-1 bounded re-review 发现 preview 与编辑交错时可能接受旧 revision 响应；以当前 Knowledge revision ref 丢弃迟到结果并增加 UI race 回归后 PASS。定向 owner/service/IPC/flow/UI 回归 6/6 通过；main/bridge/renderer typecheck、lint、renderer build、preload build 与 `git diff --check` 通过，Renderer build 仅有既有大 chunk 提示。

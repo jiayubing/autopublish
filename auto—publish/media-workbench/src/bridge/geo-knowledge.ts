@@ -14,6 +14,7 @@ import type {
   GeoConnectionResult,
   KnowledgeQuestionDetails,
   KnowledgeQuestionArticles,
+  KnowledgeQuestionWorkflow,
   KnowledgeStorageStatus,
   GeoPromptSettings,
   CustomerConfirmationModel,
@@ -21,6 +22,9 @@ import type {
 type Reply<T> = { ok: true; data: T } | { ok: false; error: IpcError };
 type ClientInput = { clientId: string };
 type Api = {
+  questionWorkflow: (input: {
+    clientId: string;
+  }) => Promise<Reply<KnowledgeQuestionWorkflow>>;
   questionArticles: (input: {
     clientId: string;
     id: string;
@@ -67,6 +71,8 @@ async function call<T>(invoke: (api: Api) => Promise<Reply<T>>): Promise<T> {
 }
 export const loadKnowledge = (clientId: string) =>
   call((api) => requireBridgeMethod(api.load)({ clientId }));
+export const getKnowledgeQuestionWorkflow = (clientId: string) =>
+  call((api) => requireBridgeMethod(api.questionWorkflow)({ clientId }));
 export const getKnowledgeQuestionArticles = (clientId: string, id: string) =>
   call((api) => requireBridgeMethod(api.questionArticles)({ clientId, id }));
 export const linkKnowledgeQuestions = (

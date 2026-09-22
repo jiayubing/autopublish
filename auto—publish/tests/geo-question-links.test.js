@@ -21,12 +21,13 @@ function setup(t) {
   const document = store.save(
     normalizeCandidate(
       {
+        profile: { basis: "fact", sourceIds: ["client-input"], fields: { name: "合成客户", aliases: "合成别名、Synthetic Co" } },
         geoQuestions: [
           { name: "如何选择服务？", intent: "selection" },
           { name: "有哪些适用场景？", intent: "scenario" },
         ],
       },
-      [],
+      [{ id: "client-input", type: "client_input", title: "客户输入" }],
       "client-1",
     ),
     0,
@@ -119,7 +120,7 @@ test("real answers stay in research owner; changed and deleted questions cannot 
   const record = {
     id: questionId,
     question: saved.geoQuestions[0].name,
-    answerText: "合成客户提供服务，选择时请核对具体服务范围。",
+    answerText: "synthetic co 提供服务，选择时请核对具体服务范围。",
     references: [{ title: "合成来源", url: "https://example.com/source" }],
     collectedAt: "2026-09-19T00:00:00.000Z",
     collectionMethod: "manual",

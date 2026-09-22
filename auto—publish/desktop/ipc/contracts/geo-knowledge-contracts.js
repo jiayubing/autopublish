@@ -305,6 +305,46 @@ function contract(method, kind, request, success) {
 }
 const geoKnowledgeContracts = [
   contract(
+    "questionWorkflow",
+    "query",
+    clientRequest,
+    exactObject({
+      clientId: id,
+      knowledgeRevision: integerField({ min: 0, max: Number.MAX_SAFE_INTEGER }),
+      items: arrayField(
+        exactObject({
+          id,
+          name: text(2000, 1),
+          intent: text(100),
+          knowledgeCoverage: text(100),
+          linkStatus: enumField(["unlinked", "linked", "stale"]),
+          questionId: nullableField(id),
+          collectionEnabled: nullableField("boolean"),
+          research: nullableField(exactObject({
+            collectedAt: text(100),
+            answerLength: integerField({ min: 0, max: 200000 }),
+            referenceCount: integerField({ min: 0, max: 1000 }),
+          })),
+          articles: exactObject({
+            total: integerField({ min: 0, max: Number.MAX_SAFE_INTEGER }),
+            publishedCount: integerField({ min: 0, max: Number.MAX_SAFE_INTEGER }),
+          }),
+          generation: exactObject({
+            ready: "boolean",
+            code: enumField([
+              "GEO_QUESTION_UNLINKED",
+              "GEO_QUESTION_LINK_STALE",
+              "GEO_RESEARCH_MISSING",
+              "GEO_RESEARCH_STALE",
+              "GEO_GENERATION_READY",
+            ]),
+          }),
+        }),
+        { max: 500 },
+      ),
+    }),
+  ),
+  contract(
     "questionArticles",
     "query",
     exactObject({ clientId: id, id }),

@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from "react";
 import {
   getKnowledgeQuestionDetails,
-  getKnowledgeQuestionArticles,
+  getKnowledgeQuestionWorkflow,
 } from "../../bridge/geo-knowledge";
 import type {
   GeoKnowledge,
   KnowledgeItem,
   KnowledgeQuestionDetails,
-  KnowledgeQuestionArticles,
+  KnowledgeQuestionWorkflow,
 } from "../../types/geo-knowledge";
 
 const buttonClass =
@@ -17,36 +17,49 @@ export default function GeoKnowledgeQuestions({
   busy,
   link,
   renderItem,
+  onCollect,
+  onGenerate,
 }: {
   knowledge: GeoKnowledge;
   busy: boolean;
   link: (ids: string[]) => Promise<boolean>;
   renderItem: (item: KnowledgeItem) => React.ReactNode;
+  onCollect: (questionId: string) => void;
+  onGenerate: (geoQuestionId: string) => void;
 }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [active, setActive] = useState("");
   const [detail, setDetail] = useState<KnowledgeQuestionDetails | null>(null);
-  const [articles, setArticles] = useState<KnowledgeQuestionArticles | null>(
-    null,
-  );
+  const [workflow, setWorkflow] = useState<KnowledgeQuestionWorkflow | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [refresh, setRefresh] = useState(0);
   useEffect(() => {
     let live = true;
+    setWorkflow(null);
+    setError("");
+    void getKnowledgeQuestionWorkflow(knowledge.clientId).then(
+      (result) => {
+        if (live && result.knowledgeRevision === knowledge.revision)
+          setWorkflow(result);
+      },
+      (reason) => {
+        if (live)
+          setError(reason instanceof Error ? reason.message : "问题状态读取失败。");
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [knowledge.clientId, knowledge.revision, refresh]);
+  useEffect(() => {
+    let live = true;
     setDetail(null);
-    setArticles(null);
     setError("");
     if (active)
-      void Promise.all([
-        getKnowledgeQuestionDetails(knowledge.clientId, active),
-        getKnowledgeQuestionArticles(knowledge.clientId, active),
-      ]).then(
-        ([result, relatedArticles]) => {
-          if (live) {
-            setDetail(result);
-            setArticles(relatedArticles);
-          }
+      void getKnowledgeQuestionDetails(knowledge.clientId, active).then(
+        (result) => {
+          if (live) setDetail(result);
         },
         (reason) => {
           if (live)
@@ -69,6 +82,7 @@ export default function GeoKnowledgeQuestions({
     }
   }
   const item = knowledge.geoQuestions.find((q) => q.id === active);
+  const activeWorkflow = workflow?.items.find((q) => q.id === active);
   const related = item
     ? [...knowledge.offerings, ...knowledge.scenarios].filter((q) =>
         [...item.relatedOfferingIds, ...item.relatedScenarioIds].includes(q.id),
@@ -106,9 +120,19 @@ export default function GeoKnowledgeQuestions({
           {renderItem(q)}
           <div className="flex items-center gap-2 text-xs">
             <span>
-              {q.questionId
-                ? "已有采集关联（详情中核对当前状态）"
-                : "未加入采集"}{" "}
+              {(() => {
+                const state = workflow?.items.find((item) => item.id === q.id);
+                if (!state) return "状态读取中";
+                if (state.linkStatus === "unlinked") return "未加入采集";
+                if (state.linkStatus === "stale") return "采集关联已失效";
+                if (!state.research)
+                  return state.collectionEnabled
+                    ? "待采集回答"
+                    : "采集已停用，暂无当前回答";
+                return state.collectionEnabled
+                  ? "已有当前回答，采集已启用"
+                  : "已有当前回答，可进入生成";
+              })()}{" "}
               · 类型：{q.intent || "未分类"}
             </span>
             <button
@@ -120,6 +144,25 @@ export default function GeoKnowledgeQuestions({
             >
               查看回答与关联：{q.name}
             </button>
+            {workflow?.items.find((item) => item.id === q.id)?.questionId && (
+              <button
+                className={buttonClass}
+                onClick={() =>
+                  onCollect(
+                    workflow.items.find((item) => item.id === q.id)!.questionId!,
+                  )
+                }
+              >
+                {workflow.items.find((item) => item.id === q.id)?.research
+                  ? "重新采集"
+                  : "去采集"}
+              </button>
+            )}
+            {workflow?.items.find((item) => item.id === q.id)?.generation.ready && (
+              <button className={buttonClass} onClick={() => onGenerate(q.id)}>
+                生成文章
+              </button>
+            )}
           </div>
         </div>
       ))}
@@ -174,22 +217,17 @@ export default function GeoKnowledgeQuestions({
           <p>
             关联产品与场景：{related.map((q) => q.name).join("、") || "暂无"}
           </p>
-          {articles && (
+          {activeWorkflow && (
             <div className="grid gap-2">
               <p>
-                关联文章：{articles.total} 篇 · 已发布：
-                {articles.publishedCount} 篇
+                关联文章：{activeWorkflow.articles.total} 篇 · 已发布：
+                {activeWorkflow.articles.publishedCount} 篇
               </p>
-              {articles.articles.map((article) => (
-                <p key={article.id}>
-                  {article.title} · {article.label}
-                </p>
-              ))}
-              {articles.total > articles.articles.length && (
-                <p>
-                  仅展示前 {articles.articles.length} 篇；完整列表请查看文章库。
-                </p>
-              )}
+              <p>
+                {activeWorkflow.generation.ready
+                  ? "已具备进入生成前检查的条件。"
+                  : "尚不具备进入生成前检查的条件。"}
+              </p>
             </div>
           )}
         </section>

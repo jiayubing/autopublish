@@ -25,7 +25,7 @@ const confirmationKindLabels: Record<ConfirmationEntry["kind"], string> = {
   fact: "客户事实", research: "公开研究", derived: "推荐角度 / 场景分析", gap: "资料缺口", caution: "谨慎使用",
 };
 
-export default function GeoKnowledgeView({ clientId }: { clientId: string }) {
+export default function GeoKnowledgeView({ clientId, onCollectQuestion, onGenerateQuestion }: { clientId: string; onCollectQuestion: (questionId: string) => void; onGenerateQuestion: (geoQuestionId: string) => void }) {
   const feature = useGeoKnowledge(clientId);
   const knowledge = feature.knowledge;
   const disabled = feature.busy || feature.state.running;
@@ -185,7 +185,7 @@ export default function GeoKnowledgeView({ clientId }: { clientId: string }) {
           </article>)}
           {!feature.confirmationLoading && !feature.confirmation && <p className="rounded border border-dashed p-6 text-slate-500">确认稿暂不可用，请刷新后重试。</p>}
         </section>}
-        {tab === "questions" && <GeoKnowledgeQuestions knowledge={knowledge} busy={disabled || Boolean(editing)} link={feature.link} renderItem={item => compactItem("geoQuestions", item)} />}
+        {tab === "questions" && <GeoKnowledgeQuestions knowledge={knowledge} busy={disabled || Boolean(editing)} link={feature.link} renderItem={item => compactItem("geoQuestions", item)} onCollect={onCollectQuestion} onGenerate={onGenerateQuestion} />}
         {tab === "sources" && <div className="grid gap-3">{knowledge.externalResearch.map(item => compactItem("externalResearch", item))}{knowledge.sources.map(source => (
           <article key={source.id} className="rounded border bg-white p-3"><h3>{source.title}</h3><p className="break-all text-xs text-slate-500">{source.fileName || source.url} · {source.type}</p>
             <div className="mt-2 text-xs text-slate-600"><strong>支持的确认稿内容：</strong>{feature.confirmation?.sections.flatMap(section => section.entries.filter(entry => entry.sourceIds.includes(source.id)).map(entry => `${section.title}：${entry.title}`)).join("；") || (feature.confirmationLoading ? "正在读取…" : "暂无正向知识引用")}</div>

@@ -136,6 +136,7 @@ export default function ContentWorkbench({
   const [articleNavigationIntent, setArticleNavigationIntent] =
     useState<ArticleLibraryNavigationIntent | null>(null);
   const [error, setError] = useState("");
+  const [focusedQuestionId, setFocusedQuestionId] = useState<string | null>(null);
   const [refreshConfirmationVisible, setRefreshConfirmationVisible] =
     useState(false);
   const historyDirtyRef = useRef(false);
@@ -481,9 +482,10 @@ export default function ContentWorkbench({
             login={doubaoLogin}
             queueQuery={doubaoQueueQuery}
             loginQuery={doubaoLoginQuery}
+            focusQuestionId={focusedQuestionId}
           />
         )}
-        {tab === "knowledge" && <div key={clientId} className="flex min-h-0 flex-1"><GeoKnowledgeView clientId={clientId} /></div>}
+        {tab === "knowledge" && <div key={clientId} className="flex min-h-0 flex-1"><GeoKnowledgeView clientId={clientId} onCollectQuestion={(questionId) => { setFocusedQuestionId(questionId); changeTab("questions"); }} onGenerateQuestion={() => changeTab("batch")} /></div>}
         {(tab === "client" || tab === "batch") && (
           <ArticleGenerationView
             initialBatchClientIds={initialBatchClientIds}
