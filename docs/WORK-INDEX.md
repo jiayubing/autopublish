@@ -5,6 +5,7 @@
 ## 当前执行入口
 
 - [GEO 内容生产闭环实施方案 v1.4](../AutoPublish-GEO-Content-Production-Implementation-Plan-v1.4.md)：已启动串行实施；CP-0 至 CP-4 完成，下一阶段为 CP-5 集成收口与旧路径清理。
+- [GEO Web Search 检索能力诊断流程](GEO-WEB-SEARCH-CAPABILITY-TEST-PROTOCOL.md)：主计划的真实 API 诊断附录；用于区分 provider/web_search、AutoPublish transport/parser、planner、synthesis/merge 的信息丢失位置，不拥有 CP 状态或产品语义；真实 Responses/web_search 调用仍需逐次用户授权。
 
 关联功能合同：[客户生成任务化与并发](../.scratch/client-generation-tasks/CLIENT-GENERATION-TASKS-PLAN.md)，只在涉及其行为时读取。
 
