@@ -276,6 +276,50 @@ function createGenerationBatchFileStore(options) {
     return clone(read(filename));
   }
 
+  function processAlive(pid) {
+    if (!Number.isInteger(pid) || pid < 1) return false;
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (error) {
+      return error && error.code === "EPERM";
+    }
+  }
+
+  function createExclusive(batch) {
+    const normalized = normalizePersisted(batch);
+    const filename = policy.generationBatchFile(normalized.id, true);
+    const reservation = filename + ".create";
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        fsApi.writeFileSync(
+          reservation,
+          JSON.stringify({ version: 1, pid: process.pid, requestId: normalized.requestId, requestFingerprint: normalized.requestFingerprint }) + "\n",
+          { encoding: "utf8", flag: "wx" },
+        );
+      } catch (error) {
+        if (!error || error.code !== "EEXIST") throw error;
+        if (exists(filename)) return get(normalized.id);
+        assertRegular(reservation, false);
+        let owner;
+        try { owner = JSON.parse(fsApi.readFileSync(reservation, "utf8")); }
+        catch (readError) { fail("GENERATION_BATCH_INVALID", "Generation create reservation is invalid", readError); }
+        if (owner.requestId !== normalized.requestId || owner.requestFingerprint !== normalized.requestFingerprint)
+          fail("GENERATION_REQUEST_CONFLICT", "Generation request conflicts with its reservation");
+        if (processAlive(owner.pid)) fail("GENERATION_CREATE_IN_PROGRESS", "Generation request creation is in progress");
+        removeRegular(reservation);
+        continue;
+      }
+      try {
+        if (exists(filename)) return get(normalized.id);
+        return write(normalized);
+      } finally {
+        removeRegular(reservation);
+      }
+    }
+    fail("GENERATION_CREATE_IN_PROGRESS", "Generation request creation is in progress");
+  }
+
   function list() {
     return policy
       .listGenerationBatchFiles()
@@ -292,6 +336,7 @@ function createGenerationBatchFileStore(options) {
     read,
     write,
     get,
+    createExclusive,
     list,
     filename: function (batchId) {
       return policy.generationBatchFile(batchId, false);

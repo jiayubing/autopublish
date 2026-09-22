@@ -7,6 +7,7 @@ const {
   BATCH_VERSION,
   MAX_TASKS,
   BATCH_STATUSES,
+  V2_BATCH_STATUSES,
   RESUMABLE_STATUSES,
   clone,
   storeError,
@@ -16,6 +17,8 @@ const {
   normalizeSource,
   normalizeTemplate,
   countsFor,
+  countsForV2,
+  normalizeQuestionSource,
   normalizeError,
   taskId,
   normalizePersisted,
@@ -38,7 +41,7 @@ function createGenerationBatchStore(options) {
 
   function writeBatch(batch) {
     const normalized = normalizePersisted(batch);
-    normalized.counts = countsFor(normalized.tasks);
+    normalized.counts = normalized.version === 2 ? countsForV2(normalized.tasks) : countsFor(normalized.tasks);
     return fileStore.write(normalized);
   }
 
@@ -58,8 +61,9 @@ function createGenerationBatchStore(options) {
   }
 
   function updateBatchStatus(batchId, status) {
-    if (!BATCH_STATUSES.has(status)) throw storeError("GENERATION_BATCH_STATUS_INVALID", "Generation batch status is invalid");
     const batch = getBatch(batchId);
+    const statuses = batch.version === 2 ? V2_BATCH_STATUSES : BATCH_STATUSES;
+    if (!statuses.has(status)) throw storeError("GENERATION_BATCH_STATUS_INVALID", "Generation batch status is invalid");
     if (batch.status === status) return batch;
     batch.status = status;
     return writeBatch(batch);
@@ -104,6 +108,17 @@ function createGenerationBatchStore(options) {
       task.error = normalizeError(error);
       task.updatedAt = clock();
       batch.status = "running";
+    });
+  }
+
+  function markTaskUncertain(batchId, taskIdValue, error) {
+    return updateTask(batchId, taskIdValue, function (task, batch) {
+      if (batch.version !== 2) throw storeError("GENERATION_BATCH_INVALID", "Uncertain is only valid for v2");
+      if (task.status === "succeeded") throw storeError("GENERATION_TASK_ALREADY_SUCCEEDED", "Succeeded task cannot become uncertain");
+      task.status = "uncertain";
+      task.error = normalizeError(error || { code: "GENERATION_RESULT_UNCERTAIN", message: "Generation result is uncertain" });
+      task.updatedAt = clock();
+      batch.status = batch.tasks.some((item) => ["pending", "running"].includes(item.status)) ? "running" : "uncertain";
     });
   }
 
@@ -165,7 +180,11 @@ function createGenerationBatchStore(options) {
       }
       let changed = false;
       batch.tasks.forEach(function (task) {
-        if (task.status === "running") { task.status = "interrupted"; task.updatedAt = clock(); changed = true; }
+        if (task.status === "running") {
+          if (batch.version === 2) return;
+          task.status = "interrupted";
+          task.updatedAt = clock(); changed = true;
+        }
       });
       if (changed) {
         if (batch.status !== "paused_configuration") batch.status = "interrupted";
@@ -203,6 +222,77 @@ function createGenerationBatchStore(options) {
     return writeBatch({ version: BATCH_VERSION, id: id, concurrency: value.concurrency === undefined ? 1 : value.concurrency, status: "pending", createdAt: createdAt, updatedAt: createdAt, aiConfigFingerprint: value.aiConfigFingerprint.trim(), clientSources: sources, templates: selectedTemplates, tasks: tasks, counts: countsFor(tasks) });
   }
 
+  function createOrGetV2(input) {
+    const value = input || {};
+    assertIdentifier(value.requestId, "request id");
+    if (typeof value.requestFingerprint !== "string" || !/^[a-f0-9]{64}$/.test(value.requestFingerprint))
+      throw storeError("GENERATION_REQUEST_INVALID", "Generation request fingerprint is invalid");
+    assertArray(value.questionSources, "GENERATION_SOURCE_INVALID", "Question sources", true);
+    assertArray(value.templates, "GENERATION_TEMPLATES_REQUIRED", "Templates", true);
+    if (!Number.isInteger(value.concurrency) || value.concurrency < 1 || value.concurrency > 4)
+      throw storeError("GENERATION_CONCURRENCY_INVALID", "Generation concurrency must be an integer from 1 to 4");
+    if (typeof value.aiConfigFingerprint !== "string" || !value.aiConfigFingerprint.trim())
+      throw storeError("GENERATION_AI_FINGERPRINT_REQUIRED", "aiConfigFingerprint is required");
+    const questionSources = value.questionSources.map(normalizeQuestionSource);
+    assertUnique(questionSources.map((item) => item.clientId + "\0" + item.geoQuestionId), "GENERATION_DUPLICATE_QUESTION", "Question");
+    const templates = value.templates.map(normalizeTemplate);
+    assertUnique(templates.map((item) => item.platform + "\0" + item.templateId), "GENERATION_DUPLICATE_TEMPLATE", "Template");
+    if (questionSources.length * templates.length > MAX_TASKS)
+      throw storeError("GENERATION_TASK_LIMIT", "Generation batch has too many tasks");
+    const id = "v2-" + crypto.createHash("sha256").update(value.requestId).digest("hex").slice(0, 40);
+    const createdAt = clock();
+    const tasks = [];
+    for (const source of questionSources) for (const template of templates) {
+      tasks.push({
+        id: taskId(id, source.id, template.platform, template.templateId),
+        questionSourceId: source.id,
+        platform: template.platform,
+        templateId: template.templateId,
+        status: "pending",
+        attempts: 0,
+        error: null,
+        articleId: null,
+        createdAt,
+        updatedAt: createdAt,
+      });
+    }
+    const batch = fileStore.createExclusive({
+      version: 2,
+      id,
+      requestId: value.requestId,
+      requestFingerprint: value.requestFingerprint,
+      concurrency: value.concurrency,
+      status: "pending",
+      startState: "not_started",
+      createdAt,
+      updatedAt: createdAt,
+      aiConfigFingerprint: value.aiConfigFingerprint.trim(),
+      questionSources,
+      templates,
+      tasks,
+    });
+    if (batch.requestId !== value.requestId || batch.requestFingerprint !== value.requestFingerprint)
+      throw storeError("GENERATION_REQUEST_CONFLICT", "Generation request conflicts with the persisted batch");
+    return batch;
+  }
+
+  function markStartRequested(batchId) {
+    const batch = getBatch(batchId);
+    if (batch.version !== 2) throw storeError("GENERATION_BATCH_INVALID", "Only v2 batches have explicit start state");
+    if (batch.startState !== "not_started") return batch;
+    batch.startState = "starting";
+    batch.startRequestedAt = clock();
+    return writeBatch(batch);
+  }
+
+  function markStarted(batchId) {
+    const batch = getBatch(batchId);
+    if (batch.version !== 2) throw storeError("GENERATION_BATCH_INVALID", "Only v2 batches have explicit start state");
+    if (batch.startState === "started") return batch;
+    batch.startState = "started";
+    return writeBatch(batch);
+  }
+
   function createRegenerationBatch(input) {
     assertIdentifier(input.id, "batch id");
     assertArray(input.tasks, "GENERATION_SOURCE_INVALID", "Tasks", true);
@@ -234,6 +324,7 @@ function createGenerationBatchStore(options) {
 
   return {
     createBatch,
+    createOrGetV2,
     createRegenerationBatch,
     getBatch,
     listBatches: fileStore.list,
@@ -241,11 +332,14 @@ function createGenerationBatchStore(options) {
     markTaskRunning,
     markTaskSucceeded,
     markTaskFailed,
+    markTaskUncertain,
     markTaskInterrupted,
     cancelPending,
     abandonBatch,
     recoverInterrupted,
     getTasksForContinue,
+    markStartRequested,
+    markStarted,
     markRunning: markTaskRunning,
     markSucceeded: markTaskSucceeded,
     markFailed: markTaskFailed,

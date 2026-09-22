@@ -171,7 +171,7 @@ function taskId(batchId, clientId, platform, templateId) {
   );
 }
 
-function normalizePersisted(batch) {
+function normalizePersistedV1(batch) {
   if (
     !batch ||
     typeof batch !== "object" ||
@@ -257,11 +257,108 @@ function normalizePersisted(batch) {
   return normalized;
 }
 
+const V2_TASK_STATUSES = new Set([...TASK_STATUSES, "uncertain"]);
+const V2_BATCH_STATUSES = new Set([...BATCH_STATUSES, "uncertain"]);
+const V2_START_STATES = new Set(["not_started", "starting", "started"]);
+
+function normalizeQuestionSource(source) {
+  if (!source || typeof source !== "object" || Array.isArray(source))
+    throw storeError("GENERATION_SOURCE_INVALID", "Question source is invalid");
+  for (const [field, label] of [["id", "question source id"], ["clientId", "client id"], ["geoQuestionId", "GEO question id"], ["collectionQuestionId", "collection question id"]])
+    assertIdentifier(source[field], label);
+  if (typeof source.questionText !== "string" || !source.questionText.trim() || source.questionText.length > 2000 ||
+      !Number.isSafeInteger(source.knowledgeRevision) || source.knowledgeRevision < 1 ||
+      typeof source.researchCapturedAt !== "string" || Number.isNaN(Date.parse(source.researchCapturedAt)) ||
+      typeof source.researchFingerprint !== "string" || !/^[a-f0-9]{64}$/.test(source.researchFingerprint))
+    throw storeError("GENERATION_SOURCE_INVALID", "Question source is invalid");
+  return {
+    id: source.id,
+    clientId: source.clientId,
+    geoQuestionId: source.geoQuestionId,
+    collectionQuestionId: source.collectionQuestionId,
+    questionText: source.questionText,
+    knowledgeRevision: source.knowledgeRevision,
+    researchCapturedAt: source.researchCapturedAt,
+    researchFingerprint: source.researchFingerprint,
+  };
+}
+
+function countsForV2(tasks) {
+  const counts = { total: tasks.length, succeeded: 0, failed: 0, pending: 0, running: 0, uncertain: 0, interrupted: 0, cancelled: 0 };
+  for (const task of tasks) counts[task.status]++;
+  return counts;
+}
+
+function normalizePersistedV2(batch) {
+  if (!batch || batch.version !== 2 || typeof batch.id !== "string" ||
+      typeof batch.requestId !== "string" || typeof batch.requestFingerprint !== "string" ||
+      !/^[a-f0-9]{64}$/.test(batch.requestFingerprint) || !V2_START_STATES.has(batch.startState) ||
+      !V2_BATCH_STATUSES.has(batch.status) || !Array.isArray(batch.questionSources) ||
+      !Array.isArray(batch.templates) || !Array.isArray(batch.tasks) ||
+      typeof batch.aiConfigFingerprint !== "string" || !batch.aiConfigFingerprint.trim())
+    throw storeError("GENERATION_BATCH_INVALID", "Generation batch v2 is invalid");
+  assertIdentifier(batch.id, "batch id");
+  assertIdentifier(batch.requestId, "request id");
+  const concurrency = batch.concurrency;
+  if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 4 || batch.tasks.length > MAX_TASKS)
+    throw storeError("GENERATION_BATCH_INVALID", "Generation batch v2 is invalid");
+  const questionSources = batch.questionSources.map(normalizeQuestionSource);
+  assertUnique(questionSources.map((item) => item.id), "GENERATION_BATCH_INVALID", "Question source id");
+  assertUnique(questionSources.map((item) => item.clientId + "\0" + item.geoQuestionId), "GENERATION_BATCH_INVALID", "Question source");
+  const sourceIds = new Set(questionSources.map((item) => item.id));
+  const templates = batch.templates.map(normalizeTemplate);
+  const tasks = batch.tasks.map((task) => {
+    if (!task || typeof task !== "object" || !V2_TASK_STATUSES.has(task.status) ||
+        !sourceIds.has(task.questionSourceId) || !Number.isInteger(task.attempts) || task.attempts < 0 ||
+        (task.articleId !== null && task.articleId !== undefined && typeof task.articleId !== "string"))
+      throw storeError("GENERATION_BATCH_INVALID", "Generation task v2 is invalid");
+    assertIdentifier(task.id, "task id");
+    assertIdentifier(task.platform, "platform");
+    assertIdentifier(task.templateId, "template id");
+    return {
+      id: task.id,
+      questionSourceId: task.questionSourceId,
+      platform: task.platform,
+      templateId: task.templateId,
+      status: task.status,
+      attempts: task.attempts,
+      error: normalizeError(task.error),
+      articleId: task.articleId || null,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
+    };
+  });
+  assertUnique(tasks.map((item) => item.id), "GENERATION_BATCH_INVALID", "Task id");
+  const normalized = {
+    version: 2,
+    id: batch.id,
+    requestId: batch.requestId,
+    requestFingerprint: batch.requestFingerprint,
+    concurrency,
+    status: batch.status,
+    startState: batch.startState,
+    ...(batch.startRequestedAt ? { startRequestedAt: batch.startRequestedAt } : {}),
+    createdAt: batch.createdAt,
+    updatedAt: batch.updatedAt,
+    aiConfigFingerprint: batch.aiConfigFingerprint,
+    questionSources,
+    templates,
+    tasks,
+  };
+  normalized.counts = countsForV2(tasks);
+  return normalized;
+}
+
+function normalizePersisted(batch) {
+  return batch?.version === 2 ? normalizePersistedV2(batch) : normalizePersistedV1(batch);
+}
+
 module.exports = {
   BATCH_VERSION,
   MAX_TASKS,
   TASK_STATUSES,
   BATCH_STATUSES,
+  V2_BATCH_STATUSES,
   RESUMABLE_STATUSES,
   clone,
   storeError,
@@ -274,4 +371,8 @@ module.exports = {
   normalizeError,
   taskId,
   normalizePersisted,
+  normalizePersistedV1,
+  normalizePersistedV2,
+  normalizeQuestionSource,
+  countsForV2,
 };

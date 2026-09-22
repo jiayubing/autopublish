@@ -190,6 +190,7 @@ async function createContentProductionComposition(options) {
           articleMutationCoordinator: value.articleMutationCoordinator,
           aiProviderService: batchAiProvider,
           getGeoKnowledgeContext: geoKnowledgeService.getGenerationContext,
+          getGenerationBriefV2: geoKnowledgeService.getGenerationBriefV2,
           getAttentionItems: value.getAttentionItems,
           onDataInvalidated: value.onDataInvalidated,
           allowLegacyV1Execution: false,

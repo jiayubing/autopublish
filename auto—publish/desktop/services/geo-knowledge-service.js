@@ -27,6 +27,8 @@ const {
 } = require("../../src/content/geo-generation-context");
 const { queryGeoArticles, queryGeoArticleCounts } = require("../../src/content/geo-article-links");
 const { buildGeoQuestionWorkflow } = require("../../src/content/geo-question-workflow");
+const { buildArticleBriefV2 } = require("../../src/content/geo-generation-context");
+const { fingerprintResearch } = require("../../src/content/generation-v2");
 const { DEFAULT_RESEARCH_PROMPT } = require("../../src/content/geo-knowledge-research");
 const { createGeoKnowledgePromptStore } = require("../geo-knowledge-prompt-store");
 const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
@@ -197,6 +199,30 @@ function createGeoKnowledgeService(options) {
     };
   }
   return {
+    getGenerationBriefV2: ({ clientId, geoQuestionId, knowledgeRevision, researchFingerprint }) => {
+      const document = load({ clientId }).knowledge;
+      if (!document) throw geoError("GEO_NOT_FOUND");
+      const geoQuestion = document.geoQuestions.find((item) => item.id === geoQuestionId);
+      if (!geoQuestion?.questionId) throw geoError("GENERATION_SOURCE_STALE");
+      const collectionQuestion = options.questionService
+        .listQuestions({ clientId })
+        .find((item) => item.id === geoQuestion.questionId);
+      if (!collectionQuestion) throw geoError("GENERATION_SOURCE_STALE");
+      let currentResearch;
+      try { currentResearch = researchStore.getResearch(clientId, collectionQuestion.id); }
+      catch (_) { throw geoError("GENERATION_SOURCE_STALE"); }
+      const fingerprint = fingerprintResearch(currentResearch);
+      if (researchFingerprint && researchFingerprint !== fingerprint)
+        throw geoError("GENERATION_SOURCE_STALE");
+      const brief = buildArticleBriefV2({
+        document,
+        knowledgeRevision: knowledgeRevision === undefined ? document.revision : knowledgeRevision,
+        geoQuestionId,
+        collectionQuestion,
+        research: currentResearch,
+      });
+      return { brief, research: currentResearch, researchFingerprint: fingerprint };
+    },
     questionWorkflow: async ({ clientId }) => {
       const document = load({ clientId }).knowledge;
       if (!document) throw geoError("GEO_NOT_FOUND");
