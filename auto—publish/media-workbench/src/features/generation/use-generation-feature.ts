@@ -1,7 +1,7 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import {
   cancelPendingGenerationBatch,
-  createAndStartGenerationBatch,
+  createAndStartGenerationBatchV2,
   regenerateAttentionItems,
   getGenerationRuntimeSnapshot,
   pauseGenerationBatch,
@@ -21,7 +21,7 @@ export function useGenerationFeature(enabled = true) {
   const featureRef = useRef<ReturnType<typeof createGenerationFeature> | null>(null);
   if (!featureRef.current) {
     featureRef.current = createGenerationFeature({
-      start: createAndStartGenerationBatch,
+      start: createAndStartGenerationBatchV2,
       regenerate: regenerateAttentionItems,
       previewBatch: previewGenerationBatch,
       pause: pauseGenerationBatch,

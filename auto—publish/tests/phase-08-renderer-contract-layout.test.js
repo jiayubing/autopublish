@@ -12,6 +12,7 @@ const domainTypeSymbols = {
   "types/geo-knowledge.ts": [
     "KnowledgeQuestionDetails",
     "KnowledgeQuestionArticles",
+    "KnowledgeQuestionWorkflow",
     "KnowledgeStorageStatus",
     "KnowledgeSection",
     "KnowledgeItem",
@@ -24,6 +25,8 @@ const domainTypeSymbols = {
     "GeoConnectionResult",
     "GeoPromptSettings",
     "KnowledgeEdit",
+    "ConfirmationEntry",
+    "CustomerConfirmationModel",
   ],
   "types/content.ts": [
     "ContentCommandStaleResult",
@@ -65,6 +68,7 @@ const domainTypeSymbols = {
     "GenerationBatchSourceSelection",
     "GenerationBatchExcludedClient",
     "GenerationBatchPreview",
+    "GenerationQuestionSource",
     "GenerationTaskStatus",
     "GenerationBatchTask",
     "GenerationBatch",

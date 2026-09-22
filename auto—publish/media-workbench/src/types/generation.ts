@@ -13,6 +13,7 @@ export interface GenerationBatchState {
   batch?: GenerationBatch | null;
   capabilities?: {
     canResume?: boolean;
+    canStart?: boolean;
     canContinue?: boolean;
     canRetry?: boolean;
     canCancel?: boolean;
@@ -26,6 +27,8 @@ export interface GenerationBatchCounts {
   pending: number;
   interrupted: number;
   cancelled: number;
+  running?: number;
+  uncertain?: number;
 }
 
 export interface GenerationBatchCancelPreview {
@@ -46,6 +49,7 @@ export type GenerationBatchLiveStatus =
   | "interrupted"
   | "paused_configuration"
   | "failed"
+  | "uncertain"
   | "completed"
   | "abandoned";
 
@@ -63,20 +67,34 @@ export interface GenerationBatchExcludedClient {
   codes: string[];
 }
 export interface GenerationBatchPreview {
-  clientCount: number;
-  executableClientCount: number;
+  version?: 1 | 2;
+  clientCount?: number;
+  questionCount?: number;
+  executableClientCount?: number;
   taskCount: number;
   executableTaskCount: number;
   excludedTaskCount: number;
-  excludedClients: GenerationBatchExcludedClient[];
+  excludedClients?: GenerationBatchExcludedClient[];
+  excludedQuestions?: Array<{ clientId: string; geoQuestionId: string; codes: string[] }>;
   templates: GenerationBatchTemplateSelection[];
-  clientSources: GenerationBatchSourceSelection[];
+  clientSources?: GenerationBatchSourceSelection[];
+  questionSources?: GenerationQuestionSource[];
   tasks?: Array<
     GenerationBatchSourceSelection & { platform: string; templateId: string }
   >;
 }
 export type GenerationTaskStatus =
-  "pending" | "running" | "succeeded" | "failed" | "interrupted" | "cancelled";
+  "pending" | "running" | "succeeded" | "failed" | "uncertain" | "interrupted" | "cancelled";
+export interface GenerationQuestionSource {
+  id: string;
+  clientId: string;
+  geoQuestionId: string;
+  collectionQuestionId: string;
+  questionText: string;
+  knowledgeRevision: number;
+  researchCapturedAt: string;
+  researchFingerprint: string;
+}
 export interface GenerationBatchTask {
   sourceArticleId?: string;
   id: string;
@@ -85,6 +103,8 @@ export interface GenerationBatchTask {
   templateId: string;
   materialIds: string[];
   researchQueryIds: string[];
+  questionSourceId?: string;
+  geoQuestionId?: string;
   status: GenerationTaskStatus;
   attempts: number;
   error?: { code?: string; message?: string } | null;
@@ -92,9 +112,14 @@ export interface GenerationBatchTask {
   articleTitle?: string | null;
 }
 export interface GenerationBatch {
+  version?: 1 | 2;
   id: string;
   status: string;
   clientSources: GenerationBatchSourceSelection[];
+  questionSources?: GenerationQuestionSource[];
+  requestId?: string;
+  requestFingerprint?: string;
+  startState?: "not_started" | "starting" | "started";
   templates: GenerationBatchTemplateSelection[];
   tasks: GenerationBatchTask[];
   counts: GenerationBatchCounts;

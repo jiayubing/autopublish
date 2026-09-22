@@ -6,6 +6,7 @@ const {
   integerField,
   literalField,
   nullableField,
+  oneOf,
   optionalField,
   stringField,
 } = require("./registry");
@@ -45,6 +46,8 @@ const counts = exactObject({
   pending: integerField({ min: 0, max: 100000 }),
   interrupted: integerField({ min: 0, max: 100000 }),
   cancelled: integerField({ min: 0, max: 100000 }),
+  running: optionalField(integerField({ min: 0, max: 100000 })),
+  uncertain: optionalField(integerField({ min: 0, max: 100000 })),
 });
 const task = exactObject({
   id,
@@ -53,7 +56,9 @@ const task = exactObject({
   templateId: id,
   materialIds: arrayField(id, { max: 50 }),
   researchQueryIds: arrayField(id, { max: 50 }),
-  status: enumField(["pending", "running", "succeeded", "failed", "interrupted", "cancelled"]),
+  questionSourceId: optionalField(id),
+  geoQuestionId: optionalField(id),
+  status: enumField(["pending", "running", "succeeded", "failed", "uncertain", "interrupted", "cancelled"]),
   attempts: integerField({ min: 0, max: 1000 }),
   error: optionalField(nullableField(exactObject({
     code,
@@ -66,17 +71,26 @@ const task = exactObject({
   updatedAt: optionalField(timestamp),
 });
 const batch = exactObject({
-  version: optionalField(literalField(1)),
+  version: optionalField(enumField([1, 2])),
   id,
   concurrency: optionalField(integerField({ min: 1, max: 4 })),
   status: enumField([
     "pending", "running", "pausing", "paused",
-    "interrupted", "paused_configuration", "completed", "failed", "abandoned",
+    "interrupted", "paused_configuration", "completed", "failed", "uncertain", "abandoned",
   ]),
   createdAt: optionalField(timestamp),
   updatedAt: optionalField(timestamp),
   aiConfigFingerprint: optionalField(text(256, 1)),
+  requestId: optionalField(id),
+  requestFingerprint: optionalField(text(64, 64)),
+  startState: optionalField(enumField(["not_started", "starting", "started"])),
+  startRequestedAt: optionalField(timestamp),
   clientSources: arrayField(source, { max: 1000 }),
+  questionSources: optionalField(arrayField(exactObject({
+    id, clientId: id, geoQuestionId: id, collectionQuestionId: id,
+    questionText: displayText(2000), knowledgeRevision: integerField({ min: 1 }),
+    researchCapturedAt: timestamp, researchFingerprint: text(64, 64),
+  }), { max: 1000 })),
   templates: arrayField(template, { max: 1000 }),
   tasks: arrayField(task, { max: GENERATION_TASK_PAGE_SIZE }),
   taskCount: optionalField(integerField({ min: 0, max: 10000 })),
@@ -88,6 +102,29 @@ const batch = exactObject({
 
 const planRequest = exactObject({
   clientIds: arrayField(id, { min: 1, max: 1000 }),
+  templates: arrayField(template, { min: 1, max: 1000 }),
+  concurrency: optionalField(integerField({ min: 1, max: 4 })),
+  clientSources: optionalField(arrayField(source, { max: 1000 })),
+  templateCatalogRevision: optionalField(text(256, 1)),
+});
+const v2PlanRequest = exactObject({
+  requestId: optionalField(id),
+  selectedQuestions: arrayField(exactObject({ clientId: id, geoQuestionId: id }), { min: 1, max: 1000 }),
+  templates: arrayField(template, { min: 1, max: 1000 }),
+  concurrency: optionalField(integerField({ min: 1, max: 4 })),
+  templateCatalogRevision: optionalField(text(256, 1)),
+});
+const v2CreateRequest = exactObject({
+  requestId: id,
+  selectedQuestions: arrayField(exactObject({ clientId: id, geoQuestionId: id }), { min: 1, max: 1000 }),
+  templates: arrayField(template, { min: 1, max: 1000 }),
+  concurrency: optionalField(integerField({ min: 1, max: 4 })),
+  templateCatalogRevision: optionalField(text(256, 1)),
+});
+const combinedPlanRequest = exactObject({
+  requestId: optionalField(id),
+  clientIds: optionalField(arrayField(id, { min: 1, max: 1000 })),
+  selectedQuestions: optionalField(arrayField(exactObject({ clientId: id, geoQuestionId: id }), { min: 1, max: 1000 })),
   templates: arrayField(template, { min: 1, max: 1000 }),
   concurrency: optionalField(integerField({ min: 1, max: 4 })),
   clientSources: optionalField(arrayField(source, { max: 1000 })),
@@ -129,6 +166,42 @@ const preview = exactObject({
   taskOffset: optionalField(integerField({ min: 0, max: 10000 })),
   tasksTruncated: optionalField("boolean"),
 });
+const v2Preview = exactObject({
+  version: literalField(2),
+  questionCount: integerField({ min: 0 }),
+  taskCount: integerField({ min: 0 }),
+  executableTaskCount: integerField({ min: 0 }),
+  excludedTaskCount: integerField({ min: 0 }),
+  excludedQuestions: arrayField(exactObject({ clientId: id, geoQuestionId: id, codes: arrayField(code, { min: 1, max: 64 }) }), { max: 1000 }),
+  questionSources: arrayField(exactObject({
+    id, clientId: id, geoQuestionId: id, collectionQuestionId: id,
+    questionText: displayText(2000), knowledgeRevision: integerField({ min: 1 }),
+    researchCapturedAt: timestamp, researchFingerprint: text(64, 64),
+  }), { max: 1000 }),
+  templates: arrayField(template, { max: 1000 }),
+  tasks: arrayField(exactObject({ questionSourceId: id, clientId: id, geoQuestionId: id, platform: id, templateId: id }), { max: GENERATION_TASK_PAGE_SIZE }),
+});
+const combinedPreview = exactObject({
+  version: optionalField(enumField([1, 2])),
+  clientCount: optionalField(integerField({ min: 0 })),
+  questionCount: optionalField(integerField({ min: 0 })),
+  executableClientCount: optionalField(integerField({ min: 0 })),
+  taskCount: integerField({ min: 0 }),
+  executableTaskCount: integerField({ min: 0 }),
+  excludedTaskCount: integerField({ min: 0 }),
+  excludedClients: optionalField(arrayField(excludedClient, { max: 1000 })),
+  excludedQuestions: optionalField(arrayField(exactObject({ clientId: id, geoQuestionId: id, codes: arrayField(code, { min: 1, max: 64 }) }), { max: 1000 })),
+  templates: arrayField(template, { max: 1000 }),
+  clientSources: optionalField(arrayField(source, { max: 1000 })),
+  questionSources: optionalField(arrayField(exactObject({
+    id, clientId: id, geoQuestionId: id, collectionQuestionId: id,
+    questionText: displayText(2000), knowledgeRevision: integerField({ min: 1 }),
+    researchCapturedAt: timestamp, researchFingerprint: text(64, 64),
+  }), { max: 1000 })),
+  tasks: optionalField(arrayField(oneOf([previewTask, exactObject({ questionSourceId: id, clientId: id, geoQuestionId: id, platform: id, templateId: id })]), { max: GENERATION_TASK_PAGE_SIZE })),
+  taskOffset: optionalField(integerField({ min: 0, max: 10000 })),
+  tasksTruncated: optionalField("boolean"),
+});
 const batchResult = exactObject({ batch });
 const nullableBatchResult = exactObject({ batch: nullableField(batch) });
 const batchListResult = exactObject({ batches: arrayField(batch, { max: 1000 }) });
@@ -141,7 +214,7 @@ const cancelPreview = exactObject({
 });
 const runtimeStatus = enumField([
   "idle", "pending", "starting", "running", "pausing", "paused",
-  "interrupted", "paused_configuration", "failed", "completed", "abandoned",
+  "interrupted", "paused_configuration", "failed", "uncertain", "completed", "abandoned",
 ]);
 const state = exactObject({
   state: runtimeStatus,
@@ -155,6 +228,7 @@ const state = exactObject({
   isStopPending: "boolean",
 });
 const capabilities = exactObject({
+  canStart: "boolean",
   canResume: "boolean",
   canContinue: "boolean",
   canRetry: "boolean",
@@ -174,7 +248,7 @@ const GENERATION_EVENT_FIELDS = [
 ];
 const GENERATION_STATUSES = new Set([
   "idle", "pending", "running", "pausing", "paused", "paused_configuration",
-  "completed", "failed", "interrupted", "cancelled", "succeeded", "abandoned",
+  "completed", "failed", "uncertain", "interrupted", "cancelled", "succeeded", "abandoned",
 ]);
 
 function generationEventError() {
@@ -217,11 +291,13 @@ function generationStringArray(value, maxItems) {
 
 function generationCounts(value) {
   if (value === null) return null;
-  exactKeys(value, ["total", "succeeded", "failed", "pending", "interrupted", "cancelled"], ["total", "succeeded", "failed", "pending", "interrupted", "cancelled"]);
+  exactKeys(value, ["total", "succeeded", "failed", "pending", "running", "uncertain", "interrupted", "cancelled"], ["total", "succeeded", "failed", "pending", "interrupted", "cancelled"]);
   const output = {};
-  for (const key of ["total", "succeeded", "failed", "pending", "interrupted", "cancelled"]) {
-    if (!Number.isSafeInteger(value[key]) || value[key] < 0 || value[key] > 100000) generationEventError();
-    output[key] = value[key];
+  for (const key of ["total", "succeeded", "failed", "pending", "running", "uncertain", "interrupted", "cancelled"]) {
+    if (value[key] !== undefined) {
+      if (!Number.isSafeInteger(value[key]) || value[key] < 0 || value[key] > 100000) generationEventError();
+      output[key] = value[key];
+    }
   }
   return output;
 }
@@ -240,6 +316,8 @@ function generationTask(value) {
     status: value.status,
     attempts: value.attempts,
   };
+  if (value.questionSourceId !== undefined) output.questionSourceId = generationText(value.questionSourceId, 200);
+  if (value.geoQuestionId !== undefined) output.geoQuestionId = generationText(value.geoQuestionId, 200);
   if (value.articleId !== undefined) output.articleId = generationOptionalText(value.articleId, 200);
   if (value.sourceArticleId !== undefined) output.sourceArticleId = generationText(value.sourceArticleId, 200);
   if (value.articleTitle !== undefined) output.articleTitle = generationDisplayText(value.articleTitle, 300);
@@ -273,6 +351,13 @@ function generationBatch(value) {
     tasks: value.tasks.map(generationTask),
     counts: generationCounts(value.counts),
   };
+  for (const key of ["version", "requestId", "requestFingerprint", "startState", "startRequestedAt"]) {
+    if (value[key] !== undefined) output[key] = value[key];
+  }
+  if (value.questionSources !== undefined) {
+    if (!Array.isArray(value.questionSources) || value.questionSources.length > 1000) generationEventError();
+    output.questionSources = value.questionSources.map((item) => ({ ...item }));
+  }
   for (const key of ["taskCount", "taskOffset"]) {
     if (value[key] !== undefined) {
       if (!Number.isSafeInteger(value[key]) || value[key] < 0 || value[key] > 10000) generationEventError();
@@ -296,9 +381,9 @@ function generationBatch(value) {
 
 function generationCapabilities(value) {
   if (value === undefined) return undefined;
-  exactKeys(value, ["canResume", "canContinue", "canRetry", "canCancel"], []);
+  exactKeys(value, ["canStart", "canResume", "canContinue", "canRetry", "canCancel"], []);
   const output = {};
-  for (const key of ["canResume", "canContinue", "canRetry", "canCancel"]) {
+  for (const key of ["canStart", "canResume", "canContinue", "canRetry", "canCancel"]) {
     if (value[key] !== undefined) {
       if (typeof value[key] !== "boolean") generationEventError();
       output[key] = value[key];
@@ -343,12 +428,13 @@ const COMMON_ERRORS = {
 };
 const GENERATION_CODES = [
   "GENERATION_CONTENT_FAILURE_REQUIRED",
-  "GENERATION_INPUT_INVALID", "GENERATION_CLIENTS_REQUIRED", "GENERATION_TEMPLATES_REQUIRED",
+  "GENERATION_INPUT_INVALID", "GENERATION_CLIENTS_REQUIRED", "GENERATION_QUESTIONS_REQUIRED", "GENERATION_TEMPLATES_REQUIRED",
   "GENERATION_SOURCE_LIMIT", "GENERATION_TASK_LIMIT",
   "GENERATION_CLIENT_NOT_FOUND", "CLIENT_MATERIAL_REQUIRED", "CLIENT_MATERIAL_INVALID",
   "GEO_RESEARCH_REQUIRED", "GEO_RESEARCH_INVALID", "GENERATION_TEMPLATE_NOT_FOUND",
   "GENERATION_TEMPLATE_INVALID", "GENERATION_TEMPLATE_STALE", "GENERATION_NO_EXECUTABLE_TASKS",
   "GENERATION_BATCH_BUSY", "GENERATION_BATCH_NOT_FOUND", "GENERATION_AI_CONFIG_CHANGED",
+  "GENERATION_REQUEST_INVALID", "GENERATION_REQUEST_CONFLICT", "GENERATION_RESULT_UNCERTAIN", "GENERATION_SOURCE_STALE",
   "AI_CONFIG_NOT_SET", "AI_CONFIG_BUSY", "GENERATION_STOPPED", "GENERATION_RUNNER_DISPOSED",
   "GENERATION_WORKSPACE_REQUIRED", "GENERATION_INVALID_ID", "GENERATION_SOURCE_INVALID",
   "GENERATION_MATERIAL_IDS_REQUIRED", "GENERATION_RESEARCH_IDS_REQUIRED", "GENERATION_BATCH_INVALID",
@@ -385,7 +471,9 @@ const generationContracts = Object.freeze([
   contract({ capability: "generation.regenerateAttentionItems", channel: "content:regenerate-attention-items", kind: "command",
     request: exactObject({ requestId: id, attentionIds: arrayField(displayText(512), { min: 1, max: 100 }), confirmed: literalField(true), concurrency: optionalField(integerField({ min: 1, max: 4 })) }),
     success: batchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),
-  contract({ capability: "generation.previewBatch", channel: "content:preview-generation-batch", kind: "query", request: planRequest, success: preview, fromArgs: directArgs, toArgs: directInput }, generationErrors),
+  contract({ capability: "generation.previewBatch", channel: "content:preview-generation-batch", kind: "query", request: combinedPlanRequest, success: combinedPreview, fromArgs: directArgs, toArgs: directInput }, generationErrors),
+  contract({ capability: "generation.createBatchV2", channel: "content:create-generation-batch-v2", kind: "command", request: v2CreateRequest, success: batchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),
+  contract({ capability: "generation.startBatchV2", channel: "content:start-generation-batch-v2", kind: "command", request: batchIdRequest, success: batchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),
   contract({ capability: "generation.createAndStartBatch", channel: "content:create-and-start-generation-batch", kind: "command", request: planRequest, success: batchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),
   contract({ capability: "generation.pauseBatch", channel: "content:pause-generation-batch", kind: "command", request: stopRequest, success: nullableBatchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),
   contract({ capability: "generation.abandonBatch", channel: "content:abandon-generation-batch", kind: "command", request: exactObject({ batchId: id, confirmed: literalField(true) }), success: nullableBatchResult, fromArgs: directArgs, toArgs: directInput }, generationErrors),

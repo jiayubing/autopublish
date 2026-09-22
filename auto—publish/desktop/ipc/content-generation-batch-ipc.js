@@ -27,11 +27,12 @@ function input(value) {
   return Object.assign({}, value);
 }
 
-function safeTask(value) {
+function safeTask(value, questionSources) {
   const task = value || {};
+  const source = questionSources && questionSources.get(task.questionSourceId);
   const result = {
     id: task.id,
-    clientId: task.clientId,
+    clientId: task.clientId || source?.clientId,
     platform: task.platform,
     templateId: task.templateId,
     materialIds: Array.isArray(task.materialIds) ? task.materialIds.slice() : [],
@@ -39,6 +40,8 @@ function safeTask(value) {
     status: task.status,
     attempts: task.attempts,
   };
+  if (task.questionSourceId !== undefined) result.questionSourceId = task.questionSourceId;
+  if (source?.geoQuestionId) result.geoQuestionId = source.geoQuestionId;
   if (task.error === null) result.error = null;
   else if (task.error) result.error = {
     code: typeof task.error.code === "string" ? task.error.code : "GENERATION_TASK_FAILED",
@@ -68,7 +71,8 @@ function taskPage(values, projector) {
 
 function safeBatch(value) {
   if (value === null || value === undefined) return null;
-  const tasks = taskPage(value.tasks, safeTask);
+  const questionSources = new Map((value.questionSources || []).map((item) => [item.id, item]));
+  const tasks = taskPage(value.tasks, (task) => safeTask(task, questionSources));
   const batch = {
     id: value.id,
     status: value.status,
@@ -84,7 +88,15 @@ function safeBatch(value) {
     tasks: tasks.tasks,
     counts: value.counts,
   };
-  for (const key of ["version", "concurrency", "createdAt", "updatedAt", "aiConfigFingerprint"])
+  if (value.version === 2) {
+    batch.questionSources = Array.from(questionSources.values()).map((item) => ({
+      id: item.id, clientId: item.clientId, geoQuestionId: item.geoQuestionId,
+      collectionQuestionId: item.collectionQuestionId, questionText: item.questionText,
+      knowledgeRevision: item.knowledgeRevision, researchCapturedAt: item.researchCapturedAt,
+      researchFingerprint: item.researchFingerprint,
+    }));
+  }
+  for (const key of ["version", "requestId", "requestFingerprint", "startState", "startRequestedAt", "concurrency", "createdAt", "updatedAt", "aiConfigFingerprint"])
     if (value[key] !== undefined) batch[key] = value[key];
   if (Array.isArray(value.excludedClients)) batch.excludedClients = value.excludedClients.map((item) => ({
     clientId: item.clientId,
@@ -100,6 +112,20 @@ function safeBatch(value) {
 
 function safePreview(value) {
   const input = value || {};
+  if (input.version === 2) return {
+    version: 2,
+    questionCount: input.questionCount,
+    taskCount: input.taskCount,
+    executableTaskCount: input.executableTaskCount,
+    excludedTaskCount: input.excludedTaskCount,
+    excludedQuestions: Array.isArray(input.excludedQuestions) ? input.excludedQuestions : [],
+    questionSources: Array.isArray(input.questionSources) ? input.questionSources.map((item) => ({ ...item })) : [],
+    templates: Array.isArray(input.templates) ? input.templates.map((item) => ({ platform: item.platform, templateId: item.templateId })) : [],
+    tasks: Array.isArray(input.tasks) ? input.tasks.slice(0, GENERATION_TASK_PAGE_SIZE).map((item) => ({
+      questionSourceId: item.questionSourceId, clientId: item.clientId, geoQuestionId: item.geoQuestionId,
+      platform: item.platform, templateId: item.templateId,
+    })) : [],
+  };
   const tasks = taskPage(input.tasks, (item) => ({
     clientId: item.clientId,
     platform: item.platform,
@@ -149,6 +175,7 @@ function safeState(value) {
 function safeCapabilities(value) {
   const input = value || {};
   return {
+    canStart: input.canStart === true,
     canResume: input.canResume === true,
     canContinue: input.canContinue === true,
     canRetry: input.canRetry === true,
@@ -173,6 +200,8 @@ function registerContentGenerationBatchIpc(deps) {
   const service = values.contentGenerationBatchService;
   if (!ipcMain || typeof ipcMain.handle !== "function" || !service) throw new Error("Generation batch IPC dependencies are required");
   ipcMain.handle("content:preview-generation-batch", function(event, value) { return invoke(async function() { return safePreview(await service.preview(input(value))); }); });
+  ipcMain.handle("content:create-generation-batch-v2", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.createBatchV2(input(value))) }; }); });
+  ipcMain.handle("content:start-generation-batch-v2", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.startBatchV2(input(value))) }; }); });
   ipcMain.handle("content:create-and-start-generation-batch", function(event, value) { return invoke(async function() { return { batch: safeBatch(await service.createAndStartBatch(input(value))) }; }); });
   ipcMain.handle("content:regenerate-attention-items", function(event, value) { return invoke(async function() {
     return { batch: safeBatch(await service.regenerateAttentionItems(input(value))) };

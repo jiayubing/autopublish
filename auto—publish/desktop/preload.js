@@ -561,6 +561,18 @@ const api = {
         input || {},
       );
     },
+    createGenerationBatchV2: function (input) {
+      return ipcRenderer.invoke(
+        "content:create-generation-batch-v2",
+        input,
+      );
+    },
+    startGenerationBatchV2: function (input) {
+      return ipcRenderer.invoke(
+        "content:start-generation-batch-v2",
+        input,
+      );
+    },
     createAndStartGenerationBatch: function (input) {
       return ipcRenderer.invoke(
         "content:create-and-start-generation-batch",

@@ -602,7 +602,11 @@ function createContentGenerationBatchService(options) {
 
   async function resumeBatch(input) {
     const value = assertObject(input);
-    return runBatch(assertId(value.batchId, "batch id"), "unfinished", value.confirmConfigChange === true);
+    const batchId = assertId(value.batchId, "batch id");
+    const batch = batchStore.getBatch(batchId);
+    if (batch.version === 2 && ["not_started", "starting"].includes(batch.startState) && batch.tasks.some(function(task) { return task.status === "pending"; }))
+      return startBatchV2({ batchId });
+    return runBatch(batchId, "unfinished", value.confirmConfigChange === true);
   }
 
   async function retryFailed(input) {

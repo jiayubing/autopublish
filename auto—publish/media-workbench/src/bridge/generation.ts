@@ -34,6 +34,13 @@ type GenerationPlanInput = {
   clientSources?: GenerationBatchSourceSelection[];
   templateCatalogRevision?: string;
 };
+export type GenerationV2PlanInput = {
+  requestId?: string;
+  selectedQuestions: Array<{ clientId: string; geoQuestionId: string }>;
+  templates: GenerationBatchTemplateSelection[];
+  concurrency?: number;
+  templateCatalogRevision?: string;
+};
 type GenerationRuntimeSnapshot = {
   runtimeId: string;
   sequence: number;
@@ -93,8 +100,14 @@ type GenerationContentApi = {
     }>
   >;
   previewGenerationBatch: (
-    input: GenerationPlanInput,
+    input: GenerationPlanInput | GenerationV2PlanInput,
   ) => Promise<GenerationIpcResponse<GenerationBatchPreview>>;
+  createGenerationBatchV2: (
+    input: GenerationV2PlanInput & { requestId: string },
+  ) => Promise<GenerationIpcResponse<{ batch: GenerationBatch }>>;
+  startGenerationBatchV2: (
+    input: { batchId: string },
+  ) => Promise<GenerationIpcResponse<{ batch: GenerationBatch }>>;
   createAndStartGenerationBatch: (
     input: GenerationPlanInput,
   ) => Promise<GenerationIpcResponse<{ batch: GenerationBatch }>>;
@@ -210,11 +223,27 @@ export async function saveContentArticle(
 }
 
 export async function previewGenerationBatch(
-  input: GenerationPlanInput,
+  input: GenerationPlanInput | GenerationV2PlanInput,
 ): Promise<GenerationBatchPreview> {
   return callGeneration(
     (api) => requireBridgeMethod(api.previewGenerationBatch)(input),
     "Unable to preview generation batch",
+  );
+}
+
+export async function createAndStartGenerationBatchV2(
+  input: GenerationV2PlanInput,
+): Promise<GenerationBatch> {
+  const requestId = input.requestId || crypto.randomUUID();
+  const created = await callGeneration(
+    (api) => requireBridgeMethod(api.createGenerationBatchV2)({ ...input, requestId }),
+    "Unable to create generation batch",
+    { map: (data) => data.batch },
+  );
+  return callGeneration(
+    (api) => requireBridgeMethod(api.startGenerationBatchV2)({ batchId: created.id }),
+    "Unable to start generation batch",
+    { map: (data) => data.batch },
   );
 }
 
