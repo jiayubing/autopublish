@@ -95,12 +95,12 @@ type GenerationContentApi = {
   createGenerationBatchV2: (
     input: GenerationV2PlanInput & { requestId: string },
   ) => Promise<GenerationIpcResponse<{ batch: GenerationBatch }>>;
-  startGenerationBatchV2: (
-    input: { batchId: string },
-  ) => Promise<GenerationIpcResponse<{ batch: GenerationBatch }>>;
-  checkUncertainGenerationBatchV2: (
-    input: { batchId: string },
-  ) => Promise<GenerationIpcResponse<{ batch: GenerationBatch }>>;
+  startGenerationBatchV2: (input: {
+    batchId: string;
+  }) => Promise<GenerationIpcResponse<{ batch: GenerationBatch }>>;
+  checkUncertainGenerationBatchV2: (input: {
+    batchId: string;
+  }) => Promise<GenerationIpcResponse<{ batch: GenerationBatch }>>;
   pauseGenerationBatch: (input?: {
     batchId?: string;
   }) => Promise<GenerationIpcResponse<{ batch: GenerationBatch | null }>>;
@@ -226,12 +226,14 @@ export async function createAndStartGenerationBatchV2(
 ): Promise<GenerationBatch> {
   const requestId = input.requestId || crypto.randomUUID();
   const created = await callGeneration(
-    (api) => requireBridgeMethod(api.createGenerationBatchV2)({ ...input, requestId }),
+    (api) =>
+      requireBridgeMethod(api.createGenerationBatchV2)({ ...input, requestId }),
     "Unable to create generation batch",
     { map: (data) => data.batch },
   );
   return callGeneration(
-    (api) => requireBridgeMethod(api.startGenerationBatchV2)({ batchId: created.id }),
+    (api) =>
+      requireBridgeMethod(api.startGenerationBatchV2)({ batchId: created.id }),
     "Unable to start generation batch",
     { map: (data) => data.batch },
   );

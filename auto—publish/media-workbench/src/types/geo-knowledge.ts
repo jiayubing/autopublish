@@ -80,17 +80,20 @@ export type GeoKnowledge = {
   sources: KnowledgeSource[];
 };
 export type KnowledgeStorageStatus =
-  | "missing"
-  | "legacy_v1"
-  | "current_v2"
-  | "invalid";
+  "missing" | "legacy_v1" | "current_v2" | "invalid";
 export type KnowledgeState = {
   phase: string;
   running: boolean;
   completed?: number;
   total?: number;
   errorCode?: string;
-  failedPhase?: "materials" | "extracting" | "planning" | "researching" | "synthesizing" | "saving";
+  failedPhase?:
+    | "materials"
+    | "extracting"
+    | "planning"
+    | "researching"
+    | "synthesizing"
+    | "saving";
 };
 export type GeoConfigStatus = {
   baseUrl: string;

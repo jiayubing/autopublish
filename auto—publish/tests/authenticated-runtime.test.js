@@ -47,12 +47,10 @@ describe("authenticated runtime seam", function () {
     assert.equal(runtime.getState().phase, "starting");
 
     let joinedResolved = false;
-    const joined = runtime
-      .start({ workspacePath: "ignored" })
-      .then((state) => {
-        joinedResolved = true;
-        return state;
-      });
+    const joined = runtime.start({ workspacePath: "ignored" }).then((state) => {
+      joinedResolved = true;
+      return state;
+    });
     await new Promise((resolve) => setImmediate(resolve));
 
     assert.equal(starts, 1);

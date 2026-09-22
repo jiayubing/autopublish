@@ -75,7 +75,11 @@ export interface GenerationBatchPreview {
   executableTaskCount: number;
   excludedTaskCount: number;
   excludedClients?: GenerationBatchExcludedClient[];
-  excludedQuestions?: Array<{ clientId: string; geoQuestionId: string; codes: string[] }>;
+  excludedQuestions?: Array<{
+    clientId: string;
+    geoQuestionId: string;
+    codes: string[];
+  }>;
   templates: GenerationBatchTemplateSelection[];
   clientSources?: GenerationBatchSourceSelection[];
   questionSources?: GenerationQuestionSource[];
@@ -84,7 +88,13 @@ export interface GenerationBatchPreview {
   >;
 }
 export type GenerationTaskStatus =
-  "pending" | "running" | "succeeded" | "failed" | "uncertain" | "interrupted" | "cancelled";
+  | "pending"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "uncertain"
+  | "interrupted"
+  | "cancelled";
 export interface GenerationQuestionSource {
   id: string;
   clientId: string;

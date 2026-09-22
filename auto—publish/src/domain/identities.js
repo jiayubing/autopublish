@@ -11,7 +11,9 @@ function domainError(code) {
 function createIdentity(kind, maxLength, pattern, preserveUnicode) {
   function parse(value) {
     if (typeof value !== "string") throw domainError("DOMAIN_ID_INVALID");
-    const normalized = (preserveUnicode ? value : value.normalize("NFKC")).trim();
+    const normalized = (
+      preserveUnicode ? value : value.normalize("NFKC")
+    ).trim();
     if (
       !normalized ||
       normalized === "." ||

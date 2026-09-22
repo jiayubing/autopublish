@@ -38,22 +38,46 @@ type Api = {
     clientId: string;
     id: string;
   }) => Promise<Reply<KnowledgeQuestionDetails>>;
-  load: (
-    input: ClientInput,
-  ) => Promise<
-    Reply<{ knowledge: GeoKnowledge | null; storageStatus: KnowledgeStorageStatus; state: KnowledgeState }>
+  load: (input: ClientInput) => Promise<
+    Reply<{
+      knowledge: GeoKnowledge | null;
+      storageStatus: KnowledgeStorageStatus;
+      state: KnowledgeState;
+    }>
   >;
   state: (input: ClientInput) => Promise<Reply<{ state: KnowledgeState }>>;
-  generate: (input: ClientInput & { temporaryPrompt?: string }) => Promise<Reply<{ knowledge: GeoKnowledge }>>;
+  generate: (
+    input: ClientInput & { temporaryPrompt?: string },
+  ) => Promise<Reply<{ knowledge: GeoKnowledge }>>;
   cancel: (input: ClientInput) => Promise<Reply<{ state: KnowledgeState }>>;
   edit: (input: KnowledgeEdit) => Promise<Reply<{ knowledge: GeoKnowledge }>>;
-  confirmSourceType: (input: { clientId: string; revision: number; sourceId: string; targetType: "official_web" | "client_public" }) => Promise<Reply<{ knowledge: GeoKnowledge }>>;
-  resolveConflict: (input: { clientId: string; revision: number; conflictId: string; claimId?: string; value?: string }) => Promise<Reply<{ knowledge: GeoKnowledge }>>;
+  confirmSourceType: (input: {
+    clientId: string;
+    revision: number;
+    sourceId: string;
+    targetType: "official_web" | "client_public";
+  }) => Promise<Reply<{ knowledge: GeoKnowledge }>>;
+  resolveConflict: (input: {
+    clientId: string;
+    revision: number;
+    conflictId: string;
+    claimId?: string;
+    value?: string;
+  }) => Promise<Reply<{ knowledge: GeoKnowledge }>>;
   promptSettings: (input: ClientInput) => Promise<Reply<GeoPromptSettings>>;
-  saveGlobalPrompt: (input: { researchPromptOverride: string }) => Promise<Reply<{ defaultGlobalPrompt: string; globalPrompt: string }>>;
-  saveClientPrompt: (input: { clientId: string; researchPrompt: string }) => Promise<Reply<{ researchPrompt: string }>>;
-  previewConfirmation: (input: ClientInput & { revision: number }) => Promise<Reply<{ model: CustomerConfirmationModel }>>;
-  exportMarkdown: (input: ClientInput & { revision: number }) => Promise<Reply<{ markdown: string }>>;
+  saveGlobalPrompt: (input: {
+    researchPromptOverride: string;
+  }) => Promise<Reply<{ defaultGlobalPrompt: string; globalPrompt: string }>>;
+  saveClientPrompt: (input: {
+    clientId: string;
+    researchPrompt: string;
+  }) => Promise<Reply<{ researchPrompt: string }>>;
+  previewConfirmation: (
+    input: ClientInput & { revision: number },
+  ) => Promise<Reply<{ model: CustomerConfirmationModel }>>;
+  exportMarkdown: (
+    input: ClientInput & { revision: number },
+  ) => Promise<Reply<{ markdown: string }>>;
   configStatus: () => Promise<Reply<GeoConfigStatus>>;
   saveConfig: (input: GeoConfigInput) => Promise<Reply<GeoConfigStatus>>;
   testConnection: (input: {
@@ -88,25 +112,47 @@ export const getKnowledgeQuestionDetails = (clientId: string, id: string) =>
 export const knowledgeState = (clientId: string) =>
   call((api) => requireBridgeMethod(api.state)({ clientId }));
 export const generateKnowledge = (clientId: string, temporaryPrompt = "") =>
-  call((api) => requireBridgeMethod(api.generate)({ clientId, temporaryPrompt }));
+  call((api) =>
+    requireBridgeMethod(api.generate)({ clientId, temporaryPrompt }),
+  );
 export const cancelKnowledge = (clientId: string) =>
   call((api) => requireBridgeMethod(api.cancel)({ clientId }));
 export const editKnowledge = (input: KnowledgeEdit) =>
   call((api) => requireBridgeMethod(api.edit)(input));
-export const confirmKnowledgeSourceType = (input: { clientId: string; revision: number; sourceId: string; targetType: "official_web" | "client_public" }) =>
-  call((api) => requireBridgeMethod(api.confirmSourceType)(input));
-export const resolveKnowledgeConflict = (input: { clientId: string; revision: number; conflictId: string; claimId?: string; value?: string }) =>
-  call((api) => requireBridgeMethod(api.resolveConflict)(input));
+export const confirmKnowledgeSourceType = (input: {
+  clientId: string;
+  revision: number;
+  sourceId: string;
+  targetType: "official_web" | "client_public";
+}) => call((api) => requireBridgeMethod(api.confirmSourceType)(input));
+export const resolveKnowledgeConflict = (input: {
+  clientId: string;
+  revision: number;
+  conflictId: string;
+  claimId?: string;
+  value?: string;
+}) => call((api) => requireBridgeMethod(api.resolveConflict)(input));
 export const getGeoPromptSettings = (clientId: string) =>
   call((api) => requireBridgeMethod(api.promptSettings)({ clientId }));
 export const saveGeoGlobalPrompt = (researchPromptOverride: string) =>
-  call((api) => requireBridgeMethod(api.saveGlobalPrompt)({ researchPromptOverride }));
+  call((api) =>
+    requireBridgeMethod(api.saveGlobalPrompt)({ researchPromptOverride }),
+  );
 export const saveGeoClientPrompt = (clientId: string, researchPrompt: string) =>
-  call((api) => requireBridgeMethod(api.saveClientPrompt)({ clientId, researchPrompt }));
-export const previewCustomerConfirmation = (clientId: string, revision: number) =>
-  call((api) => requireBridgeMethod(api.previewConfirmation)({ clientId, revision }));
+  call((api) =>
+    requireBridgeMethod(api.saveClientPrompt)({ clientId, researchPrompt }),
+  );
+export const previewCustomerConfirmation = (
+  clientId: string,
+  revision: number,
+) =>
+  call((api) =>
+    requireBridgeMethod(api.previewConfirmation)({ clientId, revision }),
+  );
 export const exportKnowledge = (clientId: string, revision: number) =>
-  call((api) => requireBridgeMethod(api.exportMarkdown)({ clientId, revision }));
+  call((api) =>
+    requireBridgeMethod(api.exportMarkdown)({ clientId, revision }),
+  );
 export const getGeoConfig = () =>
   call((api) => requireBridgeMethod(api.configStatus)());
 export const saveGeoConfig = (input: GeoConfigInput) =>
