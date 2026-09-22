@@ -10,11 +10,13 @@ interface GenerationBatchDetailProps {
     pause: boolean;
     resume: boolean;
     abandon: boolean;
+    checkUncertain: boolean;
   };
   clientNames?: Record<string, string>;
   onPause: () => void;
   onResume: () => void;
   onAbandon: () => void;
+  onCheckUncertain: () => void;
   onPreviewCancelPending: (input: { batchId: string }) => Promise<{ canCancel: boolean; pendingCount: number; runningCount: number }>;
   onCancelPending: (input: { batchId: string; confirmed: true }) => Promise<GenerationBatch>;
   onStartNew?: () => void;
@@ -40,6 +42,7 @@ export default function GenerationBatchDetail({
   onPause,
   onResume,
   onAbandon,
+  onCheckUncertain,
   onPreviewCancelPending,
   onCancelPending,
   onStartNew,
@@ -154,7 +157,10 @@ export default function GenerationBatchDetail({
 
     {terminal && onStartNew && <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">
       <span>{effectiveStatus === 'uncertain' ? '原任务已保留且不会重试。请核对结果；需重新生成时建立新批次。' : '该批次已结束，可以开始新的批量生成。'}</span>
-      <button type="button" onClick={onStartNew} disabled={anyCommandBusy} className="rounded bg-slate-900 px-2 py-1 text-white">{effectiveStatus === 'uncertain' ? '重新生成（新批次）' : '新建批量生成'}</button>
+      <div className="flex gap-2">
+        {effectiveStatus === 'uncertain' && <button type="button" onClick={onCheckUncertain} disabled={anyCommandBusy} className="rounded border border-slate-300 bg-white px-2 py-1 text-slate-700">检查结果</button>}
+        <button type="button" onClick={onStartNew} disabled={anyCommandBusy} className="rounded bg-slate-900 px-2 py-1 text-white">{effectiveStatus === 'uncertain' ? '重新生成（新批次）' : '新建批量生成'}</button>
+      </div>
     </div>}
   </section>;
 }

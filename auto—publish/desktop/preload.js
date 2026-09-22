@@ -573,6 +573,12 @@ const api = {
         input,
       );
     },
+    checkUncertainGenerationBatchV2: function (input) {
+      return ipcRenderer.invoke(
+        "content:check-uncertain-generation-batch-v2",
+        input,
+      );
+    },
     createAndStartGenerationBatch: function (input) {
       return ipcRenderer.invoke(
         "content:create-and-start-generation-batch",

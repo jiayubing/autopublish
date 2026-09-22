@@ -342,6 +342,14 @@ export default function BatchGenerationView({
         setError(value instanceof Error ? value.message : "继续失败");
       }
   }
+  async function checkUncertain() {
+    if (batch)
+      try {
+        await generation.checkUncertain({ batchId: batch.id });
+      } catch (value) {
+        setError(value instanceof Error ? value.message : "检查生成结果失败");
+      }
+  }
   async function abandon() {
     if (
       !batch ||
@@ -595,11 +603,13 @@ export default function BatchGenerationView({
                 pause: generationCommands.pause.busy,
                 resume: generationCommands.resume.busy,
                 abandon: generationCommands.abandon.busy,
+                checkUncertain: generationCommands.checkUncertain.busy,
               }}
               clientNames={clientNames}
               onPause={() => void pause()}
               onResume={() => void resume()}
               onAbandon={() => void abandon()}
+              onCheckUncertain={() => void checkUncertain()}
               onPreviewCancelPending={generation.previewCancelPending}
               onCancelPending={generation.cancelPending}
               onStartNew={startNewBatch}

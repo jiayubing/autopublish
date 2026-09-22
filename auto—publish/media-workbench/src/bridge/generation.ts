@@ -108,6 +108,9 @@ type GenerationContentApi = {
   startGenerationBatchV2: (
     input: { batchId: string },
   ) => Promise<GenerationIpcResponse<{ batch: GenerationBatch }>>;
+  checkUncertainGenerationBatchV2: (
+    input: { batchId: string },
+  ) => Promise<GenerationIpcResponse<{ batch: GenerationBatch }>>;
   createAndStartGenerationBatch: (
     input: GenerationPlanInput,
   ) => Promise<GenerationIpcResponse<{ batch: GenerationBatch }>>;
@@ -243,6 +246,16 @@ export async function createAndStartGenerationBatchV2(
   return callGeneration(
     (api) => requireBridgeMethod(api.startGenerationBatchV2)({ batchId: created.id }),
     "Unable to start generation batch",
+    { map: (data) => data.batch },
+  );
+}
+
+export async function checkUncertainGenerationBatchV2(input: {
+  batchId: string;
+}): Promise<GenerationBatch> {
+  return callGeneration(
+    (api) => requireBridgeMethod(api.checkUncertainGenerationBatchV2)(input),
+    "Unable to check uncertain generation results",
     { map: (data) => data.batch },
   );
 }

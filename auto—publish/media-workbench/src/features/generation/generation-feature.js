@@ -1,6 +1,6 @@
 import { createCommandOwner } from '../../infrastructure/query-identity/query-identity.js';
 
-const COMMANDS = Object.freeze(['previewBatch', 'start', 'regenerate', 'pause', 'resume', 'abandon', 'retry', 'previewCancelPending', 'cancelPending']);
+const COMMANDS = Object.freeze(['previewBatch', 'start', 'regenerate', 'checkUncertain', 'pause', 'resume', 'abandon', 'retry', 'previewCancelPending', 'cancelPending']);
 const LIVE_STATUSES = new Set(['running', 'pausing']);
 
 function safeError(value) {
@@ -268,6 +268,7 @@ export function createGenerationFeature(adapters = {}) {
     previewBatch: (input) => runCommand('previewBatch', input),
     start: (input) => runCommand('start', input),
     regenerate: (input) => runCommand('regenerate', input),
+    checkUncertain: (input) => runCommand('checkUncertain', input),
     pause: (input) => runCommand('pause', input),
     resume: (input) => runCommand('resume', input),
     abandon: (input) => runCommand('abandon', input),

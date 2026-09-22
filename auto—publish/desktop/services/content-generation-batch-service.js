@@ -9,6 +9,7 @@ const { createArticleGenerator } = require("../../src/content/article-generator"
 const { buildPrompt, buildPromptV2 } = require("../../src/content/prompt-builder");
 const { createGenerationBatchStore } = require("../../src/content/generation-batch-store");
 const { createGenerationBatchRunner } = require("../../src/content/generation-batch-runner");
+const { fingerprintCreateIntent } = require("../../src/content/generation-v2");
 const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
 const { createGenerationBatchPreview } = require("./content-generation-batch-preview");
@@ -154,10 +155,15 @@ function createContentGenerationBatchService(options) {
   const now = typeof opts.now === "function" ? opts.now : function() { return new Date().toISOString(); };
   let recoveryError = null;
 
-  async function recoverV2Running() {
-    for (const candidate of batchStore.listBatches()) {
-      if (!candidate || candidate.version !== 2 || !candidate.tasks.some(function(task) { return task.status === "running"; })) continue;
-      for (const task of candidate.tasks.filter(function(item) { return item.status === "running"; })) {
+  async function recoverV2Tasks(options) {
+    const recovery = options || {};
+    const statuses = recovery.statuses || new Set(["running"]);
+    const candidates = recovery.batchId
+      ? [batchStore.getBatch(recovery.batchId)]
+      : batchStore.listBatches();
+    for (const candidate of candidates) {
+      if (!candidate || candidate.version !== 2 || !candidate.tasks.some(function(task) { return statuses.has(task.status); })) continue;
+      for (const task of candidate.tasks.filter(function(item) { return statuses.has(item.status); })) {
         let found;
         try { found = await contentStore.findByGenerationTaskId(task.id); }
         catch (error) {
@@ -182,7 +188,9 @@ function createContentGenerationBatchService(options) {
     }
   }
 
-  const recoveryPromise = Promise.resolve().then(recoverV2Running).catch(function(error) {
+  const recoveryPromise = Promise.resolve().then(function() {
+    return recoverV2Tasks({ statuses: new Set(["running"]) });
+  }).catch(function(error) {
     recoveryError = error;
     reportDiagnostic({
       code: "GENERATION_V2_RECOVERY_FAILED",
@@ -478,6 +486,18 @@ function createContentGenerationBatchService(options) {
     assertAvailable();
     const value = assertObject(input);
     const requestId = assertId(value.requestId, "request id");
+    const requestedConcurrency = value.concurrency === undefined ? 2 : value.concurrency;
+    if (Array.isArray(value.selectedQuestions) && Array.isArray(value.templates)) {
+      const requestFingerprint = fingerprintCreateIntent({
+        selectedQuestions: value.selectedQuestions,
+        selectedTemplates: value.templates,
+        concurrency: requestedConcurrency,
+      });
+      if (typeof batchStore.resolveCreateReplayV2 === "function") {
+        const replay = batchStore.resolveCreateReplayV2({ requestId, requestFingerprint });
+        if (replay) return enrichBatch(replay);
+      }
+    }
     const previewResult = await preview(value);
     if (previewResult.version !== 2 || !previewResult.executableTaskCount)
       throw generationError("GENERATION_NO_EXECUTABLE_TASKS");
@@ -488,7 +508,7 @@ function createContentGenerationBatchService(options) {
       requestFingerprint: previewResult.requestFingerprint,
       questionSources: previewResult.questionSources,
       templates: previewResult.templates,
-      concurrency: value.concurrency === undefined ? 2 : value.concurrency,
+      concurrency: requestedConcurrency,
       aiConfigFingerprint,
     });
     emitBatch(batch);
@@ -598,6 +618,18 @@ function createContentGenerationBatchService(options) {
     batchStore.markStartRequested(batchId);
     batchStore.markStarted(batchId);
     return runBatch(batchId, "pending", false);
+  }
+
+  async function checkUncertainBatchV2(input) {
+    await ensureRecovery();
+    const value = assertObject(input);
+    const batchId = assertId(value.batchId, "batch id");
+    const batch = batchStore.getBatch(batchId);
+    if (!batch || batch.version !== 2) throw generationError("GENERATION_BATCH_INVALID");
+    await recoverV2Tasks({ batchId, statuses: new Set(["uncertain"]) });
+    const checked = batchStore.getBatch(batchId);
+    emitBatch(checked);
+    return enrichBatch(checked);
   }
 
   async function resumeBatch(input) {
@@ -802,6 +834,7 @@ function createContentGenerationBatchService(options) {
     createBatchV2,
     startBatch,
     startBatchV2,
+    checkUncertainBatchV2,
     createAndStartBatch,
     regenerateAttentionItems,
     pauseBatch,

@@ -18,6 +18,7 @@ const CHANNELS = [
   "content:preview-generation-batch",
   "content:create-generation-batch-v2",
   "content:start-generation-batch-v2",
+  "content:check-uncertain-generation-batch-v2",
   "content:create-and-start-generation-batch",
   "content:abandon-generation-batch",
   "content:pause-generation-batch",
@@ -29,8 +30,8 @@ const CHANNELS = [
   "content:regenerate-attention-items",
 ];
 
-test("generation inventory has twelve invokes with real feature consumers and one event", () => {
-  assert.equal(generationContracts.length, 12);
+test("generation inventory has thirteen invokes with real feature consumers and one event", () => {
+  assert.equal(generationContracts.length, 13);
   assert.equal(
     generationContracts.every((contract) => contract.kind !== "event"),
     true,
@@ -61,29 +62,30 @@ test("generation preload forwards named methods as exact versioned requests", as
     ["previewGenerationBatch", CHANNELS[0], [plan]],
     ["createGenerationBatchV2", CHANNELS[1], [{ requestId: "request-1", selectedQuestions: [{ clientId: "client-1", geoQuestionId: "geo-1" }], templates: plan.templates }]],
     ["startGenerationBatchV2", CHANNELS[2], [{ batchId: "batch-1" }]],
-    ["createAndStartGenerationBatch", CHANNELS[3], [plan]],
+    ["checkUncertainGenerationBatchV2", CHANNELS[3], [{ batchId: "batch-1" }]],
+    ["createAndStartGenerationBatch", CHANNELS[4], [plan]],
     [
       "abandonGenerationBatch",
-      CHANNELS[4],
+      CHANNELS[5],
       [{ batchId: "batch-1", confirmed: true }],
     ],
-    ["pauseGenerationBatch", CHANNELS[5], [{ batchId: "batch-1" }]],
-    ["resumeGenerationBatch", CHANNELS[6], [{ batchId: "batch-1" }]],
-    ["retryFailedGenerationBatch", CHANNELS[7], [{ batchId: "batch-1" }]],
+    ["pauseGenerationBatch", CHANNELS[6], [{ batchId: "batch-1" }]],
+    ["resumeGenerationBatch", CHANNELS[7], [{ batchId: "batch-1" }]],
+    ["retryFailedGenerationBatch", CHANNELS[8], [{ batchId: "batch-1" }]],
     [
       "previewCancelPendingGenerationBatch",
-      CHANNELS[8],
+      CHANNELS[9],
       [{ batchId: "batch-1" }],
     ],
     [
       "cancelPendingGenerationBatch",
-      CHANNELS[9],
+      CHANNELS[10],
       [{ batchId: "batch-1", confirmed: true }],
     ],
-    ["getGenerationRuntimeSnapshot", CHANNELS[10], []],
+    ["getGenerationRuntimeSnapshot", CHANNELS[11], []],
     [
       "regenerateAttentionItems",
-      CHANNELS[11],
+      CHANNELS[12],
       [
         {
           requestId: "request-1",

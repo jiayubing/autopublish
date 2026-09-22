@@ -13,6 +13,7 @@ function runtimeAdapters(overrides = {}) {
     }),
     subscribeRuntime: () => () => {},
     regenerate: async () => null,
+    checkUncertain: async () => null,
     previewBatch: async () => ({}),
     previewCancelPending: async () => ({}),
     cancelPending: async () => null,
@@ -81,6 +82,7 @@ test("generation hydrates its runtime snapshot and owns the event subscription l
   let unsubscribeCount = 0;
   const feature = createGenerationFeature({
     regenerate: async () => null,
+    checkUncertain: async () => null,
     start: async () => null,
     pause: async () => null,
     resume: async () => null,

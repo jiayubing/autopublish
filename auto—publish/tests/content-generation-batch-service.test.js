@@ -127,6 +127,7 @@ describe("content generation batch service", function() {
     const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "generation-v2-service-"));
     const saved = [];
     const generated = [];
+    let briefAvailable = true;
     const brief = {
       version: 2,
       clientId: "c1",
@@ -141,7 +142,10 @@ describe("content generation batch service", function() {
       researchStore: { listResearch: function() { return []; }, getResearch: function() { throw new Error("legacy research path"); } },
       templateStore: { getCatalogTemplate: function() { return { id: "guide", name: "Guide", scenario: "Guide", body: "Write" }; } },
       contentStore: { saveArticle: function(article) { saved.push(article); }, findByGenerationTaskId: function() { return null; } },
-      getGenerationBriefV2: async function() { return { brief, researchFingerprint: "b".repeat(64) }; },
+      getGenerationBriefV2: async function() {
+        if (!briefAvailable) throw Object.assign(new Error("stale"), { code: "GENERATION_SOURCE_STALE" });
+        return { brief, researchFingerprint: "b".repeat(64) };
+      },
       articleGeneratorFactory: function() { return { generateArticle: async function(input) { generated.push(input); return { id: "article-1", clientId: "c1", title: "Title", content: "Body", status: "generated" }; } }; },
       aiProviderService: { getFingerprint: function() { return "fp"; }, createClient: function() { return {}; } },
     });
@@ -150,7 +154,9 @@ describe("content generation batch service", function() {
     assert.equal(created.version, 2);
     assert.equal(created.startState, "not_started");
     assert.equal(service.getRuntimeSnapshot().capabilities.canStart, true);
+    briefAvailable = false;
     assert.equal((await service.createBatchV2(input)).id, created.id);
+    briefAvailable = true;
     const accepted = await service.startBatchV2({ batchId: created.id });
     assert.equal(accepted.status, "running");
     const completed = await waitForBatch(service, created.id, function(batch) { return batch.status === "completed"; });
@@ -164,6 +170,7 @@ describe("content generation batch service", function() {
   it("persists an uncertain v2 provider result and never retries the original task", async function() {
     const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "generation-v2-uncertain-"));
     let calls = 0;
+    let recoveredArticle = null;
     const brief = { version: 2, clientId: "c1", knowledgeRevision: 2, targetQuestion: { geoQuestionId: "geo-1", collectionQuestionId: "q1", text: "Q1" }, currentResearch: { question: "Q1", answer: "Answer", references: [], capturedAt: "2026-09-22T00:00:00.000Z" } };
     const service = createContentGenerationBatchService({
       workspaceRoot,
@@ -171,7 +178,7 @@ describe("content generation batch service", function() {
       materialStore: { listMaterials: async function() { return []; }, getSelectedMaterials: async function() { return []; } },
       researchStore: { listResearch: function() { return []; }, getResearch: function() { return null; } },
       templateStore: { getCatalogTemplate: function() { return { id: "guide", body: "Write" }; } },
-      contentStore: { saveArticle: function() {}, findByGenerationTaskId: function() { return null; } },
+      contentStore: { saveArticle: function() {}, findByGenerationTaskId: function() { return recoveredArticle; } },
       getGenerationBriefV2: async function() { return { brief, researchFingerprint: "b".repeat(64) }; },
       articleGeneratorFactory: function() { return { generateArticle: async function() { calls += 1; throw Object.assign(new Error("timeout"), { code: "AI_TIMEOUT" }); } }; },
       aiProviderService: { getFingerprint: function() { return "fp"; }, createClient: function() { return {}; } },
@@ -183,6 +190,11 @@ describe("content generation batch service", function() {
     assert.equal(calls, 1);
     await service.retryFailed({ batchId: batch.id });
     await new Promise(function(resolve) { setTimeout(resolve, 10); });
+    assert.equal(calls, 1);
+    recoveredArticle = { kind: "one", article: { id: "article-recovered" } };
+    const checked = await service.checkUncertainBatchV2({ batchId: batch.id });
+    assert.equal(checked.status, "completed");
+    assert.equal(checked.tasks[0].articleId, "article-recovered");
     assert.equal(calls, 1);
     await service.dispose();
   });

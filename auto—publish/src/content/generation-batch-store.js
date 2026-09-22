@@ -276,6 +276,24 @@ function createGenerationBatchStore(options) {
     return batch;
   }
 
+  function resolveCreateReplayV2(input) {
+    const value = input || {};
+    assertIdentifier(value.requestId, "request id");
+    if (typeof value.requestFingerprint !== "string" || !/^[a-f0-9]{64}$/.test(value.requestFingerprint))
+      throw storeError("GENERATION_REQUEST_INVALID", "Generation request fingerprint is invalid");
+    const id = "v2-" + crypto.createHash("sha256").update(value.requestId).digest("hex").slice(0, 40);
+    let batch;
+    try {
+      batch = getBatch(id);
+    } catch (error) {
+      if (error && error.code === "GENERATION_BATCH_NOT_FOUND") return null;
+      throw error;
+    }
+    if (batch.version !== 2 || batch.requestId !== value.requestId || batch.requestFingerprint !== value.requestFingerprint)
+      throw storeError("GENERATION_REQUEST_CONFLICT", "Generation request conflicts with the persisted batch");
+    return batch;
+  }
+
   function markStartRequested(batchId) {
     const batch = getBatch(batchId);
     if (batch.version !== 2) throw storeError("GENERATION_BATCH_INVALID", "Only v2 batches have explicit start state");
@@ -325,6 +343,7 @@ function createGenerationBatchStore(options) {
   return {
     createBatch,
     createOrGetV2,
+    resolveCreateReplayV2,
     createRegenerationBatch,
     getBatch,
     listBatches: fileStore.list,
