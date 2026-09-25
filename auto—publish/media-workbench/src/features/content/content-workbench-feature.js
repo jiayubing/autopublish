@@ -146,7 +146,7 @@ export function createContentWorkbenchFeature(adapters = {}) {
     permanentlyDeleteContentArticle: management.commands.permanentlyDeleteContentArticle,
   });
   const refreshLibrary = async (reason = "manual") => {
-    if (!(await sources.refreshSources(reason, { refreshFallbackData: false })))
+    if (!(await sources.refreshSources(reason, { refreshFallbackData: false, includeTemplateCatalog: reason === "manual" })))
       return false;
     syncManagementScope();
     const hasSelectedClient = Boolean(sources.getSnapshot().selectedClientId);
@@ -160,14 +160,10 @@ export function createContentWorkbenchFeature(adapters = {}) {
     if (!(await sources.refreshSources(reason, { refreshFallbackData: false })))
       return false;
     const hasSelectedClient = Boolean(sources.getSnapshot().selectedClientId);
-    const [clientResult, researchResult] = await Promise.all([
-      hasSelectedClient ? sources.refreshClientData(reason) : true,
-      sources.refreshResearchIndex(reason),
-    ]);
-    return clientResult && researchResult;
+    return hasSelectedClient ? sources.refreshClientData(reason) : true;
   };
   const refreshShell = async (reason = "manual") => {
-    if (!(await sources.refreshSources(reason, { refreshFallbackData: false })))
+    if (!(await sources.refreshSources(reason, { refreshFallbackData: false, includeTemplateCatalog: false })))
       return false;
     return sources.refreshClientGroups(reason);
   };
@@ -228,8 +224,11 @@ export function createContentWorkbenchFeature(adapters = {}) {
       refreshManagement: management.refreshManagement,
       refreshDoubaoQueue: sources.refreshDoubaoQueue,
       selectClient: async (clientId) => {
-        const changed = await sources.selectClient(clientId);
-        if (changed) {
+        const changed = await sources.selectClient(clientId, {
+          refreshClientData: kind === "production",
+          refreshResearchIndex: false,
+        });
+        if (changed && kind === "library") {
           syncManagementScope();
           await management.refreshManagement("scope-change");
         }
@@ -284,6 +283,7 @@ export function createContentWorkbenchFeature(adapters = {}) {
       );
     },
     refreshSources,
+    invalidateSourceCache: sources.invalidateSourceCache,
     refreshContentSources,
     refreshClientGroups: sources.refreshClientGroups,
     refreshClientData: sources.refreshClientData,

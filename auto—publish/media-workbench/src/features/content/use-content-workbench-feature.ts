@@ -223,6 +223,7 @@ export function useContentWorkbenchFeature(options?: {
     // desktop invalidation event.
     if (LOCAL_CONTENT_MUTATION_REASONS.has(event.reasonCode)) return;
     hydratedPagesRef.current.clear();
+    feature.invalidateSourceCache();
     if (!pageRef.current) return;
     return hydratePage(pageRef.current, event.kind);
   });

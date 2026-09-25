@@ -150,13 +150,15 @@ export function CurrentClientSelector({ clients, clientId, onChange, grouping }:
 }) {
   const catalog = grouping?.error ? EMPTY_CATALOG : grouping?.catalog || EMPTY_CATALOG;
   const memberships = new Map(catalog.memberships.map((member) => [member.clientId, member.groupId] as const));
-  const groupedIds = new Set<string>();
-  const grouped = catalog.groups.map((group) => {
-    const members = clients.filter((client) => memberships.get(client.id) === group.id);
-    members.forEach((client) => groupedIds.add(client.id));
-    return { group, members };
-  }).filter((entry) => entry.members.length > 0);
-  const ungrouped = clients.filter((client) => !groupedIds.has(client.id));
+  const membersByGroup = new Map(catalog.groups.map((group) => [group.id, [] as ContentClient[]] as const));
+  const ungrouped: ContentClient[] = [];
+  clients.forEach((client) => {
+    const members = membersByGroup.get(memberships.get(client.id) || '');
+    if (members) members.push(client);
+    else ungrouped.push(client);
+  });
+  const grouped = catalog.groups.map((group) => ({ group, members: membersByGroup.get(group.id) || [] }))
+    .filter((entry) => entry.members.length > 0);
   const useFlatList = Boolean(grouping?.error);
 
   return <label className="flex min-w-0 items-center gap-2 text-xs text-slate-500">当前客户

@@ -51,6 +51,8 @@ describe("renderer page navigation", { concurrency: false }, function () {
       localStorage.setItem("auto-publish:last-main-view", "article-library");
       window.__contentReadCounts = {
         listClients: 0,
+        templateCatalog: 0,
+        researchMetadata: 0,
         management: 0,
       };
       window.__platformReads = { queue: 0, profiles: 0 };
@@ -102,13 +104,15 @@ describe("renderer page navigation", { concurrency: false }, function () {
             window.__contentReadCounts.listClients += 1;
             return ok({ clients: [] });
           },
-          listTemplateCatalog: () =>
-            ok({
+          listTemplateCatalog: () => {
+            window.__contentReadCounts.templateCatalog += 1;
+            return ok({
               revision: "nav",
               platforms: [],
               templates: [],
               diagnostics: [],
-            }),
+            });
+          },
           getClientGroups: () =>
             ok({ revision: 0, groups: [], memberships: [] }),
           getArticleManagementSnapshot: () => {
@@ -145,7 +149,10 @@ describe("renderer page navigation", { concurrency: false }, function () {
             }),
           listQuestions: () => ok({ questions: [] }),
           listResearch: () => ok({ research: [] }),
-          listResearchMetadata: () => ok({ items: [] }),
+          listResearchMetadata: () => {
+            window.__contentReadCounts.researchMetadata += 1;
+            return ok({ items: [] });
+          },
           getDoubaoQueueState: () => ok({ queue: emptyQueue }),
           onDoubaoQueueState: () => () => {},
           listPaidMediaBatches: () => ok({ items: [] }),
@@ -287,6 +294,7 @@ describe("renderer page navigation", { concurrency: false }, function () {
       1,
       "article-library should hydrate content sources exactly once on first visit",
     );
+    assert.equal(initialCounts.templateCatalog, 0);
     assert.equal(
       initialCounts.management,
       0,
@@ -299,8 +307,8 @@ describe("renderer page navigation", { concurrency: false }, function () {
       timeout: 15000,
     });
     await page.waitForFunction(
-      (count) => window.__contentReadCounts.listClients > count,
-      initialCounts.listClients,
+      () => window.__contentReadCounts.templateCatalog > 0,
+      null,
       { timeout: 15000 },
     );
     const afterProductionCounts = await page.evaluate(() => ({
@@ -308,9 +316,11 @@ describe("renderer page navigation", { concurrency: false }, function () {
     }));
     assert.equal(
       afterProductionCounts.listClients,
-      initialCounts.listClients + 1,
-      "content-production should hydrate content sources exactly once on first visit",
+      initialCounts.listClients,
+      "content-production should reuse the hydrated client directory",
     );
+    assert.equal(afterProductionCounts.templateCatalog, 1);
+    assert.equal(afterProductionCounts.researchMetadata, 0);
 
     await page.locator("#nav-item-article-library").click();
     await page.getByText("文章库", { exact: true }).first().waitFor({
@@ -382,8 +392,8 @@ describe("renderer page navigation", { concurrency: false }, function () {
     assert.equal(finalCounts.management, afterProductionCounts.management);
     assert.equal(
       finalCounts.listClients,
-      afterProductionCounts.listClients + 1,
-      "submission-center should hydrate once; revisiting production/library must not reload",
+      afterProductionCounts.listClients,
+      "submission-center and revisited content pages should reuse the client directory",
     );
 
     const ownerCrash = pageErrors.filter((message) =>

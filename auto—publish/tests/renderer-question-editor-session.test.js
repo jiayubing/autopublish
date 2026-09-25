@@ -684,8 +684,7 @@ describe(
         () =>
           Boolean(window.__questionRefreshFixture?.invalidationListener) &&
           window.__questionRefreshFixture.readCounts.listQuestions >= 1 &&
-          window.__questionRefreshFixture.readCounts.getClientDetails >= 1 &&
-          window.__questionRefreshFixture.readCounts.listResearchMetadata >= 2,
+          window.__questionRefreshFixture.readCounts.getClientDetails >= 1,
       );
 
       const initialReads = await page.evaluate(() => ({
@@ -764,7 +763,7 @@ describe(
       assert.equal(afterUnrelated.listClients, afterCollect.listClients + 1);
       assert.equal(
         afterUnrelated.listResearchMetadata,
-        afterCollect.listResearchMetadata + 2,
+        afterCollect.listResearchMetadata,
       );
       assert.equal(afterUnrelated.listQuestions, afterCollect.listQuestions + 1);
       assert.equal(

@@ -141,13 +141,14 @@ describe("startup page-owned loads", () => {
     await loadContentWorkbenchPage(feature, "library", "initial");
     assert.deepEqual(
       [...new Set(calls)].sort(),
-      ["getClientGroups", "listClients", "listTemplateCatalog", "loadManagement"].sort(),
+      ["getClientGroups", "listClients", "loadManagement"].sort(),
     );
     assert.equal(calls.includes("listPaidMediaBatches"), false);
     assert.equal(calls.includes("getDoubaoQueueState"), false);
     assert.equal(calls.includes("listQuestions"), false);
     assert.equal(calls.includes("listResearch"), false);
     assert.equal(calls.includes("getClientDetails"), false);
+    assert.equal(calls.includes("listTemplateCatalog"), false);
     assert.equal(articleLibraryBadgeCount(feature.getSnapshot().management), 2);
     feature.dispose();
   });
@@ -182,11 +183,49 @@ describe("startup page-owned loads", () => {
     await loadContentWorkbenchPage(feature, "shell", "initial");
     assert.deepEqual(
       [...new Set(calls)].sort(),
-      ["getClientGroups", "listClients", "listTemplateCatalog"].sort(),
+      ["getClientGroups", "listClients"].sort(),
     );
     assert.equal(calls.includes("loadManagement"), false);
     assert.equal(calls.includes("listPaidMediaBatches"), false);
     assert.equal(calls.includes("getDoubaoQueueState"), false);
+    feature.dispose();
+  });
+
+  it("reuses the client directory across pages and reads only the selected page on client changes", async () => {
+    const calls = [];
+    const adapters = contentAdapters(calls);
+    adapters.listClients = async () => {
+      calls.push("listClients");
+      return Array.from({ length: 80 }, (_, index) => ({ id: `client-${index}`, name: `Client ${index}` }));
+    };
+    const feature = createContentWorkbenchFeature(adapters);
+    feature.setScope({ workspaceRuntimeId: "runtime-many-clients" });
+
+    await loadContentWorkbenchPage(feature, "library", "initial");
+    await feature.library.selectClient("client-1");
+    assert.equal(calls.filter((call) => call === "loadManagement").length, 2);
+    assert.equal(calls.includes("getClientDetails"), false);
+    assert.equal(calls.includes("listResearchMetadata"), false);
+
+    await loadContentWorkbenchPage(feature, "production", "initial");
+    assert.equal(calls.filter((call) => call === "listClients").length, 1);
+    assert.equal(calls.filter((call) => call === "listTemplateCatalog").length, 1);
+    assert.equal(calls.includes("listResearchMetadata"), false);
+    const managementReads = calls.filter((call) => call === "loadManagement").length;
+
+    await feature.production.selectClient("client-2");
+    assert.equal(calls.filter((call) => call === "loadManagement").length, managementReads);
+    assert.equal(calls.includes("listResearchMetadata"), false);
+    assert.equal(calls.filter((call) => call === "getClientDetails").length, 2);
+
+    await loadContentWorkbenchPage(feature, "library", "initial");
+    assert.equal(calls.filter((call) => call === "listClients").length, 1);
+    assert.equal(calls.filter((call) => call === "listTemplateCatalog").length, 1);
+
+    feature.invalidateSourceCache();
+    await loadContentWorkbenchPage(feature, "production", "initial");
+    assert.equal(calls.filter((call) => call === "listClients").length, 2);
+    assert.equal(calls.filter((call) => call === "listTemplateCatalog").length, 2);
     feature.dispose();
   });
 
