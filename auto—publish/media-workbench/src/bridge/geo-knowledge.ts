@@ -43,6 +43,7 @@ type Api = {
       knowledge: GeoKnowledge | null;
       storageStatus: KnowledgeStorageStatus;
       state: KnowledgeState;
+      modelDraft?: { status: "unverified"; markdown: string };
     }>
   >;
   state: (input: ClientInput) => Promise<Reply<{ state: KnowledgeState }>>;
@@ -68,6 +69,11 @@ type Api = {
   saveGlobalPrompt: (input: {
     researchPromptOverride: string;
   }) => Promise<Reply<{ defaultGlobalPrompt: string; globalPrompt: string }>>;
+  saveFinalKnowledgePrompt: (input: {
+    finalKnowledgePromptOverride: string;
+  }) => Promise<
+    Reply<{ defaultFinalKnowledgePrompt: string; finalKnowledgePrompt: string }>
+  >;
   saveClientPrompt: (input: {
     clientId: string;
     researchPrompt: string;
@@ -137,6 +143,14 @@ export const getGeoPromptSettings = (clientId: string) =>
 export const saveGeoGlobalPrompt = (researchPromptOverride: string) =>
   call((api) =>
     requireBridgeMethod(api.saveGlobalPrompt)({ researchPromptOverride }),
+  );
+export const saveGeoFinalKnowledgePrompt = (
+  finalKnowledgePromptOverride: string,
+) =>
+  call((api) =>
+    requireBridgeMethod(api.saveFinalKnowledgePrompt)({
+      finalKnowledgePromptOverride,
+    }),
   );
 export const saveGeoClientPrompt = (clientId: string, researchPrompt: string) =>
   call((api) =>

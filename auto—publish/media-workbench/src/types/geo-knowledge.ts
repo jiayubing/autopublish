@@ -58,6 +58,13 @@ export type KnowledgeSource = {
   citationVerified?: boolean;
 };
 export type GeoKnowledge = {
+  deliverable?: {
+    version: 1;
+    knowledgeRevision: number;
+    status: "complete" | "draft" | "stale";
+    markdown: string;
+    warnings: string[];
+  };
   schemaVersion: number;
   clientId: string;
   revision: number;
@@ -84,6 +91,7 @@ export type KnowledgeStorageStatus =
 export type KnowledgeState = {
   phase: string;
   running: boolean;
+  outcome?: "uncertain";
   completed?: number;
   total?: number;
   errorCode?: string;
@@ -93,7 +101,13 @@ export type KnowledgeState = {
     | "planning"
     | "researching"
     | "synthesizing"
-    | "saving";
+    | "saving"
+    | "R1"
+    | "R2"
+    | "R3"
+    | "R4"
+    | "R5"
+    | "K";
 };
 export type GeoConfigStatus = {
   baseUrl: string;
@@ -102,6 +116,8 @@ export type GeoConfigStatus = {
   webSearch: boolean;
   defaultGlobalPrompt: string;
   globalPrompt: string;
+  defaultFinalKnowledgePrompt: string;
+  finalKnowledgePrompt: string;
 };
 export type GeoConfigInput = {
   baseUrl: string;

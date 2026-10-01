@@ -6,6 +6,7 @@ const path = require("node:path");
 const { createGenerationExecutionScheduler } = require("../src/content/generation-execution-scheduler");
 const { createAiExecutionService } = require("../desktop/services/ai-execution-service");
 const { createClientGenerationService } = require("../desktop/services/client-generation-service");
+const { createGeoKnowledgeService } = require("../desktop/services/geo-knowledge-service");
 
 function deferred() {
   let resolve;
@@ -70,6 +71,18 @@ function createSyntheticService(overrides = {}) {
     ...overrides,
   });
 }
+
+it("generates from selected material and research when no GEO knowledge exists", async (t) => {
+  const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "generation-no-geo-"));
+  t.after(() => fs.rmSync(workspaceRoot, { recursive: true, force: true }));
+  const geo = createGeoKnowledgeService({ workspaceRoot, getClient: () => ({ name: "合成客户" }) });
+  const service = createSyntheticService({ getGeoKnowledgeContext: geo.getGenerationContext });
+  t.after(() => { service.dispose(); geo.dispose(); });
+  const article = await service.generateArticle(baseInput("client-a", "without-geo-knowledge", 1, 1));
+  assert.equal(article.title, "Synthetic title");
+  assert.equal(article.knowledgeSnapshot, undefined);
+  assert.deepEqual(article.researchQueryIds, ["question"]);
+});
 
 it("reuses persisted single and child results after restart without creating an AI client", async (t) => {
   for (const count of [1, 2]) {

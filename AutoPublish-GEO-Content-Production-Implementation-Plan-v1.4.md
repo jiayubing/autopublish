@@ -10,6 +10,8 @@
 
 **执行方式**：串行工作包；每包 Implementation → Primary Review → Blocking Remediation → Bounded Re-review → Closure
 
+**2026-09-30 知识生成合同更新**：用户明确要求用实验已验证的连续模式替换F盘旧研究实现。一次执行R1–R5与不联网K，K同时返回Knowledge V2结构化字段和九板块正文，同一store/revision保存。600—1000字只作目标，短/长稿完整交付，未验证稿可预览导出但不覆盖正式知识。九板块知识稿与§4.1的15章节客户确认投影分别展示；退役2026-09-25的九板块确定性拼装替代路线。Question、Research、Article Brief与任务身份保持既有合同。具体整合及验收见[当前记录](.scratch/doubao-research-automation/F-INTEGRATION.md)，不自动推进CP-5。
+
 ---
 
 ## 1. 审阅结论
@@ -774,6 +776,12 @@ P0/P1 必须关闭；P2 只有直接影响当前 acceptance、事实一致性、
 - 2026-09-22：完成最终文字一致性收口：统一 V1 Knowledge 为“确认 `schemaVersion === 1` 后必须删除并退出兼容”，明确四个 crash windows 的 owner 边界，为已完成 V2 合同追加 supersede 说明，并将规范 v1.4 登记到 WORK-INDEX。计划状态更新为 `READY`，CP-0 尚未开始。
 
 ## 11. Decision Log
+
+2026-09-25 局部知识库改造证据：Research 仍是两轮、18 次硬预算；弱公网信息时第二轮可研究决策场景，`decision_context` 只参与有客户/核验事实支撑的推导；本次运行的 Notebook 供一次离线 synthesis 使用；九板块知识稿由现有 V2 投影。合成数据定向行为测试 28/28、Renderer 交互测试 1/1、`typecheck:renderer` 和 `git diff --check` 通过。未执行真实 API 请求，真实模型输出质量仍待逐次授权验证。无 commit/push。
+
+2026-09-25 开发模式失败修复：九板块预览的 IPC 合同由 15 改为 9；最终 synthesis 不再要求模型回传未持久化的 Notebook，V2 合并错误纳入同一次受预算限制的结构修复，界面显示安全错误代码。定向测试覆盖九板块模型、IPC 往返、合成最终整理修复及 Renderer 错误/空态；真实失败的原始服务端错误未留存，仍需下次明确授权的真实调用确认模型质量。
+
+2026-09-25 失败复现后续：最终整理两次结构修复后仍含违规条目时，仅投影有登记 factId、有效来源和合法关系的条目，跳过违规项并标记 partial；两次均无可解析 JSON 时保存已提取的客户知识并明确提示 GEO 问题待补。修复同版本刷新清空知识稿后不再预览的 UI 时序。合成数据定向行为测试 35/35、Renderer 交互测试 1/1、`typecheck:renderer` 通过；未执行真实 API，真实客户输出仍待授权验证。无 commit/push。
 
 - **D1**：GEO Knowledge `geoQuestions[]` 是内容生产问题资产 owner；Collection Question 是采集执行 owner。
 - **D2**：新任务基数为 question × template；一篇文章不再混合多条 Research。

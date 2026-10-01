@@ -15,8 +15,10 @@ export default function DoubaoGeoSettings() {
   const [apiKey, setApiKey] = useState("");
   const [webSearch, setWebSearch] = useState(true);
   const [researchPrompt, setResearchPrompt] = useState("");
+  const [finalKnowledgePrompt, setFinalKnowledgePrompt] = useState("");
   const [saved, setSaved] = useState(false);
   const [promptSaved, setPromptSaved] = useState(false);
+  const [finalPromptSaved, setFinalPromptSaved] = useState(false);
   const [testVisible, setTestVisible] = useState(false);
   useEffect(() => {
     void feature.refreshGeo("page-open");
@@ -26,15 +28,21 @@ export default function DoubaoGeoSettings() {
       setModel(status.model);
       setBaseUrl(status.baseUrl);
       setWebSearch(status.webSearch);
-      setResearchPrompt(status.globalPrompt || status.defaultGlobalPrompt);
     }
-  }, [status]);
+  }, [status?.model, status?.baseUrl, status?.webSearch]);
+  useEffect(() => {
+    if (status) setResearchPrompt(status.globalPrompt || status.defaultGlobalPrompt);
+  }, [status?.globalPrompt, status?.defaultGlobalPrompt]);
+  useEffect(() => {
+    if (status) setFinalKnowledgePrompt(status.finalKnowledgePrompt || status.defaultFinalKnowledgePrompt);
+  }, [status?.finalKnowledgePrompt, status?.defaultFinalKnowledgePrompt]);
   const testState = snapshot.commands.testGeo;
   const testResult = testState.result as GeoConnectionResult | null;
   const busy =
     snapshot.geo.query.loading ||
     snapshot.commands.saveGeo.busy ||
     snapshot.commands.saveGeoPrompt.busy ||
+    snapshot.commands.saveFinalKnowledgePrompt.busy ||
     testState.busy;
   const configDirty =
     !status?.configured ||
@@ -46,10 +54,15 @@ export default function DoubaoGeoSettings() {
     ? status.globalPrompt || status.defaultGlobalPrompt
     : "";
   const promptDirty = researchPrompt !== effectivePrompt;
+  const effectiveFinalPrompt = status
+    ? status.finalKnowledgePrompt || status.defaultFinalKnowledgePrompt
+    : "";
+  const finalPromptDirty = finalKnowledgePrompt !== effectiveFinalPrompt;
   const error =
     snapshot.geo.query.error?.userMessage ||
     snapshot.commands.saveGeo.error?.userMessage ||
     snapshot.commands.saveGeoPrompt.error?.userMessage;
+  const finalPromptError = snapshot.commands.saveFinalKnowledgePrompt.error?.userMessage;
   async function save() {
     setTestVisible(false);
     setSaved(false);
@@ -77,6 +90,16 @@ export default function DoubaoGeoSettings() {
     if (result) {
       setResearchPrompt(result.globalPrompt || result.defaultGlobalPrompt);
       setPromptSaved(true);
+    }
+  }
+  async function saveFinalPrompt(value = finalKnowledgePrompt) {
+    setFinalPromptSaved(false);
+    if (!status || !value.trim()) return;
+    const override = value === status.defaultFinalKnowledgePrompt ? "" : value;
+    const result = await feature.saveFinalKnowledgePrompt(override);
+    if (result) {
+      setFinalKnowledgePrompt(result.finalKnowledgePrompt || result.defaultFinalKnowledgePrompt);
+      setFinalPromptSaved(true);
     }
   }
   return (
@@ -197,6 +220,45 @@ export default function DoubaoGeoSettings() {
           </button>
         </div>
         {promptSaved && <p role="status">全局研究要求已保存。</p>}
+      </section>
+      <section className="grid gap-3 rounded border bg-slate-50 p-4">
+        <div>
+          <h3 className="font-semibold">最终知识稿提示词</h3>
+          <p className="mt-1 text-xs text-slate-500">
+            实验链路在完成研究后，用这份要求生成交付知识稿。保存只修改后续写稿要求，不会发起 AI 调用。
+          </p>
+        </div>
+        <textarea
+          aria-label="最终知识稿提示词"
+          className="block min-h-48 w-full rounded border bg-white p-2"
+          maxLength={8000}
+          value={finalKnowledgePrompt}
+          disabled={busy || !status}
+          onChange={(event) => {
+            setFinalKnowledgePrompt(event.target.value);
+            setFinalPromptSaved(false);
+          }}
+        />
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="rounded border px-4 py-2 disabled:opacity-40"
+            disabled={busy || !status || !finalKnowledgePrompt.trim() || !finalPromptDirty}
+            onClick={() => void saveFinalPrompt()}
+          >
+            保存最终知识稿提示词
+          </button>
+          <button
+            type="button"
+            className="rounded border px-4 py-2 disabled:opacity-40"
+            disabled={busy || !status || !status.finalKnowledgePrompt}
+            onClick={() => void saveFinalPrompt(status?.defaultFinalKnowledgePrompt || "")}
+          >
+            恢复知识稿默认提示词
+          </button>
+        </div>
+        {finalPromptSaved && <p role="status">最终知识稿提示词已保存。</p>}
+        {finalPromptError && <p role="alert" className="text-rose-700">{finalPromptError}</p>}
       </section>
       {error && (
         <p role="alert" className="text-rose-700">

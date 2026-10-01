@@ -62,7 +62,7 @@ function buildCustomerConfirmationModel(document) {
   }
 
   function attributionRequired(sourceIds, text) {
-    return sourceIds.some((id) => sources.get(id)?.type === "client_public") || STRONG_CLAIM.test(text);
+    return sourceIds.some((id) => ["client_public", "third_party"].includes(sources.get(id)?.type)) || STRONG_CLAIM.test(text);
   }
 
   function pending(sectionId, knowledgeId) {

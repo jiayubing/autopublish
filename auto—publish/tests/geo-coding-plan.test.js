@@ -12,10 +12,6 @@ const {
   CODING_BASE_URL,
   STANDARD_BASE_URL,
 } = require("../src/content/doubao-geo-endpoint");
-const {
-  createGeoKnowledgeResearch,
-} = require("../src/content/geo-knowledge-research");
-const { normalizeCandidate } = require("../src/content/geo-knowledge-merge");
 test("new config defaults to Coding Plan; legacy retains standard address until explicitly saved", (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "geo-plan-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -105,52 +101,4 @@ test("requests stay on the selected endpoint for extraction and search; rejectio
       assert.deepEqual(urls, [baseUrl + "/responses"]);
     }
   }
-});
-test("unverified web output stops all remaining research tasks instead of pretending success", async () => {
-  let calls = 0;
-  const client = createDoubaoGeoClient({
-    getConfig: () => ({
-      baseUrl: CODING_BASE_URL,
-      apiKey: "fixture",
-      model: "fixture",
-      webSearch: true,
-    }),
-    fetch: async () => {
-      calls++;
-      const payload =
-        calls === 1
-          ? {
-              tasks: [
-                { type: "customer_entity", topic: "测试一", queries: ["一"] },
-                { type: "generic_industry", topic: "测试二", queries: ["二"] },
-              ],
-            }
-          : { findings: [], unresolved: [] };
-      return {
-        ok: true,
-        json: async () => ({
-          status: "completed",
-          output: [
-            {
-              type: "message",
-              content: [
-                {
-                  type: "output_text",
-                  text: JSON.stringify(payload),
-                  annotations: [],
-                },
-              ],
-            },
-          ],
-        }),
-      };
-    },
-  });
-  await assert.rejects(
-    createGeoKnowledgeResearch({ client }).enrich(
-      normalizeCandidate({}, [], "client-1"),
-    ),
-    { code: "GEO_SEARCH_UNCONFIRMED" },
-  );
-  assert.equal(calls, 2);
 });

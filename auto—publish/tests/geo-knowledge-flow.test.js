@@ -14,7 +14,7 @@ const { createResearchStore } = require("../src/content/research-store");
 const { createArticleStore } = require("../src/content/article-store");
 const { createArticleGenerator } = require("../src/content/article-generator");
 const { buildPrompt } = require("../src/content/prompt-builder");
-const { stableId } = require("../src/content/geo-knowledge-schema");
+const { SECTIONS } = require("../src/content/geo-knowledge-schema");
 
 test("local material-to-knowledge-to-collection-to-article flow survives service restart without network", async (t) => {
   const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "geo-flow-"));
@@ -34,9 +34,7 @@ test("local material-to-knowledge-to-collection-to-article flow survives service
     listMaterials: async () => [material],
     getSelectedMaterials: async () => [material],
   };
-  const sourceIds = [
-    stableId("source", material.id + ":" + material.contentHash),
-  ];
+  const sourceIds = ["M1"];
   const extracted = {
     profile: { fields: { name: "合成客户" }, basis: "fact", sourceIds },
     offerings: [
@@ -44,6 +42,8 @@ test("local material-to-knowledge-to-collection-to-article flow survives service
     ],
   };
   const synthesized = {
+    businessType: "service",
+    ...Object.fromEntries(SECTIONS.map(section => [section, []])),
     ...extracted,
     geoQuestions: [
       {
@@ -55,17 +55,24 @@ test("local material-to-knowledge-to-collection-to-article flow survives service
       },
     ],
   };
-  const replies = [
-    extracted,
-    { tasks: [{ type: "customer_entity", topic: "客户实体", queries: ["合成客户"] }] },
-    { findings: [], discoveries: [], unresolved: [] },
-    { tasks: [] },
-    synthesized,
-  ];
+  const requests = [];
   const client = {
-    request: async () => {
-      assert.ok(replies.length, "unexpected extra model request");
-      return { text: JSON.stringify(replies.shift()), citations: [] };
+    request: async request => {
+      requests.push(request);
+      assert.ok(requests.length <= 8, "unexpected extra model request");
+      if (request.search) return { text: '{"findings":[],"unresolved":[]}', citations: [] };
+      const context = request.prompt.split("[RUN_CONTEXT]\n")[1];
+      if (context) return { text: JSON.stringify({
+        ...Object.fromEntries(Object.keys(request.jsonSchema.properties).filter(key => key !== "researchNeed").map(key => [key, []])),
+        researchNeed: { needed: false, scope: "entity", query: "", reason: "" },
+      }), citations: [] };
+      assert.equal(request.search, false);
+      return { text: JSON.stringify({
+        canonical: synthesized, webEvidence: [],
+        summary: { text: material.content, inputRefs: sourceIds },
+        sections: [{ key: "products_services", items: [{ text: material.content, kind: "derived", inputRefs: sourceIds }] }],
+        realCases: [], customerReviews: [], recommendationAngles: [], geoThemes: [], missingInformation: [], cautions: [],
+      }), citations: [] };
     },
   };
   const researchStore = createResearchStore(workspaceRoot);
@@ -101,8 +108,10 @@ test("local material-to-knowledge-to-collection-to-article flow survives service
   const service = createGeoKnowledgeService(options);
   const generated = (await service.generate({ clientId: "client-1" }))
     .knowledge;
-  assert.equal(replies.length, 0);
+  assert.equal(requests.length, 8);
+  assert.equal(requests.filter(request => request.search).length, 1);
   assert.equal(generated.offerings[0].basis, "fact");
+  assert.equal(generated.deliverable.knowledgeRevision, generated.revision);
   const id = generated.geoQuestions[0].id;
   const linked = service.linkQuestions({
     clientId: "client-1",
@@ -128,6 +137,9 @@ test("local material-to-knowledge-to-collection-to-article flow survives service
     service.questionDetails({ clientId: "client-1", id }).clientMentioned,
     true,
   );
+  const brief = service.getGenerationBriefV2({ clientId: "client-1", geoQuestionId: id, knowledgeRevision: linked.revision }).brief;
+  assert.equal(brief.version, 2);
+  assert.equal(brief.targetQuestion.collectionQuestionId, questionId);
   const generator = createArticleGenerator({
     getClient: options.getClient,
     materialStore,

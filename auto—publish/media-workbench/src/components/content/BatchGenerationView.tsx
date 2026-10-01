@@ -55,6 +55,7 @@ interface BatchGenerationViewProps {
     clientId?: string,
     articleId?: string,
   ) => void;
+  onSwitchToClient?: () => void;
 }
 
 type SelectedQuestion = { clientId: string; geoQuestionId: string };
@@ -75,6 +76,7 @@ export default function BatchGenerationView({
   currentClientId,
   templateCatalog,
   onViewBatchArticles,
+  onSwitchToClient,
 }: BatchGenerationViewProps) {
   const { confirm } = useConfirmation();
   const generation = useGenerationFeature();
@@ -438,10 +440,18 @@ export default function BatchGenerationView({
               disabled={loading}
               describeClient={(client) =>
                 workflows[client.id]
-                  ? `${workflows[client.id].items.filter((item) => item.generation.ready).length} 个可生成问题`
+                  ? workflows[client.id].knowledgeRevision === 0
+                    ? "未生成知识库"
+                    : `${workflows[client.id].items.filter((item) => item.generation.ready).length} 个可生成问题`
                   : "待读取"
               }
             />
+            {selectedClientIds.some((id) => workflows[id]?.knowledgeRevision === 0) && (
+              <div className="mt-3 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                所选客户尚未生成知识库。可以在“客户生成”中选择客户资料和已有调研回答，继续生成文章。
+                {onSwitchToClient && <button type="button" className="ml-2 underline" onClick={onSwitchToClient}>前往客户生成</button>}
+              </div>
+            )}
           </section>
         )}
         {viewMode === "wizard" && step === 2 && (

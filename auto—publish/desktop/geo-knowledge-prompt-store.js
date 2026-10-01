@@ -21,24 +21,34 @@ function createGeoKnowledgePromptStore(options) {
   }
   function load() {
     ensureSafeFile(true);
-    if (!fs.existsSync(file)) return { researchPromptOverride: "" };
+    if (!fs.existsSync(file)) return { researchPromptOverride: "", finalKnowledgePromptOverride: "" };
     let document;
     try { document = JSON.parse(fs.readFileSync(file, "utf8")); }
     catch (_) { throw geoError("GEO_POLICY_INVALID"); }
     const value = document?.researchPromptOverride;
-    if (!document || document.version !== 1 || (value !== undefined && (typeof value !== "string" || value.length > 8000))) throw geoError("GEO_POLICY_INVALID");
-    return { researchPromptOverride: value || "" };
+    const finalValue = document?.finalKnowledgePromptOverride;
+    if (!document || document.version !== 1 || (value !== undefined && (typeof value !== "string" || value.length > 8000)) || (finalValue !== undefined && (typeof finalValue !== "string" || finalValue.length > 8000))) throw geoError("GEO_POLICY_INVALID");
+    return { researchPromptOverride: value || "", finalKnowledgePromptOverride: finalValue || "" };
   }
-  function save(researchPromptOverride) {
-    if (typeof researchPromptOverride !== "string" || researchPromptOverride.length > 8000) throw geoError("GEO_POLICY_INVALID");
+  function write(document) {
     ensureSafeFile(false);
-    const document = researchPromptOverride ? { version: 1, researchPromptOverride } : { version: 1 };
     try {
       if (writer.write(file, JSON.stringify(document, null, 2) + "\n", { keepExisting: false }) !== true) throw geoError("GEO_POLICY_SAVE_FAILED");
     } catch (_) { throw geoError("GEO_POLICY_SAVE_FAILED"); }
+  }
+  function save(researchPromptOverride) {
+    if (typeof researchPromptOverride !== "string" || researchPromptOverride.length > 8000) throw geoError("GEO_POLICY_INVALID");
+    const { finalKnowledgePromptOverride } = load();
+    write({ version: 1, ...(researchPromptOverride && { researchPromptOverride }), ...(finalKnowledgePromptOverride && { finalKnowledgePromptOverride }) });
     return { researchPromptOverride };
   }
-  return { load, save };
+  function saveFinalKnowledgePrompt(finalKnowledgePromptOverride) {
+    if (typeof finalKnowledgePromptOverride !== "string" || finalKnowledgePromptOverride.length > 8000 || (finalKnowledgePromptOverride && !finalKnowledgePromptOverride.trim())) throw geoError("GEO_POLICY_INVALID");
+    const { researchPromptOverride } = load();
+    write({ version: 1, ...(researchPromptOverride && { researchPromptOverride }), ...(finalKnowledgePromptOverride && { finalKnowledgePromptOverride }) });
+    return { finalKnowledgePromptOverride };
+  }
+  return { load, save, saveFinalKnowledgePrompt };
 }
 
 module.exports = { createGeoKnowledgePromptStore };

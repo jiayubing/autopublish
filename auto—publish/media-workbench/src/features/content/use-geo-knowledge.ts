@@ -22,18 +22,32 @@ import type {
   CustomerConfirmationModel,
 } from "../../types/geo-knowledge";
 
+function knowledgeErrorMessage(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : fallback;
+  const code = error && typeof error === "object" && "code" in error &&
+    typeof error.code === "string" ? error.code : "";
+  return code ? `${message}（${code}）` : message;
+}
+
 export function useGeoKnowledge(clientId: string) {
   const [knowledge, setKnowledge] = useState<GeoKnowledge | null>(null);
+  const [modelDraft, setModelDraft] = useState<{
+    status: "unverified";
+    markdown: string;
+  } | null>(null);
   const [state, setState] = useState<KnowledgeState>({
     phase: "idle",
     running: false,
   });
-  const [storageStatus, setStorageStatus] = useState<KnowledgeStorageStatus>("missing");
-  const [promptSettings, setPromptSettings] = useState<GeoPromptSettings | null>(null);
+  const [storageStatus, setStorageStatus] =
+    useState<KnowledgeStorageStatus>("missing");
+  const [promptSettings, setPromptSettings] =
+    useState<GeoPromptSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [confirmation, setConfirmation] = useState<CustomerConfirmationModel | null>(null);
+  const [confirmation, setConfirmation] =
+    useState<CustomerConfirmationModel | null>(null);
   const [confirmationLoading, setConfirmationLoading] = useState(false);
   const epoch = useRef(0);
   const knowledgeRevision = useRef<number | null>(null);
@@ -46,10 +60,14 @@ export function useGeoKnowledge(clientId: string) {
     const version = epoch.current;
     setLoading(true);
     try {
-      const [result, prompts] = await Promise.all([loadKnowledge(clientId), getGeoPromptSettings(clientId)]);
+      const [result, prompts] = await Promise.all([
+        loadKnowledge(clientId),
+        getGeoPromptSettings(clientId),
+      ]);
       if (version === epoch.current) {
         knowledgeRevision.current = result.knowledge?.revision ?? null;
         setKnowledge(result.knowledge);
+        setModelDraft(result.modelDraft || null);
         setConfirmation(null);
         setStorageStatus(result.storageStatus);
         setPromptSettings(prompts);
@@ -58,13 +76,18 @@ export function useGeoKnowledge(clientId: string) {
       }
     } catch (e) {
       if (version === epoch.current)
-        setError(e instanceof Error ? e.message : "知识库读取失败。");
+        setError(knowledgeErrorMessage(e, "知识库读取失败。"));
     } finally {
       if (version === epoch.current) setLoading(false);
     }
   }, [clientId]);
   useEffect(() => {
     epoch.current++;
+    locked.current = false;
+    setBusy(false);
+    setKnowledge(null);
+    setModelDraft(null);
+    setState({ phase: "idle", running: false });
     void reload();
     return () => {
       epoch.current++;
@@ -85,7 +108,7 @@ export function useGeoKnowledge(clientId: string) {
         }
       } catch (e) {
         if (version === epoch.current)
-          setError(e instanceof Error ? e.message : "进度读取失败。");
+          setError(knowledgeErrorMessage(e, "进度读取失败。"));
       } finally {
         pending = false;
       }
@@ -103,23 +126,36 @@ export function useGeoKnowledge(clientId: string) {
       if (version === epoch.current) {
         knowledgeRevision.current = result.knowledge.revision;
         setKnowledge(result.knowledge);
+        setModelDraft(null);
         setConfirmation(null);
         setStorageStatus("current_v2");
         setState({ phase: "complete", running: false });
         setError("");
       }
-      return true;
+      return version === epoch.current;
     } catch (e) {
       if (version === epoch.current) {
-        const code = e && typeof e === "object" && "code" in e && typeof e.code === "string" ? e.code : "";
-        const message = e instanceof Error ? e.message : "知识库操作未完成。";
-        setError(code ? `${message}（${code}）` : message);
+        const code =
+          e &&
+          typeof e === "object" &&
+          "code" in e &&
+          typeof e.code === "string"
+            ? e.code
+            : "";
+        setError(knowledgeErrorMessage(e, "知识库操作未完成。"));
         try {
-          const latest = await knowledgeState(clientId);
-          if (version === epoch.current) setState(latest.state);
+          const latest = await loadKnowledge(clientId);
+          if (version === epoch.current) {
+            setState(latest.state);
+            setModelDraft(latest.modelDraft || null);
+          }
         } catch {
           if (version === epoch.current)
-            setState({ phase: "failed", running: false, ...(code ? { errorCode: code } : {}) });
+            setState({
+              phase: "failed",
+              running: false,
+              ...(code ? { errorCode: code } : {}),
+            });
         }
       }
       return false;
@@ -135,15 +171,19 @@ export function useGeoKnowledge(clientId: string) {
     locked.current = true;
     setBusy(true);
     setError("");
+    const version = epoch.current;
     try {
       await action();
-      return true;
+      return version === epoch.current;
     } catch (e) {
-      setError(e instanceof Error ? e.message : "研究要求保存失败。");
+      if (version === epoch.current)
+        setError(e instanceof Error ? e.message : "研究要求保存失败。");
       return false;
     } finally {
-      locked.current = false;
-      setBusy(false);
+      if (version === epoch.current) {
+        locked.current = false;
+        setBusy(false);
+      }
     }
   }
   async function cancel() {
@@ -189,6 +229,7 @@ export function useGeoKnowledge(clientId: string) {
   }
   return {
     knowledge,
+    modelDraft,
     storageStatus,
     promptSettings,
     state,
@@ -201,15 +242,43 @@ export function useGeoKnowledge(clientId: string) {
     cancel,
     download,
     previewConfirmation,
-    generate: (temporaryPrompt = "") => command(() => generateKnowledge(clientId, temporaryPrompt)),
+    generate: (temporaryPrompt = "") =>
+      command(() => generateKnowledge(clientId, temporaryPrompt)),
     edit: (input: KnowledgeEdit) => command(() => editKnowledge(input)),
-    confirmSourceType: (sourceId: string, targetType: "official_web" | "client_public") =>
-      knowledge ? command(() => confirmKnowledgeSourceType({ clientId, revision: knowledge.revision, sourceId, targetType })) : Promise.resolve(false),
-    resolveConflict: (conflictId: string, resolution: { claimId?: string; value?: string }) =>
-      knowledge ? command(() => resolveKnowledgeConflict({ clientId, revision: knowledge.revision, conflictId, ...resolution })) : Promise.resolve(false),
-    saveClientPrompt: (value: string) => promptCommand(async () => {
+    confirmSourceType: (
+      sourceId: string,
+      targetType: "official_web" | "client_public",
+    ) =>
+      knowledge
+        ? command(() =>
+            confirmKnowledgeSourceType({
+              clientId,
+              revision: knowledge.revision,
+              sourceId,
+              targetType,
+            }),
+          )
+        : Promise.resolve(false),
+    resolveConflict: (
+      conflictId: string,
+      resolution: { claimId?: string; value?: string },
+    ) =>
+      knowledge
+        ? command(() =>
+            resolveKnowledgeConflict({
+              clientId,
+              revision: knowledge.revision,
+              conflictId,
+              ...resolution,
+            }),
+          )
+        : Promise.resolve(false),
+    saveClientPrompt: (value: string) =>
+      promptCommand(async () => {
         await saveGeoClientPrompt(clientId, value);
-        setPromptSettings(current => current ? { ...current, clientPrompt: value } : current);
+        setPromptSettings((current) =>
+          current ? { ...current, clientPrompt: value } : current,
+        );
       }),
     link: (ids: string[]) =>
       knowledge

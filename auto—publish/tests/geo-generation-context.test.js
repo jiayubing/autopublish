@@ -79,6 +79,20 @@ const research = {
   collectionMethod: "manual",
 };
 
+test("third-party research retains attribution and fact-only article selection", () => {
+  const document = library();
+  const source = document.sources.find(item => item.id === "source-1");
+  Object.assign(source, { type: "third_party", url: "https://example.test/client", fetchedAt: "2026-09-19T00:00:00.000Z", citationVerified: true });
+  document.profile.claims.forEach(claim => { claim.basis = "research"; });
+  document.profile = profileProjection(document.profile.claims);
+  document.offerings.filter(item => item.sourceIds.includes(source.id)).forEach(item => { item.basis = "research"; });
+  document.capabilities.forEach(item => { item.basis = "research"; });
+  const context = JSON.parse(selectGeoKnowledge(document, [research], ["query-1"]).context);
+  assert.equal(context.profile.claims[0].attributionRequired, true);
+  assert.deepEqual(context.profile.claims[0].sourceIds, [source.id]);
+  assert.equal(context.offerings.length, 0);
+});
+
 function addV2BriefKnowledge(doc) {
   doc.sources.push(
     {

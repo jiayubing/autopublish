@@ -24,6 +24,8 @@
 
 ## 最近已完成的本地计划
 
+- [连续知识库生成接回 F 盘](../.scratch/doubao-research-automation/F-INTEGRATION.md)：已替换旧研究方式，接入 R1–R5 + K、九板块完整稿及600—1000字目标；F盘开发构建及本地验收通过。不推进 CP-5，真实质量验收状态独立保留；旧实验测试依赖已清理，代码与本地验证已收口。
+
 - [客户 GEO 知识库 V2 增量实施计划](../AUTOPUBLISH-GEO-KNOWLEDGE-V2-INCREMENTAL-CONTRACT-v2.1.md)：V2-1～V2-4 本地实现完成；真实 API gate 继续等待逐次授权。
 
 - [客户 GEO 知识库 V1](GEO-KNOWLEDGE-PLAN.md)：K1–K6 本地实现完成；Coding Plan 已适配，真实 API gate 尚未通过。

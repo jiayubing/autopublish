@@ -36,6 +36,7 @@ interface ArticleGenerationViewProps {
   };
   generationMode?: 'client' | 'batch';
   onViewBatchArticles?: (batchId: string, clientId?: string, articleId?: string) => void;
+  onSwitchToClient?: () => void;
 }
 
 type SubmissionChoice = { id: string; displayName: string };
@@ -254,9 +255,10 @@ export default function ArticleGenerationView(props: ArticleGenerationViewProps)
     commandStates,
     generationMode = 'client',
     onViewBatchArticles,
+    onSwitchToClient,
   } = props;
   if (generationMode === 'batch') {
-    return <div className="min-h-0 flex-1"><BatchGenerationView initialClientIds={props.initialBatchClientIds} initialQuestions={props.initialBatchQuestions} clients={clients} grouping={grouping} currentClientId={clientId} researchByClient={researchByClient} getClientDetails={getClientDetails} templateCatalog={templateCatalog} commands={{ retryMaterial: commands.retryMaterial }} commandStates={commandStates} onViewBatchArticles={onViewBatchArticles} /></div>;
+    return <div className="min-h-0 flex-1"><BatchGenerationView initialClientIds={props.initialBatchClientIds} initialQuestions={props.initialBatchQuestions} clients={clients} grouping={grouping} currentClientId={clientId} researchByClient={researchByClient} getClientDetails={getClientDetails} templateCatalog={templateCatalog} commands={{ retryMaterial: commands.retryMaterial }} commandStates={commandStates} onViewBatchArticles={onViewBatchArticles} onSwitchToClient={onSwitchToClient} /></div>;
   }
   return <ClientGenerationView {...props} />;
 }

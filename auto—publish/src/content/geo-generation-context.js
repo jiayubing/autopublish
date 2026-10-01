@@ -45,7 +45,8 @@ function selectGeoKnowledge(document, researches, researchIds) {
     item.relatedScenarioIds.length === 0;
   const attributionRequired = (sourceIds) =>
     sourceIds.length > 0 &&
-    sourceIds.every((id) => sourceById.get(id)?.type === "client_public");
+    (sourceIds.every((id) => sourceById.get(id)?.type === "client_public") ||
+      sourceIds.some((id) => sourceById.get(id)?.type === "third_party"));
   const annotate = (item) => ({
     ...item,
     attributionRequired: attributionRequired(item.sourceIds),

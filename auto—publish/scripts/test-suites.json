@@ -17,6 +17,7 @@
     "tests/content-generation-batch-title-projection.test.js",
     "tests/client-knowledge.test.js",
     "tests/client-material-store.test.js",
+    "tests/customer-continuous-knowledge.test.js",
     "tests/client-image-library.test.js",
     "tests/client-image-selector.test.js",
     "tests/generation-batch-runner.test.js",
@@ -58,7 +59,8 @@
     "tests/storage-paths.test.js",
     "tests/article-lifecycle-acceptance.test.js",
     "tests/regular-platform-acceptance.test.js",
-    "tests/test-discovery-contract.test.js"
+    "tests/test-discovery-contract.test.js",
+    "tests/desktop-continuous-knowledge.test.js"
   ],
   "maintenance": [
     "tests/content-library-migration.test.js",

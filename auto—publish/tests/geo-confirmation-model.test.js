@@ -61,3 +61,13 @@ test("markdown renders the same model, hides empty headings and centralizes gaps
   assert.match(markdown, /## 请客户确认 \/ 补充/);
   assert.match(markdown, /\*\*品牌故事与发展历史\*\*：当前资料不足，建议补充/);
 });
+
+test("third-party research retains attribution in the confirmation projection", () => {
+  const document = fixture();
+  document.sources.find(source => source.id === "public-account").type = "third_party";
+  const model = buildCustomerConfirmationModel(document);
+  const entry = model.sections.find(section => section.id === "offeringFeatures").entries[0];
+  assert.equal(entry.kind, "research");
+  assert.equal(entry.attributionRequired, true);
+  assert.deepEqual(entry.sourceIds, ["public-account"]);
+});

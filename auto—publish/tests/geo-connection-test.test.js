@@ -9,6 +9,7 @@ const {
 } = require("../desktop/services/geo-knowledge-service");
 const { createDoubaoGeoClient } = require("../src/content/doubao-geo-client");
 const { CODING_BASE_URL } = require("../src/content/doubao-geo-endpoint");
+const { setTimeout: delay } = require("node:timers/promises");
 function service(t, client) {
   const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "geo-probe-"));
   const instance = createGeoKnowledgeService({
@@ -34,6 +35,59 @@ function service(t, client) {
   });
   return instance;
 }
+
+test("request deadline covers headers and body and never retries an uncertain timeout", async () => {
+  for (const phase of ["headers", "body"]) {
+    let calls = 0;
+    const client = createDoubaoGeoClient({
+      getConfig: () => ({ baseUrl: CODING_BASE_URL, apiKey: "fixture", model: "fixture" }),
+      fetch: async (_, { signal }) => {
+        calls++;
+        if (phase === "headers") await delay(80, undefined, { signal });
+        return { ok: true, json: async () => {
+          if (phase === "body") await delay(80, undefined, { signal });
+          return { status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: "OK" }] }] };
+        } };
+      },
+    });
+    await assert.rejects(client.request({ prompt: "synthetic", timeoutMs: 20 }), error =>
+      error.code === "GEO_REQUEST_TIMEOUT" && error.message === "GEO_REQUEST_TIMEOUT",
+    );
+    assert.equal(calls, 1);
+  }
+});
+
+test("a longer request deadline accepts a response that exceeds the shorter deadline", async () => {
+  const client = createDoubaoGeoClient({
+    getConfig: () => ({ baseUrl: CODING_BASE_URL, apiKey: "fixture", model: "fixture" }),
+    fetch: async (_, { signal }) => {
+      await delay(40, undefined, { signal });
+      return { ok: true, json: async () => ({ output: [{ type: "message", content: [{ type: "output_text", text: "OK" }] }] }) };
+    },
+  });
+  assert.equal((await client.request({ prompt: "synthetic", timeoutMs: 200 })).text, "OK");
+});
+
+test("request deadlines are bounded before dispatch and user cancellation remains distinct", async () => {
+  let calls = 0;
+  const client = createDoubaoGeoClient({
+    getConfig: () => ({ baseUrl: CODING_BASE_URL, apiKey: "fixture", model: "fixture" }),
+    fetch: async (_, { signal }) => {
+      calls++;
+      await delay(80, undefined, { signal });
+      return { ok: true, json: async () => ({ output: [{ type: "message", content: [{ type: "output_text", text: "OK" }] }] }) };
+    },
+  });
+  for (const timeoutMs of [0, -1, 1.5, 600001, "20"])
+    await assert.rejects(client.request({ prompt: "synthetic", timeoutMs }), { code: "GEO_REQUEST_INVALID" });
+  assert.equal(calls, 0);
+  const controller = new AbortController();
+  const pending = client.request({ prompt: "synthetic", timeoutMs: 200, signal: controller.signal });
+  await delay(10);
+  controller.abort();
+  await assert.rejects(pending, { code: "GEO_CANCELLED" });
+  assert.equal(calls, 1);
+});
 test("connection probes use one fixed request and return no customer or provider text", async (t) => {
   const requests = [];
   const instance = service(t, {

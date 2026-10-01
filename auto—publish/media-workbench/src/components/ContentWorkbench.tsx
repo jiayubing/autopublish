@@ -507,6 +507,7 @@ export default function ContentWorkbench({
             generationFeature={content.generation}
             generationMode={tab}
             onViewBatchArticles={openGenerationBatchArticles}
+            onSwitchToClient={() => changeTab("client")}
           />
         )}
         {mode === "library" && tab === "history" && (

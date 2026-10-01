@@ -6,9 +6,25 @@ const knowledge = normalizeCandidate(
   "client-1",
 );
 knowledge.revision = 1;
+knowledge.deliverable = {
+  version: 1,
+  knowledgeRevision: 1,
+  status: "draft",
+  markdown: "# 合成九板块知识稿",
+  warnings: ["篇幅不足仍交付"],
+};
 const state = { phase: "idle", running: false };
 const client = { clientId: "client-1" };
-const status = { configured: false, model: "", webSearch: true, baseUrl: "https://ark.cn-beijing.volces.com/api/plan/v3", defaultGlobalPrompt: "默认研究要求", globalPrompt: "" };
+const status = {
+  configured: false,
+  model: "",
+  webSearch: true,
+  baseUrl: "https://ark.cn-beijing.volces.com/api/plan/v3",
+  defaultGlobalPrompt: "默认研究要求",
+  globalPrompt: "",
+  defaultFinalKnowledgePrompt: "默认写稿要求",
+  finalKnowledgePrompt: "",
+};
 const geoKnowledgeIpcContractFixtures = [
   [
     "questionWorkflow",
@@ -36,8 +52,29 @@ const geoKnowledgeIpcContractFixtures = [
       clientMentioned: null,
     },
   ],
-  ["load", client, { knowledge, storageStatus: "current_v2", state }],
-  ["state", client, { state }],
+  [
+    "load",
+    client,
+    {
+      knowledge,
+      storageStatus: "current_v2",
+      state,
+      modelDraft: { status: "unverified", markdown: "# 未验证模型草稿" },
+    },
+  ],
+  [
+    "state",
+    client,
+    {
+      state: {
+        phase: "failed",
+        running: false,
+        failedPhase: "K",
+        outcome: "uncertain",
+        errorCode: "GEO_REQUEST_UNCERTAIN",
+      },
+    },
+  ],
   ["generate", client, { knowledge }],
   ["cancel", client, { state }],
   [
@@ -53,12 +90,22 @@ const geoKnowledgeIpcContractFixtures = [
   ],
   [
     "confirmSourceType",
-    { ...client, revision: 1, sourceId: "source-1", targetType: "official_web" },
+    {
+      ...client,
+      revision: 1,
+      sourceId: "source-1",
+      targetType: "official_web",
+    },
     { knowledge },
   ],
   [
     "resolveConflict",
-    { ...client, revision: 1, conflictId: "restrictions-1", claimId: "claim-1" },
+    {
+      ...client,
+      revision: 1,
+      conflictId: "restrictions-1",
+      claimId: "claim-1",
+    },
     { knowledge },
   ],
   [
@@ -70,6 +117,14 @@ const geoKnowledgeIpcContractFixtures = [
     "saveGlobalPrompt",
     { researchPromptOverride: "自定义全局要求" },
     { defaultGlobalPrompt: "默认研究要求", globalPrompt: "自定义全局要求" },
+  ],
+  [
+    "saveFinalKnowledgePrompt",
+    { finalKnowledgePromptOverride: "自定义写稿要求" },
+    {
+      defaultFinalKnowledgePrompt: "默认写稿要求",
+      finalKnowledgePrompt: "自定义写稿要求",
+    },
   ],
   [
     "saveClientPrompt",
@@ -94,12 +149,21 @@ const geoKnowledgeIpcContractFixtures = [
       },
     },
   ],
-  ["exportMarkdown", { ...client, revision: 1 }, { markdown: "# 合成客户\n确认稿" }],
+  [
+    "exportMarkdown",
+    { ...client, revision: 1 },
+    { markdown: "# 合成客户\n确认稿" },
+  ],
   ["configStatus", {}, status],
   ["testConnection", { search: false }, { search: false, citationCount: 0 }],
   [
     "saveConfig",
-    { model: "synthetic", apiKey: "synthetic-key", webSearch: true, baseUrl: status.baseUrl },
+    {
+      model: "synthetic",
+      apiKey: "synthetic-key",
+      webSearch: true,
+      baseUrl: status.baseUrl,
+    },
     { ...status, configured: true, model: "synthetic" },
   ],
 ].map(([method, request, result]) => ({

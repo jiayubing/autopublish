@@ -89,10 +89,16 @@ const item = exactObject({
   platform: optionalField(text(100, 1)),
   url: optionalField(text(2000, 1)),
   dateText: optionalField(text(200, 1)),
-  target: optionalField(exactObject({ section: literalField("profile"), field: text(200, 1) })),
+  target: optionalField(
+    exactObject({ section: literalField("profile"), field: text(200, 1) }),
+  ),
   claimIds: optionalField(arrayField(id, { min: 2, max: 500 })),
   conflictStatus: optionalField(enumField(["open", "resolved"])),
-  resolution: optionalField(nullableField(exactObject({ acceptedClaimId: id, resolvedAt: text(100, 1) }))),
+  resolution: optionalField(
+    nullableField(
+      exactObject({ acceptedClaimId: id, resolvedAt: text(100, 1) }),
+    ),
+  ),
 });
 const source = exactObject({
   id,
@@ -115,6 +121,17 @@ const source = exactObject({
   fetchedAt: optionalField(text(100, 1)),
   citationVerified: optionalField("boolean"),
 });
+const deliverable = exactObject({
+  version: literalField(1),
+  knowledgeRevision: integerField({ min: 0, max: Number.MAX_SAFE_INTEGER }),
+  status: enumField(["complete", "draft", "stale"]),
+  markdown: text(500000, 1),
+  warnings: arrayField(text(2000, 1), { max: 100 }),
+});
+const modelDraft = exactObject({
+  status: literalField("unverified"),
+  markdown: text(500000, 1),
+});
 const knowledge = exactObject({
   schemaVersion: literalField(2),
   clientId: id,
@@ -132,7 +149,11 @@ const knowledge = exactObject({
     outcome: enumField(["complete", "partial"]),
     warnings: arrayField(text(2000), { max: 100 }),
   }),
-  profile: exactObject({ ...common, fields, claims: arrayField(claim, { max: 500 }) }),
+  profile: exactObject({
+    ...common,
+    fields,
+    claims: arrayField(claim, { max: 500 }),
+  }),
   ...Object.fromEntries(
     [
       "onlinePresence",
@@ -149,6 +170,7 @@ const knowledge = exactObject({
     ].map((key) => [key, arrayField(item, { max: 500 })]),
   ),
   sources: arrayField(source, { max: 500 }),
+  deliverable: optionalField(deliverable),
 });
 const state = exactObject({
   phase: enumField([
@@ -161,8 +183,15 @@ const state = exactObject({
     "saving",
     "complete",
     "failed",
+    "R1",
+    "R2",
+    "R3",
+    "R4",
+    "R5",
+    "K",
   ]),
   running: "boolean",
+  outcome: optionalField(literalField("uncertain")),
   completed: optionalField(integerField({ min: 0, max: 10 })),
   total: optionalField(integerField({ min: 0, max: 10 })),
   errorCode: optionalField(text(128, 1)),
@@ -174,6 +203,12 @@ const state = exactObject({
       "researching",
       "synthesizing",
       "saving",
+      "R1",
+      "R2",
+      "R3",
+      "R4",
+      "R5",
+      "K",
     ]),
   ),
 });
@@ -184,13 +219,18 @@ const status = exactObject({
   webSearch: "boolean",
   defaultGlobalPrompt: text(8000, 1),
   globalPrompt: text(8000),
+  defaultFinalKnowledgePrompt: text(8000, 1),
+  finalKnowledgePrompt: text(8000),
 });
 const messages = {
   GEO_AUTH_REJECTED: "鉴权失败（401）：请检查是否使用了当前接口对应的密钥。",
-  GEO_PERMISSION_DENIED: "权限被拒绝（403）：请检查模型权限、套餐状态及接口是否匹配。",
+  GEO_PERMISSION_DENIED:
+    "权限被拒绝（403）：请检查模型权限、套餐状态及接口是否匹配。",
   GEO_REQUEST_FAILED: "服务端返回失败，请检查服务状态或额度；系统未自动重试。",
-  GEO_CAPABILITY_REJECTED: "当前地址或模型拒绝了 Responses/联网请求，请核对模型和工具支持。系统未切换接口或自动重试。",
-  GEO_SEARCH_UNCONFIRMED: "本次联网请求未返回可核验的网页引用，无法确认联网结果。研究已停止，系统未切换到其他计费接口。",
+  GEO_CAPABILITY_REJECTED:
+    "当前地址或模型拒绝了 Responses/联网请求，请核对模型和工具支持。系统未切换接口或自动重试。",
+  GEO_SEARCH_UNCONFIRMED:
+    "本次联网请求未返回可核验的网页引用，无法确认联网结果。研究已停止，系统未切换到其他计费接口。",
   GEO_LINK_PARTIAL:
     "部分问题可能已加入采集，但关联未完整保存。请刷新后重新选择加入，已有问题不会重复创建。",
   GEO_CONFIG_REQUIRED: "请先在设置中的豆包 GEO 配置密钥与模型。",
@@ -200,20 +240,23 @@ const messages = {
   GEO_REVISION_CONFLICT: "知识库已被修改，请刷新后再操作。",
   GEO_REQUEST_UNCERTAIN:
     "远端请求结果无法确认，系统未自动重发。请检查配置或稍后手动研究。",
+  GEO_REQUEST_TIMEOUT:
+    "模型响应等待超时，远端结果未确认，已停止且不会自动重试。",
   GEO_CANCELLED: "知识研究已取消，原有知识保留。",
   GEO_SCHEMA_INVALID:
-    "模型连续两次未返回符合知识库合同的 JSON，原有知识未修改。",
-  GEO_RESPONSE_INVALID:
-    "模型响应中没有可用文本，原有知识未修改。",
-  GEO_RESPONSE_INCOMPLETE:
-    "模型响应未完整结束，原有知识未修改。",
+    "模型结果未通过知识库校验，原有知识未修改；已收到的完整模型草稿可预览和导出。",
+  IPC_RESULT_INVALID: "知识库返回结果未通过校验，请刷新并提供错误代码。",
+  IPC_INTERNAL: "知识库操作发生内部错误，请提供错误代码。",
+  GEO_RESPONSE_INVALID: "模型响应中没有可用文本，原有知识未修改。",
+  GEO_RESPONSE_INCOMPLETE: "模型响应未完整结束，原有知识未修改。",
   GEO_REQUEST_BUDGET_EXHAUSTED:
     "本次研究已达到请求上限，且未能完成最终整理；原有知识未修改。",
   GEO_MATERIAL_TOO_LARGE:
     "客户资料超过单次知识提取上限，请减少或拆分资料后重试。",
   GEO_SAVE_FAILED: "知识库保存失败，原有知识保持不变。",
-  GEO_GENERATION_FAILED:
-    "知识研究发生未分类错误，原有知识未修改。",
+  GEO_GENERATION_FAILED: "知识研究发生未分类错误，原有知识未修改。",
+  GEO_CONTEXT_TOO_LARGE: "本次资料和研究结果超出可用容量，已停止，未自动重试。",
+  GEO_MATERIAL_REQUIRED: "请先添加可读取的客户资料。",
 };
 const codes = [
   "GEO_AUTH_REJECTED",
@@ -240,6 +283,7 @@ const codes = [
   "GEO_ALREADY_RUNNING",
   "GEO_REVISION_CONFLICT",
   "GEO_REQUEST_UNCERTAIN",
+  "GEO_REQUEST_TIMEOUT",
   "GEO_REQUEST_BUDGET_EXHAUSTED",
   "GEO_REQUEST_FAILED",
   "GEO_RESPONSE_INVALID",
@@ -254,6 +298,7 @@ const codes = [
   "GEO_POLICY_SAVE_FAILED",
   "GEO_MATERIAL_TOO_LARGE",
   "GEO_GENERATION_FAILED",
+  "GEO_CONTEXT_TOO_LARGE", "GEO_MATERIAL_REQUIRED",
 ];
 const errors = Object.fromEntries(
   codes.map((code) => [
@@ -281,11 +326,19 @@ const confirmationModel = exactObject({
   knowledgeRevision: integerField({ min: 0, max: Number.MAX_SAFE_INTEGER }),
   generatedAt: text(100, 1),
   sections: arrayField(
-    exactObject({ id, title: text(200, 1), entries: arrayField(confirmationEntry, { max: 1000 }) }),
+    exactObject({
+      id,
+      title: text(200, 1),
+      entries: arrayField(confirmationEntry, { max: 1000 }),
+    }),
     { min: 15, max: 15 },
   ),
   confirmationRequests: arrayField(
-    exactObject({ topic: text(2000, 1), reason: text(12000, 1), relatedKnowledgeIds: arrayField(id, { max: 500 }) }),
+    exactObject({
+      topic: text(2000, 1),
+      reason: text(12000, 1),
+      relatedKnowledgeIds: arrayField(id, { max: 500 }),
+    }),
     { max: 2000 },
   ),
 });
@@ -320,14 +373,19 @@ const geoKnowledgeContracts = [
           linkStatus: enumField(["unlinked", "linked", "stale"]),
           questionId: nullableField(id),
           collectionEnabled: nullableField("boolean"),
-          research: nullableField(exactObject({
-            collectedAt: text(100),
-            answerLength: integerField({ min: 0, max: 200000 }),
-            referenceCount: integerField({ min: 0, max: 1000 }),
-          })),
+          research: nullableField(
+            exactObject({
+              collectedAt: text(100),
+              answerLength: integerField({ min: 0, max: 200000 }),
+              referenceCount: integerField({ min: 0, max: 1000 }),
+            }),
+          ),
           articles: exactObject({
             total: integerField({ min: 0, max: Number.MAX_SAFE_INTEGER }),
-            publishedCount: integerField({ min: 0, max: Number.MAX_SAFE_INTEGER }),
+            publishedCount: integerField({
+              min: 0,
+              max: Number.MAX_SAFE_INTEGER,
+            }),
           }),
           generation: exactObject({
             ready: "boolean",
@@ -405,10 +463,25 @@ const geoKnowledgeContracts = [
     "load",
     "query",
     clientRequest,
-    exactObject({ knowledge: nullableField(knowledge), storageStatus: enumField(["missing", "legacy_v1", "current_v2", "invalid"]), state }),
+    exactObject({
+      knowledge: nullableField(knowledge),
+      storageStatus: enumField([
+        "missing",
+        "legacy_v1",
+        "current_v2",
+        "invalid",
+      ]),
+      state,
+      modelDraft: optionalField(modelDraft),
+    }),
   ),
   contract("state", "query", clientRequest, exactObject({ state })),
-  contract("generate", "command", exactObject({ clientId: id, temporaryPrompt: optionalField(text(2000)) }), exactObject({ knowledge })),
+  contract(
+    "generate",
+    "command",
+    exactObject({ clientId: id, temporaryPrompt: optionalField(text(2000)) }),
+    exactObject({ knowledge }),
+  ),
   contract("cancel", "command", clientRequest, exactObject({ state })),
   contract(
     "edit",
@@ -466,13 +539,29 @@ const geoKnowledgeContracts = [
     "promptSettings",
     "query",
     clientRequest,
-    exactObject({ defaultGlobalPrompt: text(8000, 1), globalPrompt: text(8000), clientPrompt: text(4000) }),
+    exactObject({
+      defaultGlobalPrompt: text(8000, 1),
+      globalPrompt: text(8000),
+      clientPrompt: text(4000),
+    }),
   ),
   contract(
     "saveGlobalPrompt",
     "command",
     exactObject({ researchPromptOverride: text(8000) }),
-    exactObject({ defaultGlobalPrompt: text(8000, 1), globalPrompt: text(8000) }),
+    exactObject({
+      defaultGlobalPrompt: text(8000, 1),
+      globalPrompt: text(8000),
+    }),
+  ),
+  contract(
+    "saveFinalKnowledgePrompt",
+    "command",
+    exactObject({ finalKnowledgePromptOverride: text(8000) }),
+    exactObject({
+      defaultFinalKnowledgePrompt: text(8000, 1),
+      finalKnowledgePrompt: text(8000),
+    }),
   ),
   contract(
     "saveClientPrompt",
@@ -483,17 +572,31 @@ const geoKnowledgeContracts = [
   contract(
     "previewConfirmation",
     "query",
-    exactObject({ clientId: id, revision: integerField({ min: 0, max: Number.MAX_SAFE_INTEGER }) }),
+    exactObject({
+      clientId: id,
+      revision: integerField({ min: 0, max: Number.MAX_SAFE_INTEGER }),
+    }),
     exactObject({ model: confirmationModel }),
   ),
   contract(
     "exportMarkdown",
     "query",
-    exactObject({ clientId: id, revision: integerField({ min: 0, max: Number.MAX_SAFE_INTEGER }) }),
+    exactObject({
+      clientId: id,
+      revision: integerField({ min: 0, max: Number.MAX_SAFE_INTEGER }),
+    }),
     exactObject({ markdown: text(4000000) }),
   ),
   contract("configStatus", "query", exactObject({}), status),
-  contract("testConnection", "command", exactObject({ search: "boolean" }), exactObject({ search: "boolean", citationCount: integerField({ min: 0, max: 100000 }) })),
+  contract(
+    "testConnection",
+    "command",
+    exactObject({ search: "boolean" }),
+    exactObject({
+      search: "boolean",
+      citationCount: integerField({ min: 0, max: 100000 }),
+    }),
+  ),
   contract(
     "saveConfig",
     "command",

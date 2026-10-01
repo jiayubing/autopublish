@@ -4,115 +4,308 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { createGeoKnowledgeStore } = require("../src/content/geo-knowledge-store");
-const { normalizeCandidate, mergeKnowledge } = require("../src/content/geo-knowledge-merge");
-const { createGeoKnowledgeApplication } = require("../src/content/geo-knowledge-application");
-const { createGeoKnowledgeResearch } = require("../src/content/geo-knowledge-research");
+const {
+  createGeoKnowledgeStore,
+} = require("../src/content/geo-knowledge-store");
+const {
+  normalizeCandidate,
+  mergeKnowledge,
+} = require("../src/content/geo-knowledge-merge");
+const {
+  createGeoKnowledgeApplication,
+} = require("../src/content/geo-knowledge-application");
 const { createDoubaoGeoClient } = require("../src/content/doubao-geo-client");
 const { validateKnowledge } = require("../src/content/geo-knowledge-schema");
-const { buildApplicationPrompt } = require("../src/content/geo-knowledge-research");
-const { createGeoKnowledgePromptStore } = require("../desktop/geo-knowledge-prompt-store");
+const {
+  createGeoKnowledgePromptStore,
+} = require("../desktop/geo-knowledge-prompt-store");
 const source = { id: "source-1", type: "client_input", title: "客户填写" };
-function candidate(name = "合成门店") { return { profile: { fields: { name }, basis: "fact", sourceIds: [source.id] } }; }
+function candidate(name = "合成门店") {
+  return {
+    profile: { fields: { name }, basis: "fact", sourceIds: [source.id] },
+  };
+}
 function document(name) { return normalizeCandidate(candidate(name), [source], "client-1"); }
 function workspace(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "geo-test-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   return root;
 }
-test("atomic persistence, revision and malformed content protect previous knowledge", t => {
+
+test("relationships resolve displayed names and identities to the authoritative target IDs", () => {
+  const entry = (name, identity) => ({ name, identity, basis: "fact", sourceIds: [source.id] });
+  for (const reference of ["name", "identity"]) {
+    const value = {
+      ...candidate(),
+      offerings: [entry("验光配镜", "offering-optical")],
+      scenarios: [entry("学生需求", "scenario-student")],
+      capabilities: [{ ...entry("就近服务", "capability-nearby"),
+        relatedOfferingNames: [reference === "name" ? "验光配镜" : "offering-optical"],
+        relatedScenarioNames: [reference === "name" ? "学生需求" : "scenario-student"],
+      }],
+    };
+    const document = normalizeCandidate(value, [source], "client-1");
+    assert.deepEqual(document.capabilities[0].relatedOfferingIds, [document.offerings[0].id]);
+    assert.deepEqual(document.capabilities[0].relatedScenarioIds, [document.scenarios[0].id]);
+  }
+});
+
+test("unresolved or ambiguous relationship names remain invalid", () => {
+  for (const names of [[], ["same", "same"]]) {
+    const value = { ...candidate(),
+      offerings: names.map((name, index) => ({ name, identity: "target-" + index, basis: "fact", sourceIds: [source.id] })),
+      capabilities: [{ name: "capability", relatedOfferingNames: ["same"] }],
+    };
+    assert.throws(() => normalizeCandidate(value, [source], "client-1"), { code: "GEO_KNOWLEDGE_INVALID" });
+  }
+});
+test("atomic persistence, revision and malformed content protect previous knowledge", (t) => {
   const root = workspace(t);
   const store = createGeoKnowledgeStore({ workspaceRoot: root });
   assert.equal(store.load("client-1"), null);
   const saved = store.save(document(), 0);
   assert.equal(saved.revision, 1);
-  assert.deepEqual(createGeoKnowledgeStore({ workspaceRoot: root }).load("client-1"), saved);
-  assert.throws(() => store.save(document("stale"), 0), { code: "GEO_REVISION_CONFLICT" });
-  assert.throws(() => store.save({ ...saved, schemaVersion: 3 }, 1), { code: "GEO_KNOWLEDGE_INVALID" });
-  const broken = createGeoKnowledgeStore({ workspaceRoot: root, atomicWriter: { write() { throw new Error("disk-full"); } } });
+  assert.deepEqual(
+    createGeoKnowledgeStore({ workspaceRoot: root }).load("client-1"),
+    saved,
+  );
+  assert.throws(() => store.save(document("stale"), 0), {
+    code: "GEO_REVISION_CONFLICT",
+  });
+  assert.throws(() => store.save({ ...saved, schemaVersion: 3 }, 1), {
+    code: "GEO_KNOWLEDGE_INVALID",
+  });
+  const broken = createGeoKnowledgeStore({
+    workspaceRoot: root,
+    atomicWriter: {
+      write() { throw new Error("disk-full"); },
+    },
+  });
   assert.throws(() => broken.save(document(), 1), { code: "GEO_SAVE_FAILED" });
   assert.deepEqual(store.load("client-1"), saved);
   assert.throws(() => store.load("../escape"), { code: "GEO_PATH_UNSAFE" });
 });
-test("manual lock survives research and conflicting facts remain unresolved", t => {
+test("manual lock survives research and conflicting facts remain unresolved", (t) => {
   const store = createGeoKnowledgeStore({ workspaceRoot: workspace(t) });
   let saved = store.save(document(), 0);
   const conflict = mergeKnowledge(saved, document("另一名称"));
   assert.equal(conflict.profile.fields.name, "合成门店");
   assert.equal(conflict.restrictions[0].type, "conflict");
-  saved = store.edit("client-1", saved.revision, "profile", saved.profile.id, { fields: { name: "人工名称" } });
+  saved = store.edit("client-1", saved.revision, "profile", saved.profile.id, {
+    fields: { name: "人工名称" },
+  });
   assert.equal(saved.profile.locked, true);
-  assert.equal(saved.sources.find(source => source.id === saved.profile.sourceIds[0]).title, "人工编辑确认");
+  assert.equal(
+    saved.sources.find((source) => source.id === saved.profile.sourceIds[0])
+      .title,
+    "人工编辑确认",
+  );
   assert.notDeepEqual(saved.profile.sourceIds, [source.id]);
-  assert.equal(mergeKnowledge(saved, document("AI新名称")).profile.fields.name, "人工名称");
+  assert.equal(
+    mergeKnowledge(saved, document("AI新名称")).profile.fields.name,
+    "人工名称",
+  );
 });
 test("unreferenced fact is candidate; invented references cannot enter canonical state", () => {
-  const input = candidate(); input.profile.sourceIds = [];
-  assert.equal(normalizeCandidate(input, [], "client-1").profile.basis, "candidate");
+  const input = candidate();
+  input.profile.sourceIds = [];
+  assert.equal(
+    normalizeCandidate(input, [], "client-1").profile.basis,
+    "candidate",
+  );
   input.profile.sourceIds = ["invented"];
-  assert.throws(() => normalizeCandidate(input, [], "client-1"), { code: "GEO_SOURCE_INVALID" });
+  assert.throws(() => normalizeCandidate(input, [], "client-1"), {
+    code: "GEO_SOURCE_INVALID",
+  });
 });
-test("small material input works; malformed output gets only one repair", async () => {
-  let calls = 0;
-  const research = createGeoKnowledgeResearch({ client: { async request() {
-    calls++; return { text: calls === 1 ? "not json" : JSON.stringify({ profile: { fields: {} } }), citations: [] };
-  } } });
-  const result = await research.extract({ clientId: "client-1", clientName: "合成门店", materials: [] });
-  assert.equal(result.offerings.length, 0); assert.equal(calls, 2);
-  const broken = createGeoKnowledgeResearch({ client: { async request() { throw Object.assign(new Error(), { code: "GEO_REQUEST_UNCERTAIN" }); } } });
-  await assert.rejects(broken.extract({ clientId: "client-1", materials: [] }), { code: "GEO_REQUEST_UNCERTAIN" });
-});
-test("generation rejects duplicates and concurrent edits preserve user changes", async t => {
+test("generation rejects duplicates and concurrent edits preserve user changes", async (t) => {
   const store = createGeoKnowledgeStore({ workspaceRoot: workspace(t) });
   const first = store.save(document(), 0);
   let finish;
-  const application = createGeoKnowledgeApplication({ store, getClient: () => ({ name: "合成门店" }), materialStore: { async listMaterials() { return []; } }, research: { extract: () => new Promise(resolve => { finish = resolve; }) } });
+  const application = createGeoKnowledgeApplication({
+    store,
+    getClient: () => ({ name: "合成门店" }),
+    materialStore: {
+      async listMaterials() { return []; },
+    },
+    research: {
+      run: () =>
+        new Promise((resolve) => {
+          finish = (value) => resolve({ document: value });
+        }),
+    },
+  });
   const running = application.generate("client-1");
-  await new Promise(resolve => setImmediate(resolve));
-  await assert.rejects(application.generate("client-1"), { code: "GEO_ALREADY_RUNNING" });
-  store.edit("client-1", first.revision, "profile", first.profile.id, { fields: { name: "并发人工编辑" } });
+  await new Promise((resolve) => setImmediate(resolve));
+  await assert.rejects(application.generate("client-1"), {
+    code: "GEO_ALREADY_RUNNING",
+  });
+  store.edit("client-1", first.revision, "profile", first.profile.id, {
+    fields: { name: "并发人工编辑" },
+  });
   finish(document());
   await assert.rejects(running, { code: "GEO_REVISION_CONFLICT" });
   assert.equal(store.load("client-1").profile.fields.name, "并发人工编辑");
 });
 test("Responses transport separates trusted citations and never retries uncertain requests", async () => {
   let calls = 0;
-  const client = createDoubaoGeoClient({ getConfig: () => ({ apiKey: "synthetic", model: "synthetic-model", baseUrl: "https://ark.cn-beijing.volces.com/api/plan/v3" }), fetch: async (url, options) => {
-    calls++; assert.equal(JSON.parse(options.body).tools[0].type, "web_search");
-    return { ok: true, json: async () => ({ status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: "{}", annotations: [{ type: "url_citation", title: "来源", url: "https://example.com" }] }] }] }) };
-  } });
-  assert.equal((await client.request({ prompt: "合成测试", search: true })).citations.length, 1); assert.equal(calls, 1);
+  const client = createDoubaoGeoClient({
+    getConfig: () => ({
+      apiKey: "synthetic",
+      model: "synthetic-model",
+      baseUrl: "https://ark.cn-beijing.volces.com/api/plan/v3",
+    }),
+    fetch: async (url, options) => {
+      calls++;
+      assert.equal(JSON.parse(options.body).tools[0].type, "web_search");
+      return {
+        ok: true,
+        json: async () => ({
+          status: "completed",
+          output: [
+            {
+              type: "message",
+              content: [
+                {
+                  type: "output_text",
+                  text: "{}",
+                  annotations: [
+                    {
+                      type: "url_citation",
+                      title: "来源",
+                      url: "https://example.com",
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        }),
+      };
+    },
+  });
+  assert.equal(
+    (await client.request({ prompt: "合成测试", search: true })).citations.length,
+    1,
+  );
+  assert.equal(calls, 1);
 });
 
-test("configuration stores encrypted credentials and status never returns the key", t => {
-  const { createDoubaoGeoConfigStore } = require("../desktop/doubao-geo-config-store");
+test("incomplete Responses expose only safe reasons and never retry or accept partial output", async () => {
+  for (const [reason, expected] of [
+    ["max_output_tokens", "max_output_tokens"],
+    ["content_filter", "content_filter"],
+    [undefined, "not_provided"],
+    ["private-provider-detail", "unknown"],
+    [{ secret: "private-provider-detail" }, "unknown"],
+  ]) {
+    let calls = 0;
+    const client = createDoubaoGeoClient({
+      getConfig: () => ({
+        apiKey: "synthetic",
+        model: "synthetic-model",
+        baseUrl: "https://ark.cn-beijing.volces.com/api/plan/v3",
+      }),
+      fetch: async () => {
+        calls++;
+        return {
+          ok: true,
+          json: async () => ({
+            status: "incomplete",
+            incomplete_details: { reason },
+            output: [
+              {
+                type: "message",
+                content: [
+                  { type: "output_text", text: "private-partial-body" },
+                ],
+              },
+            ],
+          }),
+        };
+      },
+    });
+    await assert.rejects(client.request({ prompt: "合成测试" }), (error) => {
+      assert.equal(error.code, "GEO_RESPONSE_INCOMPLETE");
+      assert.equal(error.incompleteReason, expected);
+      assert.equal(JSON.stringify(error).includes("private-"), false);
+      return true;
+    });
+    assert.equal(calls, 1);
+  }
+});
+
+test("configuration stores encrypted credentials and status never returns the key", (t) => {
+  const {
+    createDoubaoGeoConfigStore,
+  } = require("../desktop/doubao-geo-config-store");
   const root = workspace(t);
-  const safeStorage = { isEncryptionAvailable: () => true, encryptString: s => Buffer.from(s.split("").reverse().join("")), decryptString: b => b.toString().split("").reverse().join("") };
-  const config = createDoubaoGeoConfigStore({ userDataPath: root, safeStorage });
+  const safeStorage = {
+    isEncryptionAvailable: () => true,
+    encryptString: (s) => Buffer.from(s.split("").reverse().join("")),
+    decryptString: (b) => b.toString().split("").reverse().join(""),
+  };
+  const config = createDoubaoGeoConfigStore({
+    userDataPath: root,
+    safeStorage,
+  });
   assert.equal(config.status().configured, false);
-  config.save({ model: "synthetic", apiKey: "secret-fixture", webSearch: true, baseUrl: "https://ark.cn-beijing.volces.com/api/plan/v3" });
-  assert.equal(JSON.stringify(config.status()).includes("secret-fixture"), false);
-  assert.equal(fs.readFileSync(path.join(root, "doubao-geo.json"), "utf8").includes("secret-fixture"), false);
-  config.save({ model: "changed", apiKey: "", webSearch: false, baseUrl: "https://ark.cn-beijing.volces.com/api/plan/v3" });
+  config.save({
+    model: "synthetic",
+    apiKey: "secret-fixture",
+    webSearch: true,
+    baseUrl: "https://ark.cn-beijing.volces.com/api/plan/v3",
+  });
+  assert.equal(
+    JSON.stringify(config.status()).includes("secret-fixture"),
+    false,
+  );
+  assert.equal(
+    fs.readFileSync(path.join(root, "doubao-geo.json"), "utf8").includes("secret-fixture"),
+    false,
+  );
+  config.save({
+    model: "changed",
+    apiKey: "",
+    webSearch: false,
+    baseUrl: "https://ark.cn-beijing.volces.com/api/plan/v3",
+  });
   assert.equal(config.read().apiKey, "secret-fixture");
 });
 
-test("cancelled generation cannot save a late successful response", async t => {
+test("cancelled generation cannot save a late successful response", async (t) => {
   const store = createGeoKnowledgeStore({ workspaceRoot: workspace(t) });
   let finish;
-  const application = createGeoKnowledgeApplication({ store, getClient: () => ({}), materialStore: { async listMaterials() { return []; } }, research: { extract: () => new Promise(resolve => { finish = resolve; }) } });
+  const application = createGeoKnowledgeApplication({
+    store,
+    getClient: () => ({}),
+    materialStore: {
+      async listMaterials() { return []; },
+    },
+    research: {
+      run: () =>
+        new Promise((resolve) => {
+          finish = (value) => resolve({ document: value });
+        }),
+    },
+  });
   const pending = application.generate("client-1");
-  await new Promise(resolve => setImmediate(resolve));
-  application.cancel("client-1"); finish(document());
+  await new Promise((resolve) => setImmediate(resolve));
+  application.cancel("client-1");
+  finish(document());
   await assert.rejects(pending, { code: "GEO_CANCELLED" });
   assert.equal(store.load("client-1"), null);
 });
 
-test("knowledge refuses a linked storage directory", t => {
+test("knowledge refuses a linked storage directory", (t) => {
   const root = workspace(t);
   const outside = workspace(t);
   fs.mkdirSync(path.join(root, ".autopublish"));
-  fs.symlinkSync(outside, path.join(root, ".autopublish", "geo-knowledge"), "junction");
+  fs.symlinkSync(
+    outside,
+    path.join(root, ".autopublish", "geo-knowledge"),
+    "junction",
+  );
   const store = createGeoKnowledgeStore({ workspaceRoot: root });
   assert.throws(() => store.save(document(), 0), { code: "GEO_PATH_UNSAFE" });
   assert.deepEqual(fs.readdirSync(outside), []);
@@ -120,7 +313,13 @@ test("knowledge refuses a linked storage directory", t => {
 
 test("V2 profile projects only accepted fact or research claims", () => {
   const derived = normalizeCandidate(
-    { profile: { fields: { name: "推导名称" }, basis: "derived", sourceIds: [] } },
+    {
+      profile: {
+        fields: { name: "推导名称" },
+        basis: "derived",
+        sourceIds: [],
+      },
+    },
     [],
     "client-1",
   );
@@ -129,27 +328,61 @@ test("V2 profile projects only accepted fact or research claims", () => {
   const invalid = structuredClone(derived);
   invalid.profile.claims[0].status = "accepted";
   invalid.profile.fields.name = "推导名称";
-  assert.throws(() => validateKnowledge(invalid), { code: "GEO_KNOWLEDGE_INVALID" });
+  assert.throws(() => validateKnowledge(invalid), {
+    code: "GEO_KNOWLEDGE_INVALID",
+  });
 });
 
 test("new evidence sections and recommendation relations are enforced", () => {
   assert.throws(
-    () => normalizeCandidate({ profile: { fields: {} }, history: [{ name: "开业", basis: "candidate", sourceIds: [] }] }, [], "client-1"),
+    () =>
+      normalizeCandidate(
+        {
+          profile: { fields: {} },
+          history: [{ name: "开业", basis: "candidate", sourceIds: [] }],
+        },
+        [],
+        "client-1",
+      ),
     { code: "GEO_KNOWLEDGE_INVALID" },
   );
   assert.throws(
-    () => normalizeCandidate({ profile: { fields: {} }, recommendationAngles: [{ name: "无依据角度", basis: "derived", sourceIds: [] }] }, [], "client-1"),
+    () =>
+      normalizeCandidate(
+        {
+          profile: { fields: {} },
+          recommendationAngles: [
+            { name: "无依据角度", basis: "derived", sourceIds: [] },
+          ],
+        },
+        [],
+        "client-1",
+      ),
     { code: "GEO_KNOWLEDGE_INVALID" },
   );
-  const related = normalizeCandidate({
-    profile: { fields: {} },
-    offerings: [{ name: "合成产品", basis: "candidate", sourceIds: [] }],
-    recommendationAngles: [{ name: "产品角度", basis: "derived", sourceIds: [], relatedOfferingNames: ["合成产品"] }],
-  }, [], "client-1");
-  assert.equal(related.recommendationAngles[0].relatedOfferingIds[0], related.offerings[0].id);
+  const related = normalizeCandidate(
+    {
+      profile: { fields: {} },
+      offerings: [{ name: "合成产品", basis: "candidate", sourceIds: [] }],
+      recommendationAngles: [
+        {
+          name: "产品角度",
+          basis: "derived",
+          sourceIds: [],
+          relatedOfferingNames: ["合成产品"],
+        },
+      ],
+    },
+    [],
+    "client-1",
+  );
+  assert.equal(
+    related.recommendationAngles[0].relatedOfferingIds[0],
+    related.offerings[0].id,
+  );
 });
 
-test("legacy V1 is detected and replaced only after valid V2 generation", async t => {
+test("legacy V1 is detected and replaced only after valid V2 generation", async (t) => {
   const root = workspace(t);
   const directory = path.join(root, ".autopublish", "geo-knowledge");
   fs.mkdirSync(directory, { recursive: true });
@@ -163,20 +396,36 @@ test("legacy V1 is detected and replaced only after valid V2 generation", async 
   assert.equal(store.inspect("client-1").status, "legacy_v1");
   assert.equal(store.load("client-1"), null);
   const failed = createGeoKnowledgeApplication({
-    store, getClient: () => ({ name: "合成客户" }), materialStore: { async listMaterials() { return []; } },
-    research: { async extract() { throw Object.assign(new Error(), { code: "GEO_SCHEMA_INVALID" }); } },
+    store,
+    getClient: () => ({ name: "合成客户" }),
+    materialStore: {
+      async listMaterials() { return []; },
+    },
+    research: {
+      async run() { throw Object.assign(new Error(), { code: "GEO_SCHEMA_INVALID" }); },
+    },
   });
-  await assert.rejects(failed.generate("client-1"), { code: "GEO_SCHEMA_INVALID" });
+  await assert.rejects(failed.generate("client-1"), {
+    code: "GEO_SCHEMA_INVALID",
+  });
   assert.deepEqual(failed.state("client-1"), {
     phase: "failed",
     running: false,
-    failedPhase: "extracting",
+    failedPhase: "R1",
     errorCode: "GEO_SCHEMA_INVALID",
   });
   assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")), legacy);
   const application = createGeoKnowledgeApplication({
-    store, getClient: () => ({ name: "合成客户" }), materialStore: { async listMaterials() { return []; } },
-    research: { async extract() { return document("新版客户"); } },
+    store,
+    getClient: () => ({ name: "合成客户" }),
+    materialStore: {
+      async listMaterials() { return []; },
+    },
+    research: {
+      async run() {
+        return { document: document("新版客户") };
+      },
+    },
   });
   const saved = await application.generate("client-1");
   assert.equal(saved.schemaVersion, 2);
@@ -184,76 +433,186 @@ test("legacy V1 is detected and replaced only after valid V2 generation", async 
   assert.equal(saved.profile.fields.name, "新版客户");
 });
 
-test("source confirmation is bounded, safe and stale-protected", t => {
+test("source confirmation is bounded, safe and stale-protected", (t) => {
   const root = workspace(t);
-  const web = { id: "source-web", type: "third_party", title: "搜索结果", url: "https://example.com", fetchedAt: new Date().toISOString(), citationVerified: true };
+  const web = {
+    id: "source-web",
+    type: "third_party",
+    title: "搜索结果",
+    url: "https://example.com",
+    fetchedAt: new Date().toISOString(),
+    citationVerified: true,
+  };
   const store = createGeoKnowledgeStore({ workspaceRoot: root });
-  const saved = store.save(normalizeCandidate({ profile: { fields: { name: "公开名称" }, basis: "research", sourceIds: [web.id] } }, [web], "client-1"), 0);
-  const confirmed = store.confirmSourceType("client-1", saved.revision, web.id, "official_web");
+  const saved = store.save(
+    normalizeCandidate(
+      {
+        profile: {
+          fields: { name: "公开名称" },
+          basis: "research",
+          sourceIds: [web.id],
+        },
+      },
+      [web],
+      "client-1",
+    ),
+    0,
+  );
+  const confirmed = store.confirmSourceType(
+    "client-1",
+    saved.revision,
+    web.id,
+    "official_web",
+  );
   assert.equal(confirmed.sources[0].type, "official_web");
   assert.equal(confirmed.profile.claims[0].basis, "research");
-  assert.throws(() => store.confirmSourceType("client-1", saved.revision, web.id, "client_public"), { code: "GEO_REVISION_CONFLICT" });
-  assert.throws(() => store.confirmSourceType("client-1", confirmed.revision, web.id, "client_public"), { code: "GEO_SOURCE_INVALID" });
+  assert.throws(
+    () =>
+      store.confirmSourceType(
+        "client-1",
+        saved.revision,
+        web.id,
+        "client_public",
+      ),
+    { code: "GEO_REVISION_CONFLICT" },
+  );
+  assert.throws(
+    () =>
+      store.confirmSourceType(
+        "client-1",
+        confirmed.revision,
+        web.id,
+        "client_public",
+      ),
+    { code: "GEO_SOURCE_INVALID" },
+  );
 });
 
-test("manual conflict resolution creates a fact claim and preserves the selected observation", t => {
+test("manual conflict resolution creates a fact claim and preserves the selected observation", (t) => {
   const store = createGeoKnowledgeStore({ workspaceRoot: workspace(t) });
   const first = store.save(document("名称甲"), 0);
-  const conflicted = store.save(mergeKnowledge(first, document("名称乙")), first.revision);
-  const conflict = conflicted.restrictions.find(item => item.type === "conflict");
-  const candidateClaim = conflicted.profile.claims.find(claim => claim.value === "名称乙");
-  const resolved = store.resolveConflict("client-1", conflicted.revision, conflict.id, { claimId: candidateClaim.id });
+  const conflicted = store.save(
+    mergeKnowledge(first, document("名称乙")),
+    first.revision,
+  );
+  const conflict = conflicted.restrictions.find(
+    (item) => item.type === "conflict",
+  );
+  const candidateClaim = conflicted.profile.claims.find(
+    (claim) => claim.value === "名称乙",
+  );
+  const resolved = store.resolveConflict(
+    "client-1",
+    conflicted.revision,
+    conflict.id,
+    { claimId: candidateClaim.id },
+  );
   assert.equal(resolved.profile.fields.name, "名称乙");
-  assert.equal(resolved.profile.claims.find(claim => claim.id === candidateClaim.id).status, "candidate");
-  const accepted = resolved.profile.claims.find(claim => claim.status === "accepted");
-  assert.deepEqual({ basis: accepted.basis, origin: accepted.origin, locked: accepted.locked }, { basis: "fact", origin: "manual", locked: true });
-  assert.equal(resolved.sources.find(value => value.id === accepted.sourceIds[0]).type, "client_input");
+  assert.equal(
+    resolved.profile.claims.find((claim) => claim.id === candidateClaim.id)
+      .status,
+    "candidate",
+  );
+  const accepted = resolved.profile.claims.find(
+    (claim) => claim.status === "accepted",
+  );
+  assert.deepEqual(
+    { basis: accepted.basis, origin: accepted.origin, locked: accepted.locked },
+    { basis: "fact", origin: "manual", locked: true },
+  );
+  assert.equal(
+    resolved.sources.find((value) => value.id === accepted.sourceIds[0]).type,
+    "client_input",
+  );
   const reopened = mergeKnowledge(resolved, document("名称丙"));
-  assert.equal(reopened.restrictions.find(item => item.id === conflict.id).conflictStatus, "open");
+  assert.equal(
+    reopened.restrictions.find((item) => item.id === conflict.id)
+      .conflictStatus,
+    "open",
+  );
 });
 
-test("global and client prompt policies persist atomically without changing knowledge", t => {
+test("global and client prompt policies persist atomically without changing knowledge", (t) => {
   const root = workspace(t);
   const store = createGeoKnowledgeStore({ workspaceRoot: root });
   const saved = store.save(document("合成客户"), 0);
   assert.deepEqual(store.loadPolicy("client-1"), { researchPrompt: "" });
-  assert.deepEqual(store.savePolicy("client-1", "客户长期要求"), { researchPrompt: "客户长期要求" });
-  assert.deepEqual(store.loadPolicy("client-1"), { researchPrompt: "客户长期要求" });
+  assert.deepEqual(store.savePolicy("client-1", "客户长期要求"), {
+    researchPrompt: "客户长期要求",
+  });
+  assert.deepEqual(store.loadPolicy("client-1"), {
+    researchPrompt: "客户长期要求",
+  });
   assert.deepEqual(store.load("client-1"), saved);
 
-  const global = createGeoKnowledgePromptStore({ userDataPath: path.join(root, "config") });
-  assert.deepEqual(global.load(), { researchPromptOverride: "" });
+  const global = createGeoKnowledgePromptStore({
+    userDataPath: path.join(root, "config"),
+  });
+  assert.deepEqual(global.load(), {
+    researchPromptOverride: "",
+    finalKnowledgePromptOverride: "",
+  });
   global.save("全局要求");
-  assert.deepEqual(global.load(), { researchPromptOverride: "全局要求" });
+  assert.deepEqual(global.load(), {
+    researchPromptOverride: "全局要求",
+    finalKnowledgePromptOverride: "",
+  });
+  global.saveFinalKnowledgePrompt("自定义写稿要求");
+  assert.deepEqual(
+    createGeoKnowledgePromptStore({
+      userDataPath: path.join(root, "config"),
+    }).load(),
+    {
+      researchPromptOverride: "全局要求",
+      finalKnowledgePromptOverride: "自定义写稿要求",
+    },
+  );
   global.save("");
-  assert.deepEqual(global.load(), { researchPromptOverride: "" });
-  assert.throws(() => store.savePolicy("client-1", "x".repeat(4001)), { code: "GEO_POLICY_INVALID" });
+  assert.deepEqual(global.load(), {
+    researchPromptOverride: "",
+    finalKnowledgePromptOverride: "自定义写稿要求",
+  });
+  global.saveFinalKnowledgePrompt("");
+  assert.deepEqual(global.load(), {
+    researchPromptOverride: "",
+    finalKnowledgePromptOverride: "",
+  });
+  assert.throws(() => global.saveFinalKnowledgePrompt(" "), {
+    code: "GEO_POLICY_INVALID",
+  });
+  assert.throws(() => store.savePolicy("client-1", "x".repeat(4001)), {
+    code: "GEO_POLICY_INVALID",
+  });
 });
 
-test("generation snapshots prompt layers once and temporary prompt is not persisted", async t => {
+test("generation snapshots prompt layers once and temporary prompt is not persisted", async (t) => {
   const store = createGeoKnowledgeStore({ workspaceRoot: workspace(t) });
   let reads = 0;
   let snapshot;
   const application = createGeoKnowledgeApplication({
     store,
     getClient: () => ({ name: "合成客户" }),
-    materialStore: { async listMaterials() { return []; } },
+    materialStore: {
+      async listMaterials() { return []; },
+    },
     getPromptSnapshot: (_clientId, temporaryPrompt) => {
       reads++;
       return { globalPrompt: "全局", clientPrompt: "客户", temporaryPrompt };
     },
     research: {
-      async extract(input) { snapshot = input.promptSnapshot; return document("合成客户"); },
-      async enrich(value, input) { assert.equal(input.promptSnapshot, snapshot); return value; },
+      async run(input) {
+        snapshot = input.promptSnapshot;
+        return { document: document("合成客户") };
+      },
     },
   });
   await application.generate("client-1", { temporaryPrompt: "临时" });
   assert.equal(reads, 1);
-  assert.deepEqual(snapshot, { globalPrompt: "全局", clientPrompt: "客户", temporaryPrompt: "临时" });
+  assert.deepEqual(snapshot, {
+    globalPrompt: "全局",
+    clientPrompt: "客户",
+    temporaryPrompt: "临时",
+  });
   assert.equal(JSON.stringify(store.load("client-1")).includes("临时"), false);
-  const prompt = buildApplicationPrompt("当前任务", snapshot);
-  assert.ok(prompt.indexOf("[全局研究要求]") < prompt.indexOf("[客户补充要求]"));
-  assert.ok(prompt.indexOf("[客户补充要求]") < prompt.indexOf("[本次临时要求]"));
-  assert.ok(prompt.indexOf("[本次临时要求]") < prompt.indexOf("[当前任务]"));
-  assert.match(prompt, /schema.*来源政策.*请求预算/s);
+
 });

@@ -213,6 +213,7 @@ const api = {
     resolveConflict: input => ipcRenderer.invoke("geo-knowledge:resolveConflict", input),
     promptSettings: input => ipcRenderer.invoke("geo-knowledge:promptSettings", input),
     saveGlobalPrompt: input => ipcRenderer.invoke("geo-knowledge:saveGlobalPrompt", input),
+    saveFinalKnowledgePrompt: input => ipcRenderer.invoke("geo-knowledge:saveFinalKnowledgePrompt", input),
     saveClientPrompt: input => ipcRenderer.invoke("geo-knowledge:saveClientPrompt", input),
     previewConfirmation: input => ipcRenderer.invoke("geo-knowledge:previewConfirmation", input),
     exportMarkdown: input => ipcRenderer.invoke("geo-knowledge:exportMarkdown", input),

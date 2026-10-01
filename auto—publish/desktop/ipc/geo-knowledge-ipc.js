@@ -10,6 +10,7 @@ function registerGeoKnowledgeIpc({ ipcMain, geoKnowledgeService }) {
     "resolveConflict",
     "promptSettings",
     "saveGlobalPrompt",
+    "saveFinalKnowledgePrompt",
     "saveClientPrompt",
     "previewConfirmation",
     "exportMarkdown",
