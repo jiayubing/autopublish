@@ -1,0 +1,24 @@
+{
+  "files": [
+    {
+      "file": "auto—publish/tests/geo-knowledge-research.test.js",
+      "sha256": "899f6e992f3a76837cabb3ff5782fbcb6715b9b93c877413d9588aff470e4703"
+    },
+    {
+      "file": "auto—publish/tests/geo-knowledge.test.js",
+      "sha256": "a72a49e6e61d69f6ec0d36b8bd8dd5309835d0b356187c18b0a4c86c9067829d"
+    },
+    {
+      "file": "auto—publish/tests/geo-coding-plan.test.js",
+      "sha256": "21e6ee2286f54d6e6c3bf28e029f670882da6a9d767adc58369beca487e38a21"
+    },
+    {
+      "file": "auto—publish/tests/customer-continuous-knowledge.test.js",
+      "sha256": "965694cdaa357d22911002fdbde14f77805d1387bc3b7baaa3e943114e2470de"
+    }
+  ],
+  "retired": [
+    "auto—publish/tests/customer-deep-research.test.js",
+    "auto—publish/tests/customer-knowledge-synthesis.test.js"
+  ]
+}

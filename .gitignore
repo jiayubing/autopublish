@@ -16,3 +16,12 @@ dist/
 /auto-publish-app-config-v2-20260716/
 /auto—publish/release-production-smoke-fix/
 /auto—publish/release-gpt*/
+
+# Local knowledge experiments: raw customer/provider records and recovery backups.
+# Commit only the integration handoff and sanitized verification summaries.
+/.scratch/geo-web-search-diagnostic/
+/.scratch/geo-knowledge-final-synthesis-prototype/
+/.scratch/doubao-research-automation/*
+!/.scratch/doubao-research-automation/F-INTEGRATION.md
+!/.scratch/doubao-research-automation/F-cleanup-files.json
+!/.scratch/doubao-research-automation/F-COMMIT-EVIDENCE.json

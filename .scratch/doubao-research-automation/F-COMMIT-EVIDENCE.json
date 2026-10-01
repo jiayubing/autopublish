@@ -1,0 +1,382 @@
+{
+  "baseCommit": "8afd672346d0c93783635726f9e8f24ea0471b2f",
+  "implementationCommit": "17b3d604122c0a55b9a87f9c98eb8ee8354870a7",
+  "branch": "codex/geo-knowledge-base",
+  "validation": [
+    {
+      "command": "npm test",
+      "counts": {
+        "tests": 651,
+        "passed": 651,
+        "failed": 0,
+        "skipped": 0,
+        "cancelled": 0,
+        "todo": 0
+      },
+      "lifecycle": "CLOSED",
+      "logFile": "F-cleanup-core.log",
+      "logSha256": "6d9e42f250796996f6492b5c70d214f60cac98726c3485bcec8e7ac12f414df0"
+    },
+    {
+      "command": "npm run test:integration",
+      "counts": {
+        "tests": 1325,
+        "passed": 1325,
+        "failed": 0,
+        "skipped": 0,
+        "cancelled": 0,
+        "todo": 0
+      },
+      "lifecycle": "CLOSED",
+      "logFile": "F-cleanup-integration.log",
+      "logSha256": "7976dc07dc19c885a3fb1d557ae300cfe8d90ec5f8dab0e1fa0c20c18b095cbf"
+    },
+    {
+      "command": "npm run lint",
+      "exitCode": 0,
+      "logFile": "F-commit-lint.log",
+      "logSha256": "4719207db1de39dff12b56ed1bd59ff8218ca692682c09a44d607bd309d59967"
+    },
+    {
+      "command": "npm run typecheck:main",
+      "exitCode": 0,
+      "logFile": "F-commit-main.log",
+      "logSha256": "ebbc142724f130b6a415fe941f24cc023094b14e865322902f3ad4fce01fbed6"
+    },
+    {
+      "command": "npm run typecheck:bridge",
+      "exitCode": 0,
+      "logFile": "F-commit-bridge.log",
+      "logSha256": "1bde7b67ab165f2ead21a7a73f10585f97084eb9dcbfdbeba2fc67dc001da18b"
+    },
+    {
+      "command": "npm run build:renderer",
+      "exitCode": 0,
+      "logFile": "F-commit-renderer.log",
+      "logSha256": "1b1be1541d5a2d7b83d8ba9742893aee2c4b6c3a49883e4f6fc3f0258fd71917"
+    },
+    {
+      "command": "npm run build:preload",
+      "exitCode": 0,
+      "logFile": "F-commit-preload.log",
+      "logSha256": "6c7a17d76541a8c86474d11522bf3e42ea05ed15d1a7c10b1bfcbfc72a549807"
+    }
+  ],
+  "note": "Core and integration ran before commits against unchanged production/test files. No production or test edits followed. Final commit only adds ignore policy and evidence. Detailed logs and historical snapshots remain local, excluded from Git.",
+  "cleanup": {
+    "deletedSyntheticRunDirectories": 709,
+    "classificationCounts": {
+      "exact synthetic material": 394,
+      "retired synthesis fixture": 231,
+      "synthetic input workspace": 5,
+      "retired synthesis fixture variant": 70,
+      "exact generic competition fixture": 9
+    },
+    "prunedMissingWorktreeRegistrations": 2,
+    "retainedUnclassifiedRunDirectories": 7,
+    "rawDiagnosticsAndRecoveryBackups": "retained locally; excluded from Git",
+    "supersededV13Plan": "moved to local f-before-transfer backup"
+  },
+  "files": [
+    {
+      "file": "AUTOPUBLISH-GEO-KNOWLEDGE-V2-INCREMENTAL-CONTRACT-v2.1.md",
+      "gitBlob": "29922edad9af00ab1042d87fccf2b237aeaacf9d",
+      "worktreeSha256": "552f9b2babb1c59579bd62b7c981cdd4ac46d278e70fe93c7125ea225e6fa57d"
+    },
+    {
+      "file": "AutoPublish-GEO-Content-Production-Implementation-Plan-v1.4.md",
+      "gitBlob": "037b81246b61133625b076f33d47bc449e5cafde",
+      "worktreeSha256": "0b008102c86f2c18dac5adb08c0a62a33f9c462c843ba264a4463c4195a8c2f2"
+    },
+    {
+      "file": "auto—publish/README.md",
+      "gitBlob": "60c4bc8d40b82a9cb4a128dfa73ff521db251882",
+      "worktreeSha256": "1fdce19d1515ab58fb51cbc6f9884a20ca5aa126b0ec7d5eff1c881ea921c31c"
+    },
+    {
+      "file": "auto—publish/desktop/geo-knowledge-prompt-store.js",
+      "gitBlob": "588e4c6cee042edddebf5bec442c89e235634670",
+      "worktreeSha256": "703eeff618098073c8a1243e5c6340f4c5919a75167f778f1fa72dcf4e0f7520"
+    },
+    {
+      "file": "auto—publish/desktop/ipc/contracts/geo-knowledge-contracts.js",
+      "gitBlob": "011abcda435414ac8317cd6929ff7d783bdc365d",
+      "worktreeSha256": "0867de9c4a972ab5b433ee9873e4015c806f8db2b00070be5ab16b2113b2c9e7"
+    },
+    {
+      "file": "auto—publish/desktop/ipc/geo-knowledge-ipc.js",
+      "gitBlob": "9a7d819148f1bc7294e5c1f638e5c31e0f7c1b7d",
+      "worktreeSha256": "4b6d22ca07b1fe5d830d9380b2619c520851e59703a04d972b8193402df8f65a"
+    },
+    {
+      "file": "auto—publish/desktop/preload.js",
+      "gitBlob": "c363b9da1986b525d42c73f844ec4803d2299d7c",
+      "worktreeSha256": "44683ebc785f706dda0fb17c754285b7842ef1e3957b752716fae9e96f00e744"
+    },
+    {
+      "file": "auto—publish/desktop/services/geo-knowledge-service.js",
+      "gitBlob": "f0518e7cd2628aa5a64c36f27aeddd2fff4214cd",
+      "worktreeSha256": "dfb458c23ec85eda2ef10c6280e6f7690202ee4d493e9a182d54b0c12f7493cc"
+    },
+    {
+      "file": "auto—publish/media-workbench/src/bridge/geo-knowledge.ts",
+      "gitBlob": "9c7570a4fa9fd0b73ed34a6dd73f739a55aefbbc",
+      "worktreeSha256": "819f208be85ab11baf61004605cdf81ecd8d76fe19931a6fa2943673fce215b9"
+    },
+    {
+      "file": "auto—publish/media-workbench/src/components/ContentWorkbench.tsx",
+      "gitBlob": "2ca743a108dbd09899d9f156f5b0e1a40747ee72",
+      "worktreeSha256": "eea0c9e7b5c56fa5c4d2d53a9c143e2c26c4b92b5a4d182f21abe447cf514d73"
+    },
+    {
+      "file": "auto—publish/media-workbench/src/components/content/ArticleGenerationView.tsx",
+      "gitBlob": "ffd74563cdd6955b25ba4cde4f904e85140cfff4",
+      "worktreeSha256": "f2824146d047f7632b363161cc4ac75d0755f5d4fd2a07d7e9686ba0093a6b67"
+    },
+    {
+      "file": "auto—publish/media-workbench/src/components/content/BatchGenerationView.tsx",
+      "gitBlob": "cda84fb8ec1c749010ab01f69bb783aebb27ee7a",
+      "worktreeSha256": "5d84fc1eb7e7f075e4902a0f87c3efc4fde99b46e50caa1252aa1bf4c196ed76"
+    },
+    {
+      "file": "auto—publish/media-workbench/src/components/content/GeoKnowledgeView.tsx",
+      "gitBlob": "e7c0e364cb79be1f2f22c9036334420f91d538fc",
+      "worktreeSha256": "bc8ac52a6b1d64a5b47bee9e5e351a530510ee7796e909bde3b88dfeed7c774e"
+    },
+    {
+      "file": "auto—publish/media-workbench/src/components/settings/DoubaoGeoSettings.tsx",
+      "gitBlob": "86a4df94dab4f2d744e177df4f996d5abac4ee86",
+      "worktreeSha256": "c36007d961f81d471dc8c16b4ad7fcaf23e407a5f08f6be8c837f0dedcc01244"
+    },
+    {
+      "file": "auto—publish/media-workbench/src/features/content/use-geo-knowledge.ts",
+      "gitBlob": "9ebf3cee5060a028abcee6efade2a530e8a7f012",
+      "worktreeSha256": "d1b529d1323ad616e9b4387ad3835f6cfc7275939e1ca86aff803aef8d35bcee"
+    },
+    {
+      "file": "auto—publish/media-workbench/src/features/settings/settings-context.tsx",
+      "gitBlob": "a38d98f041a03aac6f0d9d73d96eb5aeef0289a4",
+      "worktreeSha256": "9fe1aecbe84adc14063c12dfb0a88bd569c061d00d98a31232f03b8691bc0ba6"
+    },
+    {
+      "file": "auto—publish/media-workbench/src/features/settings/settings-feature.js",
+      "gitBlob": "586974d9587d313f4ff51e5432d43ab29b23c49c",
+      "worktreeSha256": "01171439cc7621a21f6e50539a4020bec3acccdf40fc648afb7eaac8e113de53"
+    },
+    {
+      "file": "auto—publish/media-workbench/src/types/geo-knowledge.ts",
+      "gitBlob": "8ad59d161a9d1aa1be89fe8bd49851b0032cef31",
+      "worktreeSha256": "573254c0ae12f67ec675a8afbb926be6666f5d4d1e7d1f039b5153029ead9f8e"
+    },
+    {
+      "file": "auto—publish/package-lock.json",
+      "gitBlob": "f4b927658ca2b2e14ce2511279613f6ab4fa9f77",
+      "worktreeSha256": "a0c9e6828c0c1abddf9f281ff3e9847512767574ac0f4f50c3ab20ffa4846a28"
+    },
+    {
+      "file": "auto—publish/package.json",
+      "gitBlob": "9e2bdbda63e51475b8279ce79d0ad602bc4938d2",
+      "worktreeSha256": "7ceef0dae9f238cf84985e975cc04feaa5ebe0426ea14ea67b4f77eb295feae5"
+    },
+    {
+      "file": "auto—publish/scripts/test-suites.json",
+      "gitBlob": "7d42e51a20098c8ecd7be900648f3155fe88d992",
+      "worktreeSha256": "32803de7f568af00b9c322269a261ddcfea80ec9b69ed5491e0e13235c82a54b"
+    },
+    {
+      "file": "auto—publish/src/content/client-material-store.js",
+      "gitBlob": "86291fc54c6959df000d4a29fc95e22f55687cf4",
+      "worktreeSha256": "536bf3deac00162b5116d42ade7fc4a620ea0411df0be2583bfafae9ca1f44cf"
+    },
+    {
+      "file": "auto—publish/src/content/continuous-knowledge-canonical.js",
+      "gitBlob": "389aa2b00c9438d1bcdc0c555e0a7480c9064f8e",
+      "worktreeSha256": "e1fc6276ba1ba03d0cb65ae1f17a97ff372a40c0efb33f7639c46de4b9668d0c"
+    },
+    {
+      "file": "auto—publish/src/content/continuous-knowledge-contract.js",
+      "gitBlob": "04d11df40f1a6ab51507e266b863dbe422fd283f",
+      "worktreeSha256": "0eb93eb85812440d8a9aa9a153bde097ae38427ab68d8aa81ca355407b9f9742"
+    },
+    {
+      "file": "auto—publish/src/content/continuous-knowledge-evidence.js",
+      "gitBlob": "e614ca6bf9f46da614b972dbdfcce0d483e22c7f",
+      "worktreeSha256": "d656e812d8b0dd31a2e36910c6246b868840ecd87ffa5951035832abf0fbc636"
+    },
+    {
+      "file": "auto—publish/src/content/continuous-knowledge-run.js",
+      "gitBlob": "8af786c3f0eb8a7163853c73ee0f85e4dc4277e8",
+      "worktreeSha256": "7b369e9059712558e0ac26e50ef92b97244b529739177055cd470a7dca4aaf8d"
+    },
+    {
+      "file": "auto—publish/src/content/continuous-knowledge-synthesis.js",
+      "gitBlob": "726bf091539890a0f9c95ed5d3769b129a2a9120",
+      "worktreeSha256": "96c212bae88b20a7cb3d9e1880a166da2fcaf458e5be9db0b3d39306b42b18ff"
+    },
+    {
+      "file": "auto—publish/src/content/default-final-knowledge-prompt.md",
+      "gitBlob": "333be130e7dd060ba77e1d8ead13bce76f871e54",
+      "worktreeSha256": "3bb1fd9600e642fc324eed94cd316741abf91a60742a12cbc735ac281086632a"
+    },
+    {
+      "file": "auto—publish/src/content/doubao-geo-client.js",
+      "gitBlob": "602bd43d964008259ef02a84c2ee9f6c65f16d9a",
+      "worktreeSha256": "f2bb17934666d90ea6af8c585198051648dc9dd5493a2d84e86cfd9e3d8c3c34"
+    },
+    {
+      "file": "auto—publish/src/content/final-knowledge-prompt.js",
+      "gitBlob": "518033ffe5f454c378339230025265ed1c15f3b7",
+      "worktreeSha256": "259a4581272e9d9f6adfe738c140cbc26717daae8fd7d81f8d778339e8b36f40"
+    },
+    {
+      "file": "auto—publish/src/content/geo-confirmation-model.js",
+      "gitBlob": "bae960b8bf84913c15fef65342313e3bd4d7f34a",
+      "worktreeSha256": "1fc90aba81ed2eba166236038d0051e1ab95479a7cbe66929cb44cd0f63e99d8"
+    },
+    {
+      "file": "auto—publish/src/content/geo-generation-context.js",
+      "gitBlob": "1ff9c907a144ec7a5915cc36ed056ff00f922e76",
+      "worktreeSha256": "57883cb741427e0a7d014f2ed5d532bd5278c2a4d241f5b4e25d3c67a1f02dc4"
+    },
+    {
+      "file": "auto—publish/src/content/geo-knowledge-application.js",
+      "gitBlob": "6731ee25b9a346ea4fd528ab34c9843865d44ed9",
+      "worktreeSha256": "a9c0dd996b7c3d9ab0f32e648c720c72d05bd7198d13942c24a9677ae1b8aaae"
+    },
+    {
+      "file": "auto—publish/src/content/geo-knowledge-merge.js",
+      "gitBlob": "4f78e1d3398f53e8453c1bc69cc1000da24fce82",
+      "worktreeSha256": "9280405fc3dbd9f0dba610230df0ae819c827c85f83423b24a783ce1127a5ad9"
+    },
+    {
+      "file": "auto—publish/src/content/geo-knowledge-research.js",
+      "gitBlob": "69234340898811b86e6d2cbe5f8bf33fd52b8f63",
+      "worktreeSha256": "c317f40fb7212333c6d12945846b004157771af20a74adb388a45ab0417257ba"
+    },
+    {
+      "file": "auto—publish/src/content/geo-knowledge-schema.js",
+      "gitBlob": "44c6287ef4853fa0ec302f0ff09ee2ca76fa6590",
+      "worktreeSha256": "3e867d5c4bd411e5c533dc9e3684805b0b560338fe4df8e4827c7cdc9464d427"
+    },
+    {
+      "file": "auto—publish/src/content/geo-knowledge-store.js",
+      "gitBlob": "fc71e89a2f2f52bc2160bfee67ed1964d8903622",
+      "worktreeSha256": "df80f72b451a49fe6ea013cf54a87ec1994cb7605f57678f11514f6c953bcc39"
+    },
+    {
+      "file": "auto—publish/src/core/doc-text-extractor.js",
+      "gitBlob": "bfbe696b22ea87b0def30f101f87f108b92707f1",
+      "worktreeSha256": "46d2387c9fadb2844f100a6a6af0834663f9f2b4b44fde0d6c5b8634b4a1f378"
+    },
+    {
+      "file": "auto—publish/src/core/doc-text-worker.js",
+      "gitBlob": "fc598b8e418aca4fcf8ce588967d0c2dceb0d1d5",
+      "worktreeSha256": "8f90b74575ffe71de93d678cc85aeae0ae446b6037f2fc1a97fc8de957085490"
+    },
+    {
+      "file": "auto—publish/tests/client-generation-tasks.test.js",
+      "gitBlob": "84bead6017bd256130828a62696924145af7f477",
+      "worktreeSha256": "6fb1df3862e9e0263e0557994e0b4b55060700f21e2ad4e524924f59e339b56f"
+    },
+    {
+      "file": "auto—publish/tests/client-material-store.test.js",
+      "gitBlob": "eff84a25f85acf61b566194cda9f7484c6e78147",
+      "worktreeSha256": "d55195a3205e8ba6570985e19a7f56fc43edf65cb11c509db8b04195f9831195"
+    },
+    {
+      "file": "auto—publish/tests/customer-continuous-knowledge.test.js",
+      "gitBlob": "7c8fd844f84195edbb074367fb78c72c68199416",
+      "worktreeSha256": "965694cdaa357d22911002fdbde14f77805d1387bc3b7baaa3e943114e2470de"
+    },
+    {
+      "file": "auto—publish/tests/desktop-continuous-knowledge.test.js",
+      "gitBlob": "1200ba37f2cecc98dbb4941c64124f788d8b41d2",
+      "worktreeSha256": "23720da0ac64079ab16de3120428ea7ce5486033ae729e514dd06038ab23ce20"
+    },
+    {
+      "file": "auto—publish/tests/fixtures/doc/README.md",
+      "gitBlob": "16d248f6b09b632dea64803e5a01fe4635d1e3ae",
+      "worktreeSha256": "effb06350e616d8f4971ab99ff61784aa2d6ed930de1c3839add134b7138c43e"
+    },
+    {
+      "file": "auto—publish/tests/fixtures/doc/empty.doc",
+      "gitBlob": "52a98a45d4f01177df8b162121b366215e2bc5e1",
+      "worktreeSha256": "a0b2bdf57b64a7d91916fc3e2a4e9d8b90417199be6a7b646994fc62459734c9"
+    },
+    {
+      "file": "auto—publish/tests/fixtures/doc/legacy-customer.doc",
+      "gitBlob": "c08cc631d0381efc0656b3c4a324908829b19eaa",
+      "worktreeSha256": "56b90a0c7a35596901f6b0732d821553445faf481bbd72366bfcf984fc333fe5"
+    },
+    {
+      "file": "auto—publish/tests/fixtures/geo-knowledge-ipc-contract-fixtures.js",
+      "gitBlob": "be9a410e0ccdf2120dfd10f4ced45592fbc65ece",
+      "worktreeSha256": "04292e9dffbe2d4691d3ddb3e39f0ad9ffbdca5c37455a8ea98e149dc6d19b82"
+    },
+    {
+      "file": "auto—publish/tests/geo-coding-plan.test.js",
+      "gitBlob": "21f4b3e8a7871c8278ef45a8ac43a5cc509609af",
+      "worktreeSha256": "21e6ee2286f54d6e6c3bf28e029f670882da6a9d767adc58369beca487e38a21"
+    },
+    {
+      "file": "auto—publish/tests/geo-confirmation-model.test.js",
+      "gitBlob": "882741ba68663a2c7851079e902942e64b3dece6",
+      "worktreeSha256": "c3a02f1fa511bc5e7277f10541a48d8c08162e8cede87575210b0352f6f902e6"
+    },
+    {
+      "file": "auto—publish/tests/geo-connection-test.test.js",
+      "gitBlob": "fcaaf12b832193f85db9f1c07133a0bd5f9d9216",
+      "worktreeSha256": "09845fb50a97d3197acf3f8b425011114c198fd2819beba3ad47ae23254813ff"
+    },
+    {
+      "file": "auto—publish/tests/geo-generation-context.test.js",
+      "gitBlob": "1f3f22d4ebb926fd74dc9697f9fb06be613a1650",
+      "worktreeSha256": "e164809c9bf91cc1ec56126ca33701c533c1e1a317edfa3b893d835be847e77a"
+    },
+    {
+      "file": "auto—publish/tests/geo-knowledge-flow.test.js",
+      "gitBlob": "ddd9c691ed0893a7b58e9908736b3dde75881db0",
+      "worktreeSha256": "7ff52a3e1e391fdebc662f48062eb0323d47656db73cfba63300dfcf0c8d0e98"
+    },
+    {
+      "file": "auto—publish/tests/geo-knowledge-ipc.test.js",
+      "gitBlob": "03ab5a384efde32ae530243c4312b92771e8c4a6",
+      "worktreeSha256": "95a40cd91484696b97415ef7db507920266c78fd38d9e5cd7260feb7ec86f1c2"
+    },
+    {
+      "file": "auto—publish/tests/geo-knowledge-research.test.js",
+      "gitBlob": "93c8a4ce7fd812362b8641a908f8308b53de28f4",
+      "worktreeSha256": "899f6e992f3a76837cabb3ff5782fbcb6715b9b93c877413d9588aff470e4703"
+    },
+    {
+      "file": "auto—publish/tests/geo-knowledge-service.test.js",
+      "gitBlob": "04ea996a61872cf25492dbbd8f54cf4183085135",
+      "worktreeSha256": "8588fd30c5d646ed123181c579cd3210031edadd02a19b034ac05ce97aa2750d"
+    },
+    {
+      "file": "auto—publish/tests/geo-knowledge.test.js",
+      "gitBlob": "b60b2d3d5d03c4ea3cc99387687667715f706d97",
+      "worktreeSha256": "a72a49e6e61d69f6ec0d36b8bd8dd5309835d0b356187c18b0a4c86c9067829d"
+    },
+    {
+      "file": "auto—publish/tests/phase-06-settings-feature.test.mjs",
+      "gitBlob": "167c0c53b7bc3730fd8225a35165d30b0aaf0923",
+      "worktreeSha256": "5eb073b4351e633ed52cbca78c77900346c5db182c96a67bf805a00f4581dd95"
+    },
+    {
+      "file": "auto—publish/tests/renderer-generation-batch-navigation.test.js",
+      "gitBlob": "8cabb3bc713e9c3f45d37f17946ec69db1afcd4d",
+      "worktreeSha256": "298c3daf8d7be51c567b825b3bc0115197bfdaaf68b000e9fe185705cae4fde7"
+    },
+    {
+      "file": "auto—publish/tests/renderer-geo-knowledge.test.js",
+      "gitBlob": "4b87c444c3d08db2cce77b5e5d9eab9fb34f16a3",
+      "worktreeSha256": "55fb0bb314974d3bf9f8d8affc5749f65b746dbb6a4aceb25fd64027c4388d3b"
+    },
+    {
+      "file": "docs/WORK-INDEX.md",
+      "gitBlob": "c32be3998f2326260f96447e35ff6d3373d4f4c4",
+      "worktreeSha256": "09671d5f8d5f90c5e6ffcf737d4d8ff7618ed14125259f3bf90c846f7bfe6d07"
+    }
+  ]
+}
