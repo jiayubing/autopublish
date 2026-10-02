@@ -238,8 +238,13 @@ function createAuthServer(options) {
   }
 
   async function handle(request, response) {
-    const url = new URL(request.url, "http://127.0.0.1");
     try {
+      let url;
+      try {
+        url = new URL(request.url, "http://127.0.0.1");
+      } catch (_) {
+        throw new AuthError("AUTH_INPUT_INVALID");
+      }
       const health = await healthHandler.handle(request.method, url.pathname);
       if (health) return json(response, health.statusCode, health.body);
       const sourceFingerprint =
@@ -330,7 +335,11 @@ function createAuthServer(options) {
   }
 
   const server = http.createServer((request, response) => {
-    void handle(request, response);
+    void handle(request, response).catch(() => {
+      if (response.destroyed || response.writableEnded) return;
+      if (response.headersSent) return response.destroy();
+      errorResponse(response, "AUTH_SERVICE_UNAVAILABLE");
+    });
   });
   return {
     server,

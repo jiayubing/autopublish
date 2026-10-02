@@ -154,7 +154,7 @@ class AuthDomain extends AuthDomainManagement {
           request.sourceFingerprint,
           failure.code,
         );
-        throw new AuthError(failure.code);
+        return { failureCode: failure.code };
       }
       const entitlements = this.entitlementPolicy.forUser(current.id);
       this._assertUserUsable(current, entitlements);
@@ -194,6 +194,7 @@ class AuthDomain extends AuthDomainManagement {
       };
     })
       .then((result) => {
+        if (result.failureCode) throw new AuthError(result.failureCode);
         if (result.passwordChangeRequired)
           throw new AuthError("AUTH_PASSWORD_CHANGE_REQUIRED", {
             user: projectUser(result.user),
