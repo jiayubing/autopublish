@@ -57,6 +57,7 @@ files:
   - "!**/submission-records/**"
   - "!**/publications/**"
   - "!.playwright-cli/**"
+  - "!**/.playwright-cli/**"
   - "!browser/**"
   - "!**/browser/**"
   - "!research/**"
