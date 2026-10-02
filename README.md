@@ -1,27 +1,33 @@
-# 官媒投稿 Refactor / AutoPublish
+# AutoPublish
 
-这个仓库保存 AutoPublish 桌面应用及其文章生命周期、投稿和审计重构资料。
+AutoPublish 是本地 Electron 内容生产与投稿应用，管理客户资料、知识库、GEO 调研、文章生成、普通平台投稿和网站媒体订单。客户内容保存在可迁移的内容库中；应用配置、凭据、浏览器会话与安装目录分离。
 
 ## 从这里开始
 
-1. [AGENTS.md](AGENTS.md)：工程规则、真源优先级和完成标准。
-2. [docs/AI-ENTRY.md](docs/AI-ENTRY.md)：按任务类型选择最小阅读集合。
-3. [docs/WORK-INDEX.md](docs/WORK-INDEX.md)：当前执行计划和外部授权边界的导航入口。
-4. [CONTEXT.md](CONTEXT.md)：业务词汇和禁用称谓。
-5. [ARTICLE-LIFECYCLE-AND-SUBMISSION-SPEC.md](ARTICLE-LIFECYCLE-AND-SUBMISSION-SPEC.md)：文章库与投稿中心的产品行为真源。
-6. [auto—publish/README.md](auto—publish/README.md)：应用目录、开发命令和应用级说明。
-
-## 文档职责
-
-| 信息 | 唯一主要来源 |
+| 想了解什么 | 直接入口 |
 | --- | --- |
-| Agent 工作规则 | `AGENTS.md` |
-| 业务词汇 | `CONTEXT.md` |
-| 用户可观察行为 | 产品规格和对应合同 |
-| 当前波次调度与 gate | Wave Plan |
-| 单项实施范围 | `issues/` / `maintenance/` 下的对应合同 |
-| 执行方式 | `EXECUTION-PROTOCOL.md` |
-| 审计方式 | `AUDIT-PROTOCOL.md` |
-| 历史实施与验证证据 | `handoffs/` 和 Git |
+| 客户、知识库、问题与生成 | [内容生产产品说明](docs/product/knowledge.md) |
+| 文章库、投稿、订单与人工核对 | [投稿产品说明](docs/product/publishing.md) |
+| 模块、事实 owner 与设计理由 | [架构](docs/architecture.md) |
+| 本地开发、代码入口、测试选择 | [开发](docs/development.md) |
+| 配置、运行、故障和发布 | [运维](docs/operations.md) |
+| 新模型、平台与能力接入 | [扩展](docs/extensions.md) |
+| 进行中、阻塞与明确延期事项 | [剩余工作](docs/work.md) |
+| 自动化修改规则 | [AGENTS](AGENTS.md) |
 
-不要通过阅读整个 `.scratch/` 目录来了解项目。先读 [AI-ENTRY](docs/AI-ENTRY.md)，再只打开当前任务所指向的一个计划和直接相关的源码、测试。
+## 最短开发启动
+
+在 Windows PowerShell 中进入应用目录，首次安装依赖并构建：
+
+```powershell
+cd 'auto—publish'
+npm ci
+npm --prefix media-workbench ci
+npm run build:renderer
+npm run build:preload
+npm run desktop
+```
+
+Node/npm 基线以[当前 CI](.github/workflows/ci.yml)为准。首次启动选择独立内容库；真实接口在设置中配置。独立鉴权服务的环境和启动见[服务 README](auto—publish/auth-server/README.md)。
+
+文档按主题更新正文，不追加“新规则覆盖旧规则”。已完成任务只把稳定结论写回对应主题，过程记录由 Git 历史保留；只有仍需多步协调的任务留在 docs/plans。不要把 .scratch、提示词或测试夹具当普通文档批量清理。

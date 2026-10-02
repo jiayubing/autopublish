@@ -1,3 +1,5 @@
+> 本文件保留已有未提交修复证据，含不同时间点的中间状态；不要据旧段落重复实施。当前剩余工作见 [规模与可靠性计划](../../docs/plans/scale-and-reliability.md)。
+
 # 规模审计修复
 
 状态：REFRESH_INVALIDATION_LOCAL_VERIFICATION / OVERALL_PENDING。SA-01 / SA-02 / SA-04 已修复；SA-03 付费页面与普通队列展示截断、SA-05 投稿中心付费读取、以及执行/启动全量快照（SA-03/07 执行链）已关闭。2026-09-18 本轮收敛 SA-06 客户读取版本与 SA-07 页面消费范围，以及用户提出的5项 Refresh / Invalidation / Feature Owner 问题；当前修复与验证见文末。不宣称整个规模目标或 clean HEAD 发布门禁通过。

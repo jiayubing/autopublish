@@ -1,3 +1,5 @@
+> 历史局部验证证据，不代表当前整体规模结论；当前范围见 [规模与可靠性计划](../../docs/plans/scale-and-reliability.md)。
+
 # Refresh / Invalidation / Feature Owner 有界验证
 
 分支：`codex/refresh-invalidation-owner-fixes`  
