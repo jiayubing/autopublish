@@ -6,7 +6,7 @@ const { extractDocxText } = require("../core/docx-text-extractor");
 const { extractDocText } = require("../core/doc-text-extractor");
 const { createContentPathPolicy } = require("./content-path-policy");
 const { createAtomicFileWriter } = require("./content-file-transaction");
-const { getClient } = require("./client-knowledge");
+const { resolveClientIdentity } = require("./client-knowledge");
 const { reportDiagnostic } = require("../diagnostics/diagnostic-producer");
 
 const SUPPORTED_EXTENSIONS = new Set([".txt", ".md", ".markdown", ".json", ".docx", ".doc"]);
@@ -98,7 +98,7 @@ function createClientMaterialStore(options) {
   const paths = opts.paths || workspace;
   const cacheBoundary = path.resolve(paths.localState || workspaceRoot);
   const cacheRoot = path.resolve(paths.clientMaterialCache || path.join(paths.work || path.join(workspaceRoot, "work"), "client-material-cache"));
-  const clientKnowledge = opts.clientKnowledge || { getClient: function(clientId) { return getClient(workspaceRoot, clientId); } };
+  const clientKnowledge = opts.clientKnowledge || { getClient: function(clientId) { return resolveClientIdentity(workspaceRoot, clientId); } };
   const converter = typeof opts.converter === "function"
     ? opts.converter
     : function(buffer) { return extractDocxText({ buffer: buffer }); };
@@ -111,11 +111,13 @@ function createClientMaterialStore(options) {
 
   pathPolicy.assertLexicalInside(cacheBoundary, cacheRoot, "CLIENT_PATH_OUT_OF_BOUNDS", "Material cache is outside its boundary");
 
-  function getClientDirectory(clientId) {
+  function getClientDirectory(clientId, knownDirectory) {
     assertClientId(clientId);
     let client;
     try {
-      client = clientKnowledge.getClient(clientId);
+      client = knownDirectory === undefined
+        ? clientKnowledge.getClient(clientId)
+        : { directory: knownDirectory };
     } catch (error) {
       if (error && error.code === "CLIENT_PATH_OUT_OF_BOUNDS") throw pathError();
       if (error && error.code === "CLIENT_NOT_FOUND") throw materialError("CLIENT_NOT_FOUND", "Client directory was not found");
@@ -262,8 +264,10 @@ function createClientMaterialStore(options) {
     return results;
   }
 
-  function listMaterialMetadata(clientId) {
-    const client = getClientDirectory(clientId);
+  // knownDirectory comes only from the service's current identity enumeration,
+  // never from IPC. Recheck the filesystem boundary even for that directory.
+  function listMaterialMetadata(clientId, knownDirectory) {
+    const client = getClientDirectory(clientId, knownDirectory);
     let entries;
     try { entries = materialEntries(client.directory); } catch (error) {
       if (isMissing(error)) throw materialError("CLIENT_NOT_FOUND", "Client directory was not found");

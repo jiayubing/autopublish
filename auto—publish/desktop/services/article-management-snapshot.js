@@ -170,6 +170,18 @@ function createArticleManagementSnapshot(options) {
   const opts = options || {};
   const cache = new Map();
   const latestCacheKeyByClient = new Map();
+  let cacheBytes = 0;
+  const maxCacheBytes = 32 * 1024 * 1024;
+  const maxCachedClients = 64;
+  function removeCached(key) {
+    const value = cache.get(key);
+    if (value === undefined) return;
+    cacheBytes -= value.length * 2;
+    cache.delete(key);
+    for (const [clientId, clientKey] of latestCacheKeyByClient) {
+      if (clientKey === key) latestCacheKeyByClient.delete(clientId);
+    }
+  }
   const inFlight = new Map();
   let generation = 0;
   const workspaceIdentity = String(
@@ -218,6 +230,10 @@ function createArticleManagementSnapshot(options) {
       const cacheKey = key(clientId, version);
       const startedGeneration = generation;
       let serialized = cache.get(cacheKey);
+      if (serialized !== undefined) {
+        cache.delete(cacheKey);
+        cache.set(cacheKey, serialized);
+      }
       if (serialized === undefined) {
         let pending = inFlight.get(cacheKey);
         if (!pending) {
@@ -447,9 +463,15 @@ function createArticleManagementSnapshot(options) {
     const serialized = JSON.stringify(snapshot);
     // Cache one completed version per client; callers parse independent copies.
     const previousKey = latestCacheKeyByClient.get(clientId);
-    if (previousKey) cache.delete(previousKey);
-    cache.set(cacheKey, serialized);
-    latestCacheKeyByClient.set(clientId, cacheKey);
+    if (previousKey) removeCached(previousKey);
+    const size = serialized.length * 2;
+    if (size <= maxCacheBytes) {
+      while (cache.size >= maxCachedClients || cacheBytes + size > maxCacheBytes)
+        removeCached(cache.keys().next().value);
+      cache.set(cacheKey, serialized);
+      cacheBytes += size;
+      latestCacheKeyByClient.set(clientId, cacheKey);
+    }
     return serialized;
   }
 
@@ -457,6 +479,7 @@ function createArticleManagementSnapshot(options) {
     generation += 1;
     inFlight.clear();
     cache.clear();
+    cacheBytes = 0;
     latestCacheKeyByClient.clear();
   }
   function cacheSize() {

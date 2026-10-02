@@ -129,7 +129,7 @@ export function selectableArticles(articles, clientId) {
 
 export function selectionState(articles, selectedKeys, clientId) {
   const candidates = selectableArticles(articles, clientId);
-  const selected = new Set(Array.isArray(selectedKeys) ? selectedKeys : []);
+  const selected = selectedKeys instanceof Set ? selectedKeys : new Set(Array.isArray(selectedKeys) ? selectedKeys : []);
   const selectedCount = candidates.filter((article) => selected.has(articleSelectionKey(article))).length;
   return {
     total: candidates.length,

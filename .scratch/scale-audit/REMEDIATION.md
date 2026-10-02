@@ -2,6 +2,8 @@
 
 # 规模审计修复
 
+2026-10-01 用户指定的三个页面性能复查与授权优化见 [页面进入性能检查及修复](PAGE-ENTRY-2026-10-01.md)。已消除客户目录重复全库资料读取，加入文章组分页与有界缓存、缩减文章SQL载荷和待办分页投影；规模边界与最终验证以该记录为准。
+
 状态：REFRESH_INVALIDATION_LOCAL_VERIFICATION / OVERALL_PENDING。SA-01 / SA-02 / SA-04 已修复；SA-03 付费页面与普通队列展示截断、SA-05 投稿中心付费读取、以及执行/启动全量快照（SA-03/07 执行链）已关闭。2026-09-18 本轮收敛 SA-06 客户读取版本与 SA-07 页面消费范围，以及用户提出的5项 Refresh / Invalidation / Feature Owner 问题；当前修复与验证见文末。不宣称整个规模目标或 clean HEAD 发布门禁通过。
 
 保持唯一 OperationalStore owner、FIFO、暂停/在途/不确定结果及发布证据校验；不修改真实数据库，不执行外部投稿。
