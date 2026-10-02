@@ -32,3 +32,6 @@ build/runtime-tools-cache/
 /build/test-evidence.json
 /build/build-info.json
 /config/build-info.json
+
+# Task probes, logs, evidence and generated build output are local only.
+/build/
