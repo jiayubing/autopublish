@@ -723,3 +723,74 @@ test("knowledge defaults prioritize saved content and keep optional research inp
   assert.equal(await longInput.inputValue(), "沿用已保存的长期要求");
   await page.screenshot({ path: path.join(__dirname, "../build/test-results/knowledge-default-panels.png") });
 });
+
+test("a single GEO question opens a new wizard with only that question despite an old batch", async t => {
+  t.after(closeRenderer);
+  const { browser, url } = await startRenderer({ port: 4191 });
+  const page = await browser.newPage();
+  t.after(() => page.close());
+  const document = normalizeCandidate({ profile: { fields: { name: "合成客户" } } }, [], "client-1");
+  document.revision = 1;
+  document.geoQuestions = ["问题甲", "问题乙"].map((name, index) => ({ id: `geo-${index}`, name, questionId: `q-${index}`, enabled: true, origin: "manual", sourceIds: [], relatedOfferingIds: [], relatedScenarioIds: [], basis: "derived" }));
+  await page.addInitScript(fixture, { document: null });
+  await page.addInitScript(document => {
+    const ok = data => Promise.resolve({ ok: true, data });
+    window.desktopConsole.geoKnowledge.load = () => ok({ knowledge: document, storageStatus: "current_v2", state: { phase: "idle", running: false } });
+    window.desktopConsole.geoKnowledge.questionWorkflow = () => ok({ clientId: "client-1", knowledgeRevision: 1, items: document.geoQuestions.map(item => ({ ...item, linkStatus: "linked", collectionEnabled: true, research: { collectedAt: "2026-10-02T00:00:00Z", answerLength: 20, referenceCount: 1 }, articles: { total: 0, publishedCount: 0 }, generation: { ready: true, code: "GEO_GENERATION_READY" } })) });
+    window.desktopConsole.content.listTemplateCatalog = () => ok({ revision: "r1", platforms: [{ id: "toutiao", name: "头条" }], templates: [{ id: "custom-1", platform: "toutiao", name: "合成模板", title: "合成模板", source: "custom", enabled: true, body: "合成写作要求" }], diagnostics: [] });
+    window.desktopConsole.content.getGenerationRuntimeSnapshot = () => ok({ runtimeId: "gen-1", sequence: 1, runtime: { status: "paused", state: "paused", batchId: "old-batch" }, batch: { id: "old-batch", version: 2, status: "paused", tasks: [], counts: { total: 0, pending: 0, running: 0, succeeded: 0, failed: 0, uncertain: 0, interrupted: 0, cancelled: 0 }, templates: [], questionSources: [] }, capabilities: {} });
+  }, document);
+  await page.goto(url);
+  await page.locator("#nav-item-content-production").click();
+  await page.getByRole("button", { name: "客户知识库", exact: true }).click();
+  await page.getByRole("button", { name: "GEO 问题", exact: true }).click();
+  await page.getByRole("button", { name: "生成文章", exact: true }).nth(1).click();
+  await page.getByRole("heading", { name: "选择客户", exact: true }).waitFor();
+  assert.equal(await page.getByLabel("四步批量生成").getAttribute("data-view-mode"), "wizard");
+  await page.getByRole("button", { name: "下一步", exact: true }).click();
+  await page.getByLabel(/合成模板/).check();
+  await page.getByRole("button", { name: "下一步", exact: true }).click();
+  await page.getByText("问题乙", { exact: true }).waitFor();
+  const rowA = page.locator("label").filter({ hasText: "问题甲" });
+  const rowB = page.locator("label").filter({ hasText: "问题乙" });
+  assert.equal(await rowA.getByRole("checkbox").isChecked(), false);
+  assert.equal(await rowB.getByRole("checkbox").isChecked(), true);
+  assert.equal(await page.getByText("old-batch", { exact: true }).count(), 0);
+});
+
+test("client generation shows uncertain work without offering failed-task retry", async t => {
+  t.after(closeRenderer);
+  const { browser, url } = await startRenderer({ port: 4191 });
+  const page = await browser.newPage();
+  t.after(() => page.close());
+  await page.addInitScript(fixture, { document: null });
+  await page.addInitScript(() => {
+    const operation = { operationId: "uncertain-operation", clientId: "client-1", articleCount: 1, concurrency: 1, status: "uncertain", counts: { total: 1, pending: 0, running: 0, succeeded: 0, failed: 0, uncertain: 1 }, tasks: [{ index: 0, status: "uncertain", attempts: 1, articleId: null, articleTitle: null, error: { code: "AI_TIMEOUT", message: "结果不确定" } }], createdAt: "2026-10-02T00:00:00Z", updatedAt: "2026-10-02T00:00:00Z" };
+    window.desktopConsole.content.getClientGenerationState = () => Promise.resolve({ ok: true, data: { operation } });
+    window.desktopConsole.content.onClientGenerationState = () => () => {};
+  });
+  await page.goto(url);
+  await page.locator("#nav-item-content-production").click();
+  await page.getByRole("button", { name: "客户生成", exact: true }).click();
+  await page.getByText(/服务商可能已执行，不会自动重试/).waitFor();
+  assert.equal(await page.getByRole("button", { name: /重试失败/ }).count(), 0);
+  assert.match(await page.getByLabel("客户生成任务进度").innerText(), /已处理 1\/1/);
+});
+
+test("uncertain task count retains the result-check entry even with a completed batch summary", async t => {
+  t.after(closeRenderer);
+  const { browser, url } = await startRenderer({ port: 4191 });
+  const page = await browser.newPage();
+  t.after(() => page.close());
+  await page.addInitScript(fixture, { document: null });
+  await page.addInitScript(() => {
+    const counts = { total: 2, pending: 0, running: 0, succeeded: 0, failed: 0, uncertain: 1, interrupted: 0, cancelled: 1 };
+    const batch = { id: "uncertain-batch", version: 2, status: "completed", counts, tasks: [{ id: "task-a", status: "uncertain", attempts: 1 }, { id: "task-b", status: "cancelled", attempts: 0 }], templates: [], questionSources: [] };
+    window.desktopConsole.content.getGenerationRuntimeSnapshot = () => Promise.resolve({ ok: true, data: { runtimeId: "gen-1", sequence: 1, runtime: { status: "completed", state: "idle", batchId: batch.id, counts }, batch, capabilities: {} } });
+  });
+  await page.goto(url);
+  await page.locator("#nav-item-content-production").click();
+  await page.getByRole("button", { name: "批量生成", exact: true }).click();
+  await page.getByRole("button", { name: "检查结果", exact: true }).waitFor();
+  assert.equal(await page.getByRole("button", { name: "重新生成（新批次）", exact: true }).isEnabled(), true);
+});

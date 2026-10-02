@@ -41,6 +41,7 @@ const {
   canonicalSources,
 } = require("./continuous-knowledge-canonical");
 const { normalizeCandidate } = require("./geo-knowledge-merge");
+const { acquireProcessLock } = require("./content-process-lock");
 
 async function runContinuousKnowledge({
   input,
@@ -128,11 +129,11 @@ async function runContinuousKnowledge({
       .update(input.clientId || clientName)
       .digest("hex")}`,
   );
-  fs.mkdirSync(lockDirectory);
+  const releaseLock = acquireProcessLock(lockDirectory);
   try {
     fs.mkdirSync(directory);
   } catch (cause) {
-    fs.rmdirSync(lockDirectory);
+    try { releaseLock(); } catch { cause.lockCleanupFailed = true; }
     throw cause;
   }
   const write = (name, data) =>
@@ -803,7 +804,7 @@ async function runContinuousKnowledge({
     throw failure;
   } finally {
     try {
-      fs.rmdirSync(lockDirectory);
+      releaseLock();
     } catch {
       try {
         write("lock-cleanup-error.json", {

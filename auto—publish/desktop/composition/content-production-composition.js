@@ -151,6 +151,10 @@ async function createContentProductionComposition(options) {
         {
           workspaceRoot: value.workspaceRoot,
           paths: value.paths,
+          operationStore:
+            require("../../src/content/client-generation-operation-store").createClientGenerationOperationStore(
+              { workspaceRoot: value.workspaceRoot, paths: value.paths },
+            ),
           contentStore: value.contentStore,
           articleMutationCoordinator: value.articleMutationCoordinator,
           onDataInvalidated: value.onDataInvalidated,

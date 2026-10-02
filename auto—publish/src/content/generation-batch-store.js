@@ -140,7 +140,8 @@ function createGenerationBatchStore(options) {
         task.updatedAt = clock();
       }
     });
-    if (!batch.tasks.some(function (task) { return ["pending", "running", "failed", "interrupted"].includes(task.status); })) batch.status = "completed";
+    if (batch.tasks.every((task) => ["succeeded", "cancelled"].includes(task.status))) batch.status = "completed";
+    else if (batch.tasks.some((task) => task.status === "uncertain") && !batch.tasks.some((task) => task.status === "running")) batch.status = "uncertain";
     return writeBatch(batch);
   }
 

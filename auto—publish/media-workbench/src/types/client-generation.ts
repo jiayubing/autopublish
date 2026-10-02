@@ -1,7 +1,7 @@
 export type ClientGenerationTaskStatus =
-  "pending" | "running" | "succeeded" | "failed";
+  "pending" | "running" | "succeeded" | "failed" | "uncertain";
 export type ClientGenerationOperationStatus =
-  "running" | "completed" | "partial" | "failed";
+  "running" | "completed" | "partial" | "failed" | "uncertain";
 
 export interface ClientGenerationCounts {
   total: number;
@@ -9,6 +9,7 @@ export interface ClientGenerationCounts {
   running: number;
   succeeded: number;
   failed: number;
+  uncertain: number;
 }
 
 export interface ClientGenerationTask {

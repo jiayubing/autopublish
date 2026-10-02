@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LoaderCircle, RefreshCw } from "lucide-react";
 import type { ContentClient, ContentTemplateCatalog, LiejuPublicationProfile } from "../types/content";
 import type { ArticleSummary, GeneratedContentArticle } from "../types/generation";
@@ -138,6 +138,8 @@ export default function ContentWorkbench({
   const [articleNavigationIntent, setArticleNavigationIntent] =
     useState<ArticleLibraryNavigationIntent | null>(null);
   const [error, setError] = useState("");
+  const [requestedBatchQuestions, setRequestedBatchQuestions] = useState<Array<{ clientId: string; geoQuestionId: string }> | undefined>();
+  const requestedBatchClientIds = useMemo(() => requestedBatchQuestions?.map((question) => question.clientId), [requestedBatchQuestions]);
   const [focusedQuestionId, setFocusedQuestionId] = useState<string | null>(null);
   const [refreshConfirmationVisible, setRefreshConfirmationVisible] =
     useState(false);
@@ -342,6 +344,7 @@ export default function ContentWorkbench({
     requestHistoryLeave(() => {
       closeHistoryEditor(true);
       remember(SELECTED_CLIENT_KEY, nextClientId);
+      setRequestedBatchQuestions(undefined);
       content.selectClient(nextClientId);
       setError("");
       setGenerationBatchFilter(null);
@@ -358,6 +361,7 @@ export default function ContentWorkbench({
     if (nextTab === tab) return;
     requestHistoryLeave(() => {
       closeHistoryEditor(true);
+      if (nextTab !== "batch") setRequestedBatchQuestions(undefined);
       setTab(nextTab);
       if (nextTab === "questions" || nextTab === "client" || nextTab === "batch")
         remember(PRODUCTION_TAB_KEY, nextTab);
@@ -487,11 +491,11 @@ export default function ContentWorkbench({
             focusQuestionId={focusedQuestionId}
           />
         )}
-        {tab === "knowledge" && <div key={clientId} className="flex min-h-0 flex-1"><GeoKnowledgeView clientId={clientId} onCollectQuestion={(questionId) => { setFocusedQuestionId(questionId); changeTab("questions"); }} onGenerateQuestion={() => changeTab("batch")} /></div>}
+        {tab === "knowledge" && <div key={clientId} className="flex min-h-0 flex-1"><GeoKnowledgeView clientId={clientId} onCollectQuestion={(questionId) => { setFocusedQuestionId(questionId); changeTab("questions"); }} onGenerateQuestion={(geoQuestionId) => { setRequestedBatchQuestions([{ clientId, geoQuestionId }]); changeTab("batch"); }} /></div>}
         {(tab === "client" || tab === "batch") && (
           <ArticleGenerationView
-            initialBatchClientIds={initialBatchClientIds}
-            initialBatchQuestions={initialBatchQuestions}
+            initialBatchClientIds={requestedBatchClientIds || initialBatchClientIds}
+            initialBatchQuestions={requestedBatchQuestions || initialBatchQuestions}
             grouping={grouping}
             client={clients.find((item) => item.id === clientId)}
             clients={clients}

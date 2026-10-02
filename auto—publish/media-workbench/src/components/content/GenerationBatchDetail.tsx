@@ -70,7 +70,7 @@ export default function GenerationBatchDetail({
   const running = effectiveStatus === 'running';
   const unfinished = counts.pending > 0 || counts.failed > 0 || counts.interrupted > 0;
   const showCostWarning = active || (['paused', 'abandoned'].includes(batch.status) && unfinished);
-  const terminal = effectiveStatus === 'completed' || effectiveStatus === 'abandoned' || effectiveStatus === 'uncertain';
+  const terminal = !active && (effectiveStatus === 'completed' || effectiveStatus === 'abandoned' || counts.uncertain > 0);
   const successfulTasks = displayedBatch.tasks.filter((task) => task.status === 'succeeded' && task.articleId);
   const anyCommandBusy = Object.values(busy).some(Boolean);
 
@@ -156,10 +156,10 @@ export default function GenerationBatchDetail({
     </div>
 
     {terminal && onStartNew && <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">
-      <span>{effectiveStatus === 'uncertain' ? '原任务已保留且不会重试。请核对结果；需重新生成时建立新批次。' : '该批次已结束，可以开始新的批量生成。'}</span>
+      <span>{counts.uncertain > 0 ? '原任务已保留且不会重试。请核对结果；需重新生成时建立新批次。' : '该批次已结束，可以开始新的批量生成。'}</span>
       <div className="flex gap-2">
-        {effectiveStatus === 'uncertain' && <button type="button" onClick={onCheckUncertain} disabled={anyCommandBusy} className="rounded border border-slate-300 bg-white px-2 py-1 text-slate-700">检查结果</button>}
-        <button type="button" onClick={onStartNew} disabled={anyCommandBusy} className="rounded bg-slate-900 px-2 py-1 text-white">{effectiveStatus === 'uncertain' ? '重新生成（新批次）' : '新建批量生成'}</button>
+        {counts.uncertain > 0 && <button type="button" onClick={onCheckUncertain} disabled={anyCommandBusy} className="rounded border border-slate-300 bg-white px-2 py-1 text-slate-700">检查结果</button>}
+        <button type="button" onClick={onStartNew} disabled={anyCommandBusy} className="rounded bg-slate-900 px-2 py-1 text-white">{counts.uncertain > 0 ? '重新生成（新批次）' : '新建批量生成'}</button>
       </div>
     </div>}
   </section>;

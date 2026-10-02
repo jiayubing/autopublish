@@ -33,6 +33,24 @@ describe("generation batch store", function() {
     fs.rmSync(workspaceRoot, { recursive: true, force: true });
   });
 
+  it("keeps uncertain work visible after cancelling pending tasks and reopening", function() {
+    const store = createGenerationBatchStore({ workspaceRoot });
+    const batch = store.createOrGetV2({
+      requestId: "cancel-uncertain", requestFingerprint: "a".repeat(64), concurrency: 1,
+      aiConfigFingerprint: "fp", templates: templates(),
+      questionSources: [{ id: "source-a", clientId: "c1", geoQuestionId: "geo-a", collectionQuestionId: "q1", questionText: "合成问题", knowledgeRevision: 1, researchCapturedAt: "2026-10-02T00:00:00Z", researchFingerprint: "b".repeat(64) }],
+    });
+    store.markTaskRunning(batch.id, batch.tasks[0].id);
+    store.markTaskUncertain(batch.id, batch.tasks[0].id);
+    store.updateBatchStatus(batch.id, "paused");
+    store.cancelPending(batch.id);
+    const restored = createGenerationBatchStore({ workspaceRoot }).getBatch(batch.id);
+    assert.equal(restored.status, "uncertain");
+    assert.equal(restored.counts.uncertain, 1);
+    assert.equal(restored.counts.cancelled, 1);
+    assert.equal(store.cancelPending(batch.id).status, "uncertain");
+  });
+
   it("reuses unchanged batch reads and skips idempotent writes without hiding external edits", function() {
     let reads = 0;
     let syncs = 0;

@@ -31,6 +31,7 @@ export function createContentGenerationFeature(options = {}) {
 
   const receiveOperation = (next) => {
     if (disposed || !scope || !next || next.clientId !== scope.clientId) return;
+    refreshSequence += 1;
     operation = next;
     publish();
   };
@@ -52,6 +53,7 @@ export function createContentGenerationFeature(options = {}) {
     }
     const sequence = ++refreshSequence;
     try {
+      ensureOperationSubscription();
       const next = await options.getState(scope.clientId);
       if (disposed || sequence !== refreshSequence || !scope || next?.clientId && next.clientId !== scope.clientId) return null;
       if (next?.status === 'running') ensureOperationSubscription();
@@ -74,6 +76,7 @@ export function createContentGenerationFeature(options = {}) {
       throw Object.assign(new Error(error.userMessage), error);
     }
     const token = command.begin(scope);
+    const sequence = ++refreshSequence;
     publish();
     try {
       ensureOperationSubscription();
@@ -85,7 +88,7 @@ export function createContentGenerationFeature(options = {}) {
           { code: 'CONTENT_SCOPE_MISMATCH' },
         );
       }
-      operation = next || operation;
+      if (sequence === refreshSequence) operation = next || operation;
       command.finalize(token, { result: next });
       publish();
       return next;

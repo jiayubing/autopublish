@@ -16,6 +16,30 @@ function operation(clientId, operationId = `operation-${clientId}`) {
   };
 }
 
+for (const source of ["query", "start", "retry"]) {
+  test(`completed event survives an older ${source} response`, async () => {
+    let resolve;
+    let receive;
+    const delayed = () => new Promise((done) => { resolve = done; });
+    const feature = createContentGenerationFeature({
+      getState: source === "query" ? delayed : async () => null,
+      start: delayed,
+      retry: delayed,
+      subscribeOperation: (listener) => { receive = listener; return () => {}; },
+    });
+    feature.setScope({ workspaceRuntimeId: "w1", clientId: "a" });
+    if (source !== "query") await Promise.resolve();
+    const pending = source === "start" ? feature.start({ clientId: "a" }) : source === "retry" ? feature.retry("operation-a") : null;
+    receive({ ...operation("a"), status: "completed" });
+    resolve(operation("a"));
+    await pending;
+    await Promise.resolve();
+    assert.equal(feature.getSnapshot().operation.status, "completed");
+    assert.equal(feature.getSnapshot().command.busy, false);
+    feature.dispose();
+  });
+}
+
 test("content generation fences an A start result after switching to B and observes only current-client events", async () => {
   let resolveA;
   let onOperation = () => {};

@@ -61,6 +61,7 @@ function normalizeMaterial(item: ContentMaterial): ContentMaterial {
 }
 
 function statusLabel(status: string) {
+  if (status === 'uncertain') return '结果不确定';
   if (status === 'pending') return '排队中';
   if (status === 'running') return '生成中';
   if (status === 'succeeded') return '已完成';
@@ -190,7 +191,7 @@ function ClientGenerationView({
     }
   }
 
-  const finishedCount = operation ? operation.counts.succeeded + operation.counts.failed : 0;
+  const finishedCount = operation ? operation.counts.succeeded + operation.counts.failed + (operation.counts.uncertain || 0) : 0;
   const progress = operation && operation.counts.total ? Math.round((finishedCount / operation.counts.total) * 100) : 0;
   const currentClientName = client?.name || clientId || '当前客户';
 
@@ -237,6 +238,7 @@ function ClientGenerationView({
         <div className="rounded border border-slate-200 p-2">失败 <strong>{operation.counts.failed}</strong></div>
       </div>
       <div className="mt-3 divide-y divide-slate-100 rounded border border-slate-200">{operation.tasks.map((task) => <div key={task.index} className="flex items-center justify-between gap-3 px-3 py-2 text-xs"><div className="min-w-0"><span className="font-medium">第 {task.index + 1} 篇</span>{task.articleTitle && <span className="ml-2 text-slate-600">{task.articleTitle}</span>}{task.error && <span className="ml-2 text-rose-600">{task.error.code}</span>}</div><span className={`shrink-0 font-medium ${statusClass(task.status)}`}>{statusLabel(task.status)}</span></div>)}</div>
+      {operation.counts.uncertain > 0 && <p role="status" className="mt-3 text-xs text-orange-700">{operation.counts.uncertain} 篇结果不确定，服务商可能已执行，不会自动重试。重新生成将创建新任务并可能再次消耗用量。</p>}
       <p className="mt-3 text-xs text-slate-500">成功文章已保存到文章库；这里仅显示任务进度，不再承载正文预览和编辑。</p>
     </section>}
     {error && <div role="alert" className="rounded-md border border-rose-100 bg-rose-50 p-2 text-xs text-rose-700">{error}</div>}

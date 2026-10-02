@@ -907,3 +907,39 @@ test("weak input attempts background research after a confirmed search failure a
   assert.match(result.researchNotes, /search_failed/);
   assert.equal(result.budget.count, 10);
 });
+
+test("dead process lock is reclaimed for a new run without replaying the old request", async () => {
+  const artifactRoot = fs.mkdtempSync(path.join(root, "crash-"));
+  const crashInput = input();
+  const script = `const { runContinuousKnowledge } = require(${JSON.stringify(require.resolve("../src/content/continuous-knowledge-run"))});
+    runContinuousKnowledge({ input: ${JSON.stringify(crashInput)}, limits: ${JSON.stringify(limits)}, artifactRoot: ${JSON.stringify(artifactRoot)}, runId: 'crashed-run', client: { request: async () => process.exit(23) } });`;
+  const child = require("node:child_process").spawnSync(process.execPath, ["-e", script], { encoding: "utf8", timeout: 10000 });
+  assert.equal(child.status, 23, child.stderr);
+  const previous = fs.readdirSync(path.join(artifactRoot, "run-crashed-run"));
+  const client = fakeClient();
+  await runContinuousKnowledge({ input: crashInput, limits, artifactRoot, runId: "new-run", client: client.client });
+  assert.ok(client.calls.length > 0);
+  assert.deepEqual(fs.readdirSync(path.join(artifactRoot, "run-crashed-run")), previous);
+});
+
+test("a live knowledge owner cannot be displaced by another run", async () => {
+  const artifactRoot = fs.mkdtempSync(path.join(root, "live-"));
+  let release, entered;
+  const gate = new Promise(resolve => { release = resolve; });
+  const started = new Promise(resolve => { entered = resolve; });
+  const first = runContinuousKnowledge({ input: input(), limits, artifactRoot, client: { request: async () => { entered(); await gate; throw Object.assign(new Error("timeout"), { code: "GEO_REQUEST_TIMEOUT" }); } } });
+  await started;
+  try {
+    await assert.rejects(runContinuousKnowledge({ input: input(), limits, artifactRoot, client: { request: async () => { throw new Error("must not send"); } } }), { code: "EEXIST" });
+  } finally { release(); await assert.rejects(first); }
+});
+
+test("knowledge lock recovery never follows a linked lock directory", async () => {
+  const artifactRoot = fs.mkdtempSync(path.join(root, "linked-lock-"));
+  const outside = fs.mkdtempSync(path.join(root, "outside-"));
+  const lockName = "active-client-" + require("node:crypto").createHash("sha256").update(input().clientId).digest("hex");
+  fs.writeFileSync(path.join(outside, "owner-99999999-aaaaaaaa"), "preserve");
+  fs.symlinkSync(outside, path.join(artifactRoot, lockName), "junction");
+  await assert.rejects(runContinuousKnowledge({ input: input(), limits, artifactRoot, client: { request: async () => { throw new Error("must not send"); } } }), { code: "EEXIST" });
+  assert.equal(fs.readFileSync(path.join(outside, "owner-99999999-aaaaaaaa"), "utf8"), "preserve");
+});
