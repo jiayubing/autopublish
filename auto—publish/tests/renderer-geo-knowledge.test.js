@@ -29,6 +29,7 @@ function fixture({ document }) {
   };
   window.__geoCalls = {
     generate: 0,
+    tests: 0,
     edits: [],
     config: [],
     prompts: [],
@@ -91,6 +92,7 @@ function fixture({ document }) {
     },
     geoKnowledge: {
       testConnection: async (input) => {
+        window.__geoCalls.tests++;
         await new Promise((resolve) => setTimeout(resolve, 150));
         if (window.__geoTestFail)
           return {
@@ -367,6 +369,32 @@ function fixture({ document }) {
     orders: { getOrders: () => ok([]) },
   };
 }
+test("GEO endpoint selection shows the matching fee guidance without sending requests", async t => {
+  t.after(closeRenderer);
+  const { browser, url } = await startRenderer({ port: 4191 });
+  const page = await browser.newPage();
+  t.after(() => page.close());
+  await page.addInitScript(fixture, { document: null });
+  await page.goto(url);
+  await page.getByRole("button", { name: "设置", exact: true }).click();
+  await page.getByRole("button", { name: "豆包 GEO", exact: true }).click();
+  const endpoint = page.getByRole("combobox", { name: "接口 / Base URL" });
+  await endpoint.waitFor();
+  const { CODING_BASE_URL, STANDARD_BASE_URL } = require("../src/content/doubao-geo-endpoint");
+  assert.equal(await endpoint.inputValue(), CODING_BASE_URL);
+  await page.getByText("使用 Coding Plan 专用地址", { exact: false }).waitFor({ timeout: 3000 });
+  assert.equal(await page.getByText("注意：标准方舟地址", { exact: false }).count(), 0);
+  assert.equal(await page.getByRole("button", { name: "测试连接", exact: true }).isDisabled(), true);
+  await endpoint.selectOption(STANDARD_BASE_URL);
+  await page.getByText("注意：标准方舟地址", { exact: false }).waitFor();
+  assert.equal(await page.getByText("使用 Coding Plan 专用地址", { exact: false }).count(), 0);
+  await endpoint.selectOption(CODING_BASE_URL);
+  await page.getByText("使用 Coding Plan 专用地址", { exact: false }).waitFor();
+  assert.deepEqual(await page.evaluate(() => window.__geoCalls.config), []);
+  assert.equal(await page.evaluate(() => window.__geoCalls.tests), 0);
+  assert.equal(await page.evaluate(() => window.__geoCalls.generate), 0);
+});
+
 test("prose editing uses saved preview and export; candidate replacement is explicit", async t => {
   t.after(closeRenderer);
   const { browser, url } = await startRenderer({ port: 4191 });

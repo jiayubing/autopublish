@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import endpoints from "../../../../src/domain/doubao-geo-endpoints.json";
 import { useSettingsFeature } from "../../features/settings/settings-context";
 import type {
   GeoConfigStatus,
@@ -10,7 +11,7 @@ export default function DoubaoGeoSettings() {
   const status = snapshot.geo.data as GeoConfigStatus | null;
   const [model, setModel] = useState("");
   const [baseUrl, setBaseUrl] = useState(
-    "https://ark.cn-beijing.volces.com/api/plan/v3",
+    endpoints.coding,
   );
   const [apiKey, setApiKey] = useState("");
   const [webSearch, setWebSearch] = useState(true);
@@ -130,17 +131,17 @@ export default function DoubaoGeoSettings() {
             setSaved(false);
           }}
         >
-          <option value="https://ark.cn-beijing.volces.com/api/plan/v3">
+          <option value={endpoints.coding}>
             Coding Plan（套餐专用）
           </option>
-          <option value="https://ark.cn-beijing.volces.com/api/v3">
+          <option value={endpoints.standard}>
             标准方舟（套餐外按量计费）
           </option>
         </select>
       </label>
       <p className="break-all">Base URL：{baseUrl}</p>
       <p className="text-amber-700">
-        {baseUrl.endsWith("/coding/v3")
+        {baseUrl === endpoints.coding
           ? "使用 Coding Plan 专用地址；Responses 与 web_search 的实际权限仍需验证，套餐用途以服务商条款为准。"
           : "注意：标准方舟地址不消耗 Coding Plan 套餐额度，可能产生额外费用。"}{" "}
         不支持时明确报错，不自动切换计费接口。
