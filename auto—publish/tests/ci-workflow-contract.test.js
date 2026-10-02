@@ -137,7 +137,10 @@ test("CI assigns specialized desktop tests and renderer typecheck to one ordinar
     }
     if (name === "test:migration") {
       const migrationFiles = Array.from(
-        desktop.matchAll(/--test\s+(\S+)/g),
+        desktop
+          .split("- name: required/migration-roundtrip")[1]
+          .split("- name:")[0]
+          .matchAll(/--test\s+(\S+)/g),
         (match) => match[1],
       );
       assert.deepEqual(migrationFiles.sort(), [...files].sort());
@@ -194,4 +197,61 @@ test("Auth compose clean-machine storage and health are readiness-safe", () => {
   assert.doesNotMatch(compose, /\.\/data:\/data/);
   assert.match(compose, /\nvolumes:\s*\n\s+autopublish-auth-data:/);
   assert.match(dockerfile, /\/healthz\/ready/);
+});
+
+test("Windows toolchain checks each native command exit code before continuing", () => {
+  const workflow = fs.readFileSync(workflowPath, "utf8");
+  const section = job(workflow, "desktop")
+    .split("- name: required/toolchain")[1]
+    .split("- name:")[0];
+  const lines = section.split(/\r?\n/).map((line) => line.trim());
+  const commands = lines.filter((line) => line.startsWith("npm run "));
+  assert.equal(commands.length, 6);
+  for (const command of commands)
+    assert.equal(
+      lines[lines.indexOf(command) + 1],
+      "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }",
+    );
+});
+
+test("omitted browser and Electron regressions have explicit CI owners", () => {
+  const workflow = fs.readFileSync(workflowPath, "utf8");
+  const desktop = job(workflow, "desktop");
+  const options = parseArguments(
+    packageJson.scripts["test:desktop-core"].split(/\s+/).slice(2),
+  );
+  assert.ok(
+    collectTestFiles(options.excludedFiles).includes(
+      "tests/renderer-batch-generation-client-hydration.test.js",
+    ),
+  );
+  const focus = desktop
+    .split("- name: required/electron-focus")[1]
+    .split("- name:")[0];
+  assert.match(focus, /RUN_ELECTRON_FOCUS_TESTS: "1"/);
+  assert.match(
+    focus,
+    /--test tests\/renderer-settings-window-focus\.electron\.test\.js/,
+  );
+  assert.doesNotMatch(focus, /if:/);
+  const packaged = desktop
+    .split("- name: release/packaged-navigation")[1]
+    .split("- name:")[0];
+  assert.match(packaged, /if: github.event_name == 'push'/);
+  assert.match(packaged, /RUN_UNPACKED_NAVIGATION_SMOKE: "1"/);
+  assert.match(
+    packaged,
+    /AUTO_PUBLISH_UNPACKED_EXECUTABLE: release-production-smoke\/win-unpacked\/ETO—001\.exe/,
+  );
+  assert.match(
+    packaged,
+    /--test tests\/renderer-cold-start-navigation-convergence\.electron\.test\.js/,
+  );
+  const audit = job(workflow, "dependency-audit");
+  const renderer = audit
+    .split("- name: Renderer dependency audit")[1]
+    .split("- name:")[0];
+  assert.match(renderer, /npm audit --audit-level=high/);
+  assert.match(renderer, /working-directory: auto—publish\/media-workbench/);
+  assert.doesNotMatch(renderer, /continue-on-error/);
 });

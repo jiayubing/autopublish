@@ -55,14 +55,29 @@ jobs:
       - name: required/toolchain
         run: |
           npm run lint
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run typecheck:bridge
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run typecheck:main
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run format:check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run build:renderer
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run build:preload
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         working-directory: auto—publish
       - name: required/packaging-contracts
         run: npm run test:packaging
+        working-directory: auto—publish
+      - name: required/electron-focus
+        env:
+          RUN_ELECTRON_FOCUS_TESTS: "1"
+        run: >-
+          node scripts/create-test-suite-evidence.js
+          --output build/evidence/electron-focus.json
+          --operation electron-focus
+          --test tests/renderer-settings-window-focus.electron.test.js
         working-directory: auto—publish
       - name: required/production-directory-smoke
         if: github.event_name == 'push'
@@ -75,6 +90,17 @@ jobs:
           name: production-artifact-manifest
           path: auto—publish/build/production-artifact-manifest.json
           if-no-files-found: error
+      - name: release/packaged-navigation
+        if: github.event_name == 'push'
+        env:
+          RUN_UNPACKED_NAVIGATION_SMOKE: "1"
+          AUTO_PUBLISH_UNPACKED_EXECUTABLE: release-production-smoke/win-unpacked/ETO—001.exe
+        run: >-
+          node scripts/create-test-suite-evidence.js
+          --output build/evidence/packaged-navigation.json
+          --operation packaged-navigation
+          --test tests/renderer-cold-start-navigation-convergence.electron.test.js
+        working-directory: auto—publish
       - name: Upload desktop evidence
         uses: actions/upload-artifact@v4
         with:
@@ -278,6 +304,9 @@ jobs:
       - name: Production dependency audit
         run: npm audit --omit=dev --audit-level=high
         working-directory: auto—publish
+      - name: Renderer dependency audit
+        run: npm audit --audit-level=high
+        working-directory: auto—publish/media-workbench
       - name: Development dependency audit (non-blocking known-risk report)
         continue-on-error: true
         run: npm audit --audit-level=high
