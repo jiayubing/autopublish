@@ -34,6 +34,7 @@ const {
   responseSchemaFor,
   validateDocument,
 } = require("./continuous-knowledge-contract");
+const PROGRESS_STAGES = [...CONTINUOUS_STAGES.map(stage => stage.id), "K"];
 const {
   canonicalSchema,
   CANONICAL_PROMPT,
@@ -192,8 +193,8 @@ async function runContinuousKnowledge({
   }) {
     onProgress(stage, {
       mode,
-      completed: stage === "K" ? 5 : Number(stage.slice(1)) - 1,
-      total: 6,
+      completed: PROGRESS_STAGES.indexOf(stage),
+      total: PROGRESS_STAGES.length,
     });
     if (signal?.aborted) throw error("RESEARCH_CANCELLED_BEFORE_REQUEST");
     if (Array.from(prompt).length > limits.maxPromptCharacters)
@@ -346,8 +347,8 @@ async function runContinuousKnowledge({
       recovery: "No automatic retry or resume",
     });
     for (let stage = 0; stage < CONTINUOUS_STAGES.length; stage++) {
-      currentStage = `R${stage + 1}`;
       const definition = CONTINUOUS_STAGES[stage];
+      currentStage = definition.id;
       const stagePayload = payload(stage, "analysis");
       const first = await request({
         stage: currentStage,
@@ -359,14 +360,14 @@ async function runContinuousKnowledge({
         parseJsonObject(first.text),
         definition.fields,
         registry,
-        `R${stage + 1}a`,
+        `${currentStage}a`,
       );
       unresolved.push(
         ...rejected.map((item) => ({ stage: currentStage, ...item })),
       );
       let need = document.researchNeed;
       if (
-        stage > 0 &&
+        definition.key !== "customerUnderstanding" &&
         !backgroundAttempted &&
         (weakPublicPresence ||
           materials.reduce((sum, item) => sum + item.text.length, 0) < 1500)
@@ -386,7 +387,7 @@ async function runContinuousKnowledge({
         document.researchNeed = need;
       }
       if (
-        stage === 0 &&
+        definition.key === "customerUnderstanding" &&
         !document.publicIdentity.some(
           (entry) => entry.provenance === "public_research",
         ) &&
@@ -402,7 +403,7 @@ async function runContinuousKnowledge({
       }
       if (need.needed) {
         const queryKey = need.query.normalize("NFKC").replace(/\s+/gu, "");
-        const remainingRequired = CONTINUOUS_STAGES.length - stage - 1 + 1;
+        const remainingRequired = PROGRESS_STAGES.length - stage - 1;
         if (
           searches >= maxSearches ||
           searchQueries.has(queryKey) ||
@@ -482,14 +483,14 @@ async function runContinuousKnowledge({
             parseJsonObject(supplemental.text),
             definition.fields,
             registry,
-            `R${stage + 1}b`,
+            `${currentStage}b`,
           ));
           unresolved.push(
             ...rejected.map((item) => ({ stage: currentStage, ...item })),
           );
         }
       }
-      if (stage === 4) {
+      if (definition.key === "competitionAndGaps") {
         const ungrounded = document.competitionContext.filter(
           (entry) => entry.provenance === "derived",
         );

@@ -192,11 +192,18 @@ function fakeClient({
 
 test("one run passes all five analyses into a single offline knowledge request", async () => {
   const { client, calls } = fakeClient();
+  const progress = [];
   const result = await runContinuousKnowledge({ artifactRoot: root,
     input: input(),
     client,
     limits,
+    onProgress: (stage, state) => progress.push({ stage, ...state }),
   });
+  for (const [index, stage] of ["R1", "R2", "R3", "R4", "R5", "K"].entries()) {
+    const events = progress.filter(event => event.stage === stage);
+    assert.ok(events.length > 0, stage);
+    assert.ok(events.every(event => event.completed === index && event.total === 6), stage);
+  }
   assert.equal(calls.length, 10); // Missing public identity: one bounded search and one supplemental analysis.
   assert.equal(calls.filter((call) => !call.context).length, 1);
   assert.match(calls.at(-1).request.prompt, /R5 没有可采纳的具体竞对证据/);
@@ -920,6 +927,55 @@ test("dead process lock is reclaimed for a new run without replaying the old req
   await runContinuousKnowledge({ input: crashInput, limits, artifactRoot, runId: "new-run", client: client.client });
   assert.ok(client.calls.length > 0);
   assert.deepEqual(fs.readdirSync(path.join(artifactRoot, "run-crashed-run")), previous);
+});
+
+test("competing processes reclaim a dead knowledge owner only once", { timeout: 15000 }, async (t) => {
+  const { spawn, spawnSync } = require("node:child_process");
+  const artifactRoot = fs.mkdtempSync(path.join(root, "contenders-"));
+  const setup = `const { runContinuousKnowledge } = require(${JSON.stringify(require.resolve("../src/content/continuous-knowledge-run"))});
+    const options = ${JSON.stringify({ input: input(), limits, artifactRoot })};`;
+  const crash = spawnSync(process.execPath, ["-e", setup + `
+    runContinuousKnowledge({ ...options, runId: 'old-run', client: { request: async () => process.exit(23) } });
+  `], { encoding: "utf8", timeout: 10000 });
+  assert.equal(crash.status, 23, crash.stderr);
+  const oldDirectory = path.join(artifactRoot, "run-old-run");
+  const readEvidence = () => fs.readdirSync(oldDirectory, { recursive: true })
+    .filter(name => fs.statSync(path.join(oldDirectory, name)).isFile())
+    .sort().map(name => [name, fs.readFileSync(path.join(oldDirectory, name), "utf8")]);
+  const oldFiles = readEvidence();
+  const contenders = [0, 1].map(index => {
+    const child = spawn(process.execPath, ["-e", setup + `
+      process.once('message', async () => {
+        try {
+          await runContinuousKnowledge({ ...options, runId: 'contender-${index}', client: { request: async () => {
+            const release = new Promise(resolve => process.once('message', resolve));
+            process.send('accepted');
+            await release;
+            throw Object.assign(new Error('synthetic timeout'), { code: 'GEO_REQUEST_TIMEOUT' });
+          } } });
+        } catch { process.send('stopped'); }
+        finally { process.disconnect(); }
+      });
+      process.send('ready');
+    `], { stdio: ["ignore", "ignore", "pipe", "ipc"] });
+    t.after(() => { if (child.exitCode === null) child.kill(); });
+    let stderr = "";
+    child.stderr.on("data", chunk => { stderr += chunk; });
+    const exit = new Promise((resolve, reject) => {
+      child.once("error", reject);
+      child.once("exit", code => code === 0 ? resolve() : reject(new Error(stderr || `child exit ${code}`)));
+    });
+    const ready = new Promise(resolve => child.once("message", resolve));
+    return { child, exit, ready };
+  });
+  assert.deepEqual(await Promise.all(contenders.map(item => item.ready)), ["ready", "ready"]);
+  const outcomes = contenders.map(({ child }) => new Promise(resolve => child.once("message", resolve)));
+  contenders.forEach(({ child }) => child.send("start"));
+  const results = await Promise.all(outcomes);
+  assert.deepEqual([...results].sort(), ["accepted", "stopped"]);
+  contenders[results.indexOf("accepted")].child.send("release");
+  await Promise.all(contenders.map(item => item.exit));
+  assert.deepEqual(readEvidence(), oldFiles);
 });
 
 test("a live knowledge owner cannot be displaced by another run", async () => {

@@ -69,6 +69,7 @@ const STAGES = [
 ];
 const CONTINUOUS_STAGES = [
   {
+    id: "R1",
     key: "customerUnderstanding",
     file: "stage-1-customer-understanding",
     fields: [
@@ -83,18 +84,21 @@ const CONTINUOUS_STAGES = [
     goal: "R1 客户理解：从客户自述识别主体、品牌、业务、产品服务、地区、用户和公开身份；区分已知与未知。材料理解在本轮完成，不预先调用模型。案例、评价、资质只摘录有依据的原文。",
   },
   {
+    id: "R2",
     key: "customerCharacteristics",
     file: "stage-2-characteristics",
     fields: ["customerCharacteristics"],
     goal: "R2 客户特点：承接R1，归纳设施、产品、服务、团队与体验，保留每项依据；特点不是已证实的竞争优势。",
   },
   {
+    id: "R3",
     key: "coreAdvantages",
     file: "stage-3-advantages",
     fields: ["coreAdvantages", "ordinaryCharacteristics"],
     goal: "R3 核心优势：承接R1-R2，解释能力、使用场景、用户价值的关系，区分普通特点和合理分析，不凭空建立竞争比较。",
   },
   {
+    id: "R4",
     key: "eeaapAnalysis",
     file: "stage-4-eeaap",
     fields: [
@@ -111,6 +115,7 @@ const CONTINUOUS_STAGES = [
     goal: "R4 EEAAP 五维逐项诊断：Experience实际体验，Expertise专业能力，Authority权威依据，Accuracy准确性，Purpose内容目的。每维说明依据、优点、问题和改善方向；缺依据明确留空。分析人群、痛点、决策需求与场景，不把推导写成经营事实。",
   },
   {
+    id: "R5",
     key: "competitionAndGaps",
     file: "stage-5-competition-gaps",
     fields: [

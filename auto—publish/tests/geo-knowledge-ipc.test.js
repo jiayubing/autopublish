@@ -31,6 +31,7 @@ test("knowledge preload and authenticated transport roundtrip all capabilities",
     ),
     geoKnowledgeService,
   });
+  assert.deepEqual([...handlers.keys()].sort(), geoKnowledgeIpcContractFixtures.map(fixture => fixture.channel).sort());
   const harness = loadPreloadHarness({
     invoke: (channel, input) => handlers.get(channel)(null, input),
   });
