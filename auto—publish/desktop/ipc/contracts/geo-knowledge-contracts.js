@@ -122,11 +122,20 @@ const source = exactObject({
   citationVerified: optionalField("boolean"),
 });
 const deliverable = exactObject({
+  researchNotes: optionalField(text(100000)),
+  sectionEvidence: optionalField(arrayField(exactObject({ title: text(100, 1), kinds: arrayField(text(50, 1), { max: 10 }), sourceIds: arrayField(id, { max: 500 }) }), { max: 9 })),
   version: literalField(1),
   knowledgeRevision: integerField({ min: 0, max: Number.MAX_SAFE_INTEGER }),
   status: enumField(["complete", "draft", "stale"]),
   markdown: text(500000, 1),
   warnings: arrayField(text(2000, 1), { max: 100 }),
+  contentRevision: optionalField(integerField({ min: 1, max: Number.MAX_SAFE_INTEGER })),
+  savedAt: optionalField(text(100, 1)),
+  origin: optionalField(enumField(["ai", "manual", "legacy"])),
+  indexStatus: optionalField(enumField(["current", "stale"])),
+  sourceIds: optionalField(arrayField(id, { max: 500 })),
+  candidateId: optionalField(id),
+  baseContentRevision: optionalField(integerField({ min: 1, max: Number.MAX_SAFE_INTEGER })),
 });
 const modelDraft = exactObject({
   status: literalField("unverified"),
@@ -171,6 +180,7 @@ const knowledge = exactObject({
   ),
   sources: arrayField(source, { max: 500 }),
   deliverable: optionalField(deliverable),
+  pendingDeliverable: optionalField(deliverable),
 });
 const state = exactObject({
   phase: enumField([
@@ -312,36 +322,6 @@ const errors = Object.fromEntries(
   ]),
 );
 const clientRequest = exactObject({ clientId: id });
-const confirmationEntry = exactObject({
-  kind: enumField(["fact", "research", "derived", "gap", "caution"]),
-  title: text(2000, 1),
-  body: text(12000, 1),
-  sourceIds: arrayField(id, { max: 100 }),
-  attributionRequired: "boolean",
-  relatedKnowledgeIds: arrayField(id, { max: 500 }),
-});
-const confirmationModel = exactObject({
-  version: literalField(1),
-  clientId: id,
-  knowledgeRevision: integerField({ min: 0, max: Number.MAX_SAFE_INTEGER }),
-  generatedAt: text(100, 1),
-  sections: arrayField(
-    exactObject({
-      id,
-      title: text(200, 1),
-      entries: arrayField(confirmationEntry, { max: 1000 }),
-    }),
-    { min: 15, max: 15 },
-  ),
-  confirmationRequests: arrayField(
-    exactObject({
-      topic: text(2000, 1),
-      reason: text(12000, 1),
-      relatedKnowledgeIds: arrayField(id, { max: 500 }),
-    }),
-    { max: 2000 },
-  ),
-});
 function contract(method, kind, request, success) {
   return defineContract({
     capability: "content.geo" + method[0].toUpperCase() + method.slice(1),
@@ -484,6 +464,16 @@ const geoKnowledgeContracts = [
   ),
   contract("cancel", "command", clientRequest, exactObject({ state })),
   contract(
+    "editDeliverable", "command",
+    exactObject({ clientId: id, revision: integerField({ min: 1, max: Number.MAX_SAFE_INTEGER }), markdown: text(500000, 1) }),
+    exactObject({ knowledge }),
+  ),
+  contract(
+    "acceptDeliverable", "command",
+    exactObject({ clientId: id, revision: integerField({ min: 1, max: Number.MAX_SAFE_INTEGER }), candidateId: id }),
+    exactObject({ knowledge }),
+  ),
+  contract(
     "edit",
     "command",
     exactObject({
@@ -568,15 +558,6 @@ const geoKnowledgeContracts = [
     "command",
     exactObject({ clientId: id, researchPrompt: text(4000) }),
     exactObject({ researchPrompt: text(4000) }),
-  ),
-  contract(
-    "previewConfirmation",
-    "query",
-    exactObject({
-      clientId: id,
-      revision: integerField({ min: 0, max: Number.MAX_SAFE_INTEGER }),
-    }),
-    exactObject({ model: confirmationModel }),
   ),
   contract(
     "exportMarkdown",

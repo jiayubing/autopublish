@@ -4,11 +4,13 @@
 
 ## 当前执行入口
 
-- [GEO 内容生产闭环实施方案 v1.4](../AutoPublish-GEO-Content-Production-Implementation-Plan-v1.4.md)：已启动串行实施；CP-0 至 CP-4 完成，下一阶段为 CP-5 集成收口与旧路径清理。
+- [九板块客户知识库产品改造方案](NINE-SECTION-KNOWLEDGE-PRODUCT-PLAN.md)：阶段一至四本地实现及最终验证完成；仅剩真实模型/搜索质量 gate，待当次授权。验证与最小合成验收范围由该计划维护，不自动推进 CP-5。
 
 关联功能合同：[客户生成任务化与并发](../.scratch/client-generation-tasks/CLIENT-GENERATION-TASKS-PLAN.md)，只在涉及其行为时读取。
 
 ## 已就绪、未启动
+
+- [GEO 内容生产闭环实施方案 v1.4](../AutoPublish-GEO-Content-Production-Implementation-Plan-v1.4.md)：CP-0 至 CP-4 完成；CP-5 保持暂缓，九板块客户知识库改造已完成本地实现，真实质量验收单独等待授权。
 
 - [规模审计修复](../.scratch/scale-audit/REMEDIATION.md)：已完成 SA-01 / SA-02 / SA-04 及付费页面分页/摘要读取；为避免与 GEO 内容生产闭环并行，普通队列、全局执行/启动与其余失效优化暂缓到后续批次。
 
@@ -16,7 +18,9 @@
 
 ## 等待用户明确外部授权
 
-这些条目不能自动执行真实登录、发布、图片上传、付费、取消订单、订单核对或生产迁移：
+这些条目不能自动执行真实模型调用、登录、发布、图片上传、付费、取消订单、订单核对或生产迁移：
+
+- 九板块知识库的资料丰富/小店真实模型质量验收：[产品计划及合成样例](NINE-SECTION-KNOWLEDGE-PRODUCT-PLAN.md)。本地核心 659 项与集成 1329 项已通过。
 
 - 文章生命周期 Wave Plan 中 Ticket 25 / Wave 11 的真实外部验收：[Wave Plan](../.scratch/article-lifecycle-and-submission/ARTICLE-LIFECYCLE-WAVE-EXECUTION-PLAN.md)。
 - Ticket 26 的真实登录、发布、付费、取消、订单核对和生产迁移：[Wave Plan](../.scratch/article-lifecycle-and-submission/ARTICLE-LIFECYCLE-WAVE-EXECUTION-PLAN.md)。

@@ -28,7 +28,7 @@ function createRequestBudget(
 function parseJsonObject(value) {
   if (typeof value !== "string" || !value.trim())
     throw geoError("GEO_SCHEMA_INVALID");
-  const trimmed = value.trim();
+  const trimmed = repairObjectKeys(value.trim());
   const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/iu);
   const candidates = fenced ? [fenced[1]] : [trimmed];
   if (!fenced) {
@@ -63,10 +63,42 @@ function parseJsonObject(value) {
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
         return parsed;
     } catch (_) {
-      // A bounded format repair request handles malformed JSON.
+      // Try the next complete object; never invent missing values or closing braces.
     }
   }
   throw geoError("GEO_SCHEMA_INVALID");
+}
+
+// Repair unquoted property names (including a missing opening quote) only
+// outside strings. Text, references and values are preserved verbatim.
+function repairObjectKeys(value) {
+  let result = "";
+  let quoted = false;
+  let escaped = false;
+  let previous = "";
+  for (let index = 0; index < value.length; index++) {
+    const character = value[index];
+    if (quoted) {
+      result += character;
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === '"') quoted = false;
+      continue;
+    }
+    if ((previous === "{" || previous === ",") && /[A-Za-z_]/u.test(character)) {
+      const key = value.slice(index).match(/^([A-Za-z_][A-Za-z0-9_]*)"?(\s*:)/u);
+      if (key) {
+        result += JSON.stringify(key[1]) + key[2];
+        index += key[0].length - 1;
+        previous = ":";
+        continue;
+      }
+    }
+    result += character;
+    if (character === '"') quoted = true;
+    if (!/\s/u.test(character)) previous = character;
+  }
+  return result;
 }
 
 module.exports = {

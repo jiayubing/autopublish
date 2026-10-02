@@ -303,6 +303,19 @@ function normalizePersistedV2(batch) {
   if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 4 || batch.tasks.length > MAX_TASKS)
     throw storeError("GENERATION_BATCH_INVALID", "Generation batch v2 is invalid");
   const questionSources = batch.questionSources.map(normalizeQuestionSource);
+  let proseBriefs;
+  if (batch.proseBriefs !== undefined) {
+    if (!batch.proseBriefs || typeof batch.proseBriefs !== "object" || Array.isArray(batch.proseBriefs))
+      throw storeError("GENERATION_BATCH_INVALID", "Invalid brief snapshots");
+    const { validateArticleBriefV2 } = require("./geo-generation-context");
+    proseBriefs = {};
+    for (const [id, brief] of Object.entries(batch.proseBriefs)) {
+      const source = questionSources.find(item => item.id === id);
+      if (!source || brief?.knowledgeRevision !== source.knowledgeRevision || brief?.targetQuestion?.geoQuestionId !== source.geoQuestionId)
+        throw storeError("GENERATION_BATCH_INVALID", "Invalid brief identity");
+      proseBriefs[id] = validateArticleBriefV2(brief, source.clientId, [source.collectionQuestionId]);
+    }
+  }
   assertUnique(questionSources.map((item) => item.id), "GENERATION_BATCH_INVALID", "Question source id");
   assertUnique(questionSources.map((item) => item.clientId + "\0" + item.geoQuestionId), "GENERATION_BATCH_INVALID", "Question source");
   const sourceIds = new Set(questionSources.map((item) => item.id));
@@ -342,6 +355,7 @@ function normalizePersistedV2(batch) {
     updatedAt: batch.updatedAt,
     aiConfigFingerprint: batch.aiConfigFingerprint,
     questionSources,
+    ...(proseBriefs ? { proseBriefs } : {}),
     templates,
     tasks,
   };

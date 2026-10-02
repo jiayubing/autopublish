@@ -1,60 +1,36 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import GeoKnowledgeQuestions from "./GeoKnowledgeQuestions";
 import { useGeoKnowledge } from "../../features/content/use-geo-knowledge";
-import type {
-  ConfirmationEntry,
-  KnowledgeItem,
-  KnowledgeSection,
-} from "../../types/geo-knowledge";
 
-const sectionLabels: Record<KnowledgeSection, string> = {
-  profile: "基础信息", onlinePresence: "线上身份", history: "客户历史",
-  offerings: "产品与服务", capabilities: "能力与证据", cases: "客户案例",
-  scenarios: "场景", recommendationAngles: "推荐角度", competitors: "竞对",
-  geoQuestions: "GEO 问题", externalResearch: "外部研究", restrictions: "待确认与限制",
-};
-const knowledgeSections = [
-  "onlinePresence",
-  "history",
-  "offerings",
-  "capabilities",
-  "cases",
-  "scenarios",
-  "recommendationAngles",
-  "competitors",
-] as const;
-const basisLabels = {
-  fact: "客户事实",
-  research: "公开研究",
-  derived: "AI 推导",
-  candidate: "待确认",
-};
-const phaseLabels: Record<string, string> = {
-  idle: "尚未生成",
-  materials: "正在读取客户资料",
-  extracting: "正在提取客户事实",
-  planning: "正在制定研究计划",
-  researching: "正在联网研究",
-  synthesizing: "正在整理知识与 GEO 问题",
-  saving: "正在保存知识库",
-  complete: "生成完成",
-  failed: "本次操作未完成",
-  R1: "R1 · 理解客户",
-  R2: "R2 · 提炼特点",
-  R3: "R3 · 分析优势",
-  R4: "R4 · EEAAP 五维分析",
-  R5: "R5 · 竞争、缺口与 GEO 问题",
-  K: "K · 生成结构化知识与九板块稿件",
-};
-const fieldLabels: Record<string, string> = {
-  name: "客户名称", category: "主营品类", location: "所在地区", address: "地址",
-  serviceArea: "服务区域", aliases: "别名", phone: "联系电话", contact: "联系方式", foundedYear: "成立年份",
-};
-const buttonClass = "rounded border border-slate-300 px-3 py-2 text-xs disabled:opacity-40";
-const confirmationKindLabels: Record<ConfirmationEntry["kind"], string> = {
-  fact: "客户事实", research: "公开研究", derived: "推荐角度 / 场景分析", gap: "资料缺口", caution: "谨慎使用",
-};
-
+const titles = [
+  "产品或服务描述",
+  "产品或服务特点",
+  "品牌故事",
+  "用户痛点",
+  "创始人介绍",
+  "社会贡献",
+  "信任背书",
+  "客户案例",
+  "客户评价",
+];
+const button =
+  "rounded border border-slate-300 px-3 py-2 text-sm disabled:opacity-40";
+function splitProse(markdown: string) {
+  const blocks = markdown.split(/^##\s+/m);
+  const header = blocks.shift() || "";
+  const sections = Object.fromEntries(titles.map((title) => [title, ""]));
+  const extra: string[] = [];
+  for (const block of blocks) {
+    const newline = block.indexOf("\n");
+    const title = (newline < 0 ? block : block.slice(0, newline)).trim();
+    if (titles.includes(title))
+      sections[title] +=
+        (sections[title] ? "\n\n" : "") +
+        (newline < 0 ? "" : block.slice(newline).trim());
+    else extra.push("## " + block);
+  }
+  return { header, sections, extra };
+}
 export default function GeoKnowledgeView({
   clientId,
   onCollectQuestion,
@@ -64,549 +40,521 @@ export default function GeoKnowledgeView({
   onCollectQuestion: (questionId: string) => void;
   onGenerateQuestion: (geoQuestionId: string) => void;
 }) {
+  const scrollRef = useRef<HTMLElement | null>(null);
+  const sectionsRef = useRef<Record<string, HTMLElement | null>>({});
   const feature = useGeoKnowledge(clientId);
   const knowledge = feature.knowledge;
-  const disabled = feature.busy || feature.state.running;
-  const [tab, setTab] = useState<
-    | "knowledge"
-    | "draft"
-    | "confirmation"
-    | "questions"
-    | "sources"
-    | "restrictions"
-  >("knowledge");
-  const draft = feature.modelDraft || knowledge?.deliverable;
-  const [selected, setSelected] = useState<{
-    section: KnowledgeSection;
-    item: KnowledgeItem;
-  } | null>(null);
+  const current = knowledge?.deliverable;
+  const disabled = feature.loading || feature.busy || feature.state.running;
   const [editing, setEditing] = useState<{
-    section: KnowledgeSection;
-    item: KnowledgeItem;
+    revision: number;
+    header: string;
+    sections: Record<string, string>;
+    extra: string[];
   } | null>(null);
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [fields, setFields] = useState<Record<string, string>>({});
   const [researchOpen, setResearchOpen] = useState(false);
   const [clientPrompt, setClientPrompt] = useState("");
   const [temporaryPrompt, setTemporaryPrompt] = useState("");
+  const [notice, setNotice] = useState("");
+  const [questionsOpen, setQuestionsOpen] = useState(false);
   const [manualValues, setManualValues] = useState<Record<string, string>>({});
   useEffect(() => {
-    setTab("knowledge");
-    setSelected(null);
     setEditing(null);
     setResearchOpen(false);
-    setClientPrompt("");
     setTemporaryPrompt("");
+    setNotice("");
+    setQuestionsOpen(false);
     setManualValues({});
   }, [clientId]);
-
   useEffect(() => {
-    if (!feature.promptSettings) return;
-    setClientPrompt(feature.promptSettings.clientPrompt);
+    setClientPrompt(feature.promptSettings?.clientPrompt || "");
   }, [feature.promptSettings]);
-  useEffect(() => {
-    if (!knowledge || !selected) return;
-    const item =
-      selected.section === "profile"
-        ? knowledge.profile
-        : knowledge[selected.section].find(
-            (value) => value.id === selected.item.id,
-          );
-    if (item && item !== selected.item) setSelected({ section: selected.section, item });
-  }, [knowledge?.revision]);
-  useEffect(() => {
-    if (!knowledge || !["confirmation", "sources"].includes(tab)) return;
-    void feature.previewConfirmation();
-  }, [clientId, knowledge?.revision, tab]);
-
-  function beginEdit(section: KnowledgeSection, item: KnowledgeItem) {
-    setEditing({ section, item });
-    setName(item.name || "");
-    setDescription(item.description || "");
-    setFields({
-      name: "",
-      category: "",
-      location: "",
-      address: "",
-      serviceArea: "",
-      ...item.fields,
-    });
-  }
-  async function saveEdit() {
-    if (!knowledge || !editing) return;
-    const ok = await feature.edit({
-      clientId,
-      revision: knowledge.revision,
-      section: editing.section,
-      id: editing.item.id,
-      changes:
-        editing.section === "profile"
-          ? {
-              fields: Object.fromEntries(
-                Object.entries(fields as Record<string, string>).filter(
-                  ([, value]) => value.trim(),
-                ),
-              ) as Record<string, string>,
-            }
-          : { name, description },
-    });
-    if (ok) setEditing(null);
-  }
-  async function startResearch() {
+  async function generate() {
     if (!(await feature.saveClientPrompt(clientPrompt))) return;
+    setResearchOpen(false);
     if (await feature.generate(temporaryPrompt)) {
       setResearchOpen(false);
       setTemporaryPrompt("");
-      setTab("draft");
     }
   }
-  function compactItem(section: KnowledgeSection, item: KnowledgeItem) {
-    const summary = item.fields
-      ? Object.values(item.fields).slice(0, 3).join(" · ")
-      : item.description || "暂无补充说明";
-    return (
-      <button
-        key={item.id}
-        className="w-full rounded border border-slate-200 bg-white p-3 text-left hover:bg-slate-50"
-        onClick={() => setSelected({ section, item })}
-      >
-        <span className="flex items-center justify-between gap-3">
-          <strong>{item.name || "客户基本信息"}</strong>
-          <span className="text-xs text-slate-500">{basisLabels[item.basis]}{item.locked ? " · 已锁定" : ""}</span>
-        </span>
-        <span className="mt-1 block truncate text-xs text-slate-500">{summary}</span>
-      </button>
-    );
+  async function save() {
+    if (!editing) return;
+    const markdown =
+      [
+        editing.header.trim(),
+        ...titles
+          .filter((title) => editing.sections[title].trim())
+          .map((title) => `## ${title}\n\n${editing.sections[title].trim()}`),
+        ...editing.extra,
+      ]
+        .filter(Boolean)
+        .join("\n\n") + "\n";
+    if (await feature.saveDeliverable(editing.revision, markdown))
+      setEditing(null);
   }
-  function detailDrawer() {
-    if (!selected || !knowledge)
-      return (
-        <aside className="rounded border border-dashed p-5 text-slate-500">选择一条知识查看详情。</aside>
-      );
-    const { section, item } = selected;
-    return (
-      <aside className="rounded border bg-white p-4" aria-label="知识详情">
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="font-semibold">{item.name || "客户基本信息"}</h3>
-          <button className={buttonClass} onClick={() => setSelected(null)}>关闭</button>
-        </div>
-        <p className="mt-2 text-xs text-slate-500">{sectionLabels[section]} · {basisLabels[item.basis]}{item.locked ? " · 人工锁定" : ""}</p>
-        {item.fields ? (
-          <dl className="mt-3 grid gap-2">
-            {Object.entries(item.fields).map(([key, value]) => (
-              <div key={key}><dt className="text-xs text-slate-500">{fieldLabels[key] || key}</dt><dd>{value}</dd></div>
-            ))}
-          </dl>
-        ) : (
-          <p className="mt-3 whitespace-pre-wrap break-words">{item.description || "暂无补充说明"}</p>
-        )}
-        {item.url && (
-          <a className="mt-3 block break-all text-blue-700" href={item.url} target="_blank" rel="noreferrer">{item.url}</a>
-        )}
-        <div className="mt-3 text-xs text-slate-500">
-          来源：
-          {item.sourceIds.map(
-              (id) =>
-                knowledge.sources.find((source) => source.id === id)?.title ||
-                id,
-            )
-            .join("、") || "暂无来源"}
-        </div>
-        {!(["recommendationAngles", "restrictions"] as KnowledgeSection[]).includes(section) && (
-          <button className={buttonClass + " mt-4"} disabled={disabled} onClick={() => beginEdit(section, item)}>编辑并锁定</button>
-        )}
-      </aside>
-    );
-  }
-
-  if (!clientId) return <div className="p-6 text-sm">请先选择客户。</div>;
+  const displayed = splitProse(current?.markdown || "");
   return (
-    <section className="flex-1 overflow-auto p-4 text-sm" aria-label="客户知识库">
-      <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div><h2 className="text-lg font-semibold">客户知识库</h2><p className="mt-1 text-xs text-slate-500">客户实体优先研究；知识用于发现问题与辅助文章生产。</p></div>
-        <div className="flex gap-2">
-          <button className={buttonClass} disabled={feature.loading || disabled || Boolean(editing)} onClick={() => setResearchOpen(true)}>{knowledge ? "重新研究" : "生成知识库"}</button>
-          <button className={buttonClass} disabled={disabled} onClick={() => void feature.reload()}>刷新</button>
-          {disabled && (
-            <button className={buttonClass} onClick={() => void feature.cancel()}>取消研究</button>
+    <section
+      className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain p-4 [overflow-wrap:anywhere]"
+      ref={scrollRef}
+      aria-label="知识库"
+      tabIndex={0}
+    >
+      <div className="mx-auto w-full max-w-5xl space-y-4">
+        <div className="sticky -top-4 z-10 flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white py-3">
+          <h2 className="mr-auto text-lg font-semibold">知识库</h2>
+          <button
+            className={button}
+            disabled={disabled || !!editing}
+            onClick={() => setResearchOpen(true)}
+          >
+            {current ? "重新生成知识库" : "生成知识库"}
+          </button>
+          <button
+            className={button}
+            disabled={disabled}
+            onClick={() => void feature.reload()}
+          >
+            刷新
+          </button>
+          {feature.state.running && (
+            <button className={button} onClick={() => void feature.cancel()}>
+              取消生成
+            </button>
+          )}
+          {current && (
+            <nav
+              aria-label="知识库板块导航"
+              className="flex w-full flex-wrap gap-1"
+            >
+              {titles.map((title) => (
+                <button
+                  key={title}
+                  className="rounded px-2 py-1 text-sm text-slate-600 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2"
+                  onClick={() => {
+                    const container = scrollRef.current;
+                    const target = sectionsRef.current[title];
+                    if (!container || !target) return;
+                    if (target instanceof HTMLDetailsElement)
+                      target.open = true;
+                    container.scrollTo({
+                      top:
+                        container.scrollTop +
+                        target.getBoundingClientRect().top -
+                        container.getBoundingClientRect().top -
+                        parseFloat(getComputedStyle(target).scrollMarginTop),
+                    });
+                  }}
+                >
+                  {title}
+                </button>
+              ))}
+            </nav>
           )}
         </div>
-      </header>
-      {feature.loading && <p role="status">正在读取知识库…</p>}
-      {feature.error && (
-        <p role="alert" className="mb-3 text-rose-700">{feature.error}</p>
-      )}
-      <p role="status" className="mb-3">
-        {phaseLabels[feature.state.phase] || "正在处理"}
-        {feature.state.failedPhase
-          ? ` · 失败阶段：${phaseLabels[feature.state.failedPhase] || feature.state.failedPhase}`
-          : ""}
-        {feature.state.total !== undefined
-          ? ` ${feature.state.completed || 0} / ${feature.state.total}`
-          : ""}
-      </p>
-      {feature.state.phase === "K" && feature.state.running && (
-        <p role="status">正在成稿，最长等待10分钟，请勿重复发起。</p>
-      )}
-      {feature.state.outcome === "uncertain" && (
-        <p role="alert">{feature.state.errorCode === "GEO_REQUEST_TIMEOUT"
-          ? "模型响应等待超时，接口结果仍不确定，已停止，不会自动重试。（GEO_REQUEST_TIMEOUT）"
-          : "接口结果不确定，已停止，不会自动重试。"}</p>
-      )}
-      {draft && (
-        <button className={buttonClass} onClick={() => setTab("draft")}>
-          九板块知识稿
-        </button>
-      )}
-      {tab === "draft" && (
-        <section
-          aria-label="九板块知识稿"
-          className="my-4 rounded border bg-white p-4"
-        >
-          <h3 className="font-semibold">九板块知识稿</h3>
-          {draft ? (
-            <>
-              <p className="my-2 text-sm text-slate-600">
-                {draft.status === "unverified"
-                  ? "模型草稿未通过校验，供人工整理，未覆盖正式知识库。"
-                  : draft.status === "stale"
-                    ? "稿件需重新生成，已保留原文。"
-                    : draft.status === "draft"
-                      ? "已出稿，部分篇幅或资料仍需补充。"
-                      : "稿件已生成。"}{" "}
-                · 正文目标600—1000字，篇幅不符合也保留完整稿件。
-              </p>
-              {"warnings" in draft &&
-                draft.warnings.map((warning, index) => (
-                  <p key={index} className="my-2 text-amber-800">
-                    {warning}
-                  </p>
-                ))}
+        {feature.loading && <p role="status">正在读取知识库…</p>}
+        {feature.error && (
+          <p role="alert" className="text-rose-700">
+            {feature.error}
+          </p>
+        )}
+        {feature.state.running && (
+          <p role="status">
+            正在生成：{feature.state.phase}
+            {feature.state.phase === "K"
+              ? " · 正在成稿，最长等待10分钟，请勿重复发起。"
+              : ""}
+          </p>
+        )}
+        {feature.state.phase === "failed" && (
+          <p role="alert">
+            本次生成未完成 · {feature.state.failedPhase || ""} ·{" "}
+            {feature.state.errorCode || ""}。已有正文仍保留。
+          </p>
+        )}
+        {feature.state.outcome === "uncertain" && (
+          <p role="alert">
+            模型响应等待超时或远端结果不确定，已停止，不会自动重试。（
+            {feature.state.errorCode}）
+          </p>
+        )}
+        {researchOpen && (
+          <section
+            className="space-y-3 rounded border p-4"
+            aria-label="生成要求"
+          >
+            <p>本次使用客户资料与联网研究，会消耗已配置接口用量。</p>
+            <details>
+              <summary>全局研究要求</summary>
+              <pre className="whitespace-pre-wrap">
+                {feature.promptSettings?.globalPrompt ||
+                  feature.promptSettings?.defaultGlobalPrompt}
+              </pre>
+            </details>
+            <p className="text-sm text-slate-500">
+              默认沿用已保存的研究要求；有额外要求时再展开修改。
+            </p>
+            <details className="rounded border border-slate-200 p-3">
+              <summary className="cursor-pointer text-sm font-medium">
+                客户长期研究要求{" "}
+                <span className="font-normal text-slate-500">
+                  {clientPrompt.trim() ? "· 已设置，生成时应用" : "· 未设置"}
+                </span>
+              </summary>
+              <label className="mt-3 block text-sm">
+                客户长期研究要求
+                <textarea
+                  className="block w-full border p-2"
+                  aria-label="客户长期研究要求"
+                  maxLength={4000}
+                  value={clientPrompt}
+                  disabled={disabled}
+                  onChange={(event) => setClientPrompt(event.target.value)}
+                />
+              </label>
+            </details>
+            <details className="rounded border border-slate-200 p-3">
+              <summary className="cursor-pointer text-sm font-medium">
+                本次临时研究要求{" "}
+                <span className="font-normal text-slate-500">
+                  {temporaryPrompt.trim() ? "· 已填写，仅本次生效" : "· 可选"}
+                </span>
+              </summary>
+              <label className="mt-3 block text-sm">
+                本次临时研究要求
+                <textarea
+                  className="block w-full border p-2"
+                  aria-label="本次临时研究要求"
+                  maxLength={2000}
+                  value={temporaryPrompt}
+                  disabled={disabled}
+                  onChange={(event) => setTemporaryPrompt(event.target.value)}
+                />
+              </label>
+            </details>
+            <button
+              className={button}
+              disabled={disabled}
+              onClick={() => void generate()}
+            >
+              保存要求并开始研究
+            </button>
+            <button
+              className={button}
+              disabled={disabled}
+              onClick={() => setResearchOpen(false)}
+            >
+              取消
+            </button>
+          </section>
+        )}
+        {!current && !feature.loading && (
+          <p>
+            暂无知识库。可从当前客户资料生成；现有客户资料仍可用于文章生成。
+          </p>
+        )}
+        {knowledge?.pendingDeliverable && (
+          <details className="rounded border border-amber-300 p-4">
+            <summary>新生成的候选稿（尚未替换当前正文）</summary>
+            <pre className="whitespace-pre-wrap">
+              {knowledge.pendingDeliverable.markdown}
+            </pre>
+            {knowledge.pendingDeliverable.warnings.map((warning, i) => (
+              <p key={i}>{warning}</p>
+            ))}
+            <button
+              className={button}
+              disabled={disabled || !!editing}
+              onClick={() => {
+                const id = knowledge.pendingDeliverable?.candidateId;
+                if (id) void feature.acceptDeliverable(knowledge.revision, id);
+              }}
+            >
+              用此稿替换当前正文
+            </button>
+          </details>
+        )}
+        {feature.modelDraft && (
+          <details className="rounded border p-4">
+            <summary>本次未验证模型草稿（未覆盖当前正文）</summary>
+            <pre className="whitespace-pre-wrap">
+              {feature.modelDraft.markdown}
+            </pre>
+          </details>
+        )}
+        {current && (
+          <>
+            <p>
+              当前正文版本 {current.contentRevision || 1} · 保存时间{" "}
+              {new Date(current.savedAt || knowledge.updatedAt).toLocaleString(
+                "zh-CN",
+                { hour12: false },
+              )}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {editing ? (
+                <>
+                  <button
+                    className={button}
+                    disabled={disabled}
+                    onClick={() => void save()}
+                  >
+                    保存正文
+                  </button>
+                  <button
+                    className={button}
+                    disabled={disabled}
+                    onClick={() => setEditing(null)}
+                  >
+                    取消编辑
+                  </button>
+                </>
+              ) : (
+                <button
+                  className={button}
+                  disabled={disabled}
+                  onClick={() => {
+                    for (const section of Object.values(sectionsRef.current)) {
+                      if (section instanceof HTMLDetailsElement)
+                        section.open = true;
+                    }
+                    setEditing({
+                      revision: knowledge.revision,
+                      ...splitProse(current.markdown),
+                    });
+                  }}
+                >
+                  编辑正文
+                </button>
+              )}
               <button
-                className={buttonClass}
-                onClick={() => {
-                  const url = URL.createObjectURL(
-                    new Blob([draft.markdown], {
-                      type: "text/markdown;charset=utf-8",
-                    }),
-                  );
-                  const link = document.createElement("a");
-                  link.href = url;
-                  link.download = "九板块知识稿.md";
-                  link.click();
-                  URL.revokeObjectURL(url);
+                className={button}
+                disabled={disabled}
+                onClick={() => void feature.download()}
+              >
+                导出 Markdown
+              </button>
+              <button
+                className={button}
+                disabled={disabled}
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(current.markdown);
+                    setNotice("已复制已保存正文。");
+                  } catch {
+                    setNotice("复制失败，请使用 Markdown 导出。");
+                  }
                 }}
               >
-                导出知识稿 Markdown
+                复制完整正文
               </button>
-              <pre className="mt-4 whitespace-pre-wrap break-words font-sans">
-                {draft.markdown}
-              </pre>
-            </>
-          ) : (
-            <p>当前知识库尚无九板块稿件，可重新研究生成。</p>
-          )}
-        </section>
-      )}
-      {feature.storageStatus === "legacy_v1" && !knowledge && (
-        <p className="mb-4 rounded border border-amber-300 bg-amber-50 p-4">旧版知识库需要重新研究。新版完整生成前，旧文件会保持不变。</p>
-      )}
-      {knowledge && (
-        <p className="mb-4 text-xs text-slate-500">
-          {knowledge.status.outcome === "partial" ? "知识库已保存，部分研究未完成" : "知识库已保存"}{" "}
-          · 来源 {knowledge.sources.length} 个 · GEO 问题{" "}
-          {knowledge.geoQuestions.length} 个 · 待确认{" "}
-          {
-            knowledge.restrictions.filter(
-              (item) =>
-                item.type === "conflict" && item.conflictStatus === "open",
-            ).length
-          }{" "}
-          项
-        </p>
-      )}
-
-      {researchOpen && (
-        <div className="mb-4 grid gap-3 rounded border bg-white p-4" role="dialog" aria-label="研究要求">
-          <h3 className="font-semibold">研究要求</h3>
-          <label>
-            此客户长期补充要求
-            <textarea
-              className="mt-1 block min-h-20 w-full border p-2"
-              maxLength={4000}
-              value={clientPrompt}
-              disabled={disabled}
-              onChange={(event) => setClientPrompt(event.target.value)}
-            />
-          </label>
-          <label>
-            本次临时要求（不会保存）<textarea
-              className="mt-1 block min-h-20 w-full border p-2"
-              maxLength={2000}
-              value={temporaryPrompt}
-              disabled={disabled}
-              onChange={(event) => setTemporaryPrompt(event.target.value)}
-            />
-          </label>
-          <p className="text-xs text-slate-500">
-            依次完成五轮研究和一次成稿；最多12次请求，其中最多3次搜索。不自动补写或重试，篇幅不符合也保留稿件。
-          </p>
-          <div className="flex gap-2"><button className={buttonClass} disabled={disabled} onClick={() => void startResearch()}>保存要求并开始研究</button><button className={buttonClass} disabled={disabled} onClick={() => setResearchOpen(false)}>取消</button></div>
-        </div>
-      )}
-
-      {editing && (
-        <form
-          className="mb-4 grid gap-3 rounded border bg-white p-4"
-          onSubmit={(event) => { event.preventDefault(); void saveEdit(); }}
-        >
-          <h3 className="font-semibold">编辑并锁定</h3>
-          {editing.section === "profile" ? (
-            Object.entries(fields).map(([key, value]) => (
-              <label key={key}>
-                {fieldLabels[key] || key}
-                <input
-                  className="ml-2 border p-2"
-                  value={value}
-                  onChange={(event) =>
-                    setFields({ ...fields, [key]: event.target.value })
-                  }
-                />
-              </label>
-            ))
-          ) : (
-            <>
-              <label>
-                名称
-                <input
-                  className="block w-full border p-2"
-                  value={name}
-                  maxLength={2000}
-                  required
-                  onChange={(event) => setName(event.target.value)}
-                />
-              </label>
-              <label>
-                说明
-                <textarea
-                  className="block min-h-24 w-full border p-2"
-                  value={description}
-                  maxLength={12000}
-                  onChange={(event) => setDescription(event.target.value)}
-                />
-              </label>
-            </>
-          )}
-          <div className="flex gap-2"><button className={buttonClass} disabled={disabled}>保存并锁定</button><button type="button" className={buttonClass} onClick={() => setEditing(null)}>取消</button></div>
-        </form>
-      )}
-
-      {!knowledge && !feature.loading && feature.storageStatus !== "legacy_v1" && (
-          <p className="rounded border border-dashed p-6 text-slate-500">暂无知识库。点击“生成知识库”，从当前客户资料开始整理。</p>
-        )}
-      {knowledge && (
-        <>
-          <nav className="mb-4 flex flex-wrap gap-2" aria-label="知识库内容">
-            {(
-              [
-                ["knowledge", "客户知识"],
-                ["confirmation", "客户确认稿"],
-                ["questions", "GEO 问题"],
-                ["sources", "来源"],
-                ["restrictions", "待确认"],
-              ] as const
-            ).map(([id, label]) => (
-              <button key={id} className={buttonClass + (tab === id ? " bg-slate-100" : "")} onClick={() => setTab(id)}>{label}</button>
-            ))}
-          </nav>
-          {tab === "knowledge" && (
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-              <div className="grid gap-4">
-                <section><h3 className="mb-2 font-semibold">基础信息</h3>{compactItem("profile", knowledge.profile)}</section>
-                {knowledgeSections.map((section) => (
-                  <section key={section}>
-                    <h3 className="mb-2 font-semibold">{sectionLabels[section]}</h3>
-                    <div className="grid gap-2">
-                      {knowledge[section].map((item) =>
-                        compactItem(section, item),
-                      )}
-                      {!knowledge[section].length && (
-                        <p className="text-slate-500">暂无信息</p>
-                      )}
-                    </div>
-                  </section>
-                ))}
-              </div>
-              {detailDrawer()}
             </div>
-          )}
-          {tab === "confirmation" && (
-            <section aria-label="客户确认稿" className="grid gap-4">
-              <header className="flex flex-wrap items-center justify-between gap-3 rounded border bg-white p-4">
-            <div><h3 className="font-semibold">客户确认稿</h3><p className="mt-1 text-xs text-slate-500">仅重组当前客户知识，不调用 AI，也不会回写知识库。</p></div>
-            <button className={buttonClass} disabled={disabled || feature.confirmationLoading || !feature.confirmation} onClick={() => void feature.download()}>导出 Markdown</button>
-          </header>
-              {feature.confirmationLoading && (
-                <p role="status">正在整理客户确认稿…</p>
-              )}
-              {feature.confirmation?.sections.map((section) => (
-                <article key={section.id} className="rounded border bg-white p-4">
-                  <h3 className="font-semibold">{section.title}</h3>
-                  <div className="mt-3 grid gap-3">
-                    {section.entries.map((entry, index) => (
-                      <div
-                        key={`${entry.title}-${index}`}
-                        className={"rounded p-3 " + (entry.kind === "gap" || entry.kind === "caution" ? "bg-amber-50" : "bg-slate-50")}
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-2"><strong>{entry.title}</strong><span className="text-xs text-slate-500">{confirmationKindLabels[entry.kind]}</span></div>
-                        <p className="mt-2 whitespace-pre-wrap break-words">{entry.body}</p>
-                        {entry.attributionRequired && (
-                          <p className="mt-2 text-xs text-amber-800">对外使用时请保留来源或限定表述。</p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </article>
-              ))}
-              {!feature.confirmationLoading && !feature.confirmation && (
-                <p className="rounded border border-dashed p-6 text-slate-500">确认稿暂不可用，请刷新后重试。</p>
-              )}
-            </section>
-          )}
-          {tab === "questions" && (
-            <GeoKnowledgeQuestions
-              knowledge={knowledge}
-              busy={disabled || Boolean(editing)}
-              link={feature.link}
-              renderItem={(item) => compactItem("geoQuestions", item)}
-              onCollect={onCollectQuestion}
-              onGenerate={onGenerateQuestion}
-            />
-          )}
-          {tab === "sources" && (
-            <div className="grid gap-3">
-              {knowledge.externalResearch.map((item) =>
-                compactItem("externalResearch", item),
-              )}
-              {knowledge.sources.map((source) => (
-                <article key={source.id} className="rounded border bg-white p-3">
-                  <h3>{source.title}</h3>
-                  <p className="break-all text-xs text-slate-500">{source.fileName || source.url} · {source.type}</p>
-                  <div className="mt-2 text-xs text-slate-600">
-                    <strong>支持的确认稿内容：</strong>
-                    {feature.confirmation?.sections.flatMap((section) =>
-                        section.entries.filter((entry) =>
-                            entry.sourceIds.includes(source.id),
-                          )
-                          .map((entry) => `${section.title}：${entry.title}`),
-                      )
-                      .join("；") ||
-                      (feature.confirmationLoading ? "正在读取…" : "暂无正向知识引用")}
-                  </div>
-                  {source.url && (
-                    <div className="mt-2 flex gap-2">
-                      {source.type === "third_party" && (
-                        <button
-                          className={buttonClass}
-                          disabled={disabled}
-                          onClick={() =>
-                            void feature.confirmSourceType(
-                              source.id,
-                              "official_web",
-                            )
-                          }
-                        >
-                          确认是客户官网
-                        </button>
-                      )}
-                      {["third_party", "platform"].includes(source.type) && (
-                        <button
-                          className={buttonClass}
-                          disabled={disabled}
-                          onClick={() =>
-                            void feature.confirmSourceType(
-                              source.id,
-                              "client_public",
-                            )
-                          }
-                        >
-                          确认是客户公开账号
-                        </button>
-                      )}
-                    </div>
+            {notice && <p role="status">{notice}</p>}
+            {editing && (
+              <p>复制、导出和文章任务只使用已保存正文；空板块不会导出。</p>
+            )}
+            {displayed.header.replace(/^#.*$/m, "").trim() && (
+              <p className="whitespace-pre-wrap">
+                {displayed.header.replace(/^#.*$/m, "").trim()}
+              </p>
+            )}
+            {titles.map((title) => (
+              <details
+                key={title}
+                open={!!editing || !!displayed.sections[title]}
+                ref={(element) => {
+                  sectionsRef.current[title] = element;
+                }}
+                className="scroll-mt-48 rounded border border-slate-200 bg-white p-4 sm:p-5"
+              >
+                <summary className="cursor-pointer">
+                  <h3 className="inline font-semibold">{title}</h3>
+                  {!editing && !displayed.sections[title] && (
+                    <span className="ml-3 text-sm text-slate-400">
+                      待补充 · 交付时省略
+                    </span>
                   )}
-                </article>
+                </summary>
+                {editing ? (
+                  <textarea
+                    aria-label={title}
+                    className="mt-3 min-h-32 w-full border p-2"
+                    value={editing.sections[title]}
+                    disabled={disabled}
+                    onChange={(event) =>
+                      setEditing({
+                        ...editing,
+                        sections: {
+                          ...editing.sections,
+                          [title]: event.target.value,
+                        },
+                      })
+                    }
+                  />
+                ) : (
+                  <p className="mt-3 whitespace-pre-wrap text-base leading-8 text-slate-700">
+                    {displayed.sections[title] ||
+                      "暂无有依据的内容，交付时省略。"}
+                  </p>
+                )}
+              </details>
+            ))}
+            {displayed.extra.length > 0 && (
+              <details>
+                <summary>保留的原有正文</summary>
+                <pre className="whitespace-pre-wrap">
+                  {displayed.extra.join("\n")}
+                </pre>
+              </details>
+            )}
+          </>
+        )}
+        {knowledge && (
+          <details className="rounded border p-4">
+            <summary>研究说明、来源与使用限制</summary>
+            {current?.warnings.map((warning, i) => (
+              <p key={i}>{warning}</p>
+            ))}
+            <p>
+              客户自述不等于独立认证；行业背景与分析不能改写成客户已提供的服务。人工修改保留来源参考，不代表逐句验证。
+            </p>
+            <details className="my-3">
+              <summary className="cursor-pointer text-sm">详细研究记录</summary>
+              <pre className="mt-2 whitespace-pre-wrap text-sm">
+                {current?.researchNotes || "旧版本未记录研究过程。"}
+              </pre>
+            </details>
+            {current?.sectionEvidence?.map((item) => (
+              <p key={item.title}>
+                {item.title}：{item.kinds.join("、")}
+              </p>
+            ))}
+            <ul>
+              {knowledge.sources.map((source) => (
+                <li key={source.id}>
+                  {source.title} · {source.type}
+                  {source.url && source.type === "third_party" && (
+                    <button
+                      className={button}
+                      disabled={disabled || !!editing}
+                      onClick={() =>
+                        void feature.confirmSourceType(
+                          source.id,
+                          "official_web",
+                        )
+                      }
+                    >
+                      确认是客户官网
+                    </button>
+                  )}
+                  {source.url &&
+                    ["third_party", "platform"].includes(source.type) && (
+                      <button
+                        className={button}
+                        disabled={disabled || !!editing}
+                        onClick={() =>
+                          void feature.confirmSourceType(
+                            source.id,
+                            "client_public",
+                          )
+                        }
+                      >
+                        确认是客户公开账号
+                      </button>
+                    )}
+                  {source.url && (
+                    <>
+                      {" "}
+                      ·{" "}
+                      <a href={source.url} target="_blank" rel="noreferrer">
+                        来源
+                      </a>
+                    </>
+                  )}
+                </li>
               ))}
-            </div>
-          )}
-          {tab === "restrictions" && (
-            <div className="grid gap-3">
-              {knowledge.status.warnings.map((warning, index) => (
-                <p key={index} className="rounded bg-amber-50 p-3">{warning}</p>
-              ))}
-              {knowledge.restrictions.map((item) => {
-                const claims = (item.claimIds || []).map((id) =>
-                    knowledge.profile.claims?.find((claim) => claim.id === id),
-                  )
-                  .filter(Boolean);
-                return (
-                  <article key={item.id} className="rounded border bg-white p-3">
-                    <h3 className="font-semibold">{item.name}</h3>
-                    <p className="mt-1 text-slate-600">{item.description}</p>
-                    {item.type === "conflict" && item.conflictStatus === "open" && (
-                        <div className="mt-3 grid gap-2">
-                          {claims.map(
-                            (claim) =>
-                              claim && (
-                                <button
-                                  key={claim.id}
-                                  className={buttonClass}
-                                  disabled={disabled}
-                                  onClick={() =>
-                                    void feature.resolveConflict(item.id, {
-                                      claimId: claim.id,
-                                    })
-                                  }
-                                >
-                                  采用：{claim.value}
-                                </button>
-                              ),
-                          )}
-                          <div className="flex gap-2">
-                            <input
-                              className="min-w-0 flex-1 border p-2"
-                              placeholder="手工填写确认值"
-                              value={manualValues[item.id] || ""}
-                              onChange={(event) =>
-                                setManualValues({
-                                  ...manualValues,
-                                  [item.id]: event.target.value,
-                                })
-                              }
-                            />
-                            <button
-                              className={buttonClass}
-                              disabled={disabled || !(manualValues[item.id] || "").trim()}
-                              onClick={() =>
-                                void feature.resolveConflict(item.id, {
-                                  value: manualValues[item.id],
-                                })
-                              }
-                            >
-                              确认手工值
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                  </article>
-                );
-              })}
-              {!knowledge.restrictions.length && !knowledge.status.warnings.length && <p>暂无待确认事项。</p>}
-            </div>
-          )}
-        </>
-      )}
+            </ul>
+            {knowledge.restrictions.map((item) => (
+              <section key={item.id}>
+                <p>
+                  {item.name}：{item.description}
+                </p>
+                {item.type === "conflict" && item.conflictStatus === "open" && (
+                  <div>
+                    {(item.claimIds || [])
+                      .map((id) =>
+                        knowledge.profile.claims.find(
+                          (claim) => claim.id === id,
+                        ),
+                      )
+                      .filter((claim) => !!claim)
+                      .map((claim) => (
+                        <button
+                          key={claim.id}
+                          className={button}
+                          disabled={disabled || !!editing}
+                          onClick={() =>
+                            void feature.resolveConflict(item.id, {
+                              claimId: claim.id,
+                            })
+                          }
+                        >
+                          采用：{claim.value}
+                        </button>
+                      ))}
+                    <input
+                      aria-label={item.name + "确认值"}
+                      className="border p-2"
+                      value={manualValues[item.id] || ""}
+                      disabled={disabled || !!editing}
+                      onChange={(event) =>
+                        setManualValues({
+                          ...manualValues,
+                          [item.id]: event.target.value,
+                        })
+                      }
+                    />
+                    <button
+                      className={button}
+                      disabled={
+                        disabled || !!editing || !manualValues[item.id]?.trim()
+                      }
+                      onClick={() =>
+                        void feature.resolveConflict(item.id, {
+                          value: manualValues[item.id],
+                        })
+                      }
+                    >
+                      确认手工值
+                    </button>
+                  </div>
+                )}
+              </section>
+            ))}
+          </details>
+        )}
+        {knowledge && (
+          <section>
+            <button
+              className={button}
+              aria-expanded={questionsOpen}
+              onClick={() => setQuestionsOpen(!questionsOpen)}
+            >
+              GEO 问题
+            </button>
+            {questionsOpen && (
+              <GeoKnowledgeQuestions
+                knowledge={knowledge}
+                busy={disabled}
+                link={feature.link}
+                renderItem={(item) => <p>{item.name}</p>}
+                onCollect={onCollectQuestion}
+                onGenerate={onGenerateQuestion}
+              />
+            )}
+          </section>
+        )}
+      </div>
     </section>
   );
 }

@@ -76,7 +76,19 @@ function createGeoKnowledgeStore(options) {
     if (document.invalid) return { status: "invalid", knowledge: null };
     if (isLegacyV1(document, clientId)) return { status: "legacy_v1", knowledge: null };
     if (document.schemaVersion !== 2 || document.clientId !== clientId) return { status: "invalid", knowledge: null };
-    try { return { status: "current_v2", knowledge: validateKnowledge(document) }; }
+    try {
+      const knowledge = validateKnowledge(document);
+      if (knowledge.deliverable && !knowledge.deliverable.contentRevision) {
+        Object.assign(knowledge.deliverable, {
+          contentRevision: 1,
+          savedAt: knowledge.updatedAt,
+          origin: "legacy",
+          indexStatus: "stale",
+          sourceIds: knowledge.sources.map(source => source.id),
+        });
+      }
+      return { status: "current_v2", knowledge };
+    }
     catch (_) { return { status: "invalid", knowledge: null }; }
   }
   function load(clientId) {
@@ -114,9 +126,50 @@ function createGeoKnowledgeStore(options) {
         valid.deliverable.warnings = ["知识已修改，稿件需重新生成。"];
       }
       valid.deliverable.knowledgeRevision = valid.revision;
+      if (valid.deliverable.status === "stale" && valid.deliverable.contentRevision)
+        valid.deliverable.indexStatus = "stale";
     }
+    if (valid.pendingDeliverable) valid.pendingDeliverable.knowledgeRevision = valid.revision;
     valid.updatedAt = new Date().toISOString();
     return write(validateKnowledge(valid));
+  }
+  function editDeliverable(clientId, revision, markdown) {
+    const current = load(clientId);
+    if (!current?.deliverable) throw geoError("GEO_NOT_FOUND");
+    if (current.revision !== revision) throw geoError("GEO_REVISION_CONFLICT");
+    if (typeof markdown !== "string" || !markdown.trim() || markdown.length > 500000)
+      throw geoError("GEO_KNOWLEDGE_INVALID");
+    if (markdown === current.deliverable.markdown) return current;
+    current.deliverable = {
+      ...current.deliverable,
+      markdown,
+      contentRevision: (current.deliverable.contentRevision || 1) + 1,
+      savedAt: new Date().toISOString(),
+      origin: "manual",
+      indexStatus: "stale",
+      status: "complete",
+      sourceIds: current.deliverable.sourceIds || current.sources.map(source => source.id),
+      warnings: ["正文已人工保存，辅助索引需更新；来源保留为参考，不代表逐句验证。"],
+    };
+    return save(current, revision);
+  }
+  function acceptDeliverable(clientId, revision, candidateId) {
+    const current = load(clientId);
+    if (!current) throw geoError("GEO_NOT_FOUND");
+    if (current.revision !== revision) throw geoError("GEO_REVISION_CONFLICT");
+    const candidate = current.pendingDeliverable;
+    if (!candidate || candidate.candidateId !== candidateId)
+      throw geoError("GEO_REVISION_CONFLICT");
+    const { candidateId: _id, baseContentRevision: _base, ...draft } = candidate;
+    current.deliverable = {
+      ...draft,
+      contentRevision: (current.deliverable.contentRevision || 1) + 1,
+      savedAt: new Date().toISOString(),
+      // Structured facts may have changed after generation; never claim a fresh index.
+      indexStatus: "stale",
+    };
+    delete current.pendingDeliverable;
+    return save(current, revision);
   }
   function replaceLegacy(document) {
     const valid = validateKnowledge(document);
@@ -374,6 +427,8 @@ function createGeoKnowledgeStore(options) {
     inspect,
     load,
     save,
+    editDeliverable,
+    acceptDeliverable,
     replaceLegacy,
     edit,
     confirmSourceType,

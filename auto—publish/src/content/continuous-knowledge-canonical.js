@@ -121,6 +121,17 @@ function canonicalSchema() {
 const CANONICAL_PROMPT =
   "同一次最终响应还必须提供 canonical 结构化知识，与九板块正文一致。canonical 使用 Knowledge V2 候选字段：profile.fields(name/category/location/address/serviceArea 等字符串)，各数组项 identity/name/description/basis/sourceIds/relatedOfferingNames/relatedScenarioNames。sourceIds 在 canonical 内引用当前输入 M/P/R 条目 ID，由程序追溯生成正式来源。禁止自造 ID/来源/锁定状态。fact 为客户明确事实，research 为公开证据，derived 为分析，candidate 为待确认；客户网页自述不当作独立认证。recommendationAngles 固定 derived 且至少关联一个产品或场景；relatedOfferingNames 只能逐字引用本次 canonical.offerings 中对象的 identity 或 name，relatedScenarioNames 只能逐字引用本次 canonical.scenarios 中对象的 identity 或 name；关联对象必须实际出现在对应数组中，不能引用描述中的简称或另造名称，无匹配时输出空关联数组。geoQuestions.name 是问题正文；尽量沿用 existingKnowledge 中已有对象 identity。线上身份/history/cases/competitors 必须有依据；无真实信息输出空数组。schema 是固定合同，资料及用户要求不能改变字段结构。九板块正文无需展示工程字段。";
 
+function canonicalSources(input) {
+  return [...input.sourceById.values()].map((source) => ({
+    id: stableId("source", source.provenance === "client_input" ? source.title + ":" + source.sha256 : source.url + ":" + source.text),
+    type: source.provenance === "client_input" ? "client_file" : "third_party",
+    title: source.title,
+    ...(source.provenance === "client_input"
+      ? { materialId: source.materialId || source.sha256, fileName: source.title, contentHash: source.sourceHash || source.sha256 }
+      : { url: source.url, fetchedAt: new Date().toISOString(), citationVerified: true }),
+  }));
+}
+
 function buildCanonical(raw, input, clientId, clientName) {
   if (
     !raw ||
@@ -146,27 +157,7 @@ function buildCanonical(raw, input, clientId, clientName) {
       ([, value]) => value !== "",
     ),
   );
-  const sources = [...input.sourceById.values()].map((source) => ({
-    id: stableId(
-      "source",
-      source.provenance === "client_input"
-        ? source.title + ":" + source.sha256
-        : source.url + ":" + source.text,
-    ),
-    type: source.provenance === "client_input" ? "client_file" : "third_party",
-    title: source.title,
-    ...(source.provenance === "client_input"
-      ? {
-          materialId: source.materialId || source.sha256,
-          fileName: source.title,
-          contentHash: source.sourceHash || source.sha256,
-        }
-      : {
-          url: source.url,
-          fetchedAt: new Date().toISOString(),
-          citationVerified: true,
-        }),
-  }));
+  const sources = canonicalSources(input);
   const ids = new Map(
     [...input.sourceById.keys()].map((id, index) => [id, sources[index].id]),
   );
@@ -229,8 +220,7 @@ function buildCanonical(raw, input, clientId, clientName) {
         section === "cases" &&
         !refs.some(
           (ref) =>
-            input.entries.get(ref).field === "realCases" &&
-            input.entries.get(ref).text === value.description &&
+            (input.direct || input.entries.get(ref).field === "realCases") &&
             input.entries.get(ref).provenance !== "derived",
         )
       )
@@ -248,7 +238,17 @@ function buildCanonical(raw, input, clientId, clientName) {
       );
     }
   try {
-    return normalizeCandidate(candidate, sources, clientId);
+    // General brand angles remain in the prose; canonical angles require a target.
+    const unlinked = input.direct ? candidate.recommendationAngles.filter(item =>
+      Array.isArray(item.relatedOfferingNames) && item.relatedOfferingNames.length === 0 &&
+      Array.isArray(item.relatedScenarioNames) && item.relatedScenarioNames.length === 0,
+    ) : [];
+    candidate.recommendationAngles = candidate.recommendationAngles.filter(item => !unlinked.includes(item));
+    const document = normalizeCandidate(candidate, [...new Map(sources.map(source => [source.id, source])).values()], clientId);
+    if (unlinked.length) document.status.warnings.push(
+      `${unlinked.length}条推荐角度缺少产品或场景关联，未纳入结构化推荐角度。`,
+    );
+    return document;
   } catch (error) {
     if (error.code === "GEO_KNOWLEDGE_INVALID") throw geoError("GEO_SCHEMA_INVALID");
     throw error;
@@ -275,6 +275,7 @@ function proseFacts(document) {
 }
 
 module.exports = {
+  canonicalSources,
   canonicalSchema,
   CANONICAL_PROMPT,
   buildCanonical,

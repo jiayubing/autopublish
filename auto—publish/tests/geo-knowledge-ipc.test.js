@@ -7,8 +7,6 @@ const { loadPreloadHarness } = require("./helpers/preload-harness");
 const {
   geoKnowledgeIpcContractFixtures,
 } = require("./fixtures/geo-knowledge-ipc-contract-fixtures");
-const { normalizeCandidate } = require("../src/content/geo-knowledge-merge");
-const { buildCustomerConfirmationModel } = require("../src/content/geo-confirmation-model");
 
 test("knowledge preload and authenticated transport roundtrip all capabilities", async () => {
   const handlers = new Map();
@@ -60,20 +58,4 @@ test("knowledge preload and authenticated transport roundtrip all capabilities",
     ).ok,
     false,
   );
-});
-
-test("actual fifteen-section confirmation passes preview IPC contract", async () => {
-  const knowledge = normalizeCandidate({
-    profile: { fields: { name: "合成眼镜店" }, basis: "fact", sourceIds: ["client"] },
-    offerings: [{ name: "验光配镜", description: "提供验光与配镜服务。", basis: "fact", sourceIds: ["client"] }],
-    scenarios: [{ name: "学生配镜", description: "适用于学生配镜需求。", basis: "derived", sourceIds: ["client"] }],
-  }, [{ id: "client", type: "client_input", title: "客户资料" }], "client-1");
-  const handlers = new Map();
-  registerGeoKnowledgeIpc({
-    ipcMain: createTypedIpcMain({ handle: (channel, fn) => handlers.set(channel, fn) }, async () => {}),
-    geoKnowledgeService: { previewConfirmation: () => ({ model: buildCustomerConfirmationModel(knowledge) }) },
-  });
-  const reply = await handlers.get("geo-knowledge:previewConfirmation")(null, { schemaVersion: 1, payload: { clientId: "client-1", revision: 0 } });
-  assert.equal(reply.ok, true, reply.error?.code);
-  assert.equal(reply.data.model.sections.length, 15);
 });

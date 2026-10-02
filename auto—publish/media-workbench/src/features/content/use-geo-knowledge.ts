@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   loadKnowledge,
+  editKnowledgeDeliverable,
+  acceptKnowledgeDeliverable,
   knowledgeState,
   generateKnowledge,
   cancelKnowledge,
   editKnowledge,
   exportKnowledge,
-  previewCustomerConfirmation,
   linkKnowledgeQuestions,
   confirmKnowledgeSourceType,
   resolveKnowledgeConflict,
@@ -19,7 +20,6 @@ import type {
   KnowledgeEdit,
   KnowledgeStorageStatus,
   GeoPromptSettings,
-  CustomerConfirmationModel,
 } from "../../types/geo-knowledge";
 
 function knowledgeErrorMessage(error: unknown, fallback: string) {
@@ -46,9 +46,6 @@ export function useGeoKnowledge(clientId: string) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [confirmation, setConfirmation] =
-    useState<CustomerConfirmationModel | null>(null);
-  const [confirmationLoading, setConfirmationLoading] = useState(false);
   const epoch = useRef(0);
   const knowledgeRevision = useRef<number | null>(null);
   const locked = useRef(false);
@@ -68,7 +65,6 @@ export function useGeoKnowledge(clientId: string) {
         knowledgeRevision.current = result.knowledge?.revision ?? null;
         setKnowledge(result.knowledge);
         setModelDraft(result.modelDraft || null);
-        setConfirmation(null);
         setStorageStatus(result.storageStatus);
         setPromptSettings(prompts);
         setState(result.state);
@@ -127,7 +123,6 @@ export function useGeoKnowledge(clientId: string) {
         knowledgeRevision.current = result.knowledge.revision;
         setKnowledge(result.knowledge);
         setModelDraft(null);
-        setConfirmation(null);
         setStorageStatus("current_v2");
         setState({ phase: "complete", running: false });
         setError("");
@@ -202,29 +197,11 @@ export function useGeoKnowledge(clientId: string) {
       );
       const link = document.createElement("a");
       link.href = url;
-      link.download = "客户确认稿.md";
+      link.download = "知识库.md";
       link.click();
       URL.revokeObjectURL(url);
     } catch (e) {
       setError(e instanceof Error ? e.message : "导出失败。");
-    }
-  }
-  async function previewConfirmation() {
-    if (!knowledge || confirmationLoading) return;
-    const version = epoch.current;
-    const revision = knowledge.revision;
-    setConfirmationLoading(true);
-    try {
-      const result = await previewCustomerConfirmation(clientId, revision);
-      if (version === epoch.current && knowledgeRevision.current === revision) {
-        setConfirmation(result.model);
-        setError("");
-      }
-    } catch (e) {
-      if (version === epoch.current)
-        setError(e instanceof Error ? e.message : "客户确认稿读取失败。");
-    } finally {
-      if (version === epoch.current) setConfirmationLoading(false);
     }
   }
   return {
@@ -236,14 +213,15 @@ export function useGeoKnowledge(clientId: string) {
     loading,
     busy,
     error,
-    confirmation,
-    confirmationLoading,
     reload,
     cancel,
     download,
-    previewConfirmation,
     generate: (temporaryPrompt = "") =>
       command(() => generateKnowledge(clientId, temporaryPrompt)),
+    saveDeliverable: (revision: number, markdown: string) =>
+      command(() => editKnowledgeDeliverable(clientId, revision, markdown)),
+    acceptDeliverable: (revision: number, candidateId: string) =>
+      command(() => acceptKnowledgeDeliverable(clientId, revision, candidateId)),
     edit: (input: KnowledgeEdit) => command(() => editKnowledge(input)),
     confirmSourceType: (
       sourceId: string,

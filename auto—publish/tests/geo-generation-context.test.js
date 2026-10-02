@@ -505,3 +505,28 @@ test("associated article counts use summaries and the existing lifecycle project
     ["pending_submission", "published"],
   );
 });
+
+
+test("saved prose replaces old positive facts, preserves restrictions and selects whole sections", () => {
+  const document = library();
+  document.deliverable = { version: 1, knowledgeRevision: 3, contentRevision: 2,
+    savedAt: document.updatedAt, sourceIds: [], origin: "manual", indexStatus: "stale", status: "complete",
+    markdown: "# 客户知识库\n\n## 产品或服务描述\n\n新保存服务。\n\n## 用户痛点\n\n选择服务的顾虑。", warnings: [] };
+  const snapshot = selectGeoKnowledge(document, [research], ["query-1"]);
+  const context = JSON.parse(snapshot.context);
+  assert.equal(context.knowledgeProse.markdown, document.deliverable.markdown);
+  assert.equal(context.knowledgeProse.contentRevision, 2);
+  assert.equal(context.profile, null);
+  assert.deepEqual(context.offerings, []);
+  assert.equal(context.restrictions.length, 2);
+  const { selectKnowledgeProse } = require("../src/content/knowledge-prose");
+  const bounded = selectKnowledgeProse(document, "用户痛点", 22);
+  assert.deepEqual(bounded.selectedSections, ["用户痛点"]);
+  assert.equal(bounded.markdown, "## 用户痛点\n\n选择服务的顾虑。");
+  assert.ok(bounded.omittedSections.includes("产品或服务描述"));
+  const { validateGeoSnapshot } = require("../src/content/geo-generation-context");
+  assert.deepEqual(validateGeoSnapshot(snapshot, document.clientId, ["query-1"]), snapshot);
+  assert.throws(() => validateGeoSnapshot({ ...snapshot, context: "{" }, document.clientId, ["query-1"]), { code: "ARTICLE_INVALID" });
+  const noQuestion = selectGeoKnowledge(document, [{ ...research, question: "不同问题" }], ["other"]);
+  assert.equal(validateGeoSnapshot(noQuestion, document.clientId, ["other"]).questions.length, 0);
+});

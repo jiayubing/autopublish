@@ -798,3 +798,51 @@ describe("content generation batch service", function() {
   });
 
 });
+
+
+it("v2 prose batch persists its creation snapshot across restart and later knowledge edits", async function() {
+  const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "prose-batch-"));
+  const generated = [];
+  const geoQuestionId = "geoQuestions-" + "a".repeat(24);
+  let revision = 1;
+  let resolveCalls = 0;
+  const brief = () => ({ version: 2, clientId: "c1", knowledgeRevision: revision,
+    targetQuestion: { geoQuestionId, collectionQuestionId: "q1", text: "Q1", intent: "selection" },
+    client: { primaryName: "合成客户", aliases: [] },
+    selectedKnowledge: { profileFacts: [], offerings: [], capabilities: [], scenarios: [], cases: [], recommendationAngles: [], onlinePresence: [], history: [] },
+    competitors: [], restrictions: [], evidence: { sources: [], attributionRequiredIds: [] },
+    currentResearch: { question: "Q1", answer: "Answer", references: [], capturedAt: "2026-10-01T00:00:00Z", mentionedEntities: [], decisionDimensions: [], answerGaps: [], clientMentioned: false },
+    knowledgeProse: { contentRevision: revision, savedAt: "2026-10-01T00:00:00Z", origin: "manual", markdown: "## 产品或服务描述\n\n保存正文 " + revision,
+      selectedSections: ["产品或服务描述"], omittedSections: [], sectionEvidence: [], sources: [], usageRules: "限制优先" },
+  });
+  const options = {
+    workspaceRoot,
+    clientKnowledge: { getClient: () => ({ id: "c1" }), listClients: () => [{ id: "c1" }] },
+    materialStore: { listMaterials: async () => [], getSelectedMaterials: async () => [] },
+    researchStore: { listResearch: () => [], getResearch: () => null },
+    templateStore: { getCatalogTemplate: () => ({ id: "guide", body: "Write" }) },
+    contentStore: { saveArticle: () => {}, findByGenerationTaskId: () => null },
+    getGenerationBriefV2: async () => { resolveCalls++; return { brief: brief(), researchFingerprint: "b".repeat(64) }; },
+    articleGeneratorFactory: () => ({ generateArticle: async input => { generated.push(input); return { id: "article-" + generated.length, clientId: "c1", title: "Title", content: "Body", status: "generated" }; } }),
+    aiProviderService: { getFingerprint: () => "fp", createClient: () => ({}) },
+  };
+  let service = createContentGenerationBatchService(options);
+  try {
+    const input = { requestId: "prose-request", selectedQuestions: [{ clientId: "c1", geoQuestionId }], templates: [{ platform: "media", templateId: "guide" }], concurrency: 1 };
+    const batch = await service.createBatchV2(input);
+    assert.equal(batch.proseBriefs, undefined);
+    const callsAtCreation = resolveCalls;
+    await service.dispose();
+    revision = 2;
+    service = createContentGenerationBatchService(options);
+    await service.startBatchV2({ batchId: batch.id });
+    await waitForBatch(service, batch.id, item => item.status === "completed");
+    assert.equal(resolveCalls, callsAtCreation);
+    assert.equal(generated[0].articleBrief.knowledgeProse.contentRevision, 1);
+    assert.match(generated[0].articleBrief.knowledgeProse.markdown, /保存正文 1/);
+    const next = await service.createBatchV2({ ...input, requestId: "prose-next" });
+    await service.startBatchV2({ batchId: next.id });
+    await waitForBatch(service, next.id, item => item.status === "completed");
+    assert.equal(generated[1].articleBrief.knowledgeProse.contentRevision, 2);
+  } finally { await service.dispose(); fs.rmSync(workspaceRoot, { recursive: true, force: true }); }
+});

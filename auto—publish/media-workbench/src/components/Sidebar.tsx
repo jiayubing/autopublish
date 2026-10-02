@@ -92,7 +92,7 @@ export default function Sidebar({
   return (
     <aside
       id="app-sidebar"
-      className="flex h-screen w-60 shrink-0 select-none flex-col border-r text-slate-300"
+      className="flex h-full min-h-0 w-60 shrink-0 select-none flex-col border-r text-slate-300"
       style={{
         background: "var(--app-sidebar)",
         borderColor: "var(--app-sidebar-border)",

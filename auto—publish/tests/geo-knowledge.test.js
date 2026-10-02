@@ -85,6 +85,24 @@ test("atomic persistence, revision and malformed content protect previous knowle
   assert.deepEqual(store.load("client-1"), saved);
   assert.throws(() => store.load("../escape"), { code: "GEO_PATH_UNSAFE" });
 });
+
+test("legacy prose maps to version one without rewriting storage or losing provenance", t => {
+  const root = workspace(t);
+  const store = createGeoKnowledgeStore({ workspaceRoot: root });
+  const legacy = document();
+  legacy.deliverable = { version: 1, knowledgeRevision: 0, status: "draft", markdown: "# 旧正文\n原始人工内容", warnings: ["旧提示"] };
+  const saved = store.save(legacy, 0);
+  const reader = createGeoKnowledgeStore({ workspaceRoot: root, atomicWriter: { write() { assert.fail("reads must not migrate on disk"); } } });
+  const loaded = reader.load("client-1");
+  assert.equal(loaded.deliverable.contentRevision, 1);
+  assert.equal(loaded.deliverable.origin, "legacy");
+  assert.equal(loaded.deliverable.indexStatus, "stale");
+  assert.equal(loaded.deliverable.markdown, saved.deliverable.markdown);
+  assert.deepEqual(loaded.deliverable.sourceIds, saved.sources.map(source => source.id));
+  assert.deepEqual(loaded.sources, saved.sources);
+  assert.deepEqual(loaded.profile, saved.profile);
+  assert.equal(loaded.revision, saved.revision);
+});
 test("manual lock survives research and conflicting facts remain unresolved", (t) => {
   const store = createGeoKnowledgeStore({ workspaceRoot: workspace(t) });
   let saved = store.save(document(), 0);

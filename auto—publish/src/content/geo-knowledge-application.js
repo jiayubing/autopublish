@@ -3,6 +3,7 @@
 const { geoError, generationErrorCode } = require("./geo-knowledge-schema");
 const { mergeKnowledge } = require("./geo-knowledge-merge");
 const { proseFacts } = require("./continuous-knowledge-canonical");
+const { randomUUID } = require("node:crypto");
 const FAILURE_PHASES = new Set([
   "materials",
   "extracting",
@@ -75,8 +76,10 @@ function createGeoKnowledgeApplication({
       controller.signal.throwIfAborted();
       progress("saving");
       const merged = mergeKnowledge(current, document);
-      if (result.markdown)
-        merged.deliverable = {
+      if (current?.deliverable) merged.deliverable = structuredClone(current.deliverable);
+      if (current?.pendingDeliverable) merged.pendingDeliverable = structuredClone(current.pendingDeliverable);
+      if (result.markdown) {
+        const draft = {
           version: 1,
           knowledgeRevision: merged.revision,
           status:
@@ -84,16 +87,32 @@ function createGeoKnowledgeApplication({
               ? result.knowledge.quality.status
               : "stale",
           markdown: result.markdown,
+          contentRevision: 1,
+          savedAt: new Date().toISOString(),
+          origin: "ai",
+          indexStatus: !result.indexWarning && proseFacts(merged) === proseFacts(document) ? "current" : "stale",
+          sourceIds: document.sources.map(source => source.id),
+          sectionEvidence: result.sectionEvidence || [],
+          researchNotes: result.researchNotes || "",
           warnings: [
+            ...(result.indexWarning ? [result.indexWarning] : []),
             ...(result.knowledge.quality.shortSections.length ||
             result.knowledge.quality.overlongSections.length
               ? ["部分板块篇幅不在600—1000字范围，已保留完整正文。"]
               : []),
             ...(proseFacts(merged) !== proseFacts(document)
-              ? ["已保存知识保留了原有或人工确认事实，稿件需重新生成。"]
+              ? ["已保留原有锁定信息与使用限制；辅助索引与正文可能不同，文章以正文及使用限制为准。"]
               : []),
           ],
         };
+        if (current?.deliverable) {
+          merged.pendingDeliverable = {
+            ...draft,
+            candidateId: randomUUID(),
+            baseContentRevision: current.deliverable.contentRevision || 1,
+          };
+        } else merged.deliverable = draft;
+      }
       const saved = initial.status === "legacy_v1"
         ? store.replaceLegacy(merged)
         : store.save(merged, current?.revision || 0);

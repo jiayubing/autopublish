@@ -48,10 +48,6 @@ const {
 const {
   reportDiagnostic,
 } = require("../../src/diagnostics/diagnostic-producer");
-const {
-  buildCustomerConfirmationModel,
-  renderCustomerConfirmationMarkdown,
-} = require("../../src/content/geo-confirmation-model");
 
 function createGeoKnowledgeService(options) {
   const store = options.store || createGeoKnowledgeStore(options);
@@ -279,27 +275,11 @@ function createGeoKnowledgeService(options) {
       throw geoError("GEO_ALREADY_RUNNING");
     return store.savePolicy(clientId, researchPrompt);
   }
-  function confirmation({ clientId, revision }) {
+  function exportMarkdown({ clientId, revision }) {
     const document = load({ clientId }).knowledge;
-    if (!document) throw geoError("GEO_NOT_FOUND");
+    if (!document?.deliverable) throw geoError("GEO_NOT_FOUND");
     if (revision !== document.revision) throw geoError("GEO_REVISION_CONFLICT");
-    return {
-      document,
-      model: buildCustomerConfirmationModel(document),
-      client: resolveClient(clientId),
-    };
-  }
-  function previewConfirmation(input) {
-    return { model: confirmation(input).model };
-  }
-  function exportMarkdown(input) {
-    const current = confirmation(input);
-    return {
-      markdown: renderCustomerConfirmationMarkdown(current.model, {
-        clientName: current.client.name,
-        sources: current.document.sources,
-      }),
-    };
+    return { markdown: document.deliverable.markdown };
   }
   return {
     getGenerationBriefV2: ({
@@ -375,6 +355,14 @@ function createGeoKnowledgeService(options) {
     linkQuestions,
     load,
     generate,
+    editDeliverable: ({ clientId, revision, markdown }) => {
+      resolveClient(clientId);
+      return { knowledge: store.editDeliverable(clientId, revision, markdown) };
+    },
+    acceptDeliverable: ({ clientId, revision, candidateId }) => {
+      resolveClient(clientId);
+      return { knowledge: store.acceptDeliverable(clientId, revision, candidateId) };
+    },
     edit,
     confirmSourceType,
     resolveConflict,
@@ -382,7 +370,6 @@ function createGeoKnowledgeService(options) {
     saveGlobalPrompt,
     saveFinalKnowledgePrompt,
     saveClientPrompt,
-    previewConfirmation,
     exportMarkdown,
     state: ({ clientId }) => ({ state: stateFor(clientId) }),
     cancel: ({ clientId }) => ({ state: application.cancel(clientId) }),

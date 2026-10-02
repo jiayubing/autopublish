@@ -259,6 +259,7 @@ function createGenerationBatchStore(options) {
     const batch = fileStore.createExclusive({
       version: 2,
       id,
+      ...(value.proseBriefs ? { proseBriefs: clone(value.proseBriefs) } : {}),
       requestId: value.requestId,
       requestFingerprint: value.requestFingerprint,
       concurrency: value.concurrency,

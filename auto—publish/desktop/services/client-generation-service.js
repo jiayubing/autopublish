@@ -219,7 +219,7 @@ function createClientGenerationService(options) {
     const generator = articleGeneratorFactory({
       getClient: function(id) { return clientKnowledge.getClient(id); },
       researchStore: researchStore,
-      getGeoKnowledgeContext: value.getGeoKnowledgeContext,
+      getGeoKnowledgeContext: () => clone(operation.knowledgeSnapshot),
       materialStore: materialStore,
       templateStore: templateStore,
       buildPrompt: promptBuilder,
@@ -343,6 +343,9 @@ function createClientGenerationService(options) {
     if (existingOperation) return snapshot(existingOperation);
     const createdAt = now();
     const operation = {
+      knowledgeSnapshot: typeof value.getGeoKnowledgeContext === "function"
+        ? clone(value.getGeoKnowledgeContext(request.clientId, request.researchQueryIds.map(id => researchStore.getResearch(request.clientId, id)), request.researchQueryIds))
+        : null,
       id: request.generationOperationId,
       clientId: request.clientId,
       articleCount: request.articleCount,

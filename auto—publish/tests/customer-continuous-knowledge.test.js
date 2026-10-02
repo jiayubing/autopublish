@@ -180,7 +180,7 @@ function fakeClient({
           ? {
               needed: true,
               scope: context.stage === 0 ? "entity" : "decision_context",
-              query: "合成检索",
+              query: "合成检索" + context.stage,
               reason: "缺口",
             }
           : { needed: false, scope: "", query: "", reason: "" };
@@ -197,7 +197,7 @@ test("one run passes all five analyses into a single offline knowledge request",
     client,
     limits,
   });
-  assert.equal(calls.length, 8); // Missing public identity: one bounded search and one supplemental analysis.
+  assert.equal(calls.length, 10); // Missing public identity: one bounded search and one supplemental analysis.
   assert.equal(calls.filter((call) => !call.context).length, 1);
   assert.match(calls.at(-1).request.prompt, /R5 没有可采纳的具体竞对证据/);
   assert.match(
@@ -205,7 +205,7 @@ test("one run passes all five analyses into a single offline knowledge request",
     /正文板块可以综合引用任一已完成阶段的有效条目及原材料/,
   );
   assert.match(calls.at(-1).request.prompt, /600—1000个非空白Unicode字符/);
-  assert.equal(result.budget.count, 8);
+  assert.equal(result.budget.count, 10);
   assert.equal(result.knowledge.quality.status, "draft");
   assert.equal(result.knowledge.quality.sectionLengths.products_services, 11);
   assert.ok(
@@ -226,7 +226,7 @@ test("themes with one or two valid questions retain the full draft without anoth
     const result = await runContinuousKnowledge({ artifactRoot: root, input: input(), client, limits });
     assert.equal(result.knowledge.geoThemes[0].questionRefs.length, count);
     assert.match(result.markdown || fs.readFileSync(path.join(result.directory, "customer-knowledge.md"), "utf8"), /星河眼镜提供配镜服务/);
-    assert.equal(calls.length, 8);
+    assert.equal(calls.length, 10);
     assert.equal(calls.filter(call => !call.context).length, 1);
   }
 });
@@ -329,7 +329,7 @@ test("the default prompt and saved quality use a 600 character minimum", async (
       client,
       limits,
     });
-    assert.match(calls.at(-1).request.prompt, /每个板块写 600—1000 字/);
+    assert.match(calls.at(-1).request.prompt, /600—1000字为参考/);
     const saved = JSON.parse(
       fs.readFileSync(
         path.join(result.directory, "customer-knowledge.json"),
@@ -493,7 +493,7 @@ test("same run identity cannot send a second request", async () => {
     runContinuousKnowledge({ artifactRoot: root, input: input(), client, limits, runId }),
     { code: "EEXIST" },
   );
-  assert.equal(calls.length, 8);
+  assert.equal(calls.length, 10);
 });
 
 test("concurrent runs for the same client cannot both dispatch", async () => {
@@ -527,7 +527,7 @@ test("concurrent runs for the same client cannot both dispatch", async () => {
   );
   release();
   await first;
-  assert.equal(calls.length, 8);
+  assert.equal(calls.length, 10);
 });
 
 test("capacity refusal happens before dispatch and keeps the run for inspection", async () => {
@@ -560,7 +560,7 @@ test("uncertain final request is recorded and never retried", async () => {
   assert.equal(failure.code, "GEO_REQUEST_UNCERTAIN");
   assert.equal(calls.filter((call) => !call.context).length, 1);
   const outcome = JSON.parse(
-    fs.readFileSync(path.join(failure.directory, "request-8-outcome.json")),
+    fs.readFileSync(path.join(failure.directory, "request-10-outcome.json")),
   );
   assert.equal(outcome.outcome, "uncertain");
   assert.ok(
@@ -610,7 +610,7 @@ test("an incomplete R4 response retains its safe reason and stops before R5 or K
     false,
   );
   const outcome = JSON.parse(
-    fs.readFileSync(path.join(failure.directory, "request-6-outcome.json")),
+    fs.readFileSync(path.join(failure.directory, "request-8-outcome.json")),
   );
   assert.equal(outcome.outcome, "confirmed_response_unusable");
   assert.equal(outcome.incompleteReason, "max_output_tokens");
@@ -637,11 +637,11 @@ test("a confirmed response can be revalidated offline after a local write failur
       code: "RESEARCH_ARTIFACT_OR_RUN_FAILED",
     },
   );
-  assert.ok(fs.existsSync(path.join(directory, "request-8-response.json")));
+  assert.ok(fs.existsSync(path.join(directory, "request-10-response.json")));
   fs.rmdirSync(blocker);
   const knowledge = replayContinuousKnowledge({ artifactRoot: root, runDirectory: directory });
   assert.equal(knowledge.client.name, "星河眼镜");
-  assert.equal(calls.length, 8);
+  assert.equal(calls.length, 10);
   assert.ok(fs.existsSync(path.join(directory, "customer-knowledge.json")));
   assert.ok(fs.existsSync(path.join(directory, "customer-knowledge.md")));
 });
@@ -651,13 +651,13 @@ test("a response persistence failure never triggers another remote request", asy
   const directory = path.join(root, `run-${runId}`);
   const { client, calls } = fakeClient({
     beforeFinal: () =>
-      fs.mkdirSync(path.join(directory, "request-8-response.json")),
+      fs.mkdirSync(path.join(directory, "request-10-response.json")),
   });
   await assert.rejects(
     runContinuousKnowledge({ artifactRoot: root, input: input(), client, limits, runId }),
     { code: "RESEARCH_RESPONSE_PERSIST_FAILED" },
   );
-  assert.equal(calls.length, 8);
+  assert.equal(calls.length, 10);
   assert.match(
     fs.readFileSync(path.join(directory, "run-report.md"), "utf8"),
     /Status: uncertain/,
@@ -678,7 +678,7 @@ test("offline replay restores a missing report without another request", async (
   });
   assert.deepEqual(recovered, result.knowledge);
   assert.match(fs.readFileSync(report, "utf8"), /Remote requests added: 0/);
-  assert.equal(calls.length, 8);
+  assert.equal(calls.length, 10);
 });
 
 test("offline replay rejects a changed knowledge JSON", async () => {
@@ -721,7 +721,7 @@ test("malformed final JSON and unknown refs retain the response without publishi
       ].includes(failure.code),
     );
     assert.ok(
-      fs.existsSync(path.join(failure.directory, "request-8-response.json")),
+      fs.existsSync(path.join(failure.directory, "request-10-response.json")),
     );
     assert.ok(
       !fs.existsSync(path.join(failure.directory, "customer-knowledge.json")),
@@ -885,4 +885,25 @@ test("editing the caller input during a run cannot change frozen context", async
     /九板块/,
   );
   assert.equal(calls.at(-1).request.search, false);
+});
+
+
+test("weak input attempts background research after a confirmed search failure and still saves prose", async () => {
+  const fake = fakeClient();
+  const searches = [];
+  const result = await runContinuousKnowledge({ artifactRoot: root, input: input(), limits,
+    client: { request: async request => {
+      if (request.search) {
+        const context = JSON.parse(request.prompt.split("[RUN_CONTEXT]\n")[1]);
+        searches.push(context.searchNeed);
+        throw Object.assign(new Error("synthetic confirmed failure"), { code: "GEO_CAPABILITY_REJECTED" });
+      }
+      return fake.client.request(request);
+    } },
+  });
+  assert.deepEqual(searches.map(item => item.scope), ["entity", "decision_context"]);
+  assert.equal(new Set(searches.map(item => item.query)).size, 2);
+  assert.match(result.markdown, /星河眼镜提供配镜服务/);
+  assert.match(result.researchNotes, /search_failed/);
+  assert.equal(result.budget.count, 10);
 });

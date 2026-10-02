@@ -86,6 +86,8 @@ test("desktop knowledge use cases persist generated facts, manual edits and expo
     materialStore: { listMaterials: async () => [] },
     research: {
       run: async () => ({
+        markdown: "# 九板块正文\n\n## 产品或服务描述\n\n合成客户服务。",
+        knowledge: { quality: { status: "complete", shortSections: [], overlongSections: [] } },
         document: normalizeCandidate(
           { profile: { fields: { name: "合成客户" } } },
           [],
@@ -108,25 +110,8 @@ test("desktop knowledge use cases persist generated facts, manual edits and expo
     clientId: "client-1",
     revision: 2,
   }).markdown;
-  assert.match(markdown, /人工名称/);
-  const preview = service.previewConfirmation({
-    clientId: "client-1",
-    revision: 2,
-  }).model;
-  assert.equal(preview.sections.length, 15);
-  assert.equal(preview.knowledgeRevision, 2);
-  for (const entry of preview.sections
-    .flatMap((section) => section.entries)
-    .filter((entry) => entry.kind !== "gap")) {
-    assert.match(
-      markdown,
-      new RegExp(entry.title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
-    );
-  }
-  assert.throws(
-    () => service.previewConfirmation({ clientId: "client-1", revision: 1 }),
-    { code: "GEO_REVISION_CONFLICT" },
-  );
+  assert.match(markdown, /合成客户服务/);
+  assert.throws(() => service.exportMarkdown({ clientId: "client-1", revision: 1 }), { code: "GEO_REVISION_CONFLICT" });
   assert.equal(
     service.load({ clientId: "client-1" }).knowledge.profile.locked,
     true,

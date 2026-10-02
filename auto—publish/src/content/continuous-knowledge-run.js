@@ -22,6 +22,7 @@ const {
   renderMarkdown,
   renderModelDraft,
   countCharacters,
+  terminalSources,
 } = require("./continuous-knowledge-synthesis");
 const {
   CONTINUOUS_STAGES,
@@ -37,7 +38,9 @@ const {
   canonicalSchema,
   CANONICAL_PROMPT,
   buildCanonical,
+  canonicalSources,
 } = require("./continuous-knowledge-canonical");
+const { normalizeCandidate } = require("./geo-knowledge-merge");
 
 async function runContinuousKnowledge({
   input,
@@ -151,6 +154,9 @@ async function runContinuousKnowledge({
   const ledger = [];
   let searches = 0;
   let weakPublicPresence = false;
+  let backgroundAttempted = false;
+  const searchQueries = new Set();
+  const searchNotes = [];
   let currentStage = "input";
   let remoteUncertain = false;
   const budget = createRequestBudget((request) => client.request(request), {
@@ -359,6 +365,26 @@ async function runContinuousKnowledge({
       );
       let need = document.researchNeed;
       if (
+        stage > 0 &&
+        !backgroundAttempted &&
+        (weakPublicPresence ||
+          materials.reduce((sum, item) => sum + item.text.length, 0) < 1500)
+      ) {
+        need = {
+          needed: true,
+          scope: "decision_context",
+          query: `${
+            (stages.customerUnderstanding?.productsAndServices || [])
+              .map((item) => item.text)
+              .join("；")
+              .slice(0, 600) || clientName
+          } 消费场景 常见疑问 选择因素`,
+          reason:
+            "客户资料有限，依据本轮已识别的业务与地区研究品类和场景，不重复查询客户实体，不将行业做法认定为客户服务",
+        };
+        document.researchNeed = need;
+      }
+      if (
         stage === 0 &&
         !document.publicIdentity.some(
           (entry) => entry.provenance === "public_research",
@@ -374,9 +400,11 @@ async function runContinuousKnowledge({
         document.researchNeed = need;
       }
       if (need.needed) {
+        const queryKey = need.query.normalize("NFKC").replace(/\s+/gu, "");
         const remainingRequired = CONTINUOUS_STAGES.length - stage - 1 + 1;
         if (
           searches >= maxSearches ||
+          searchQueries.has(queryKey) ||
           budget.snapshot().hardLimit - budget.snapshot().count <
             remainingRequired + 2 ||
           (weakPublicPresence && need.scope === "entity")
@@ -390,20 +418,54 @@ async function runContinuousKnowledge({
           });
         } else {
           searches++;
+          searchQueries.add(queryKey);
+          if (need.scope !== "entity") backgroundAttempted = true;
           write(`${definition.file}-initial.json`, document);
           const searchPayload = payload(stage, "search", {
             searchNeed: need,
             currentAnalysis: document,
           });
-          const response = await request({
-            stage: currentStage,
-            mode: "search",
-            search: true,
-            prompt: promptFor(searchPayload, CONTINUOUS_STAGES),
-          });
-          const accepted = acceptSearch(response, need.scope, currentStage);
+          let response;
+          let accepted = [];
+          try {
+            response = await request({
+              stage: currentStage,
+              mode: "search",
+              search: true,
+              prompt: promptFor(searchPayload, CONTINUOUS_STAGES),
+            });
+            accepted = acceptSearch(response, need.scope, currentStage);
+          } catch (cause) {
+            if (
+              signal?.aborted ||
+              ![
+                "GEO_AUTH_REJECTED",
+                "GEO_PERMISSION_DENIED",
+                "GEO_CAPABILITY_REJECTED",
+                "GEO_SEARCH_UNCONFIRMED",
+                "GEO_RESPONSE_INVALID",
+                "RESEARCH_SEARCH_INVALID",
+              ].includes(cause.code)
+            )
+              throw cause;
+            unresolved.push({
+              stage: currentStage,
+              reason: "search_failed",
+              code: cause.code,
+            });
+          }
           if (need.scope === "entity" && !accepted.length)
             weakPublicPresence = true;
+          searchNotes.push({
+            stage: currentStage,
+            scope: need.scope,
+            query: need.query,
+            accepted: accepted.map((item) => ({
+              title: item.title,
+              url: item.url,
+              text: item.text,
+            })),
+          });
           const after = payload(stage, "analysis-after-search", {
             searchNeed: need,
             currentAnalysis: document,
@@ -519,7 +581,7 @@ async function runContinuousKnowledge({
     });
     let raw;
     try {
-      raw = JSON.parse(response.text);
+      raw = parseJsonObject(response.text);
     } catch {
       throw error("KNOWLEDGE_RESPONSE_INVALID");
     }
@@ -534,9 +596,43 @@ async function runContinuousKnowledge({
       clientName,
       [],
     );
-    const document = canonical
-      ? buildCanonical(canonicalRaw, knowledgeInput, input.clientId, clientName)
-      : null;
+    let document = null;
+    let indexWarning = null;
+    if (canonical) {
+      try {
+        document = buildCanonical(
+          canonicalRaw,
+          knowledgeInput,
+          input.clientId,
+          clientName,
+        );
+      } catch (cause) {
+        if (
+          ![
+            "GEO_SCHEMA_INVALID",
+            "GEO_SOURCE_INVALID",
+            "GEO_KNOWLEDGE_INVALID",
+          ].includes(cause.code) &&
+          !String(cause.code || "").startsWith("KNOWLEDGE_")
+        )
+          throw cause;
+        indexWarning = `辅助索引未生成（${generationErrorCode(cause.code)}），已保留通过正文校验的九板块内容。`;
+        document = normalizeCandidate(
+          {},
+          [
+            ...new Map(
+              canonicalSources(knowledgeInput).map((source) => [
+                source.id,
+                source,
+              ]),
+            ).values(),
+          ],
+          input.clientId,
+        );
+        document.status.warnings.push(indexWarning);
+        document.status.outcome = "partial";
+      }
+    }
     const sectionLengths = Object.fromEntries([
       ...[
         "products_services",
@@ -604,6 +700,46 @@ async function runContinuousKnowledge({
       `# Knowledge synthesis\n\nStatus: ${knowledge.quality.status}\nRemote outcome: confirmed_response\nRequests: ${budget.snapshot().count}\nSearches: ${searches}\nShort sections: ${shortSections.join(", ") || "none"}\nOverlong sections: ${overlongSections.join(", ") || "none"}\nExcluded materials: ${excludedMaterials.length}\nUnresolved: ${unresolved.length}\nNo natural-language fact certification.\n`,
     );
     write("run-outcome.json", { phase: "complete", running: false });
+    const sourceRecords = canonical ? canonicalSources(knowledgeInput) : [];
+    const sourceKeys = [...knowledgeInput.sourceById.keys()];
+    const sectionEvidence = [
+      ...knowledge.sections,
+      { title: "客户案例", items: knowledge.realCases },
+      { title: "客户评价", items: knowledge.customerReviews },
+    ]
+      .filter((section) => section.items.length)
+      .map((section) => ({
+        title: section.title,
+        kinds: [
+          ...new Set(
+            section.items.flatMap((item) => [
+              item.kind || "fact",
+              ...item.supportClasses,
+              ...(item.inputRefs.some((ref) =>
+                terminalSources(knowledgeInput, ref).some(
+                  (id) =>
+                    knowledgeInput.sourceById.get(id)?.scope ===
+                    "decision_context",
+                ),
+              )
+                ? ["industry_context"]
+                : []),
+            ]),
+          ),
+        ],
+        sourceIds: [
+          ...new Set(
+            section.items
+              .flatMap((item) =>
+                item.inputRefs.flatMap((ref) =>
+                  terminalSources(knowledgeInput, ref),
+                ),
+              )
+              .map((id) => sourceRecords[sourceKeys.indexOf(id)]?.id)
+              .filter(Boolean),
+          ),
+        ],
+      }));
     return {
       directory,
       knowledge,
@@ -612,6 +748,29 @@ async function runContinuousKnowledge({
       budget: budget.snapshot(),
       searches,
       document,
+      indexWarning,
+      sectionEvidence,
+      researchNotes: JSON.stringify(
+        {
+          questions: searchNotes,
+          searches: ledger
+            .filter((item) => item.mode === "search")
+            .map((item) => ({
+              stage: item.stage,
+              outcome: item.outcome,
+              ...(item.code ? { code: item.code } : {}),
+            })),
+          unresolved: unresolved.map((item) => ({
+            stage: item.stage,
+            reason: item.reason,
+            code: item.code,
+          })),
+          missing: knowledge.missingInformation.map((item) => item.text),
+          cautions: knowledge.cautions.map((item) => item.text),
+        },
+        null,
+        2,
+      ),
       markdown: renderMarkdown(knowledge),
     };
   } catch (cause) {
@@ -687,7 +846,7 @@ function replayContinuousKnowledge({ runDirectory, artifactRoot }) {
   const stored = read(responseFile.replace("started", "response"));
   let raw;
   try {
-    raw = JSON.parse(stored.text);
+    raw = parseJsonObject(stored.text);
   } catch {
     throw error("KNOWLEDGE_RESPONSE_INVALID");
   }

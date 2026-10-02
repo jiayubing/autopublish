@@ -440,7 +440,7 @@ function promptFor(input, clientName, knowledgePrompt = "") {
           .map(([section, fields]) => `${section}: ${fields.join("/")}`)
           .join("；") +
         "。其他条目不能在这些板块充当事实依据；若原材料和允许字段都不足以支撑主张，就省略主张，不要靠添加 M id 掩盖无依据内容。",
-    `客户摘要只概括安全成立的核心信息，不浓缩营销断言。按客户指定的九个板块组织主体内容：产品或服务描述用 products_services，特点用 features，品牌故事用 brand_story，用户痛点用 pain_points，创始人介绍用 founder，社会贡献用 social_contribution，信任背书用 trust，客户案例用 realCases，客户评价用 customerReviews。有事实支撑的板块各写一个${MIN_SECTION_CHARACTERS}—${MAX_SECTION_CHARACTERS}字的自然段，充分说明事实与客户价值之间的关系，不机械重复或用空话凑字数。框架中的细项只是取材顺序，不是必须填满的事实清单。没有依据的创始人、公益、资质、案例或评价等板块就输出空数组，由交付稿省略；不要输出资料缺口、来源状态或写稿过程说明。其他研究价值可用于摘要、推荐角度、GEO 与内部待补充信息，不增加交付板块。realCases 只能引用真实案例依据；customerReviews 只能引用真实评价依据，可围绕真实评价展开解读，但引用评价原话时必须逐字保留，不从个体评价推导整体满意度。missingInformation 只写业务信息缺口。GEO 每个主题选 3–5 个代表问题，完整问题由程序保留。`,
+    `客户摘要只概括安全成立的核心信息，不浓缩营销断言。按客户指定的九个板块组织主体内容：产品或服务描述用 products_services，特点用 features，品牌故事用 brand_story，用户痛点用 pain_points，创始人介绍用 founder，社会贡献用 social_contribution，信任背书用 trust，客户案例用 realCases，客户评价用 customerReviews。资料充足板块以${MIN_SECTION_CHARACTERS}—${MAX_SECTION_CHARACTERS}字为参考，允许自然分段和短板块；小店优先按经营内容、消费场景和选择需求展开，不套工业模板，充分说明事实与客户价值之间的关系，不机械重复或用空话凑字数。框架中的细项只是取材顺序，不是必须填满的事实清单。没有依据的创始人、公益、资质、案例或评价等板块就输出空数组，由交付稿省略；不要输出资料缺口、来源状态或写稿过程说明。其他研究价值可用于摘要、推荐角度、GEO 与内部待补充信息，不增加交付板块。realCases 只能引用真实案例依据；customerReviews 只能引用真实评价依据，可围绕真实评价展开解读，但引用评价原话时必须逐字保留，不从个体评价推导整体满意度。missingInformation 只写业务信息缺口。GEO 每个主题选 3–5 个代表问题，完整问题由程序保留。`,
     knowledgePrompt ? "[客户指定的知识稿要求]\n" + knowledgePrompt : "",
     input.direct ? "GEO主题优先选3—5个代表问题；只有1—2个有效问题时保留实际问题，不编造补齐。" : "",
     final.competitionContext.length === 0
@@ -534,10 +534,10 @@ function validateResponse(raw, input) {
     fail("KNOWLEDGE_OUTPUT_INVALID");
   const { entries, final, sourceById } = input;
   const sourceIdsFor = (ref) => terminalSources(input, ref);
-  function refs(value, allowedFields, outputText) {
+  function refs(value, allowedFields, outputText, allowEmpty = false) {
     if (
       !Array.isArray(value) ||
-      value.length < 1 ||
+      (!allowEmpty && value.length < 1) ||
       value.length > 30 ||
       new Set(value).size !== value.length
     )
@@ -560,7 +560,7 @@ function validateResponse(raw, input) {
     }
     return value;
   }
-  function item(value, { allowedFields, kind = false, verbatim = false } = {}) {
+  function item(value, { allowedFields, kind = false, verbatim = false, allowEmpty = false } = {}) {
     const keys = kind ? ["text", "kind", "inputRefs"] : ["text", "inputRefs"];
     if (
       !exactKeys(value, keys) ||
@@ -570,7 +570,9 @@ function validateResponse(raw, input) {
       fail("KNOWLEDGE_OUTPUT_INVALID");
     if (ENGINEERING_MARKERS.some((marker) => value.text.includes(marker)))
       fail("KNOWLEDGE_OUTPUT_INVALID");
-    const inputRefs = refs(value.inputRefs, allowedFields, value.text);
+    const inputRefs = refs(value.inputRefs, allowedFields, value.text, allowEmpty);
+    if (allowEmpty && inputRefs.length === 0)
+      return { text: value.text, inputRefs, supportClasses: [] };
     const exactReviewQuote =
       allowedFields?.length === 1 &&
       allowedFields[0] === "customerReviews" &&
@@ -593,6 +595,8 @@ function validateResponse(raw, input) {
       ...new Set(inputRefs.flatMap((ref) => sourceIdsFor(ref))),
     ];
     const sourceTexts = sourceIds.map((id) => sourceById.get(id).text);
+    if (value.kind === "direct" && sourceIds.some(id => sourceById.get(id).scope === "decision_context"))
+      fail("KNOWLEDGE_CLAIM_STRENGTH_ESCALATION");
     if (
       (verbatim || value.kind === "direct") &&
       (supports.length !== 1 ||
@@ -635,9 +639,9 @@ function validateResponse(raw, input) {
       HARD_FACT_MARKERS.some(
         (marker) =>
           value.text.includes(marker) &&
-          (!supportedText.includes(marker) ||
-            (input.direct &&
-              !sourceTexts.some((source) => source.includes(marker)))),
+          (input.direct
+            ? !sourceTexts.some((source) => source.includes(marker))
+            : !supportedText.includes(marker)),
       )
     )
       fail("KNOWLEDGE_UNSUPPORTED_HARD_FACT");
@@ -720,9 +724,11 @@ function validateResponse(raw, input) {
   }
   const realCases = list(
     raw.realCases,
-    { allowedFields: ["realCases"], verbatim: true },
+    { allowedFields: input.direct ? undefined : ["realCases"], verbatim: !input.direct },
     20,
   );
+  if (input.direct && realCases.some(value => value.inputRefs.some(ref => entries.get(ref).provenance === "derived")))
+    fail("KNOWLEDGE_SYNTHESIS_INVALID_REF");
   const customerReviews = list(
     raw.customerReviews,
     { allowedFields: ["customerReviews"] },
@@ -730,14 +736,15 @@ function validateResponse(raw, input) {
   );
   for (const review of customerReviews)
     for (const ref of review.inputRefs)
-      if (!review.text.includes(entries.get(ref).text))
+      if (!review.text.includes(entries.get(ref).text) &&
+          !(input.direct && entries.get(ref).text.includes(review.text)))
         fail("KNOWLEDGE_REVIEW_QUOTE_CHANGED");
   const recommendationAngles = withoutExactDuplicates(
     list(raw.recommendationAngles, {}, 30),
   );
   const missingInformation = list(
     raw.missingInformation,
-    { allowedFields: ["contentGaps"] },
+    { allowedFields: ["contentGaps"], allowEmpty: Boolean(input.direct) },
     30,
   );
   const cautions = list(raw.cautions, { allowedFields: ["cautions"] }, 30);
@@ -840,8 +847,8 @@ function buildKnowledge(raw, input, clientName, citations = []) {
     if (!CUSTOMER_DRAFT_SECTIONS.includes(section.key)) continue;
     const paragraph = section.items.map((item) => item.text).join(" ");
     if (
-      (!input.direct && countCharacters(paragraph) > MAX_SECTION_CHARACTERS) ||
-      /[\r\n]/u.test(paragraph)
+      !input.direct && (countCharacters(paragraph) > MAX_SECTION_CHARACTERS ||
+      /[\r\n]/u.test(paragraph))
     )
       fail("KNOWLEDGE_PARAGRAPH_INVALID", { section: section.key });
   }
@@ -851,8 +858,8 @@ function buildKnowledge(raw, input, clientName, citations = []) {
   ]) {
     const paragraph = items.map((item) => item.text).join(" ");
     if (
-      (!input.direct && countCharacters(paragraph) > MAX_SECTION_CHARACTERS) ||
-      /[\r\n]/u.test(paragraph)
+      !input.direct && (countCharacters(paragraph) > MAX_SECTION_CHARACTERS ||
+      /[\r\n]/u.test(paragraph))
     )
       fail("KNOWLEDGE_PARAGRAPH_INVALID", { section });
   }
@@ -867,7 +874,7 @@ function countCharacters(value) {
 
 function renderMarkdown(knowledge) {
   const lines = [`# ${knowledge.client.name}客户知识稿`, ""];
-  const paragraph = (items) => items.map((item) => item.text).join(" ");
+  const paragraph = (items) => items.map((item) => item.text).join("\n\n");
   for (const key of CUSTOMER_DRAFT_SECTIONS) {
     const section = knowledge.sections.find((item) => item.key === key);
     if (section)

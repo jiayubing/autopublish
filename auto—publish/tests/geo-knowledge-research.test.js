@@ -18,6 +18,17 @@ test("JSON parser accepts one object in common model wrappers without weakening 
   });
 });
 
+test("JSON parser repairs property quoting without changing prose or completing truncated output", () => {
+  assert.deepEqual(parseJsonObject('{"text":"原句 { inputRefs: 保留 }",inputRefs": ["M1"]}'), {
+    text: "原句 { inputRefs: 保留 }", inputRefs: ["M1"],
+  });
+  assert.deepEqual(parseJsonObject('```json\n{summary: {"text":"合成资料",inputRefs:["M1"]}}\n```'), {
+    summary: { text: "合成资料", inputRefs: ["M1"] },
+  });
+  for (const value of ['{"text":"未完成', '{inputRefs:["M1"]', '{inputRefs:}', '{"text": undefined}'])
+    assert.throws(() => parseJsonObject(value), { code: "GEO_SCHEMA_INVALID" });
+});
+
 test("profile enrichment adds non-conflicting fields and reports only contradictory fields", () => {
   const source = [{ id: "s", type: "client_input", title: "合成资料" }];
   const make = (fields) =>

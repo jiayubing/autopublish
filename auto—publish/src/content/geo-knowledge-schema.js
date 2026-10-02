@@ -112,8 +112,9 @@ function validateKnowledge(document) {
   requireValue(
     object(document.status) && ["complete", "partial"].includes(document.status.outcome),
   );
-  if (document.deliverable !== undefined) {
-    const draft = document.deliverable;
+  for (const key of ["deliverable", "pendingDeliverable"]) {
+    const draft = document[key];
+    if (draft === undefined) continue;
     requireValue(
       object(draft) &&
         draft.version === 1 &&
@@ -128,6 +129,23 @@ function validateKnowledge(document) {
         draft.warnings.length <= 100 &&
         draft.warnings.every((value) => text(value, 2000)),
     );
+    if (draft.contentRevision !== undefined) {
+      requireValue(Number.isSafeInteger(draft.contentRevision) && draft.contentRevision >= 1);
+      requireValue(text(draft.savedAt, 100) && Number.isFinite(Date.parse(draft.savedAt)));
+      requireValue(["current", "stale"].includes(draft.indexStatus));
+      requireValue(["ai", "manual", "legacy"].includes(draft.origin));
+      requireValue(Array.isArray(draft.sourceIds) && unique(draft.sourceIds) &&
+        draft.sourceIds.every(id => document.sources.some(source => source.id === id)));
+    }
+    if (key === "pendingDeliverable") {
+      requireValue(isSafeSegment(draft.candidateId));
+      requireValue(Number.isSafeInteger(draft.baseContentRevision) && draft.baseContentRevision >= 1);
+      requireValue(document.deliverable !== undefined);
+    }
+    if (draft.researchNotes !== undefined) requireValue(typeof draft.researchNotes === "string" && draft.researchNotes.length <= 100000);
+    if (draft.sectionEvidence !== undefined) requireValue(Array.isArray(draft.sectionEvidence) && draft.sectionEvidence.length <= 9 &&
+      draft.sectionEvidence.every(item => text(item.title, 100) && Array.isArray(item.kinds) && item.kinds.every(kind => text(kind, 50)) &&
+        Array.isArray(item.sourceIds) && item.sourceIds.every(id => document.sources.some(source => source.id === id))));
   }
   requireValue(
     Array.isArray(document.status.warnings) && document.status.warnings.length <= 100 &&

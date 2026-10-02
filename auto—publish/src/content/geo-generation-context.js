@@ -1,6 +1,7 @@
 "use strict";
 const { validateKnowledge, geoError } = require("./geo-knowledge-schema");
 const { normalizeQuestionText } = require("./geo-question-links");
+const { selectKnowledgeProse } = require("./knowledge-prose");
 
 const ANGLE_INTENTS = new Set(["selection", "local", "scenario", "comparison"]);
 const COMPETITOR_INTENTS = new Set(["comparison", "selection", "local"]);
@@ -25,7 +26,7 @@ function selectGeoKnowledge(document, researches, researchIds) {
     if (matches) matchedResearches.push(researches[index]);
     return matches;
   });
-  if (!questions.length) return null;
+  if (!questions.length && !knowledge.deliverable) return null;
 
   const sourceById = new Map(
     knowledge.sources.map((source) => [source.id, source]),
@@ -153,9 +154,14 @@ function selectGeoKnowledge(document, researches, researchIds) {
       .map(annotate),
     restrictions: knowledge.restrictions.map(annotate),
   };
+  if (knowledge.deliverable) {
+    selected.profile = null;
+    for (const key of Object.keys(selected)) if (key !== "restrictions" && Array.isArray(selected[key])) selected[key] = [];
+    selected.knowledgeProse = selectKnowledgeProse(knowledge, researches.map(item => item.question).join("\n"));
+  }
   const sourceIds = new Set(
     [
-      ...(profile ? profile.claims : []),
+      ...(selected.profile ? selected.profile.claims : []),
       ...Object.entries(selected)
         .filter(([key, value]) => key !== "profile" && Array.isArray(value))
         .flatMap(([, value]) => value),
@@ -182,6 +188,10 @@ function selectGeoKnowledge(document, researches, researchIds) {
 }
 function validateGeoSnapshot(value, clientId, researchIds) {
   if (value?.version === 2) return validateArticleBriefV2(value, clientId, researchIds);
+  let context;
+  try { context = JSON.parse(value?.context); } catch { throw geoError("ARTICLE_INVALID"); }
+  if (!context || typeof context !== "object" || Array.isArray(context)) throw geoError("ARTICLE_INVALID");
+  if (context.knowledgeProse !== undefined) validateProseSnapshot(context.knowledgeProse);
   if (
     !value ||
     value.version !== 1 ||
@@ -193,7 +203,7 @@ function validateGeoSnapshot(value, clientId, researchIds) {
     !value.context ||
     value.context.length > 100000 ||
     !Array.isArray(value.questions) ||
-    !value.questions.length ||
+    (!value.questions.length && !context.knowledgeProse) ||
     value.questions.length > 500 ||
     value.questions.some(
       (question) =>
@@ -288,6 +298,7 @@ function buildArticleBriefV2({ document, knowledgeRevision, geoQuestionId, colle
   for (const claim of selectedKnowledge.profileFacts)
     for (const id of claim.sourceIds || []) sourceIds.add(id);
   const brief = {
+    ...(selected.knowledgeProse ? { knowledgeProse: selected.knowledgeProse } : {}),
     version: 2,
     clientId: knowledge.clientId,
     knowledgeRevision: knowledge.revision,
@@ -330,11 +341,16 @@ function buildArticleBriefV2({ document, knowledgeRevision, geoQuestionId, colle
         .map((item) => item.id),
     },
   };
+  if (JSON.stringify(brief).length > 100000 && brief.knowledgeProse) {
+    const overhead = JSON.stringify({ ...brief, knowledgeProse: { ...brief.knowledgeProse, markdown: "" } }).length;
+    brief.knowledgeProse = selectKnowledgeProse(knowledge, question.name, Math.max(0, 100000 - overhead - 1000));
+  }
   if (JSON.stringify(brief).length > 100000) throw geoError("GEO_CONTEXT_TOO_LARGE");
   return brief;
 }
 
 function validateArticleBriefV2(value, clientId, researchIds) {
+  if (value?.knowledgeProse !== undefined) validateProseSnapshot(value.knowledgeProse);
   const target = value?.targetQuestion;
   const current = value?.currentResearch;
   const arrays = value?.selectedKnowledge;
@@ -364,6 +380,16 @@ function validateArticleBriefV2(value, clientId, researchIds) {
   )
     throw geoError("ARTICLE_INVALID");
   return structuredClone(value);
+}
+
+function validateProseSnapshot(value) {
+  if (!value || !Number.isSafeInteger(value.contentRevision) || value.contentRevision < 1 ||
+      !Number.isFinite(Date.parse(value.savedAt)) || !["ai", "manual", "legacy"].includes(value.origin) ||
+      typeof value.markdown !== "string" || !value.markdown.trim() || value.markdown.length > 100000 ||
+      !Array.isArray(value.selectedSections) || !Array.isArray(value.omittedSections) ||
+      [...value.selectedSections, ...value.omittedSections].some(title => typeof title !== "string" || !title.trim()) ||
+      !Array.isArray(value.sectionEvidence) || !Array.isArray(value.sources) ||
+      typeof value.usageRules !== "string" || !value.usageRules.trim()) throw geoError("ARTICLE_INVALID");
 }
 
 module.exports = {

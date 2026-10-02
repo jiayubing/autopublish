@@ -57,14 +57,25 @@ export type KnowledgeSource = {
   contentHash?: string;
   citationVerified?: boolean;
 };
+type KnowledgeDeliverable = {
+  researchNotes?: string;
+  sectionEvidence?: { title: string; kinds: string[]; sourceIds: string[] }[];
+  version: 1;
+  knowledgeRevision: number;
+  status: "complete" | "draft" | "stale";
+  markdown: string;
+  warnings: string[];
+  contentRevision?: number;
+  savedAt?: string;
+  origin?: "ai" | "manual" | "legacy";
+  indexStatus?: "current" | "stale";
+  sourceIds?: string[];
+  candidateId?: string;
+  baseContentRevision?: number;
+};
 export type GeoKnowledge = {
-  deliverable?: {
-    version: 1;
-    knowledgeRevision: number;
-    status: "complete" | "draft" | "stale";
-    markdown: string;
-    warnings: string[];
-  };
+  deliverable?: KnowledgeDeliverable;
+  pendingDeliverable?: KnowledgeDeliverable;
   schemaVersion: number;
   clientId: string;
   revision: number;
@@ -187,24 +198,4 @@ export type KnowledgeQuestionWorkflow = {
         | "GEO_GENERATION_READY";
     };
   }>;
-};
-export type ConfirmationEntry = {
-  kind: "fact" | "research" | "derived" | "gap" | "caution";
-  title: string;
-  body: string;
-  sourceIds: string[];
-  attributionRequired: boolean;
-  relatedKnowledgeIds: string[];
-};
-export type CustomerConfirmationModel = {
-  version: 1;
-  clientId: string;
-  knowledgeRevision: number;
-  generatedAt: string;
-  sections: { id: string; title: string; entries: ConfirmationEntry[] }[];
-  confirmationRequests: {
-    topic: string;
-    reason: string;
-    relatedKnowledgeIds: string[];
-  }[];
 };

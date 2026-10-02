@@ -25,8 +25,6 @@ const domainTypeSymbols = {
     "GeoConnectionResult",
     "GeoPromptSettings",
     "KnowledgeEdit",
-    "ConfirmationEntry",
-    "CustomerConfirmationModel",
   ],
   "types/content.ts": [
     "ContentCommandStaleResult",

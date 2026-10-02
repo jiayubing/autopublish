@@ -1,5 +1,7 @@
 # AutoPublish GEO 内容生产闭环实施方案 v1.4
 
+**2026-10-01 当前入口：** 用户已授权实施[九板块客户知识库产品计划](docs/NINE-SECTION-KNOWLEDGE-PRODUCT-PLAN.md)，CP-5 保持暂缓。正文版本、候选替换、弱资料研究、九板块编辑交付和文章正文快照已接通，最终验证状态由该计划维护。独立 Confirmation Model 与公开预览接口已移除；§4.1 与 CP-1 已替换为正文合同。保留后文历史 Closure 作为历史证据，不得据此恢复退役路径。
+
 **状态**：IN PROGRESS / CP-4 COMPLETE；CP-5 待开始
 
 **产品依据**：`AutoPublish-GEO-Content-Production-Product-Design-v1.0.md`
@@ -25,7 +27,7 @@
 3. **新生成任务必须从“客户 × 模板”改为“问题 × 模板”**：每个新任务只绑定一个 GEO Question、一个匹配的 Research 和一个 Article Brief。旧批次只能按版本化历史合同读取/收尾，不能继续创建同客户多回答混合输入的新任务。
 4. **Article Brief 不是新 store**：继续由 `geo-generation-context` 实时派生；文章成功时把实际输入固化到现有 Article source snapshot 体系，批次和 UI 不成为事实 owner。
 5. **Research 洞察必须保守派生，但不能因此丢失现有写作能力**：第一版不新增隐藏的 AI 分析请求。`clientMentioned`、`mentionedEntities` 等只做可验证的字面/关系投影；`decisionDimensions`、`answerGaps` 无可靠结构化结果时允许为空。若 `decisionDimensions` 为空，文章 Prompt 仍可读取 `currentResearch.answer` 并在本次写作内部观察当前回答采用的判断维度，但该判断不得持久化、不得回写 Research/Knowledge。
-6. **Confirmation 只负责重组，不负责“凭空变丰富”**：客户确认稿必须比当前 section 直出更适合阅读和确认，但不得调用 AI、联网或补造客户事实。若真实客户 Knowledge 本身过薄，应回到 Knowledge research/synthesis 补足，而不是在 Confirmation 层扩写。
+6. **正文交付**：丰富内容由连续研究与成稿生成，页面编辑、复制与导出不隐式调用模型，不能编造事实。
 7. **AI 请求结果不确定必须进入持久状态**：Generation v2 不能把“请求可能已被 provider 接收但本地无法确认结果”折叠为普通 `failed/interrupted`。task 必须有 terminal `uncertain` 状态；uncertain 不进入 resume/retry。只有发现同 `generationTaskId` 的本地 Article 时可确定性恢复为 `succeeded`；否则用户显式选择重新生成时，必须经过新预检并创建新 batch/task，原 uncertain task 保留不改写。
 8. **批次创建必须幂等**：v2 create command 必填调用方生成的 `requestId`。batch 持久化 `requestId + requestFingerprint`；同 requestId、同 canonical create input 返回原批次，同 requestId、不同输入返回稳定 conflict。create 重放只返回已存在 batch，绝不能再次启动 AI。
 9. **Research 完整性使用内容 fingerprint，不使用时间戳充当证明**：Research 时间字段只适合作为展示信息，不能证明回答未变化。question source 必须保存 `researchFingerprint`；执行前重新读取 Research 并按同一 canonical 规则计算比较。Knowledge 继续使用 revision，不引入细粒度 Knowledge hash。
@@ -54,7 +56,7 @@
 
 | 产品目标 | 当前实现 | 实施要求 |
 | --- | --- | --- |
-| 客户确认稿 | 当前 Markdown 是 section 直出 | 建立唯一 Confirmation Model，页面预览与 Markdown 共用 |
+| 九板块交付 | 唯一保存正文 | 页面编辑、复制、Markdown 与文章输入共用版本 |
 | 问题成为工作单元 | 当前仅逐项查看关联，生成入口仍以客户为单位 | 建立批量 Question Workflow read model 与问题驱动入口 |
 | 每篇一个 Brief | 当前一次文章可混入 1–50 条 Research | 新任务强制一个 question / research / brief |
 | 问题 × 模板 | 当前批次是客户 × 模板 | generation batch schema v2 与 task identity 改造 |
@@ -116,12 +118,12 @@ Customer materials / public research
 | 对象 | 唯一 owner | 写入规则 |
 | --- | --- | --- |
 | Customer Knowledge | `geo-knowledge-store` | 只有现有 store command 可写 |
-| Confirmation Model | `geo-confirmation-model` 纯派生模块 | 不持久化，不接受反向写入 |
+| 九板块正文 | GeoKnowledgeStore 的 deliverable / pendingDeliverable | 正文编辑与候选替换经 revision 原子保存 |
 | GEO Question asset | Knowledge `geoQuestions[]` | 研究 merge / 人工编辑经 knowledge revision 写入 |
 | Collection Question | 现有 question service | 只拥有采集文本、启停和采集执行身份 |
 | GEO Research | `research-store` | 成功采集或人工录入写入；失败不覆盖旧成功回答 |
 | Question Workflow | application query/read model | 只聚合，不持久化 |
-| Article Brief | `geo-generation-context` | 每次预检/执行派生，不建立 store |
+| Article Brief | `geo-generation-context` | 预检派生；有正文的新批次创建时固化到既有 batch store |
 | Generation Batch / Task | `generation-batch-store` | schema v2，任务只引用一个问题来源 |
 | Article input history | Article JSON | 成功生成时一次固化，后续知识变化不改写 |
 
@@ -131,40 +133,9 @@ Customer materials / public research
 
 ## 4. 公开合同
 
-### 4.1 Confirmation Model v1
+### 4.1 九板块正文合同
 
-`buildCustomerConfirmationModel(knowledge)` 是纯函数。页面预览和 Markdown exporter 必须消费同一个返回值。
-
-```text
-version: 1
-clientId
-knowledgeRevision
-generatedAt
-sections[]:
-  id
-  title
-  entries[]:
-    kind: fact | research | derived | gap | caution
-    title
-    body
-    sourceIds[]
-    attributionRequired
-    relatedKnowledgeIds[]
-confirmationRequests[]:
-  topic
-  reason
-  relatedKnowledgeIds[]
-```
-
-固定 15 个 section 与产品设计一致。规则：
-
-- `fact/research` 只能来自当前 Knowledge 中允许展示的 claim/item；
-- `derived` 只允许来自 `recommendationAngles` 或明确标记的场景推导，并显示“推荐角度/场景分析”；
-- 15 个 section 是逻辑结构，不要求导出时把 15 个空标题全部展示。无内容章节可以在 model 中产生 `gap` 供页面提示，但 Markdown 默认隐藏空章节，并把重要资料缺口集中汇总到最后的“请客户确认 / 补充”区域，避免生成一份充满重复“资料不足”的模板报告；
-- conflict、candidate、forbidden、internal-only 和强声明进入 caution/confirmation request，不作为正向事实；
-- 每个正向 entry 保存对应 `sourceIds/relatedKnowledgeIds`，支持 UI 回看来源；
-- 模型不得调用 AI、联网、补齐资料或写回 Knowledge；
-- Markdown 只负责渲染 model，不另写一套 section 选择逻辑。
+正文、候选和版本由现有 GeoKnowledgeStore 持久化。页面直接编辑九个固定板块，复制与 Markdown 导出使用同一已保存 `deliverable.markdown`。首次成功成稿直接保存；再次生成保留候选，用户明确替换才更新正文。辅助索引失败不阻止有效正文保存，使用限制继续保留。完整字段、并发与验收合同见九板块计划。
 
 ### 4.2 Question Workflow read model
 
@@ -456,27 +427,9 @@ uncertain 不是文章内容审核“需处理”，也不是发布中心的 unc
 - GEO Knowledge V1 删除/不迁移边界与 generation/article v1 历史保留边界已明确；
 - v1 generation 非终态盘点结果已记录，旧 runner 不再有任何可触发 AI 自动重试的公开路径。
 
-### CP-1：Customer Confirmation Brief
+### CP-1：历史投影已退役
 
-**目标**：用一个派生模型同时提供客户可读预览和 Markdown。
-
-Owner / 调用链：
-
-- 新增 `src/content/geo-confirmation-model.js` 纯函数 owner；
-- `desktop/services/geo-knowledge-service.js` 只负责编排 load/model/export；
-- IPC contract、preload、bridge、types 增加 preview/export；
-- `GeoKnowledgeView` 增加“客户确认稿”tab，替换当前顶部通用导出入口；
-- 来源 tab 增加“支持哪些知识”的反向投影。
-
-测试：
-
-- 15 section 逻辑顺序、空章节 gap、Markdown 空章节隐藏与缺口集中汇总、来源追踪、derived 标签、强声明和 conflict 不越权；
-- preview 与 Markdown 来自同一 model；
-- 除 synthetic 自动化测试外，用一个现有客户 Knowledge 做本地只读产品验收（不把真实客户数据提交为 fixture，也不发往外部服务）：确认稿应能形成可读的产品/服务、能力、场景、案例、推荐定位和待补资料结构。若结果仍明显偏薄，记录为 Knowledge research/synthesis 的输入质量问题，不得通过 Confirmation AI 扩写或编造解决；
-- stale revision、损坏 Knowledge、导出失败使用稳定安全错误；
-- UI 加载、空态、partial、资料缺口、长文本、导出失败。
-
-非目标：DOCX、客户修改回写、AI 扩写、联网补资料。
+2026-10-01 由九板块正文工作区替代。旧独立模型、preview IPC、类型与专用测试已删除；导出直接读取保存正文。历史实施记录只作为证据，不是恢复旧投影的指令。
 
 ### CP-2：GEO Question 工作台
 
@@ -635,7 +588,7 @@ Knowledge revision N
 
 新增测试按公开行为命名，例如：
 
-- `geo-confirmation-model.test.js`
+- 正文 store / service / renderer 与文章快照行为测试
 - `geo-question-workflow.test.js`
 - `question-driven-generation.test.js`
 - `generation-v2-idempotency.test.js`
@@ -732,7 +685,7 @@ P0/P1 必须关闭；P2 只有直接影响当前 acceptance、事实一致性、
 本方案只有在以下条件全部满足时才能标记 COMPLETE：
 
 1. CP-0～CP-5 全部 Closure；
-2. 客户确认稿预览与 Markdown 共用唯一 Confirmation Model；
+2. 九板块预览、复制与 Markdown 使用同一保存正文；
 3. GEO Question 页面可判断知识、采集、回答和文章状态；列表保持轻量，Research 正文与 `clientMentioned` 只按需读取；
 4. 所有新生成任务为 question × template，且每篇只有一个 target question；
 5. Article Brief v2 不依赖完整知识库或完整客户资料正文即可提供本篇上下文，且 Research 身份严格通过 `collectionQuestionId` 匹配；
@@ -792,7 +745,7 @@ P0/P1 必须关闭；P2 只有直接影响当前 acceptance、事实一致性、
 - **D7**：本计划不与当前规模审计修复并行执行；启动 CP-0 时先选择唯一干净 integration baseline。
 - **D8**：Research 记录身份属于 Collection Question；Article Brief 用 `collectionQuestionId === research.id` 连接，`geoQuestionId` 不与 Research ID 混用。
 - **D9**：Question Workflow 列表采用轻量 metadata 聚合；`clientMentioned` 和 Research 正文按需在详情/生成预检读取，不新增索引 owner。
-- **D10**：Confirmation Model 只能重组现有 Knowledge；真实确认稿偏薄时回到 Knowledge research/synthesis 修复，不在 Confirmation 层调用 AI 扩写。
+- **D10（已替代）**：按九板块计划实施研究与成稿；日常正文编辑和导出不触发模型调用。
 - **D11**：Generation Batch v2 的 task 只持久化 `questionSourceId + template/platform + task state`，客户/问题/Research 身份由 questionSource 解引用，避免重复真源。
 - **D12**：第一版使用 client Knowledge revision 做保守 stale invalidation；不引入细粒度 fingerprint，直到真实使用证明有必要。
 - **D13**：文章类型继续由现有写作 Prompt 在单篇生成内部选择，不新增持久化“本次文章类型” owner。

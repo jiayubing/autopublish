@@ -5,7 +5,6 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { startRenderer, closeRenderer } = require("./helpers/renderer-harness");
 const { normalizeCandidate } = require("../src/content/geo-knowledge-merge");
-const { mergeKnowledge } = require("../src/content/geo-knowledge-merge");
 
 function fixture({ document }) {
   const ok = (data) => Promise.resolve({ ok: true, data });
@@ -35,7 +34,6 @@ function fixture({ document }) {
     prompts: [],
     sources: [],
     conflicts: [],
-    confirmations: [],
     exports: [],
     temporaryPrompt: "",
   };
@@ -281,84 +279,7 @@ function fixture({ document }) {
         window.__geoCalls.prompts.push(["client", researchPrompt]);
         return ok({ researchPrompt });
       },
-      previewConfirmation: (input) => {
-        window.__geoCalls.confirmations.push(input);
-        const titles = [
-          "客户 / 品牌概况",
-          "主要产品与服务",
-          "产品 / 服务特点",
-          "品牌故事与发展历史",
-          "线上公开身份",
-          "用户需求与典型场景",
-          "核心能力与差异化",
-          "团队 / 负责人",
-          "资质、授权与信任背书",
-          "客户案例",
-          "竞对与市场位置",
-          "推荐定位 / GEO 推荐角度",
-          "核心 GEO 问题",
-          "禁止或谨慎使用的表述",
-          "请客户确认 / 补充",
-        ];
-        const result = {
-          model: {
-            version: 1,
-            clientId: knowledge.clientId,
-            knowledgeRevision: knowledge.revision,
-            generatedAt: knowledge.updatedAt,
-            sections: titles.map((title, index) => ({
-              id: "section-" + index,
-              title,
-              entries:
-                index === 0
-                  ? [
-                      {
-                        kind: "fact",
-                        title: "客户名称",
-                        body: knowledge.profile.fields.name,
-                        sourceIds: ["client-source"],
-                        attributionRequired: false,
-                        relatedKnowledgeIds: [knowledge.profile.id],
-                      },
-                    ]
-                  : index === 14
-                    ? [
-                        {
-                          kind: "gap",
-                          title: "客户案例",
-                          body: "当前资料不足，建议补充。",
-                          sourceIds: [],
-                          attributionRequired: false,
-                          relatedKnowledgeIds: [],
-                        },
-                      ]
-                    : [],
-            })),
-            confirmationRequests: [
-              {
-                topic: "客户案例",
-                reason: "当前资料不足，建议补充。",
-                relatedKnowledgeIds: [],
-              },
-            ],
-          },
-        };
-        if (window.__delayConfirmationPreview) {
-          return new Promise((resolve) => {
-            window.__finishConfirmationPreview = () => resolve(ok(result));
-          });
-        }
-        return ok(result);
-      },
-      exportMarkdown: (input) => {
-        window.__geoCalls.exports.push(input);
-        if (window.__failConfirmationExport)
-          return Promise.resolve({
-            ok: false,
-            error: { code: "GEO_SAVE_FAILED", userMessage: "确认稿导出失败。" },
-          });
-        return ok({ markdown: "# 合成客户客户确认稿" });
-      },
+      exportMarkdown: () => ok({ markdown: knowledge?.deliverable?.markdown || "" }),
       confirmSourceType: (input) => {
         window.__geoCalls.sources.push(input);
         knowledge.sources.find((source) => source.id === input.sourceId).type =
@@ -446,7 +367,64 @@ function fixture({ document }) {
     orders: { getOrders: () => ok([]) },
   };
 }
-test("unverified model draft is previewable and exportable without a canonical knowledge file", async (t) => {
+test("prose editing uses saved preview and export; candidate replacement is explicit", async t => {
+  t.after(closeRenderer);
+  const { browser, url } = await startRenderer({ port: 4191 });
+  const page = await browser.newPage();
+  t.after(() => page.close());
+  const document = normalizeCandidate({ profile: { fields: { name: "合成客户" } } }, [], "client-1");
+  document.revision = 1;
+  document.deliverable = { version: 1, knowledgeRevision: 1, contentRevision: 1, status: "complete", markdown: "# 已保存的正文\n\n## 产品或服务描述\n\n已保存服务", warnings: [] };
+  document.pendingDeliverable = { ...document.deliverable, candidateId: "candidate-1", markdown: "# 新生成的候选正文\n\n## 产品或服务描述\n\n新生成服务" };
+  await page.addInitScript(fixture, { document: null });
+  await page.addInitScript(document => {
+    const ok = data => Promise.resolve({ ok: true, data: structuredClone(data) });
+    window.desktopConsole.geoKnowledge.load = () => ok({ knowledge: document, storageStatus: "current_v2", state: { phase: "idle", running: false } });
+    window.desktopConsole.geoKnowledge.exportMarkdown = () => ok({ markdown: document.deliverable.markdown });
+    window.desktopConsole.geoKnowledge.editDeliverable = input => {
+      if (window.__failProseSave) return Promise.resolve({ ok: false, error: { code: "GEO_SAVE_FAILED", userMessage: "正文保存失败" } });
+      document.revision++;
+      document.deliverable.markdown = input.markdown;
+      document.deliverable.contentRevision++;
+      return ok({ knowledge: document });
+    };
+    window.desktopConsole.geoKnowledge.acceptDeliverable = () => {
+      document.revision++;
+      document.deliverable = { ...document.pendingDeliverable, contentRevision: document.deliverable.contentRevision + 1 };
+      delete document.pendingDeliverable;
+      return ok({ knowledge: document });
+    };
+  }, document);
+  await page.goto(url);
+  await page.locator("#nav-item-content-production").click();
+  await page.getByRole("button", { name: "客户知识库", exact: true }).click();
+  await page.getByText("新生成的候选稿（尚未替换当前正文）", { exact: true }).click();
+  await page.getByRole("button", { name: "编辑正文", exact: true }).click();
+  assert.equal(await page.locator("textarea[aria-label]").count(), 9);
+  await page.getByLabel("产品或服务描述").fill("# 尚未保存的修改");
+  assert.equal(await page.getByRole("button", { name: "用此稿替换当前正文" }).isDisabled(), true);
+  await page.evaluate(() => { Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async text => { window.__copied = text; } } }); });
+  await page.getByRole("button", { name: "复制完整正文" }).click();
+  assert.equal(await page.evaluate(() => window.__copied), document.deliverable.markdown);
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "导出 Markdown" }).click();
+  const download = await downloadPromise;
+  assert.equal(download.suggestedFilename(), "知识库.md");
+  assert.equal(fs.readFileSync(await download.path(), "utf8"), document.deliverable.markdown);
+  await page.evaluate(() => { window.__failProseSave = true; });
+  await page.getByRole("button", { name: "保存正文", exact: true }).click();
+  await page.getByText(/GEO_SAVE_FAILED/).waitFor();
+  assert.equal(await page.getByLabel("产品或服务描述").inputValue(), "# 尚未保存的修改");
+  await page.evaluate(() => { window.__failProseSave = false; });
+  await page.getByRole("button", { name: "保存正文", exact: true }).click();
+  await page.getByText(/当前正文版本 2/).waitFor();
+  await page.getByRole("button", { name: "用此稿替换当前正文" }).click();
+  await page.getByText(/当前正文版本 3/).waitFor();
+  assert.equal(await page.getByText("新生成的候选稿（尚未替换当前正文）", { exact: true }).count(), 0);
+  assert.equal(await page.getByText("新生成服务", { exact: true }).count(), 1);
+});
+
+test("unverified model draft remains separately previewable without a canonical knowledge file", async (t) => {
   t.after(closeRenderer);
   const { browser, url } = await startRenderer({ port: 4191 });
   const page = await browser.newPage();
@@ -471,8 +449,7 @@ test("unverified model draft is previewable and exportable without a canonical k
   await page.goto(url);
   await page.locator("#nav-item-content-production").click();
   await page.getByRole("button", { name: "客户知识库", exact: true }).click();
-  await page.getByRole("button", { name: "九板块知识稿", exact: true }).click();
-  await page.getByText(/模型草稿未通过校验/).waitFor();
+  await page.getByText("本次未验证模型草稿（未覆盖当前正文）", { exact: true }).click();
   await page.getByText(/未验证但完整保留的正文/).waitFor();
   assert.equal(
     await page
@@ -480,9 +457,7 @@ test("unverified model draft is previewable and exportable without a canonical k
       .isEnabled(),
     true,
   );
-  const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "导出知识稿 Markdown" }).click();
-  assert.equal((await download).suggestedFilename(), "九板块知识稿.md");
+
   assert.equal(await page.evaluate(() => window.__geoCalls.generate), 0);
 });
 
@@ -600,283 +575,151 @@ test("switching client discards a late generation response and leaves the new cl
   assert.equal(await page.getByRole("dialog", { name: "研究要求" }).count(), 0);
   assert.equal(await page.evaluate(() => window.__geoCalls.generate), 1);
 });
-test("knowledge page handles empty, busy, error, editing and encrypted-config input flows", async (t) => {
+
+
+test("legacy knowledge keeps source confirmation and conflict resolution in its auxiliary area", async t => {
   t.after(closeRenderer);
   const { browser, url } = await startRenderer({ port: 4191 });
-  const page = await browser.newPage({
-    viewport: { width: 1280, height: 900 },
-  });
-  page.on("pageerror", (error) =>
-    console.error("Renderer error:", error.message),
-  );
+  const page = await browser.newPage();
   t.after(() => page.close());
-  const sources = [
-    { id: "client-source", type: "client_input", title: "客户填写" },
-    {
-      id: "web-source",
-      type: "third_party",
-      title: "搜索发现",
-      url: "https://example.com",
-      fetchedAt: "2026-09-20T00:00:00.000Z",
-      citationVerified: true,
-    },
-  ];
-  const original = normalizeCandidate(
-    {
-      profile: {
-        fields: { name: "合成客户" },
-        basis: "fact",
-        sourceIds: ["client-source"],
-      },
-      geoQuestions: [{ name: "如何选择服务？", intent: "selection" }],
-    },
-    sources,
-    "client-1",
-  );
-  const document = mergeKnowledge(
-    original,
-    normalizeCandidate(
-      {
-        profile: {
-          fields: { name: "候选名称" },
-          basis: "fact",
-          sourceIds: ["client-source"],
-        },
-      },
-      sources,
-      "client-1",
-    ),
-  );
+  const document = normalizeCandidate({ profile: { fields: { name: "合成客户" } } }, [], "client-1");
+  document.sources = [{ id: "source-1", title: "合成公开来源", type: "third_party", url: "https://example.test/customer" }];
+  document.restrictions = [{ id: "conflict-1", name: "营业地点冲突", description: "需人工核对", type: "conflict", conflictStatus: "open", claimIds: [] }];
   document.revision = 1;
-  document.deliverable = {
-    version: 1,
-    knowledgeRevision: 1,
-    status: "draft",
-    markdown:
-      "# 合成客户知识稿\n\n## 产品或服务描述\n\n篇幅不足也保留的完整正文。",
-    warnings: ["部分板块篇幅不在600—1000字范围，已保留完整正文。"],
-  };
-  await page.addInitScript(fixture, { document });
+  await page.addInitScript(fixture, { document: null });
+  await page.addInitScript(document => {
+    const ok = () => Promise.resolve({ ok: true, data: { knowledge: structuredClone(document), state: { phase: "idle", running: false } } });
+    window.desktopConsole.geoKnowledge.load = ok;
+    window.desktopConsole.geoKnowledge.confirmSourceType = input => { window.__geoCalls.sources.push(input); document.sources[0].type = input.targetType; document.revision++; return ok(); };
+    window.desktopConsole.geoKnowledge.resolveConflict = input => { window.__geoCalls.conflicts.push(input); document.restrictions[0].conflictStatus = "resolved"; document.revision++; return ok(); };
+  }, document);
   await page.goto(url);
   await page.locator("#nav-item-content-production").click();
   await page.getByRole("button", { name: "客户知识库", exact: true }).click();
-  await page.getByText(/暂无知识库/).waitFor();
-  const generate = page.getByRole("button", {
-    name: "生成知识库",
-    exact: true,
-  });
-  await generate.click();
-  await page.getByRole("dialog", { name: "研究要求" }).waitFor();
-  await page.getByLabel(/此客户长期补充要求/).fill("长期要求");
-  await page.getByLabel(/本次临时要求/).fill("临时要求");
-  await page.getByRole("button", { name: "保存要求并开始研究" }).click();
-  assert.equal(await generate.isDisabled(), true);
-  await page.evaluate(() => window.__finishGeo(true));
-  await page
-    .getByRole("alert")
-    .filter({ hasText: "请先配置豆包 GEO" })
-    .waitFor();
-  await page.getByText(/GEO_CONFIG_REQUIRED/).waitFor();
-  await page.getByText(/失败阶段：R4 · EEAAP/).waitFor();
-  await page.getByRole("button", { name: "保存要求并开始研究" }).click();
-  await page.evaluate(() => {
-    window.__failNextGeoState = true;
-  });
-  await page
-    .getByRole("alert")
-    .filter({ hasText: "临时进度读取失败" })
-    .waitFor();
-  await page.evaluate(() => window.__finishGeo(false));
-  await page.getByRole("alert").waitFor({ state: "detached" });
-  await page
-    .getByRole("region", { name: "九板块知识稿" })
-    .getByText(/篇幅不足也保留的完整正文/)
-    .waitFor();
-  const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "导出知识稿 Markdown" }).click();
-  assert.equal((await downloadPromise).suggestedFilename(), "九板块知识稿.md");
-  assert.equal(await page.evaluate(() => window.__geoCalls.generate), 2);
-  await page.getByRole("button", { name: "客户知识", exact: true }).click();
-  await page
-    .getByRole("button", { name: /客户基本信息/ })
-    .first()
-    .click();
-  await page.getByRole("button", { name: "编辑并锁定" }).click();
-  await page.getByLabel("客户名称", { exact: true }).fill("人工合成名称");
-  await page.getByRole("button", { name: "保存并锁定" }).click();
-  await page
-    .getByLabel("知识详情")
-    .getByText("人工合成名称", { exact: true })
-    .waitFor();
-  assert.equal(
-    await page.evaluate(() => window.__geoCalls.edits[0].revision),
-    1,
-  );
-  await page.evaluate(() => {
-    window.__delayConfirmationPreview = true;
-  });
-  await page.getByRole("button", { name: "客户确认稿", exact: true }).click();
-  await page.waitForFunction(
-    () => window.__geoCalls.confirmations.length === 1,
-  );
-  await page.getByRole("button", { name: "客户知识", exact: true }).click();
-  await page.getByRole("button", { name: "编辑并锁定" }).click();
-  await page.getByLabel("客户名称", { exact: true }).fill("并发后名称");
-  await page.getByRole("button", { name: "保存并锁定" }).click();
-  await page.evaluate(() => {
-    window.__delayConfirmationPreview = false;
-    window.__finishConfirmationPreview();
-  });
-  await page.waitForTimeout(20);
-  await page.getByRole("button", { name: "客户确认稿", exact: true }).click();
-  await page
-    .getByRole("region", { name: "客户确认稿" })
-    .getByText("并发后名称", { exact: true })
-    .waitFor();
-  await page.getByText("当前资料不足，建议补充。", { exact: true }).waitFor();
-  assert.equal(
-    await page.evaluate(() => window.__geoCalls.confirmations.at(-1).revision),
-    3,
-  );
-  await page.evaluate(() => {
-    window.__failConfirmationExport = true;
-  });
-  await page.getByRole("button", { name: "导出 Markdown" }).click();
-  await page.getByRole("alert").filter({ hasText: "确认稿导出失败" }).waitFor();
-  await page.evaluate(() => {
-    window.__failConfirmationExport = false;
-  });
-  if (process.env.GEO_CAPTURE_SCREENSHOT === "1") {
-    const directory = path.join(__dirname, "..", "build", "test-results");
-    fs.mkdirSync(directory, { recursive: true });
-    await page.screenshot({
-      path: path.join(directory, "geo-knowledge.png"),
-      fullPage: true,
-    });
-  }
+  await page.getByText("研究说明、来源与使用限制", { exact: true }).click();
+  await page.getByRole("button", { name: "确认是客户官网", exact: true }).click();
+  await page.getByLabel("营业地点冲突确认值").fill("已核对的合成地点");
+  await page.getByRole("button", { name: "确认手工值", exact: true }).click();
+  await page.waitForFunction(() => window.__geoCalls.conflicts.length === 1);
+  assert.equal(await page.getByRole("button", { name: "确认手工值", exact: true }).count(), 0);
+  assert.equal(await page.evaluate(() => window.__geoCalls.sources[0].targetType), "official_web");
+  assert.equal(await page.evaluate(() => window.__geoCalls.conflicts[0].value), "已核对的合成地点");
   await page.getByRole("button", { name: "GEO 问题", exact: true }).click();
-  await page.getByRole("checkbox", { name: "选择 如何选择服务？" }).check();
-  await page.getByRole("button", { name: "加入问题采集（1）" }).click();
-  await page.getByText(/已加入问题采集；/).waitFor();
-  await page.getByRole("button", { name: "问题采集", exact: true }).click();
-  await page.getByText("如何选择服务？", { exact: true }).waitFor();
+  assert.equal(await page.evaluate(() => window.__geoCalls.generate), 0);
+});
+
+
+test("knowledge long content scrolls inside the workbench and section navigation stays reachable", async t => {
+  t.after(closeRenderer);
+  const { browser, url } = await startRenderer({ port: 4191 });
+  const page = await browser.newPage();
+  t.after(() => page.close());
+  const titles = ["产品或服务描述", "产品或服务特点", "品牌故事", "用户痛点", "创始人介绍", "社会贡献", "信任背书", "客户案例", "客户评价"];
+  const document = normalizeCandidate({ profile: { fields: { name: "合成客户" } } }, [], "client-1");
+  document.revision = 1;
+  document.deliverable = { version: 1, knowledgeRevision: 1, contentRevision: 1, status: "complete", warnings: [],
+    markdown: "# 合成客户知识库\n\n" + titles.map(title => "## " + title + "\n\n" + ("合成阅读样例，说明业务特点与日常使用场景。".repeat(45))).join("\n\n") };
+  await page.addInitScript(fixture, { document: null });
+  await page.addInitScript(document => {
+    window.desktopConsole.geoKnowledge.load = () => Promise.resolve({ ok: true, data: { knowledge: document, storageStatus: "current_v2", state: { phase: "idle", running: false } } });
+  }, document);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto(url);
+  await page.locator("#nav-item-content-production").click();
   await page.getByRole("button", { name: "客户知识库", exact: true }).click();
-  await page.getByRole("button", { name: "GEO 问题", exact: true }).click();
-  await page
-    .getByRole("button", { name: "查看回答与关联：如何选择服务？" })
-    .click();
-  await page
-    .getByText("合成客户提供服务，详情以实际核对为准。", { exact: true })
-    .waitFor();
-  await page.getByText(/客户名称字面出现：是/).waitFor();
-  await page.getByText("关联文章：1 篇 · 已发布：1 篇").waitFor();
-  await page.getByRole("button", { name: "来源", exact: true }).click();
-  await page
-    .getByText(/支持的确认稿内容：客户 \/ 品牌概况：客户名称/)
-    .waitFor();
-  await page.getByRole("button", { name: "确认是客户官网" }).click();
-  assert.equal(
-    await page.evaluate(() => window.__geoCalls.sources[0].targetType),
-    "official_web",
-  );
-  await page.getByRole("button", { name: "待确认", exact: true }).click();
-  await page
-    .getByRole("button", { name: /采用：/ })
-    .first()
-    .click();
-  assert.equal(
-    await page.evaluate(() => window.__geoCalls.conflicts.length),
-    1,
-  );
-  if (process.env.GEO_CAPTURE_SCREENSHOT === "1") {
-    await page
-      .getByRole("region", { name: "GEO 问题详情" })
-      .scrollIntoViewIfNeeded();
-    await page.screenshot({
-      path: path.join(
-        __dirname,
-        "..",
-        "build",
-        "test-results",
-        "geo-knowledge-question.png",
-      ),
-      fullPage: true,
+  for (const size of [{ width: 1280, height: 720 }, { width: 900, height: 600 }]) {
+    await page.setViewportSize(size);
+    const region = page.getByRole("region", { name: "知识库", exact: true });
+    await region.waitFor();
+    await page.getByRole("heading", { name: "知识库", exact: true }).waitFor();
+    const outerScroll = () => region.evaluate(element => {
+      const positions = [];
+      for (let parent = element.parentElement; parent; parent = parent.parentElement) positions.push([parent.tagName, parent.className, parent.scrollLeft, parent.scrollTop, parent.clientHeight, parent.scrollHeight]);
+      return { positions, windowX: window.scrollX, windowY: window.scrollY };
     });
+    const beforeScroll = await outerScroll();
+    const box = await region.boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height - 30);
+    await page.mouse.wheel(0, 650);
+    await page.waitForFunction(() => document.querySelector('[aria-label="知识库"]').scrollTop > 0);
+    await page.getByRole("navigation", { name: "知识库板块导航" }).getByRole("button", { name: "客户评价", exact: true }).click();
+    assert.deepEqual(await outerScroll(), beforeScroll, "knowledge navigation must not scroll any application ancestor");
+    const topbar = await page.locator(".app-topbar").boundingBox();
+    const authbar = await page.getByLabel("授权状态", { exact: true }).boundingBox();
+    assert.ok(topbar.y >= authbar.y + authbar.height, JSON.stringify({ topbar, authbar, beforeScroll, afterScroll: await outerScroll() }));
+    const last = await page.getByRole("heading", { name: "客户评价", exact: true }).boundingBox();
+    const nav = await page.getByRole("navigation", { name: "知识库板块导航" }).boundingBox();
+    assert.ok(last.y >= nav.y + nav.height, "section heading must not be obscured by sticky navigation");
+    assert.ok(last.y + last.height < box.y + box.height, "last section must be reachable within the viewport");
+    assert.equal(await region.evaluate(element => element.scrollWidth <= element.clientWidth + 1), true);
+    await page.getByRole("navigation", { name: "知识库板块导航" }).getByRole("button", { name: "产品或服务描述", exact: true }).click();
+    const first = await page.getByRole("heading", { name: "产品或服务描述", exact: true }).boundingBox();
+    assert.ok(first.y >= nav.y + nav.height && first.y < box.y + box.height);
+    assert.deepEqual(await outerScroll(), beforeScroll);
+    await page.getByRole("button", { name: "问题采集", exact: true }).click();
+    const switchedHeader = await page.locator(".app-topbar").boundingBox();
+    assert.ok(switchedHeader.y >= authbar.y + authbar.height);
+    await page.getByRole("button", { name: "客户知识库", exact: true }).click();
   }
+  fs.mkdirSync(path.join(__dirname, "../build/test-results"), { recursive: true });
+  await page.screenshot({ path: path.join(__dirname, "../build/test-results/knowledge-scroll.png") });
   await page.locator("#nav-item-settings").click();
-  await page.getByRole("button", { name: "豆包 GEO", exact: true }).click();
-  await page.waitForFunction(() => {
-    const field = document.querySelector('textarea[aria-label="全局研究要求"]');
-    return field && field.value === "默认要求";
-  });
-  assert.equal(await page.getByLabel("全局研究要求").inputValue(), "默认要求");
-  await page.getByLabel("全局研究要求").fill("设置中的全局要求");
-  await page.getByRole("button", { name: "保存全局研究要求" }).click();
-  await page.getByText("全局研究要求已保存。").waitFor();
-  await page.getByRole("button", { name: "恢复内置默认" }).click();
-  await page.waitForFunction(() => window.__geoCalls.prompts.length === 4);
-  assert.equal(await page.getByLabel("全局研究要求").inputValue(), "默认要求");
-  assert.equal(
-    await page.getByLabel("最终知识稿提示词").inputValue(),
-    "默认知识稿要求",
-  );
-  await page.getByLabel("最终知识稿提示词").fill("自定义交付要求");
-  await page.getByRole("button", { name: "保存最终知识稿提示词" }).click();
-  await page.getByText("最终知识稿提示词已保存。").waitFor();
-  assert.equal(await page.getByLabel("全局研究要求").inputValue(), "默认要求");
-  await page.getByRole("button", { name: "恢复知识稿默认提示词" }).click();
-  await page.waitForFunction(() => window.__geoCalls.prompts.length === 6);
-  assert.equal(
-    await page.getByLabel("最终知识稿提示词").inputValue(),
-    "默认知识稿要求",
-  );
-  await page.getByLabel("模型 / Endpoint ID").fill("synthetic-model");
-  await page.getByLabel("API Key", { exact: true }).fill("synthetic-secret");
-  await page.getByRole("button", { name: "保存豆包 GEO 配置" }).click();
-  await page.getByText("豆包 GEO 配置已保存。").waitFor();
-  await page.getByRole("button", { name: "测试连接", exact: true }).click();
-  await page.getByText(/连接测试通过：/).waitFor();
-  await page.getByRole("button", { name: "测试联网搜索", exact: true }).click();
-  await page.getByText("联网测试通过，返回 1 条可核验引用。").waitFor();
-  await page.evaluate(() => {
-    window.__geoTestFail = true;
-  });
-  await page.getByRole("button", { name: "测试连接", exact: true }).click();
-  await page.getByText(/鉴权失败（401）/).waitFor();
-  assert.equal(await page.getByText("private upstream text").count(), 0);
-  assert.equal(
-    await page.evaluate(() => window.__geoCalls.config[0].baseUrl),
-    "https://ark.cn-beijing.volces.com/api/plan/v3",
-  );
-  await page
-    .getByLabel("接口 / Base URL")
-    .selectOption("https://ark.cn-beijing.volces.com/api/v3");
-  assert.equal(
-    await page
-      .getByRole("button", { name: "测试连接", exact: true })
-      .isDisabled(),
-    true,
-  );
-  assert.equal(await page.getByText(/鉴权失败（401）/).count(), 0);
-  await page.getByText(/标准方舟地址不消耗 Coding Plan/).waitFor();
-  await page
-    .getByLabel("接口 / Base URL")
-    .selectOption("https://ark.cn-beijing.volces.com/api/plan/v3");
-  assert.equal(
-    await page.getByLabel("API Key", { exact: true }).inputValue(),
-    "",
-  );
-  assert.equal(await page.evaluate(() => window.__geoCalls.generate), 2);
-  assert.equal(
-    await page.evaluate(() => window.__geoCalls.temporaryPrompt),
-    "临时要求",
-  );
-  assert.deepEqual(await page.evaluate(() => window.__geoCalls.prompts), [
-    ["client", "长期要求"],
-    ["client", "长期要求"],
-    ["global", "设置中的全局要求"],
-    ["global", ""],
-    ["final", "自定义交付要求"],
-    ["final", ""],
-  ]);
+  const settingsHeader = await page.locator(".app-topbar").boundingBox();
+  const authorization = await page.getByLabel("授权状态", { exact: true }).boundingBox();
+  assert.ok(settingsHeader.y >= authorization.y + authorization.height, "switching application pages must preserve the visible header");
+});
+
+
+test("knowledge defaults prioritize saved content and keep optional research inputs collapsed without dropping their values", async t => {
+  t.after(closeRenderer);
+  const { browser, url } = await startRenderer({ port: 4191 });
+  const page = await browser.newPage();
+  t.after(() => page.close());
+  const document = normalizeCandidate({ profile: { fields: { name: "合成客户" } } }, [], "client-1");
+  document.revision = 1;
+  document.deliverable = { version: 1, knowledgeRevision: 1, contentRevision: 1, status: "complete", warnings: [], markdown: "# 知识库\n\n## 产品或服务描述\n\n合成服务正文" };
+  document.pendingDeliverable = { ...document.deliverable, candidateId: "candidate-1", markdown: "合成候选正文" };
+  await page.addInitScript(fixture, { document });
+  await page.addInitScript(document => {
+    window.desktopConsole.geoKnowledge.load = () => Promise.resolve({ ok: true, data: { knowledge: document, state: { phase: "idle", running: false } } });
+    const settings = window.desktopConsole.geoKnowledge.promptSettings;
+    window.desktopConsole.geoKnowledge.promptSettings = async () => { const result = await settings(); result.data.clientPrompt = "沿用已保存的长期要求"; return result; };
+  }, document);
+  await page.goto(url);
+  await page.locator("#nav-item-content-production").click();
+  await page.getByRole("button", { name: "客户知识库", exact: true }).click();
+  assert.equal(await page.getByText("合成服务正文", { exact: true }).isVisible(), true);
+  assert.equal(await page.getByText("合成候选正文", { exact: true }).isVisible(), false);
+  assert.equal(await page.getByText("研究说明、来源与使用限制", { exact: true }).evaluate(element => element.parentElement.open), false);
+  assert.equal(await page.getByRole("button", { name: "GEO 问题", exact: true }).getAttribute("aria-expanded"), "false");
+  const missing = page.getByRole("heading", { name: "创始人介绍", exact: true });
+  assert.equal(await missing.evaluate(element => element.closest("details").open), false);
+  await page.getByRole("navigation", { name: "知识库板块导航" }).getByRole("button", { name: "创始人介绍", exact: true }).click();
+  assert.equal(await missing.evaluate(element => element.closest("details").open), true);
+  await page.getByRole("heading", { name: "产品或服务描述", exact: true }).click();
+  assert.equal(await page.getByText("合成服务正文", { exact: true }).isVisible(), false);
+  await page.getByRole("button", { name: "编辑正文", exact: true }).click();
+  for (const input of await page.locator("textarea[aria-label]").all()) assert.equal(await input.isVisible(), true);
+  await page.getByRole("button", { name: "取消编辑", exact: true }).click();
+  await page.getByRole("button", { name: "重新生成知识库", exact: true }).click();
+  const longInput = page.getByLabel("客户长期研究要求", { exact: true });
+  const temporaryInput = page.getByLabel("本次临时研究要求", { exact: true });
+  assert.equal(await longInput.isVisible(), false);
+  assert.equal(await temporaryInput.isVisible(), false);
+  assert.equal(await longInput.inputValue(), "沿用已保存的长期要求");
+  await page.locator("summary").filter({ hasText: "本次临时研究要求" }).click();
+  await temporaryInput.fill("本次关注社区使用场景");
+  await page.locator("summary").filter({ hasText: "本次临时研究要求" }).click();
+  assert.equal(await temporaryInput.isVisible(), false);
+  await page.getByRole("button", { name: "保存要求并开始研究" }).click();
+  await page.waitForFunction(() => typeof window.__finishGeo === "function");
+  assert.equal(await page.getByRole("region", { name: "生成要求", exact: true }).count(), 0);
+  assert.deepEqual(await page.evaluate(() => window.__geoCalls.prompts.at(-1)), ["client", "沿用已保存的长期要求"]);
+  assert.equal(await page.evaluate(() => window.__geoCalls.temporaryPrompt), "本次关注社区使用场景");
+  await page.evaluate(() => window.__finishGeo(false));
+  await page.getByRole("button", { name: "重新生成知识库", exact: true }).click();
+  assert.equal(await temporaryInput.isVisible(), false);
+  assert.equal(await temporaryInput.inputValue(), "");
+  assert.equal(await longInput.inputValue(), "沿用已保存的长期要求");
+  await page.screenshot({ path: path.join(__dirname, "../build/test-results/knowledge-default-panels.png") });
 });

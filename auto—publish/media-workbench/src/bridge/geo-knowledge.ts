@@ -17,11 +17,20 @@ import type {
   KnowledgeQuestionWorkflow,
   KnowledgeStorageStatus,
   GeoPromptSettings,
-  CustomerConfirmationModel,
 } from "../types/geo-knowledge";
 type Reply<T> = { ok: true; data: T } | { ok: false; error: IpcError };
 type ClientInput = { clientId: string };
 type Api = {
+  editDeliverable: (input: {
+    clientId: string;
+    revision: number;
+    markdown: string;
+  }) => Promise<Reply<{ knowledge: GeoKnowledge }>>;
+  acceptDeliverable: (input: {
+    clientId: string;
+    revision: number;
+    candidateId: string;
+  }) => Promise<Reply<{ knowledge: GeoKnowledge }>>;
   questionWorkflow: (input: {
     clientId: string;
   }) => Promise<Reply<KnowledgeQuestionWorkflow>>;
@@ -78,9 +87,6 @@ type Api = {
     clientId: string;
     researchPrompt: string;
   }) => Promise<Reply<{ researchPrompt: string }>>;
-  previewConfirmation: (
-    input: ClientInput & { revision: number },
-  ) => Promise<Reply<{ model: CustomerConfirmationModel }>>;
   exportMarkdown: (
     input: ClientInput & { revision: number },
   ) => Promise<Reply<{ markdown: string }>>;
@@ -101,6 +107,26 @@ async function call<T>(invoke: (api: Api) => Promise<Reply<T>>): Promise<T> {
 }
 export const loadKnowledge = (clientId: string) =>
   call((api) => requireBridgeMethod(api.load)({ clientId }));
+export const editKnowledgeDeliverable = (
+  clientId: string,
+  revision: number,
+  markdown: string,
+) =>
+  call((api) =>
+    requireBridgeMethod(api.editDeliverable)({ clientId, revision, markdown }),
+  );
+export const acceptKnowledgeDeliverable = (
+  clientId: string,
+  revision: number,
+  candidateId: string,
+) =>
+  call((api) =>
+    requireBridgeMethod(api.acceptDeliverable)({
+      clientId,
+      revision,
+      candidateId,
+    }),
+  );
 export const getKnowledgeQuestionWorkflow = (clientId: string) =>
   call((api) => requireBridgeMethod(api.questionWorkflow)({ clientId }));
 export const getKnowledgeQuestionArticles = (clientId: string, id: string) =>
@@ -155,13 +181,6 @@ export const saveGeoFinalKnowledgePrompt = (
 export const saveGeoClientPrompt = (clientId: string, researchPrompt: string) =>
   call((api) =>
     requireBridgeMethod(api.saveClientPrompt)({ clientId, researchPrompt }),
-  );
-export const previewCustomerConfirmation = (
-  clientId: string,
-  revision: number,
-) =>
-  call((api) =>
-    requireBridgeMethod(api.previewConfirmation)({ clientId, revision }),
   );
 export const exportKnowledge = (clientId: string, revision: number) =>
   call((api) =>

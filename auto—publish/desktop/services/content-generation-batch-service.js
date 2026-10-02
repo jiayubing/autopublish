@@ -280,11 +280,15 @@ function createContentGenerationBatchService(options) {
   function enrichBatch(batch) {
     // ContentStore owns and refreshes generation identity projections, so this
     // lookup avoids reopening canonical article JSON just to display a title.
-    return projectBatchTitles(clone(batch), false);
+    const result = clone(batch);
+    if (result) delete result.proseBriefs;
+    return projectBatchTitles(result, false);
   }
 
   function emit(value) {
-    const event = safeEvent(value);
+    const safeValue = { ...value, ...(value.batch ? { batch: { ...value.batch } } : {}) };
+    if (safeValue.batch) delete safeValue.batch.proseBriefs;
+    const event = safeEvent(safeValue);
     if (event.batch) projectBatchTitles(event.batch, true);
     if (!event.capabilities && event.batch) {
       event.capabilities = {
@@ -419,7 +423,7 @@ function createContentGenerationBatchService(options) {
     if (isV2) {
       const source = batch.questionSources.find(function(item) { return item.id === task.questionSourceId; });
       if (!source || typeof opts.getGenerationBriefV2 !== "function") throw generationError("GENERATION_SOURCE_INVALID");
-      resolvedV2 = await opts.getGenerationBriefV2({
+      resolvedV2 = batch.proseBriefs?.[source.id] ? { brief: clone(batch.proseBriefs[source.id]) } : await opts.getGenerationBriefV2({
         clientId: source.clientId,
         geoQuestionId: source.geoQuestionId,
         knowledgeRevision: source.knowledgeRevision,
@@ -508,7 +512,15 @@ function createContentGenerationBatchService(options) {
       throw generationError("GENERATION_NO_EXECUTABLE_TASKS");
     const aiConfigFingerprint = await fingerprint();
     assertAvailable();
+    const proseBriefs = {};
+    for (const source of previewResult.questionSources) {
+      const resolved = await opts.getGenerationBriefV2({ clientId: source.clientId, geoQuestionId: source.geoQuestionId,
+        knowledgeRevision: source.knowledgeRevision, researchFingerprint: source.researchFingerprint });
+      if (resolved.brief.knowledgeProse) proseBriefs[source.id] = clone(resolved.brief);
+    }
+    assertAvailable();
     const batch = batchStore.createOrGetV2({
+      proseBriefs,
       requestId,
       requestFingerprint: previewResult.requestFingerprint,
       questionSources: previewResult.questionSources,

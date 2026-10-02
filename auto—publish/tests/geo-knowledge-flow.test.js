@@ -59,7 +59,7 @@ test("local material-to-knowledge-to-collection-to-article flow survives service
   const client = {
     request: async request => {
       requests.push(request);
-      assert.ok(requests.length <= 8, "unexpected extra model request");
+      assert.ok(requests.length <= 10, "unexpected extra model request");
       if (request.search) return { text: '{"findings":[],"unresolved":[]}', citations: [] };
       const context = request.prompt.split("[RUN_CONTEXT]\n")[1];
       if (context) return { text: JSON.stringify({
@@ -108,8 +108,8 @@ test("local material-to-knowledge-to-collection-to-article flow survives service
   const service = createGeoKnowledgeService(options);
   const generated = (await service.generate({ clientId: "client-1" }))
     .knowledge;
-  assert.equal(requests.length, 8);
-  assert.equal(requests.filter(request => request.search).length, 1);
+  assert.equal(requests.length, 10);
+  assert.equal(requests.filter(request => request.search).length, 2);
   assert.equal(generated.offerings[0].basis, "fact");
   assert.equal(generated.deliverable.knowledgeRevision, generated.revision);
   const id = generated.geoQuestions[0].id;
@@ -139,6 +139,8 @@ test("local material-to-knowledge-to-collection-to-article flow survives service
   );
   const brief = service.getGenerationBriefV2({ clientId: "client-1", geoQuestionId: id, knowledgeRevision: linked.revision }).brief;
   assert.equal(brief.version, 2);
+  assert.equal(brief.knowledgeProse.markdown, generated.deliverable.markdown);
+  assert.deepEqual(brief.selectedKnowledge.offerings, []);
   assert.equal(brief.targetQuestion.collectionQuestionId, questionId);
   const generator = createArticleGenerator({
     getClient: options.getClient,

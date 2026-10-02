@@ -444,3 +444,20 @@ it("bounds retained terminal operations and clears them on dispose", async () =>
   await service.dispose();
   await assert.rejects(service.waitForOperation("operation-b"), { code: "CONTENT_GENERATION_OPERATION_NOT_FOUND" });
 });
+
+
+it("one operation freezes saved prose across articles while the next operation gets new prose", async t => {
+  let revision = 1;
+  const contentStore = createMemoryContentStore();
+  const inputs = [];
+  const service = createSyntheticService({ contentStore,
+    getGeoKnowledgeContext: () => ({ version: 1, revision, context: "saved prose " + revision }),
+    buildPrompt: input => { inputs.push(input.knowledgeSnapshot); revision = 2; return { system: "synthetic", user: "synthetic" }; },
+  });
+  t.after(() => service.dispose());
+  await service.generateArticle(baseInput("client-a", "frozen-prose", 2, 1));
+  assert.deepEqual(inputs.map(item => item.revision), [1, 1]);
+  assert.deepEqual(contentStore.articles.map(item => item.knowledgeSnapshot.revision), [1, 1]);
+  await service.generateArticle(baseInput("client-a", "new-prose", 1, 1));
+  assert.equal(inputs[2].revision, 2);
+});
