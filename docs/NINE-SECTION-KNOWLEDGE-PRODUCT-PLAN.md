@@ -267,3 +267,19 @@ Primary Review 自查了正文/索引的权威边界、来源追溯、完整板�
 - 保存时间改为易读的中文本地时间；不改变持久化值、知识内容或模型调用合同。侧栏/知识库滚动隔离继续生效。
 
 修改文件：`GeoKnowledgeView.tsx` 与 `renderer-geo-knowledge.test.js`。最终页面测试 8 项全部通过（包含研究输入默认隐藏但值仍提交、成功后清空临时要求、手动折叠后编辑、候选/辅助区默认状态及滚动回归）；实际构建并查看截图。`typecheck:renderer`、`typecheck:bridge`、`lint` 与 `git diff --check` 通过。自查后只对输入可访问名称和手动折叠后编辑展开做有界修复，无未关闭的本地阻塞项。未运行整套 integration 或真实外部验收，未提交或推送。
+
+
+## GitHub 更新验证（2026-10-02）
+
+用户明确授权更新到 GitHub。已合并 `origin/codex/geo-knowledge-base` 最新历史，保留远端诊断方案不纳入当前仓库树的处理：对应 Markdown 仅取消跟踪，本地文件保留。没有强制推送。
+
+知识库提交：`65edfd9a706d3336fa2a3098da598075b7e2db5c`。包括正文与版本、生成容错、文章快照、知识库页面与默认展开调整、侧栏滚动修复及测试/合同；既有页面性能优化和规模审计 dirty 文件未纳入本次提交。
+
+在该提交的独立干净检出中验证（复用本机依赖，源码与测试均来自提交）：
+
+- `npm test`：61 文件、659 项通过，0 失败/跳过。
+- `npm run test:integration`：243 文件、1327 项通过，0 失败/跳过，180109 ms。与前文脏工作区统计差异来自未提交的性能测试未进入该快照，不是跳过或禁用测试。
+- `typecheck:main`、`typecheck:renderer`、`typecheck:bridge`、`lint`、`format:check`、`build:preload` 全部通过；renderer 由集成 harness 实际构建。
+- 检出目录 Git 状态干净；测试日志复制到主工作区忽略目录 `auto—publish/build/push-knowledge-65edfd9a/`。本记录提交只增加文档，不再改变已验证生产代码或测试。
+
+推送目标为现有 `codex/geo-knowledge-base` 分支；不合并 master、不发布安装包，真实外部质量 gate 仍独立等待授权。
