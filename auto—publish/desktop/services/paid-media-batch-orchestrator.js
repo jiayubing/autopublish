@@ -245,17 +245,43 @@ function createPaidMediaBatchOrchestrator(options) {
   }
 
   async function executeClaim(claim) {
-    const preflight = await callPreflight(claim);
+    let leaseFailure = false;
+    const renew = () => {
+      if (leaseFailure) return;
+      try {
+        transitions.renewPaidOrderCreationClaim({
+          orderCreationAttemptId: claim.orderCreationAttemptId,
+          claimToken: claim.claimToken,
+          leaseMs: 30000,
+        });
+      } catch (_) {
+        leaseFailure = true;
+      }
+    };
+    const timer = setInterval(renew, 10000);
+    let preflight;
+    try {
+      preflight = await callPreflight(claim);
+      renew();
+      if (leaseFailure) preflight = { reasonCode: "PAID_EXECUTION_CLAIM_STALE" };
+    } finally {
+      clearInterval(timer);
+    }
     if (preflight || disposed) {
-      transitions.releasePaidOrderCreationClaim({
-        orderCreationAttemptId: claim.orderCreationAttemptId,
-        claimToken: claim.claimToken,
-        reasonCode: preflight && preflight.reasonCode,
-      });
       transitions.setPaidSubmissionBatchRunIntent({
         batchId: claim.batchId,
         running: false,
       });
+      try {
+        transitions.releasePaidOrderCreationClaim({
+          orderCreationAttemptId: claim.orderCreationAttemptId,
+          claimToken: claim.claimToken,
+          reasonCode: preflight && preflight.reasonCode,
+        });
+      } catch (error) {
+        if (error.code !== "PAID_EXECUTION_CLAIM_STALE") throw error;
+        // A replacement owner must retain its claim; this batch is paused.
+      }
       return Object.freeze({
         status: "preflight_changed",
         batchId: claim.batchId,
