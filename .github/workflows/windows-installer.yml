@@ -1,72 +1,55 @@
 name: Windows Installer
 
 on:
-  workflow_run:
-    workflows:
-      - CI
-    branches:
-      - master
-    types:
-      - completed
-  pull_request:
-    paths:
-      - .github/workflows/windows-installer.yml
   workflow_dispatch:
     inputs:
       ref:
-        description: Git ref to package
-        required: false
-        default: ""
+        description: Full commit SHA of the verified release candidate
+        required: true
 
 permissions:
   contents: read
 
 jobs:
   installer:
-    if: >-
-      github.event_name != 'workflow_run' ||
-      github.event.workflow_run.conclusion == 'success'
     runs-on: windows-latest
     env:
       CI_SYNTHETIC_ONLY: "1"
     steps:
-      - name: Checkout requested ref
+      - name: Checkout requested candidate
         uses: actions/checkout@v4
         with:
-          # Package the PR branch itself, not the synthetic merge with master.
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.event_name == 'pull_request' && github.event.pull_request.head.sha || inputs.ref || github.ref }}
-
+          ref: ${{ inputs.ref }}
+      - name: Verify candidate identity
+        env:
+          CANDIDATE_SHA: ${{ inputs.ref }}
+        run: |
+          if ($env:CANDIDATE_SHA -notmatch '^[0-9a-fA-F]{40}$') { throw 'A full commit SHA is required' }
+          $actual = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($actual -ne $env:CANDIDATE_SHA) { throw 'Candidate SHA mismatch' }
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: auto—publish/package-lock.json
-
       - run: npm ci
         working-directory: auto—publish
-
       - run: npm ci
         working-directory: auto—publish/media-workbench
-
       - name: Install Playwright Chromium
-        if: github.event_name == 'workflow_dispatch'
         run: npx playwright install chromium
         working-directory: auto—publish
-
-      - name: Run desktop core tests
-        if: github.event_name == 'workflow_dispatch'
-        run: npm run test:desktop-core
+      - name: Run desktop regression tests
+        run: npm run test:desktop-regression
         working-directory: auto—publish
-
       - name: Build unsigned Windows installer
         run: npm run dist:alpha:dirty
         working-directory: auto—publish
-
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
         with:
           name: ETO-001-windows-installer
-          path: |
-            auto—publish/release-alpha/*.exe
+          path: auto—publish/release-alpha/*.exe
           if-no-files-found: error
           retention-days: 14

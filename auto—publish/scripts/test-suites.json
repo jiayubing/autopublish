@@ -60,7 +60,8 @@
     "tests/article-lifecycle-acceptance.test.js",
     "tests/regular-platform-acceptance.test.js",
     "tests/test-discovery-contract.test.js",
-    "tests/desktop-continuous-knowledge.test.js"
+    "tests/desktop-continuous-knowledge.test.js",
+    "tests/operational-storage-safety.test.js"
   ],
   "maintenance": [
     "tests/content-library-migration.test.js",
