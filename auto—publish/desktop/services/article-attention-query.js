@@ -155,6 +155,10 @@ function createArticleAttentionQuery(options) {
             exists: true,
             status: article.status || null,
             title: article.title || null,
+            geoQuestionId: article.knowledgeSnapshot && article.knowledgeSnapshot.version === 2 &&
+              article.knowledgeSnapshot.targetQuestion && typeof article.knowledgeSnapshot.targetQuestion.geoQuestionId === "string"
+              ? article.knowledgeSnapshot.targetQuestion.geoQuestionId
+              : null,
             submissionEligible:
               evaluateArticleSubmissionEligibility(article).eligible,
             lookupStatus: "available",
@@ -375,6 +379,7 @@ function createArticleAttentionQuery(options) {
       reasonSummary: safeText(value.reasonSummary, 1000),
       updatedAt: safeText(value.updatedAt || value.observedAt, 64),
       articleStatus: safeText(normalizedFacts.articleStatus, 80),
+      geoQuestionId: safeText(articleState && articleState.geoQuestionId, 200),
     };
     const copy = {
       kind,
@@ -385,6 +390,7 @@ function createArticleAttentionQuery(options) {
       safeFacts,
       articleId: safeText(value.articleId, 200),
       titleSnapshot: titleFor(value, articleState),
+      geoQuestionId: safeText(articleState && articleState.geoQuestionId, 200),
       clientId: safeText(value.clientId, 100),
       platformId: safeText(value.platformId || value.targetPlatformId, 100),
       accountProfileId: safeText(value.accountProfileId, 160),
@@ -603,7 +609,10 @@ function createArticleAttentionQuery(options) {
     const cacheRevision = typeof opts.getCacheRevision === "function" ? opts.getCacheRevision(clientId) : revision;
     const cacheKey = clientId || "";
     if (cachedSnapshots.get(cacheKey)?.cacheRevision !== cacheRevision) {
-      cachedSnapshots.set(cacheKey, { cacheRevision, entries: entries(clientId) });
+      const scopedEntries = entries(clientId).filter(entry => !clientId || entry.item.clientId === clientId);
+      const actionable = scopedEntries.filter(entry => entry.item.allowedActions.some(action =>
+        !["inspect", "open-publication", "open-article"].includes(action))).length;
+      cachedSnapshots.set(cacheKey, { cacheRevision, entries: scopedEntries, counts: { total: scopedEntries.length, actionable } });
       if (cachedSnapshots.size > 64) cachedSnapshots.delete(cachedSnapshots.keys().next().value);
     }
     return { ...cachedSnapshots.get(cacheKey), revision };
@@ -611,27 +620,21 @@ function createArticleAttentionQuery(options) {
 
   function list(input) {
     const value = input || {};
+    const paged = value.page !== undefined || value.pageSize !== undefined;
+    const page = value.page === undefined ? 1 : value.page;
+    const pageSize = value.pageSize === undefined ? 100 : value.pageSize;
+    if (paged && (!Number.isSafeInteger(page) || page < 1 || !Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 500 || !Number.isSafeInteger(page * pageSize))) {
+      throw Object.assign(new Error("Attention page is invalid"), { code: "ARTICLE_ATTENTION_PAGE_INVALID" });
+    }
     const current = snapshot(value.clientId);
-    const filtered = current.entries.filter(function (entry) {
-      return !value.clientId || entry.item.clientId === value.clientId;
-    });
+    const filtered = current.entries;
     return {
       revision: current.revision,
-      items: filtered.map(function (entry) {
+      ...(paged ? { total: filtered.length, page, pageSize } : {}),
+      items: (paged ? filtered.slice((page - 1) * pageSize, page * pageSize) : filtered).map(function (entry) {
         return entry.item;
       }),
-      counts: {
-        total: filtered.length,
-        actionable: filtered.filter(function (entry) {
-          return entry.item.allowedActions.some(function (action) {
-            return ![
-              "inspect",
-              "open-publication",
-              "open-article",
-            ].includes(action);
-          });
-        }).length,
-      },
+      counts: { ...current.counts },
     };
   }
 

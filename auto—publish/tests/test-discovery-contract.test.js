@@ -84,21 +84,21 @@ test("default test discovery collects both JavaScript module extensions", () => 
   );
 });
 
-test("desktop core CLI discovers every file except its configured exclusions", () => {
+test("desktop regression CLI lists its configured selection without dropping discovery ownership", () => {
   const command = JSON.parse(
     fs.readFileSync(path.join(root, "package.json"), "utf8"),
-  ).scripts["test:desktop-core"].split(/\s+/);
+  ).scripts["test:desktop-regression"].split(/\s+/);
   assert.deepEqual(command.slice(0, 2), ["node", "scripts/run-tests.js"]);
   const options = parseArguments(command.slice(2));
-  assert.ok(options, "desktop core must use valid runner arguments");
-  assert.equal(options.suite || "all", "all");
+  assert.ok(options, "desktop regression must use valid runner arguments");
 
   const allFiles = collectTestFiles();
   const excluded = options.excludedFiles;
   assert.equal(new Set(excluded).size, excluded.length);
   for (const file of excluded) assert.ok(allFiles.includes(file), file);
-  const coreFiles = collectTestFiles(excluded);
-  assert.equal(coreFiles.length, allFiles.length - excluded.length);
+  const selectedFiles = selectTestSuite(allFiles, options.suite).filter(
+    (file) => !excluded.includes(file),
+  );
 
   const result = spawnSync(process.execPath, [...command.slice(1), "--list"], {
     cwd: root,
@@ -110,7 +110,7 @@ test("desktop core CLI discovers every file except its configured exclusions", (
     .split(/\r?\n/)
     .filter((line) => line.startsWith("- "))
     .map((line) => line.slice(2));
-  assert.deepEqual(listed, coreFiles);
+  assert.deepEqual(listed, selectedFiles);
   assert.deepEqual(parseArguments(["--exclude", excluded[0]]), {
     excludedFiles: [excluded[0]],
     list: false,

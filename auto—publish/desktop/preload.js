@@ -199,6 +199,29 @@ const api = {
       return ipcRenderer.invoke("ai-provider:clear");
     },
   },
+  geoKnowledge: {
+    questionArticles: (input) => ipcRenderer.invoke("geo-knowledge:questionArticles", input),
+    questionWorkflow: (input) => ipcRenderer.invoke("geo-knowledge:questionWorkflow", input),
+    linkQuestions: (input) => ipcRenderer.invoke("geo-knowledge:linkQuestions", input),
+    questionDetails: (input) => ipcRenderer.invoke("geo-knowledge:questionDetails", input),
+    state: input => ipcRenderer.invoke("geo-knowledge:state", input),
+    load: input => ipcRenderer.invoke("geo-knowledge:load", input),
+    generate: input => ipcRenderer.invoke("geo-knowledge:generate", input),
+    cancel: input => ipcRenderer.invoke("geo-knowledge:cancel", input),
+    edit: input => ipcRenderer.invoke("geo-knowledge:edit", input),
+    editDeliverable: input => ipcRenderer.invoke("geo-knowledge:editDeliverable", input),
+    acceptDeliverable: input => ipcRenderer.invoke("geo-knowledge:acceptDeliverable", input),
+    confirmSourceType: input => ipcRenderer.invoke("geo-knowledge:confirmSourceType", input),
+    resolveConflict: input => ipcRenderer.invoke("geo-knowledge:resolveConflict", input),
+    promptSettings: input => ipcRenderer.invoke("geo-knowledge:promptSettings", input),
+    saveGlobalPrompt: input => ipcRenderer.invoke("geo-knowledge:saveGlobalPrompt", input),
+    saveFinalKnowledgePrompt: input => ipcRenderer.invoke("geo-knowledge:saveFinalKnowledgePrompt", input),
+    saveClientPrompt: input => ipcRenderer.invoke("geo-knowledge:saveClientPrompt", input),
+    exportMarkdown: input => ipcRenderer.invoke("geo-knowledge:exportMarkdown", input),
+    configStatus: () => ipcRenderer.invoke("geo-knowledge:configStatus"),
+    saveConfig: input => ipcRenderer.invoke("geo-knowledge:saveConfig", input),
+    testConnection: input => ipcRenderer.invoke("geo-knowledge:testConnection", input),
+  },
   platformSettings: {
     getStatus: function (platformId) {
       return ipcRenderer.invoke("platform-settings:get-status", {
@@ -540,14 +563,23 @@ const api = {
         input || {},
       );
     },
-    createAndStartGenerationBatch: function (input) {
+    createGenerationBatchV2: function (input) {
       return ipcRenderer.invoke(
-        "content:create-and-start-generation-batch",
-        input || {},
+        "content:create-generation-batch-v2",
+        input,
       );
     },
-    regenerateAttentionItems: function (input) {
-      return ipcRenderer.invoke("content:regenerate-attention-items", input || {});
+    startGenerationBatchV2: function (input) {
+      return ipcRenderer.invoke(
+        "content:start-generation-batch-v2",
+        input,
+      );
+    },
+    checkUncertainGenerationBatchV2: function (input) {
+      return ipcRenderer.invoke(
+        "content:check-uncertain-generation-batch-v2",
+        input,
+      );
     },
     pauseGenerationBatch: function (input) {
       return ipcRenderer.invoke("content:pause-generation-batch", input || {});

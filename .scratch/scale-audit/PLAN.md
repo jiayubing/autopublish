@@ -1,3 +1,5 @@
+> 历史只读审计范围，不再调度执行；当前范围见 [规模与可靠性计划](../../docs/plans/scale-and-reliability.md)。
+
 # 规模化架构与性能审计：第一轮
 
 状态：AUDIT_COMPLETE / SCALE_TARGET_BLOCKED。基线1e74583cf0ee2be02125c65298bf3b5579a8bca5。

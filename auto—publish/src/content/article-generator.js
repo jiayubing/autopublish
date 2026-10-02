@@ -171,6 +171,63 @@ function createArticleGenerator(deps) {
     if (!input || typeof input !== "object" || Array.isArray(input)) {
       throw generatorError("RESEARCH_QUERY_IDS_INVALID", "Article generation input is invalid");
     }
+    if (input.articleBrief && input.articleBrief.version === 2) {
+      const brief = cloneValue(input.articleBrief);
+      if (!brief.targetQuestion || typeof brief.targetQuestion.collectionQuestionId !== "string" ||
+          !brief.currentResearch || !hasText(brief.currentResearch.answer)) {
+        throw generatorError("GENERATION_SOURCE_INVALID", "Article Brief v2 is invalid");
+      }
+      const template = deps.templateStore.getCatalogTemplate({
+        platformId: input.platform,
+        templateId: input.templateId,
+      });
+      const scenario = input.scenario || template.scenario || template.displayName || input.templateId;
+      const templateSnapshot = snapshotTemplate(template, input.platform, input.templateId);
+      const prompt = deps.buildPrompt({
+        articleBrief: brief,
+        template,
+        templateId: input.templateId,
+        platform: input.platform,
+        scenario,
+      });
+      const output = await deps.aiClient.complete([
+        { role: "system", content: prompt.system },
+        { role: "user", content: prompt.user },
+      ]);
+      const parsed = parseArticle(output);
+      const questionId = brief.targetQuestion.collectionQuestionId;
+      return {
+        id: createUniqueId(),
+        knowledgeSnapshot: brief,
+        clientId: brief.clientId,
+        researchQueryIds: [questionId],
+        researchSnapshots: [{
+          questionId,
+          question: brief.currentResearch.question,
+          answerText: brief.currentResearch.answer,
+          references: cloneValue(brief.currentResearch.references || []),
+          collectedAt: brief.currentResearch.capturedAt,
+          collectionMethod: input.collectionMethod,
+        }],
+        platform: input.platform,
+        scenario,
+        templateId: input.templateId,
+        title: parsed.title,
+        content: parsed.content,
+        status: "generated",
+        source: {
+          client_material: false,
+          doubao_answer: true,
+          references: Boolean(brief.currentResearch.references && brief.currentResearch.references.length),
+          template: true,
+        },
+        createdAt: now(),
+        templateSnapshot,
+        generationBatchId: optionalProvenanceId(input.generationBatchId, "Generation batch id"),
+        generationTaskId: optionalProvenanceId(input.generationTaskId, "Generation task id"),
+        generationOperationId: optionalProvenanceId(input.generationOperationId, "Generation operation id"),
+      };
+    }
     const researchQueryIds = normalizeResearchQueryIds(input);
     const materialIds = normalizeMaterialIds(input);
     const client = deps.getClient(input.clientId);
@@ -198,8 +255,11 @@ function createArticleGenerator(deps) {
     });
     const scenario = input.scenario || template.scenario || template.displayName || input.templateId;
     const templateSnapshot = snapshotTemplate(template, input.platform, input.templateId);
+    const knowledgeSnapshot = typeof deps.getGeoKnowledgeContext === "function"
+      ? cloneValue(await deps.getGeoKnowledgeContext(input.clientId, researches, researchQueryIds)) : null;
     const prompt = deps.buildPrompt({
       client: client,
+      knowledgeSnapshot,
       materialItems: materials,
       research: researches[0],
       researchItems: researches,
@@ -216,6 +276,7 @@ function createArticleGenerator(deps) {
     const timestamp = now();
     return {
       id: createUniqueId(),
+      ...(knowledgeSnapshot ? { knowledgeSnapshot } : {}),
       clientId: input.clientId,
       researchQueryIds: researchQueryIds,
       researchSnapshots: researches.map(function(research, index) { return snapshotResearch(researchQueryIds[index], research); }),

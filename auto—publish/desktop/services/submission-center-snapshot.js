@@ -276,7 +276,7 @@ function createSubmissionCenterSnapshot(options) {
     const settled = await Promise.allSettled([
       Promise.resolve().then(() => opts.listRegularQueueGroups({ page: queryPage.page, pageSize: queryPage.pageSize, ...(clientId ? { clientId } : {}) })),
       Promise.resolve().then(() => opts.listPaidMediaBatches({ page: queryPage.page, pageSize: queryPage.pageSize, ...(clientId ? { clientId } : {}) })),
-      Promise.resolve().then(() => opts.listAttention({ ...(clientId ? { clientId } : {}) })),
+      Promise.resolve().then(() => opts.listAttention({ page: queryPage.page, pageSize: queryPage.pageSize, ...(clientId ? { clientId } : {}) })),
     ]);
     const failures = [];
     const valueFor = (index, section, fallback) => {
@@ -295,6 +295,10 @@ function createSubmissionCenterSnapshot(options) {
       isPaidWorkbenchBatch,
     );
     const attentionItems = projectAttention(attentionRaw, clientId);
+    const attentionIsPage = Object.prototype.hasOwnProperty.call(attentionRaw, "total");
+    if (attentionIsPage && (!Number.isSafeInteger(attentionRaw.total) || attentionRaw.total < attentionItems.length || attentionItems.length > queryPage.pageSize || attentionRaw.page !== queryPage.page || attentionRaw.pageSize !== queryPage.pageSize))
+      throw fail("SUBMISSION_CENTER_SNAPSHOT_INVALID");
+    const attentionCount = attentionIsPage ? attentionRaw.total : attentionItems.length;
     if (regularIsPage && (!Number.isSafeInteger(regularRaw.total) || regularRaw.total < regularGroups.length || regularGroups.length > queryPage.pageSize || regularRaw.page !== queryPage.page || regularRaw.pageSize !== queryPage.pageSize))
       throw fail("SUBMISSION_CENTER_SNAPSHOT_INVALID");
     const regularItems = regularIsPage && Number.isInteger(regularRaw.regularItems)
@@ -310,14 +314,14 @@ function createSubmissionCenterSnapshot(options) {
     const totalCounts = {
       regularItems,
       paidBatches: paidBatchesCount,
-      attentionItems: attentionItems.length,
-      total: regularItems + paidBatchesCount + attentionItems.length,
+      attentionItems: attentionCount,
+      total: regularItems + paidBatchesCount + attentionCount,
     };
     const start = (queryPage.page - 1) * queryPage.pageSize;
     const end = start + queryPage.pageSize;
     const regularPage = regularIsPage ? regularGroups : regularGroups.slice(start, end);
     const paidPage = paidIsPage ? paidBatches : paidBatches.slice(start, end);
-    const attentionPage = attentionItems.slice(start, end);
+    const attentionPage = attentionIsPage ? attentionItems : attentionItems.slice(start, end);
     return {
       revisionBefore,
       revisionAfter,
@@ -333,7 +337,7 @@ function createSubmissionCenterSnapshot(options) {
         counts: totalCounts,
         page: queryPage.page,
         pageSize: queryPage.pageSize,
-        hasMore: end < Math.max(regularGroupCount, paidBatchesCount, attentionItems.length),
+        hasMore: end < Math.max(regularGroupCount, paidBatchesCount, attentionCount),
         failures,
       },
     };

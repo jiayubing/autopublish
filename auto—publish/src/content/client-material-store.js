@@ -3,18 +3,24 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const { extractDocxText } = require("../core/docx-text-extractor");
+const { extractDocText } = require("../core/doc-text-extractor");
 const { createContentPathPolicy } = require("./content-path-policy");
 const { createAtomicFileWriter } = require("./content-file-transaction");
-const { getClient } = require("./client-knowledge");
+const { resolveClientIdentity } = require("./client-knowledge");
 const { reportDiagnostic } = require("../diagnostics/diagnostic-producer");
 
-const SUPPORTED_EXTENSIONS = new Set([".txt", ".md", ".markdown", ".json", ".docx"]);
+const SUPPORTED_EXTENSIONS = new Set([".txt", ".md", ".markdown", ".json", ".docx", ".doc"]);
 const EXCLUDED_NAMES = new Set(["questions.json", "client.json", "search_query.txt"]);
 const MATERIAL_ERROR_MESSAGES = {
   MATERIAL_DOCX_INVALID: "DOCX input is invalid",
   MATERIAL_DOCX_EMPTY: "DOCX does not contain readable text",
   MATERIAL_DOCX_ENCRYPTED: "DOCX is encrypted or damaged",
   MATERIAL_DOCX_CONVERSION_FAILED: "DOCX conversion failed",
+  MATERIAL_DOC_INVALID: "DOC is not a readable Word 97-2003 file",
+  MATERIAL_DOC_EMPTY: "DOC does not contain readable text",
+  MATERIAL_DOC_ENCRYPTED: "DOC is encrypted and cannot be read",
+  MATERIAL_DOC_TOO_LARGE: "DOC exceeds the supported size",
+  MATERIAL_DOC_TIMEOUT: "DOC extraction timed out",
   MATERIAL_READ_FAILED: "Client material could not be read"
 };
 
@@ -72,13 +78,13 @@ function characterCount(content) {
   return Array.from(content).length;
 }
 
-function safeErrorCode(error) {
+function safeErrorCode(error, extension) {
   if (error && MATERIAL_ERROR_MESSAGES[error.code]) return error.code;
-  return "MATERIAL_DOCX_CONVERSION_FAILED";
+  return extension === ".doc" ? "MATERIAL_DOC_INVALID" : "MATERIAL_DOCX_CONVERSION_FAILED";
 }
 
-function safeErrorDto(error) {
-  const code = safeErrorCode(error);
+function safeErrorDto(error, extension) {
+  const code = safeErrorCode(error, extension);
   return { code: code, message: MATERIAL_ERROR_MESSAGES[code] };
 }
 
@@ -92,21 +98,26 @@ function createClientMaterialStore(options) {
   const paths = opts.paths || workspace;
   const cacheBoundary = path.resolve(paths.localState || workspaceRoot);
   const cacheRoot = path.resolve(paths.clientMaterialCache || path.join(paths.work || path.join(workspaceRoot, "work"), "client-material-cache"));
-  const clientKnowledge = opts.clientKnowledge || { getClient: function(clientId) { return getClient(workspaceRoot, clientId); } };
+  const clientKnowledge = opts.clientKnowledge || { getClient: function(clientId) { return resolveClientIdentity(workspaceRoot, clientId); } };
   const converter = typeof opts.converter === "function"
     ? opts.converter
     : function(buffer) { return extractDocxText({ buffer: buffer }); };
+  const docConverter = typeof opts.docConverter === "function"
+    ? opts.docConverter
+    : function(buffer) { return extractDocText({ buffer: buffer }); };
   const hash = typeof opts.hash === "function" ? opts.hash : defaultHash;
   const cacheVersion = opts.cacheVersion === undefined ? 2 : opts.cacheVersion;
   const atomicWriter = opts.atomicWriter || createAtomicFileWriter({ fs: fs });
 
   pathPolicy.assertLexicalInside(cacheBoundary, cacheRoot, "CLIENT_PATH_OUT_OF_BOUNDS", "Material cache is outside its boundary");
 
-  function getClientDirectory(clientId) {
+  function getClientDirectory(clientId, knownDirectory) {
     assertClientId(clientId);
     let client;
     try {
-      client = clientKnowledge.getClient(clientId);
+      client = knownDirectory === undefined
+        ? clientKnowledge.getClient(clientId)
+        : { directory: knownDirectory };
     } catch (error) {
       if (error && error.code === "CLIENT_PATH_OUT_OF_BOUNDS") throw pathError();
       if (error && error.code === "CLIENT_NOT_FOUND") throw materialError("CLIENT_NOT_FOUND", "Client directory was not found");
@@ -140,7 +151,7 @@ function createClientMaterialStore(options) {
       name: name,
       extension: extension,
       status: "error",
-      error: safeErrorDto(error),
+      error: safeErrorDto(error, extension),
       content: "",
       characterCount: 0
     };
@@ -196,7 +207,7 @@ function createClientMaterialStore(options) {
       if (error && error.code === "MATERIAL_READ_FAILED") return materialErrorDto(entry.name, extension, error);
       throw error;
     }
-    if (extension !== ".docx") {
+    if (extension !== ".docx" && extension !== ".doc") {
       const content = source.toString("utf8");
       return { id: id, name: entry.name, extension: extension, status: "ready", content: content, characterCount: characterCount(content), contentHash: await hash(source), source: "text" };
     }
@@ -207,13 +218,13 @@ function createClientMaterialStore(options) {
       const cached = readCache(filename, clientId, entry.name, sourceHash);
       if (cached) return {
         id: id, name: entry.name, extension: extension, status: "ready", content: cached.content,
-        characterCount: cached.characterCount, contentHash: cached.sourceHash, source: "docx", cacheHit: true
+        characterCount: cached.characterCount, contentHash: cached.sourceHash, source: extension.slice(1), cacheHit: true
       };
     }
 
     try {
-      const content = await converter(source, { clientId: clientId, name: entry.name, version: cacheVersion });
-      if (typeof content !== "string") throw materialError("MATERIAL_DOCX_CONVERSION_FAILED", "DOCX conversion failed");
+      const content = await (extension === ".doc" ? docConverter : converter)(source, { clientId: clientId, name: entry.name, version: cacheVersion });
+      if (typeof content !== "string" || !content.trim()) throw materialError(extension === ".doc" ? "MATERIAL_DOC_EMPTY" : "MATERIAL_DOCX_CONVERSION_FAILED", "Material conversion failed");
       const result = {
         version: cacheVersion,
         clientId: clientId,
@@ -234,7 +245,7 @@ function createClientMaterialStore(options) {
           metadata: { action: "cache-write" }
         });
       }
-      return { id: id, name: entry.name, extension: extension, status: "ready", content: content, characterCount: result.characterCount, contentHash: sourceHash, source: "docx", cacheHit: false };
+      return { id: id, name: entry.name, extension: extension, status: "ready", content: content, characterCount: result.characterCount, contentHash: sourceHash, source: extension.slice(1), cacheHit: false };
     } catch (error) {
       return materialErrorDto(entry.name, extension, error);
     }
@@ -253,8 +264,10 @@ function createClientMaterialStore(options) {
     return results;
   }
 
-  function listMaterialMetadata(clientId) {
-    const client = getClientDirectory(clientId);
+  // knownDirectory comes only from the service's current identity enumeration,
+  // never from IPC. Recheck the filesystem boundary even for that directory.
+  function listMaterialMetadata(clientId, knownDirectory) {
+    const client = getClientDirectory(clientId, knownDirectory);
     let entries;
     try { entries = materialEntries(client.directory); } catch (error) {
       if (isMissing(error)) throw materialError("CLIENT_NOT_FOUND", "Client directory was not found");

@@ -1,0 +1,268 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  loadKnowledge,
+  editKnowledgeDeliverable,
+  acceptKnowledgeDeliverable,
+  knowledgeState,
+  generateKnowledge,
+  cancelKnowledge,
+  editKnowledge,
+  exportKnowledge,
+  linkKnowledgeQuestions,
+  confirmKnowledgeSourceType,
+  resolveKnowledgeConflict,
+  getGeoPromptSettings,
+  saveGeoClientPrompt,
+} from "../../bridge/geo-knowledge";
+import type {
+  GeoKnowledge,
+  KnowledgeState,
+  KnowledgeEdit,
+  KnowledgeStorageStatus,
+  GeoPromptSettings,
+} from "../../types/geo-knowledge";
+
+function knowledgeErrorMessage(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : fallback;
+  const code = error && typeof error === "object" && "code" in error &&
+    typeof error.code === "string" ? error.code : "";
+  return code ? `${message}（${code}）` : message;
+}
+
+export function useGeoKnowledge(clientId: string) {
+  const [knowledge, setKnowledge] = useState<GeoKnowledge | null>(null);
+  const [modelDraft, setModelDraft] = useState<{
+    status: "unverified";
+    markdown: string;
+  } | null>(null);
+  const [state, setState] = useState<KnowledgeState>({
+    phase: "idle",
+    running: false,
+  });
+  const [storageStatus, setStorageStatus] =
+    useState<KnowledgeStorageStatus>("missing");
+  const [promptSettings, setPromptSettings] =
+    useState<GeoPromptSettings | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const epoch = useRef(0);
+  const knowledgeRevision = useRef<number | null>(null);
+  const locked = useRef(false);
+  const reload = useCallback(async () => {
+    if (!clientId) {
+      setLoading(false);
+      return;
+    }
+    const version = epoch.current;
+    setLoading(true);
+    try {
+      const [result, prompts] = await Promise.all([
+        loadKnowledge(clientId),
+        getGeoPromptSettings(clientId),
+      ]);
+      if (version === epoch.current) {
+        knowledgeRevision.current = result.knowledge?.revision ?? null;
+        setKnowledge(result.knowledge);
+        setModelDraft(result.modelDraft || null);
+        setStorageStatus(result.storageStatus);
+        setPromptSettings(prompts);
+        setState(result.state);
+        setError("");
+      }
+    } catch (e) {
+      if (version === epoch.current)
+        setError(knowledgeErrorMessage(e, "知识库读取失败。"));
+    } finally {
+      if (version === epoch.current) setLoading(false);
+    }
+  }, [clientId]);
+  useEffect(() => {
+    epoch.current++;
+    locked.current = false;
+    setBusy(false);
+    setKnowledge(null);
+    setModelDraft(null);
+    setState({ phase: "idle", running: false });
+    void reload();
+    return () => {
+      epoch.current++;
+    };
+  }, [reload]);
+  useEffect(() => {
+    if (!clientId || (!state.running && !busy)) return;
+    const version = epoch.current;
+    let pending = false;
+    const timer = setInterval(async () => {
+      if (pending) return;
+      pending = true;
+      try {
+        const result = await knowledgeState(clientId);
+        if (version === epoch.current) {
+          setState(result.state);
+          if (!result.state.running && !busy) void reload();
+        }
+      } catch (e) {
+        if (version === epoch.current)
+          setError(knowledgeErrorMessage(e, "进度读取失败。"));
+      } finally {
+        pending = false;
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [clientId, state.running, busy, reload]);
+  async function command(action: () => Promise<{ knowledge: GeoKnowledge }>) {
+    if (locked.current) return false;
+    locked.current = true;
+    setBusy(true);
+    setError("");
+    const version = epoch.current;
+    try {
+      const result = await action();
+      if (version === epoch.current) {
+        knowledgeRevision.current = result.knowledge.revision;
+        setKnowledge(result.knowledge);
+        setModelDraft(null);
+        setStorageStatus("current_v2");
+        setState({ phase: "complete", running: false });
+        setError("");
+      }
+      return version === epoch.current;
+    } catch (e) {
+      if (version === epoch.current) {
+        const code =
+          e &&
+          typeof e === "object" &&
+          "code" in e &&
+          typeof e.code === "string"
+            ? e.code
+            : "";
+        setError(knowledgeErrorMessage(e, "知识库操作未完成。"));
+        try {
+          const latest = await loadKnowledge(clientId);
+          if (version === epoch.current) {
+            setState(latest.state);
+            setModelDraft(latest.modelDraft || null);
+          }
+        } catch {
+          if (version === epoch.current)
+            setState({
+              phase: "failed",
+              running: false,
+              ...(code ? { errorCode: code } : {}),
+            });
+        }
+      }
+      return false;
+    } finally {
+      if (version === epoch.current) {
+        locked.current = false;
+        setBusy(false);
+      }
+    }
+  }
+  async function promptCommand(action: () => Promise<void>) {
+    if (locked.current) return false;
+    locked.current = true;
+    setBusy(true);
+    setError("");
+    const version = epoch.current;
+    try {
+      await action();
+      return version === epoch.current;
+    } catch (e) {
+      if (version === epoch.current)
+        setError(e instanceof Error ? e.message : "研究要求保存失败。");
+      return false;
+    } finally {
+      if (version === epoch.current) {
+        locked.current = false;
+        setBusy(false);
+      }
+    }
+  }
+  async function cancel() {
+    try {
+      await cancelKnowledge(clientId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "取消未完成。");
+    }
+  }
+  async function download() {
+    if (!knowledge) return;
+    try {
+      const result = await exportKnowledge(clientId, knowledge.revision);
+      const url = URL.createObjectURL(
+        new Blob([result.markdown], { type: "text/markdown;charset=utf-8" }),
+      );
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "知识库.md";
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "导出失败。");
+    }
+  }
+  return {
+    knowledge,
+    modelDraft,
+    storageStatus,
+    promptSettings,
+    state,
+    loading,
+    busy,
+    error,
+    reload,
+    cancel,
+    download,
+    generate: (temporaryPrompt = "") =>
+      command(() => generateKnowledge(clientId, temporaryPrompt)),
+    saveDeliverable: (revision: number, markdown: string) =>
+      command(() => editKnowledgeDeliverable(clientId, revision, markdown)),
+    acceptDeliverable: (revision: number, candidateId: string) =>
+      command(() => acceptKnowledgeDeliverable(clientId, revision, candidateId)),
+    edit: (input: KnowledgeEdit) => command(() => editKnowledge(input)),
+    confirmSourceType: (
+      sourceId: string,
+      targetType: "official_web" | "client_public",
+    ) =>
+      knowledge
+        ? command(() =>
+            confirmKnowledgeSourceType({
+              clientId,
+              revision: knowledge.revision,
+              sourceId,
+              targetType,
+            }),
+          )
+        : Promise.resolve(false),
+    resolveConflict: (
+      conflictId: string,
+      resolution: { claimId?: string; value?: string },
+    ) =>
+      knowledge
+        ? command(() =>
+            resolveKnowledgeConflict({
+              clientId,
+              revision: knowledge.revision,
+              conflictId,
+              ...resolution,
+            }),
+          )
+        : Promise.resolve(false),
+    saveClientPrompt: (value: string) =>
+      promptCommand(async () => {
+        await saveGeoClientPrompt(clientId, value);
+        setPromptSettings((current) =>
+          current ? { ...current, clientPrompt: value } : current,
+        );
+      }),
+    link: (ids: string[]) =>
+      knowledge
+        ? command(() =>
+            linkKnowledgeQuestions(clientId, knowledge.revision, ids),
+          )
+        : Promise.resolve(false),
+  };
+}

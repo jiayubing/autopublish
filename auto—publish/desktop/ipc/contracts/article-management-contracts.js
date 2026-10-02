@@ -37,6 +37,7 @@ const articleSummary = exactObject({
   ...summaryFields,
   summaryVersion: enumField([1]),
   hasContent: "boolean",
+  geoQuestionIds: optionalField(arrayField(id, {max: 500})),
   templateSnapshot: optionalField(exactObject({
     platform: id, id, name: text(1000), scenario: text(1000),
     source: optionalField(enumField(["builtin", "custom"])),

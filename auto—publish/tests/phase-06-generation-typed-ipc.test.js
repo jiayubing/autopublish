@@ -16,7 +16,9 @@ const { runRendererModule } = require("./helpers/run-renderer-module");
 
 const CHANNELS = [
   "content:preview-generation-batch",
-  "content:create-and-start-generation-batch",
+  "content:create-generation-batch-v2",
+  "content:start-generation-batch-v2",
+  "content:check-uncertain-generation-batch-v2",
   "content:abandon-generation-batch",
   "content:pause-generation-batch",
   "content:resume-generation-batch",
@@ -24,11 +26,10 @@ const CHANNELS = [
   "content:preview-cancel-pending-generation-batch",
   "content:cancel-pending-generation-batch",
   "content:get-generation-runtime-snapshot",
-  "content:regenerate-attention-items",
 ];
 
-test("generation inventory has ten invokes with real feature consumers and one event", () => {
-  assert.equal(generationContracts.length, 10);
+test("generation inventory has eleven invokes with real feature consumers and one event", () => {
+  assert.equal(generationContracts.length, 11);
   assert.equal(
     generationContracts.every((contract) => contract.kind !== "event"),
     true,
@@ -57,37 +58,28 @@ test("generation preload forwards named methods as exact versioned requests", as
   };
   const methodCalls = [
     ["previewGenerationBatch", CHANNELS[0], [plan]],
-    ["createAndStartGenerationBatch", CHANNELS[1], [plan]],
+    ["createGenerationBatchV2", CHANNELS[1], [{ requestId: "request-1", selectedQuestions: [{ clientId: "client-1", geoQuestionId: "geo-1" }], templates: plan.templates }]],
+    ["startGenerationBatchV2", CHANNELS[2], [{ batchId: "batch-1" }]],
+    ["checkUncertainGenerationBatchV2", CHANNELS[3], [{ batchId: "batch-1" }]],
     [
       "abandonGenerationBatch",
-      CHANNELS[2],
+      CHANNELS[4],
       [{ batchId: "batch-1", confirmed: true }],
     ],
-    ["pauseGenerationBatch", CHANNELS[3], [{ batchId: "batch-1" }]],
-    ["resumeGenerationBatch", CHANNELS[4], [{ batchId: "batch-1" }]],
-    ["retryFailedGenerationBatch", CHANNELS[5], [{ batchId: "batch-1" }]],
+    ["pauseGenerationBatch", CHANNELS[5], [{ batchId: "batch-1" }]],
+    ["resumeGenerationBatch", CHANNELS[6], [{ batchId: "batch-1" }]],
+    ["retryFailedGenerationBatch", CHANNELS[7], [{ batchId: "batch-1" }]],
     [
       "previewCancelPendingGenerationBatch",
-      CHANNELS[6],
+      CHANNELS[8],
       [{ batchId: "batch-1" }],
     ],
     [
       "cancelPendingGenerationBatch",
-      CHANNELS[7],
+      CHANNELS[9],
       [{ batchId: "batch-1", confirmed: true }],
     ],
-    ["getGenerationRuntimeSnapshot", CHANNELS[8], []],
-    [
-      "regenerateAttentionItems",
-      CHANNELS[9],
-      [
-        {
-          requestId: "request-1",
-          attentionIds: ["attention-1"],
-          confirmed: true,
-        },
-      ],
-    ],
+    ["getGenerationRuntimeSnapshot", CHANNELS[10], []],
   ];
   for (const [method, channel, args] of methodCalls) {
     await preload.api.content[method](...args);
@@ -218,27 +210,21 @@ test("generation production wire validates exact input and projects task failure
   registerContentGenerationBatchIpc({
     ipcMain: ipc.ipcMain,
     contentGenerationBatchService: {
-      createAndStartBatch(input) {
+      createBatchV2(input) {
         createCalls += 1;
-        assert.equal(input.clientIds[0], "client-1");
+        assert.equal(input.selectedQuestions[0].clientId, "client-1");
         return batchFixture;
       },
     },
   });
 
   const input = {
-    clientIds: ["client-1"],
+    requestId: "request-1",
+    selectedQuestions: [{ clientId: "client-1", geoQuestionId: "geo-1" }],
     templates: [{ platform: "media", templateId: "template-1" }],
-    clientSources: [
-      {
-        clientId: "client-1",
-        materialIds: ["material-1"],
-        researchQueryIds: ["research-1"],
-      },
-    ],
   };
   const response = await ipc.invoke(
-    "content:create-and-start-generation-batch",
+    "content:create-generation-batch-v2",
     [input],
   );
   assert.equal(response.schemaVersion, 1);
@@ -259,7 +245,7 @@ test("generation production wire validates exact input and projects task failure
   );
 
   const contract = productionIpcRegistry.byChannel(
-    "content:create-and-start-generation-batch",
+    "content:create-generation-batch-v2",
   );
   const rejected = await ipc.handlers.get(contract.channel)(null, {
     schemaVersion: 1,
@@ -393,16 +379,17 @@ test("generation service exceptions become SafeOperationalError without raw deta
   registerContentGenerationBatchIpc({
     ipcMain: ipc.ipcMain,
     contentGenerationBatchService: {
-      createAndStartBatch() {
+      createBatchV2() {
         throw new Error("C:\\private\\generation.db raw service failure");
       },
     },
   });
   const response = await ipc.invoke(
-    "content:create-and-start-generation-batch",
+    "content:create-generation-batch-v2",
     [
       {
-        clientIds: ["client-1"],
+        requestId: "request-1",
+        selectedQuestions: [{ clientId: "client-1", geoQuestionId: "geo-1" }],
         templates: [{ platform: "media", templateId: "template-1" }],
       },
     ],

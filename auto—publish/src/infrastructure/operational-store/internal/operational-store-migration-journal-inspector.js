@@ -43,6 +43,11 @@ function inspectOperationalStoreMigrationJournals(options) {
             importCommitFingerprint: row.import_commit_fingerprint,
             verificationFingerprint: row.verification_fingerprint,
             importedSchemaVersion: row.imported_schema_version,
+            importedEntryCount: db
+              .prepare(
+                "SELECT COUNT(*) AS count FROM migration_import_entries WHERE migration_run_id=?",
+              )
+              .get(row.migration_run_id).count,
             importedEntries:
               row.phase === "verified"
                 ? db

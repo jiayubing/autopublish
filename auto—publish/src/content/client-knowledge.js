@@ -312,10 +312,16 @@ function loadClientKnowledge(clientDirectory, workspaceRootOrBoundary) {
 }
 
 function getClient(workspaceRoot, clientId) {
-  const client = listClients(workspaceRoot).find(function(item) {
-    return item.id === clientId;
-  });
-  if (!client) throw contentError("CLIENT_NOT_FOUND", "Client was not found");
+  const identity = resolveClientIdentity(workspaceRoot, clientId);
+  const boundary = assertClientDirectory(identity.directory, workspaceRoot);
+  const metadata = readClientMetadata(boundary);
+  const client = {
+    ...identity,
+    publicationProfiles: metadata.publicationProfiles,
+    knowledgeFiles: loadClientKnowledgeWithinBoundary(boundary),
+  };
+  const searchQuery = readOptionalSearchQueryWithinBoundary(boundary);
+  if (searchQuery !== undefined) client.searchQuery = searchQuery;
   return client;
 }
 
@@ -381,10 +387,13 @@ function listClientIdentities(workspaceRoot) {
   if (!clients.realClientsRoot) return [];
   let entries;
   try { entries = fs.readdirSync(clients.clientsRoot, { withFileTypes: true }); } catch (_) { throw pathOutOfBounds(); }
+  const ids = new Set();
   return entries.filter(function(entry) { return entry.isDirectory() && !entry.name.startsWith("."); }).map(function(entry) {
     const directory = getClientWorkspace({ root: clients.workspaceRoot, clients: clients.clientsRoot }, entry.name);
     const boundary = assertClientDirectory(directory, clients);
     const metadata = readClientMetadata(boundary);
+    if (ids.has(metadata.id)) throw contentError("CLIENT_IDENTITY_CONFLICT", "Client identity is duplicated");
+    ids.add(metadata.id);
     const client = { id: metadata.id, name: metadata.name, directory: directory, publicationProfiles: metadata.publicationProfiles };
     const searchQuery = readOptionalSearchQueryWithinBoundary(boundary);
     if (searchQuery !== undefined) client.searchQuery = searchQuery;

@@ -4,6 +4,16 @@ import {
 } from "../../infrastructure/query-identity/query-identity.js";
 
 const ERROR_MESSAGES = Object.freeze({
+  GEO_AUTH_REJECTED: "鉴权失败（401）：请检查当前接口对应的密钥。",
+  GEO_PERMISSION_DENIED: "权限被拒绝（403）：请检查模型权限、套餐状态及接口是否匹配。",
+  GEO_CONFIG_REQUIRED: "请先保存豆包 GEO 配置。",
+  GEO_CONFIG_STORAGE_INVALID: "无法读取已保存的加密配置，请重新填写并保存。",
+  GEO_CAPABILITY_REJECTED: "当前地址或模型拒绝了 Responses/联网请求，请检查能力支持；未自动切换接口。",
+  GEO_SEARCH_UNCONFIRMED: "未返回可核验网页引用，联网能力尚未确认。",
+  GEO_SEARCH_DISABLED: "请先启用联网搜索并保存配置。",
+  GEO_ALREADY_RUNNING: "知识研究或连接测试正在运行，请等待完成。",
+  GEO_REQUEST_UNCERTAIN: "网络异常或超时，远端结果无法确认；未自动重试。",
+  GEO_REQUEST_FAILED: "服务端返回失败，请检查服务状态或额度；未自动重试。",
   AI_CONFIG_INVALID: "AI 配置无效，请检查 Base URL、模型和超时时间。",
   AI_CONFIG_BUSY: "生成批次正在运行或停止，暂时不能修改 AI 配置。",
   AI_CONFIG_ENV_OVERRIDE: "AI 配置由环境变量控制，当前页面为只读。",
@@ -56,6 +66,7 @@ function emptyQuery() {
 }
 
 const QUERY_DEFINITIONS = Object.freeze({
+  geo: ["getGeoStatus", "GEO_SETTINGS_QUERY_FAILED", "无法读取豆包 GEO 配置。"],
   ai: ["getAiStatus", "AI_SETTINGS_QUERY_FAILED", "无法读取 AI 配置。"],
   media: [
     "getMediaStatus",
@@ -85,6 +96,10 @@ const QUERY_DEFINITIONS = Object.freeze({
 });
 
 const COMMAND_NAMES = Object.freeze([
+  "testGeo",
+  "saveGeo",
+  "saveGeoPrompt",
+  "saveFinalKnowledgePrompt",
   "saveAi",
   "testAi",
   "clearAi",
@@ -129,6 +144,7 @@ export function createSettingsFeature(adapters = {}) {
     snapshot = Object.freeze({
       scope,
       ai: Object.freeze(values.ai),
+      geo: Object.freeze(values.geo),
       media: Object.freeze(values.media),
       hepan: Object.freeze(values.hepan),
       legacy: Object.freeze(values.legacy),
@@ -290,6 +306,11 @@ export function createSettingsFeature(adapters = {}) {
     ensureLoaded,
     refresh,
     refreshAi: (reason = "manual") => runQuery("ai", reason),
+    refreshGeo: (reason = "manual") => runQuery("geo", reason),
+    saveGeo: (input) => execute(owners.saveGeo, adapters.saveGeo, input, "GEO_SETTINGS_SAVE_FAILED", "豆包 GEO 配置保存失败。", status => setDirect("geo", status)),
+    saveGeoPrompt: (value) => execute(owners.saveGeoPrompt, adapters.saveGeoPrompt, value, "GEO_SETTINGS_SAVE_FAILED", "全局研究要求保存失败。", prompt => setDirect("geo", { ...values.geo.data, ...prompt })),
+    saveFinalKnowledgePrompt: (value) => execute(owners.saveFinalKnowledgePrompt, adapters.saveFinalKnowledgePrompt, value, "GEO_SETTINGS_SAVE_FAILED", "最终知识稿提示词保存失败。", prompt => setDirect("geo", { ...values.geo.data, ...prompt })),
+    testGeo: (input) => execute(owners.testGeo, adapters.testGeo, input, "GEO_SETTINGS_TEST_FAILED", "豆包 GEO 测试失败；未自动重试。"),
     refreshMedia: (reason = "manual") => runQuery("media", reason),
     refreshHepan: (reason = "manual") => runQuery("hepan", reason),
     refreshLegacy: (reason = "manual") => runQuery("legacy", reason),

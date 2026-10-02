@@ -526,6 +526,7 @@ async function createWorkspaceRuntimeComposition(deps) {
         },
       );
     modules = {
+      geoKnowledgeService: contentProductionComposition.geoKnowledgeService,
       taskService,
       platformSettingsService,
       doubaoCollectionService,
@@ -549,6 +550,7 @@ async function createWorkspaceRuntimeComposition(deps) {
       mediaApplication,
     };
     ipcDeps = {
+      geoKnowledgeService: contentProductionComposition.geoKnowledgeService,
       ipcMain: options.ipcMain,
       taskService,
       sendToRenderer,

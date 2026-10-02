@@ -46,7 +46,7 @@ function fixture(options) {
   let contentStore;
   const store = createOperationalStore({
     workspaceRoot: root,
-    clock: () => new Date(NOW),
+    clock: settings.clock || (() => new Date(NOW)),
     transitionPorts,
     internalPaidExecutionTransitionFault: (point) => {
       if (point === settings.faultPoint) throw new Error(`fault:${point}`);
@@ -65,7 +65,7 @@ function fixture(options) {
     paidAdmissionTransitions: transitionPorts.paidAdmissionTransitions,
     regularQueueTransitions: transitionPorts.regularQueueTransitions,
     systemSubmissionCodeProvider: () => code,
-    clock: () => new Date(NOW),
+    clock: settings.clock || (() => new Date(NOW)),
   });
   const resource = {
     resourceId: "media-13",
@@ -86,7 +86,7 @@ function fixture(options) {
       clientId,
       displayName: "客户甲",
     }),
-    clock: () => new Date(NOW),
+    clock: settings.clock || (() => new Date(NOW)),
   });
   contentStore.createArticle(article("article-a"));
   contentStore.createArticle(article("article-b"));
@@ -991,4 +991,49 @@ test("pause waits for the current order request and prevents the next claim", as
   } finally {
     value.close();
   }
+});
+
+for (const outcome of ["renewed", "expired", "renewal-failed", "stopped"]) test(`paid preparation lease: ${outcome}`, async (t) => {
+  let now = Date.parse(NOW);
+  const value = fixture({ clock: () => new Date(now) });
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  let release, entered;
+  const gate = new Promise(resolve => { release = resolve; });
+  const ready = new Promise(resolve => { entered = resolve; });
+  const calls = [];
+  let renewals = 0;
+  const transitions = { ...value.transitions, renewPaidOrderCreationClaim(input) {
+    renewals += 1;
+    if (outcome === "renewal-failed") throw Object.assign(new Error("synthetic"), { code: "PAID_EXECUTION_CLAIM_STALE" });
+    return value.transitions.renewPaidOrderCreationClaim(input);
+  } };
+  const orchestrator = createPaidMediaBatchOrchestrator({
+    paidExecutionTransitions: transitions,
+    recheckPaidOrder: async () => { entered(); await gate; return null; },
+    orderCreationPort: orderPort(calls).port,
+  });
+  let run;
+  try {
+    const admitted = await admit(value);
+    run = orchestrator.startBatch({ batchId: admitted.batchId });
+    await ready;
+    if (outcome === "expired") now += 31000;
+    else for (let i = 0; i < 4; i += 1) { now += 10000; t.mock.timers.tick(10000); }
+    const disposal = outcome === "stopped" ? orchestrator.dispose() : null;
+    release();
+    const result = await run;
+    if (disposal) await disposal;
+    const snapshot = value.transitions.listPaidSubmissionBatchSnapshots({ batchId: admitted.batchId })[0];
+    if (outcome === "renewed") assert.equal(calls.length, 2);
+    else {
+      assert.equal(result.status, "preflight_changed");
+      assert.equal(calls.length, 0);
+      assert.equal(snapshot.paused, true);
+      assert.equal(snapshot.items[0].status, "queued");
+    }
+    assert.equal(orchestrator.getState().isRunning, false);
+    const finalRenewals = renewals;
+    now += 60000; t.mock.timers.tick(60000);
+    assert.equal(renewals, finalRenewals, "preflight heartbeat must be disposed");
+  } finally { release(); if (run) await Promise.allSettled([run]); await orchestrator.dispose(); value.close(); }
 });

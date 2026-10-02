@@ -34,6 +34,7 @@ describe("template catalog to generation contract", function() {
       assert.equal(catalog.diagnostics.some((item) => item.code === "TEMPLATE_FRONT_MATTER_INVALID" && item.templateId === "broken"), true);
 
       const service = createContentGenerationBatchService({
+        allowLegacyV1Execution: true,
         workspaceRoot: root,
         templateStore,
         clientKnowledge: { getClient: () => ({ id: "client-1", name: "Fixture client" }) },

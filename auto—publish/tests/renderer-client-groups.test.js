@@ -69,8 +69,14 @@ async function openFixture(t, count = 60) {
       onGenerationBatchState: () => () => {},
       previewGenerationBatch: (input) => {
         calls.preview.push(structuredClone(input));
-        return ok({ clientCount: input.clientIds.length, executableClientCount: input.clientIds.length, taskCount: input.clientIds.length * input.templates.length, executableTaskCount: input.clientIds.length * input.templates.length, excludedTaskCount: 0, excludedClients: [], templates: input.templates, clientSources: input.clientSources, tasks: [] });
+        return ok({ version: 2, questionCount: input.selectedQuestions.length, taskCount: input.selectedQuestions.length * input.templates.length, executableTaskCount: input.selectedQuestions.length * input.templates.length, excludedTaskCount: 0, excludedQuestions: [], templates: input.templates, questionSources: [], tasks: [] });
       },
+      createGenerationBatchV2: (input) => {
+        calls.start.push(structuredClone(input));
+        batch = { version: 2, id: "batch-1", status: "pending", startState: "not_started", concurrency: input.concurrency, clientSources: [], questionSources: [], templates: input.templates, tasks: [], counts: { total: input.selectedQuestions.length * input.templates.length, succeeded: 0, failed: 0, pending: input.selectedQuestions.length * input.templates.length, uncertain: 0, interrupted: 0, cancelled: 0 } };
+        return ok({ batch });
+      },
+      startGenerationBatchV2: () => { batch = { ...batch, status: "running", startState: "started" }; return ok({ batch }); },
       createAndStartGenerationBatch: (input) => {
         calls.start.push(structuredClone(input));
         batch = { id: "batch-1", status: "running", concurrency: input.concurrency, clientSources: input.clientSources, templates: input.templates, tasks: [], counts: { total: input.clientIds.length * input.templates.length, succeeded: 0, failed: 0, pending: input.clientIds.length * input.templates.length, interrupted: 0, cancelled: 0 } };
@@ -94,6 +100,7 @@ async function openFixture(t, count = 60) {
       platforms: { getQueue: () => ok({ platforms: [], queue: [] }), listAccountProfiles: () => ok({ profiles: [] }), getState: () => ok({ isBatchRunning: false, isStopPending: false, isPlatformRunning: false }), onState: () => () => {} },
       publication: { listForArticles: () => ok([]) },
       articleAttention: { list: () => ok({ revision: 0, items: [], counts: { total: 0, actionable: 0 } }) }, content,
+      geoKnowledge: { questionWorkflow: ({ clientId }) => ok({ clientId, knowledgeRevision: 1, items: [{ id: "geo-1", name: "问题 A", intent: "comparison", knowledgeCoverage: "enough", linkStatus: "linked", questionId: "research-a", collectionEnabled: true, research: { collectedAt: "2026-09-22T00:00:00.000Z", answerLength: 10, referenceCount: 0 }, articles: { total: 0, publishedCount: 0 }, generation: { ready: true, code: "GEO_GENERATION_READY" } }] }) },
     };
   }, { count });
   await page.goto(url, { waitUntil: "domcontentloaded" });
@@ -176,8 +183,8 @@ test("group management is a direct action and batch generation reuses the same g
   await page.getByRole("button", { name: "检查并确认", exact: true }).click();
   await page.getByRole("button", { name: "确认并启动批量生成", exact: true }).click();
   const calls = await page.evaluate(() => window.__groupCalls);
-  assert.deepEqual(calls.preview[0].clientIds, ["client-2"]);
-  assert.deepEqual(calls.start[0].clientIds, ["client-2"]);
+  assert.deepEqual(calls.preview[0].selectedQuestions, [{ clientId: "client-2", geoQuestionId: "geo-1" }]);
+  assert.deepEqual(calls.start[0].selectedQuestions, [{ clientId: "client-2", geoQuestionId: "geo-1" }]);
   assert.equal(calls.collect.length, 0);
 
   await page.reload({ waitUntil: "domcontentloaded" });

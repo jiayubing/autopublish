@@ -645,9 +645,11 @@ export interface ArticleAttentionItem {
     reasonSummary?: string | null;
     updatedAt?: string | null;
     articleStatus?: string | null;
+    geoQuestionId?: string | null;
   };
   articleId?: string | null;
   titleSnapshot?: string | null;
+  geoQuestionId?: string | null;
   clientId?: string | null;
   platformId?: string | null;
   displayName?: string | null;

@@ -10,11 +10,13 @@ interface GenerationBatchDetailProps {
     pause: boolean;
     resume: boolean;
     abandon: boolean;
+    checkUncertain: boolean;
   };
   clientNames?: Record<string, string>;
   onPause: () => void;
   onResume: () => void;
   onAbandon: () => void;
+  onCheckUncertain: () => void;
   onPreviewCancelPending: (input: { batchId: string }) => Promise<{ canCancel: boolean; pendingCount: number; runningCount: number }>;
   onCancelPending: (input: { batchId: string; confirmed: true }) => Promise<GenerationBatch>;
   onStartNew?: () => void;
@@ -27,6 +29,7 @@ const STATUS_LABELS: Record<string, string> = {
   running: '生成中',
   succeeded: '成功',
   failed: '失败',
+  uncertain: '需人工核对',
   interrupted: '中断',
   cancelled: '已取消',
 };
@@ -39,6 +42,7 @@ export default function GenerationBatchDetail({
   onPause,
   onResume,
   onAbandon,
+  onCheckUncertain,
   onPreviewCancelPending,
   onCancelPending,
   onStartNew,
@@ -56,6 +60,7 @@ export default function GenerationBatchDetail({
     failed: 0,
     pending: 0,
     interrupted: 0,
+    uncertain: 0,
     cancelled: 0,
     ...(displayedBatch.counts || {}),
     ...(runtimeStateMatches ? (state.counts || {}) : {}),
@@ -65,7 +70,7 @@ export default function GenerationBatchDetail({
   const running = effectiveStatus === 'running';
   const unfinished = counts.pending > 0 || counts.failed > 0 || counts.interrupted > 0;
   const showCostWarning = active || (['paused', 'abandoned'].includes(batch.status) && unfinished);
-  const terminal = effectiveStatus === 'completed' || effectiveStatus === 'abandoned';
+  const terminal = !active && (effectiveStatus === 'completed' || effectiveStatus === 'abandoned' || counts.uncertain > 0);
   const successfulTasks = displayedBatch.tasks.filter((task) => task.status === 'succeeded' && task.articleId);
   const anyCommandBusy = Object.values(busy).some(Boolean);
 
@@ -103,10 +108,11 @@ export default function GenerationBatchDetail({
       </div>
     </div>
 
-    <div className="mt-4 grid grid-cols-2 gap-2 text-xs sm:grid-cols-6">
+    <div className="mt-4 grid grid-cols-2 gap-2 text-xs sm:grid-cols-7">
       <span className="rounded bg-slate-50 p-2">总任务 {counts.total}</span>
       <span className="rounded bg-emerald-50 p-2 text-emerald-700">成功 {counts.succeeded}</span>
       <span className="rounded bg-rose-50 p-2 text-rose-700">失败 {counts.failed}</span>
+      <span className="rounded bg-orange-50 p-2 text-orange-700">需核对 {counts.uncertain}</span>
       <span className="rounded bg-amber-50 p-2 text-amber-700">待处理 {counts.pending}</span>
       <span className="rounded bg-slate-50 p-2">中断 {counts.interrupted}</span>
       <span className="rounded bg-slate-50 p-2">取消 {counts.cancelled}</span>
@@ -134,7 +140,7 @@ export default function GenerationBatchDetail({
             <div className="mt-0.5 truncate text-[11px] text-slate-400">{task.platform} · {task.templateId}</div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <span className={task.status === 'failed' ? 'text-rose-600' : task.status === 'succeeded' ? 'text-emerald-600' : task.status === 'cancelled' ? 'text-slate-400' : 'text-slate-500'}>
+            <span className={task.status === 'failed' ? 'text-rose-600' : task.status === 'uncertain' ? 'text-orange-700' : task.status === 'succeeded' ? 'text-emerald-600' : task.status === 'cancelled' ? 'text-slate-400' : 'text-slate-500'}>
               {STATUS_LABELS[task.status] || task.status}{task.error?.message ? ` · ${task.error.message}` : ''}
             </span>
             {task.status === 'succeeded' && task.articleId && onViewBatchArticles && <button
@@ -150,8 +156,11 @@ export default function GenerationBatchDetail({
     </div>
 
     {terminal && onStartNew && <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">
-      <span>该批次已结束，可以开始新的批量生成。</span>
-      <button type="button" onClick={onStartNew} disabled={anyCommandBusy} className="rounded bg-slate-900 px-2 py-1 text-white">新建批量生成</button>
+      <span>{counts.uncertain > 0 ? '原任务已保留且不会重试。请核对结果；需重新生成时建立新批次。' : '该批次已结束，可以开始新的批量生成。'}</span>
+      <div className="flex gap-2">
+        {counts.uncertain > 0 && <button type="button" onClick={onCheckUncertain} disabled={anyCommandBusy} className="rounded border border-slate-300 bg-white px-2 py-1 text-slate-700">检查结果</button>}
+        <button type="button" onClick={onStartNew} disabled={anyCommandBusy} className="rounded bg-slate-900 px-2 py-1 text-white">{counts.uncertain > 0 ? '重新生成（新批次）' : '新建批量生成'}</button>
+      </div>
     </div>}
   </section>;
 }

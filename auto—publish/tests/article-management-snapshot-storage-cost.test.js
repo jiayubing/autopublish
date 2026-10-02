@@ -99,6 +99,10 @@ function fixture(articleCount) {
   const originalAll = statementPrototype.all;
   const originalGet = statementPrototype.get;
   function observeRows(result) {
+    for (const row of Array.isArray(result) ? result : result ? [result] : []) {
+      if (typeof row.intent_payload === "string") assert.equal(row.intent_payload.includes(BODY), false);
+      if (row.item_id && row.batch_id && typeof row.payload_json === "string") assert.equal(row.payload_json.includes(BODY), false);
+    }
     active.sqlReads += 1;
     active.sqlRows += Array.isArray(result) ? result.length : result ? 1 : 0;
     active.sqlResultBytes += bytes(result);

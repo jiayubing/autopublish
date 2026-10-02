@@ -1,5 +1,6 @@
 const { execFileSync } = require("child_process");
 const path = require("path");
+const { collectTestFiles, selectTestSuite } = require("./run-tests");
 
 const rootDir = path.resolve(__dirname, "..");
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
@@ -59,25 +60,19 @@ function runNpm(args) {
   });
 }
 
-if (focusedGenerationTests.length > 0) {
-  execFileSync(process.execPath, ["--test", ...focusedGenerationTests], {
-    cwd: rootDir,
-    stdio: "inherit"
+const selected = new Set(selectTestSuite(collectTestFiles(), "core"));
+for (const group of [focusedGenerationTests, focusedPlanTests, focusedAuthTests]) {
+  const files = group.filter(file => {
+    if (selected.has(file)) return false;
+    selected.add(file);
+    return true;
   });
-}
-
-if (focusedPlanTests.length > 0) {
-  execFileSync(process.execPath, ["--test", ...focusedPlanTests], {
-    cwd: rootDir,
-    stdio: "inherit"
-  });
-}
-
-if (focusedAuthTests.length > 0) {
-  execFileSync(process.execPath, ["--test", ...focusedAuthTests], {
-    cwd: rootDir,
-    stdio: "inherit"
-  });
+  if (files.length) {
+    execFileSync(process.execPath, ["--test", ...files], {
+      cwd: rootDir,
+      stdio: "inherit"
+    });
+  }
 }
 
 runNpm(["test"]);

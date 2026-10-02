@@ -158,9 +158,11 @@ export function createContentSourcesFeature(adapters = {}) {
   let disposed = false;
   let scope = null;
   let clients = [];
+  let clientsLoaded = false;
   let clientGroups = EMPTY_GROUPS;
   let clientGroupsQuery = Object.freeze({ loading: false, error: null, reason: null });
   let templateCatalog = EMPTY_CATALOG;
+  let templateCatalogLoaded = false;
   let selectedClientId = '';
   let currentArticle = null;
   let query = Object.freeze({ loading: false, error: null, reason: null });
@@ -355,13 +357,16 @@ export function createContentSourcesFeature(adapters = {}) {
   const refreshSources = async (reason = 'manual', options = {}) => {
     if (disposed || !scope) return false;
     const refreshFallbackData = options.refreshFallbackData !== false;
+    const includeTemplateCatalog = options.includeTemplateCatalog !== false;
     const token = identity.begin(undefined, reason);
     query = Object.freeze({ loading: true, error: null, reason });
     publish();
     try {
       const [nextClients, nextCatalog] = await Promise.all([
-        adapters.listClients(),
-        adapters.listTemplateCatalog(),
+        reason === 'initial' && clientsLoaded ? clients : adapters.listClients(),
+        !includeTemplateCatalog || (reason === 'initial' && templateCatalogLoaded)
+          ? templateCatalog
+          : adapters.listTemplateCatalog(),
       ]);
       if (!identity.isCurrent(token)) return false;
       // The directory query contains material metadata, not replacement bodies.
@@ -379,7 +384,11 @@ export function createContentSourcesFeature(adapters = {}) {
             status: loaded.status, error: loaded.error, contentHash: loaded.contentHash };
         }) };
       });
-      templateCatalog = nextCatalog || EMPTY_CATALOG;
+      clientsLoaded = true;
+      if (includeTemplateCatalog) {
+        templateCatalog = nextCatalog || EMPTY_CATALOG;
+        templateCatalogLoaded = true;
+      } else if (reason !== 'initial') templateCatalogLoaded = false;
       const nextSelectedClientId = clients.some((item) => item.id === selectedClientId)
         ? selectedClientId
         : clients[0]?.id || '';
@@ -718,9 +727,11 @@ export function createContentSourcesFeature(adapters = {}) {
       clearQueueSubscription();
       ensureQueueSubscription();
       clients = [];
+      clientsLoaded = false;
       clientGroups = EMPTY_GROUPS;
       clientGroupsQuery = Object.freeze({ loading: false, error: null, reason: null });
       templateCatalog = EMPTY_CATALOG;
+      templateCatalogLoaded = false;
       selectedClientId = '';
       currentArticle = null;
       query = Object.freeze({ loading: false, error: null, reason: null });
@@ -755,16 +766,21 @@ export function createContentSourcesFeature(adapters = {}) {
       return clientResult && researchResult;
     },
     refreshSources,
+    invalidateSourceCache() {
+      clientsLoaded = false;
+      templateCatalogLoaded = false;
+      identity.invalidate();
+    },
     refreshClientGroups,
     refreshClientData,
     refreshResearchIndex,
     refreshDoubaoQueue,
-    async selectClient(clientId) {
+    async selectClient(clientId, options = {}) {
       if (disposed || !clients.some((item) => item.id === clientId) || clientId === selectedClientId) return false;
       transitionClientScope(clientId);
       publish();
-      await refreshClientData('scope-change');
-      void refreshResearchIndex('scope-change');
+      if (options.refreshClientData !== false) await refreshClientData('scope-change');
+      if (options.refreshResearchIndex !== false) void refreshResearchIndex('scope-change');
       return true;
     },
     setCurrentArticle(article) {

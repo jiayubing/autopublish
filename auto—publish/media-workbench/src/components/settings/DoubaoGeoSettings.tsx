@@ -1,0 +1,316 @@
+import React, { useEffect, useState } from "react";
+import endpoints from "../../../../src/domain/doubao-geo-endpoints.json";
+import { useSettingsFeature } from "../../features/settings/settings-context";
+import type {
+  GeoConfigStatus,
+  GeoConnectionResult,
+} from "../../types/geo-knowledge";
+
+export default function DoubaoGeoSettings() {
+  const { feature, snapshot } = useSettingsFeature();
+  const status = snapshot.geo.data as GeoConfigStatus | null;
+  const [model, setModel] = useState("");
+  const [baseUrl, setBaseUrl] = useState(
+    endpoints.coding,
+  );
+  const [apiKey, setApiKey] = useState("");
+  const [webSearch, setWebSearch] = useState(true);
+  const [researchPrompt, setResearchPrompt] = useState("");
+  const [finalKnowledgePrompt, setFinalKnowledgePrompt] = useState("");
+  const [saved, setSaved] = useState(false);
+  const [promptSaved, setPromptSaved] = useState(false);
+  const [finalPromptSaved, setFinalPromptSaved] = useState(false);
+  const [testVisible, setTestVisible] = useState(false);
+  useEffect(() => {
+    void feature.refreshGeo("page-open");
+  }, [feature]);
+  useEffect(() => {
+    if (status) {
+      setModel(status.model);
+      setBaseUrl(status.baseUrl);
+      setWebSearch(status.webSearch);
+    }
+  }, [status?.model, status?.baseUrl, status?.webSearch]);
+  useEffect(() => {
+    if (status) setResearchPrompt(status.globalPrompt || status.defaultGlobalPrompt);
+  }, [status?.globalPrompt, status?.defaultGlobalPrompt]);
+  useEffect(() => {
+    if (status) setFinalKnowledgePrompt(status.finalKnowledgePrompt || status.defaultFinalKnowledgePrompt);
+  }, [status?.finalKnowledgePrompt, status?.defaultFinalKnowledgePrompt]);
+  const testState = snapshot.commands.testGeo;
+  const testResult = testState.result as GeoConnectionResult | null;
+  const busy =
+    snapshot.geo.query.loading ||
+    snapshot.commands.saveGeo.busy ||
+    snapshot.commands.saveGeoPrompt.busy ||
+    snapshot.commands.saveFinalKnowledgePrompt.busy ||
+    testState.busy;
+  const configDirty =
+    !status?.configured ||
+    baseUrl !== status.baseUrl ||
+    model.trim() !== status.model ||
+    webSearch !== status.webSearch ||
+    apiKey.length > 0;
+  const effectivePrompt = status
+    ? status.globalPrompt || status.defaultGlobalPrompt
+    : "";
+  const promptDirty = researchPrompt !== effectivePrompt;
+  const effectiveFinalPrompt = status
+    ? status.finalKnowledgePrompt || status.defaultFinalKnowledgePrompt
+    : "";
+  const finalPromptDirty = finalKnowledgePrompt !== effectiveFinalPrompt;
+  const error =
+    snapshot.geo.query.error?.userMessage ||
+    snapshot.commands.saveGeo.error?.userMessage ||
+    snapshot.commands.saveGeoPrompt.error?.userMessage;
+  const finalPromptError = snapshot.commands.saveFinalKnowledgePrompt.error?.userMessage;
+  async function save() {
+    setTestVisible(false);
+    setSaved(false);
+    const result = await feature.saveGeo({
+      baseUrl,
+      model: model.trim(),
+      apiKey,
+      webSearch,
+    });
+    if (result?.configured) {
+      setApiKey("");
+      setSaved(true);
+    }
+  }
+  async function test(search: boolean) {
+    if (busy || configDirty) return;
+    setTestVisible(true);
+    await feature.testGeo({ search });
+  }
+  async function savePrompt(value = researchPrompt) {
+    setPromptSaved(false);
+    if (!status || !value.trim()) return;
+    const override = value === status.defaultGlobalPrompt ? "" : value;
+    const result = await feature.saveGeoPrompt(override);
+    if (result) {
+      setResearchPrompt(result.globalPrompt || result.defaultGlobalPrompt);
+      setPromptSaved(true);
+    }
+  }
+  async function saveFinalPrompt(value = finalKnowledgePrompt) {
+    setFinalPromptSaved(false);
+    if (!status || !value.trim()) return;
+    const override = value === status.defaultFinalKnowledgePrompt ? "" : value;
+    const result = await feature.saveFinalKnowledgePrompt(override);
+    if (result) {
+      setFinalKnowledgePrompt(result.finalKnowledgePrompt || result.defaultFinalKnowledgePrompt);
+      setFinalPromptSaved(true);
+    }
+  }
+  return (
+    <form
+      className="grid gap-4 rounded border bg-white p-5 text-sm"
+      onChange={() => {
+        setSaved(false);
+        setTestVisible(false);
+      }}
+      onSubmit={(event) => {
+        event.preventDefault();
+        void save();
+      }}
+    >
+      <h2 className="font-semibold">豆包 GEO</h2>
+      <p>
+        用于客户知识提取与联网研究。保存配置不会发起调用；生成知识库时会发送当前客户资料并产生
+        API 用量。
+      </p>
+      <label>
+        接口 / Base URL
+        <select
+          className="mt-1 block w-full rounded border p-2"
+          value={baseUrl}
+          disabled={busy}
+          onChange={(event) => {
+            setBaseUrl(event.target.value);
+            setSaved(false);
+          }}
+        >
+          <option value={endpoints.coding}>
+            Coding Plan（套餐专用）
+          </option>
+          <option value={endpoints.standard}>
+            标准方舟（套餐外按量计费）
+          </option>
+        </select>
+      </label>
+      <p className="break-all">Base URL：{baseUrl}</p>
+      <p className="text-amber-700">
+        {baseUrl === endpoints.coding
+          ? "使用 Coding Plan 专用地址；Responses 与 web_search 的实际权限仍需验证，套餐用途以服务商条款为准。"
+          : "注意：标准方舟地址不消耗 Coding Plan 套餐额度，可能产生额外费用。"}{" "}
+        不支持时明确报错，不自动切换计费接口。
+      </p>
+      <label>
+        模型 / Endpoint ID
+        <input
+          className="mt-1 block w-full rounded border p-2"
+          value={model}
+          disabled={busy}
+          onChange={(event) => setModel(event.target.value)}
+          required
+          maxLength={200}
+        />
+      </label>
+      <label>
+        API Key
+        <input
+          type="password"
+          autoComplete="off"
+          className="mt-1 block w-full rounded border p-2"
+          value={apiKey}
+          disabled={busy}
+          onChange={(event) => setApiKey(event.target.value)}
+          placeholder={
+            status?.configured
+              ? "已保存，留空保持原密钥"
+              : "请输入火山方舟 API Key"
+          }
+          required={!status?.configured}
+          maxLength={4000}
+        />
+      </label>
+      <label className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          checked={webSearch}
+          disabled={busy}
+          onChange={(event) => setWebSearch(event.target.checked)}
+        />
+        启用联网搜索
+      </label>
+      <section className="grid gap-3 rounded border bg-slate-50 p-4">
+        <div>
+          <h3 className="font-semibold">全局研究要求</h3>
+          <p className="mt-1 text-xs text-slate-500">
+            适用于所有客户；每个客户的长期补充要求会在此基础上追加。
+          </p>
+        </div>
+        <textarea
+          aria-label="全局研究要求"
+          className="block min-h-32 w-full rounded border bg-white p-2"
+          maxLength={8000}
+          value={researchPrompt}
+          disabled={busy || !status}
+          onChange={(event) => {
+            setResearchPrompt(event.target.value);
+            setPromptSaved(false);
+          }}
+        />
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="rounded border px-4 py-2 disabled:opacity-40"
+            disabled={busy || !status || !researchPrompt.trim() || !promptDirty}
+            onClick={() => void savePrompt()}
+          >
+            保存全局研究要求
+          </button>
+          <button
+            type="button"
+            className="rounded border px-4 py-2 disabled:opacity-40"
+            disabled={busy || !status || !status.globalPrompt}
+            onClick={() => void savePrompt(status?.defaultGlobalPrompt || "")}
+          >
+            恢复内置默认
+          </button>
+        </div>
+        {promptSaved && <p role="status">全局研究要求已保存。</p>}
+      </section>
+      <section className="grid gap-3 rounded border bg-slate-50 p-4">
+        <div>
+          <h3 className="font-semibold">最终知识稿提示词</h3>
+          <p className="mt-1 text-xs text-slate-500">
+            实验链路在完成研究后，用这份要求生成交付知识稿。保存只修改后续写稿要求，不会发起 AI 调用。
+          </p>
+        </div>
+        <textarea
+          aria-label="最终知识稿提示词"
+          className="block min-h-48 w-full rounded border bg-white p-2"
+          maxLength={8000}
+          value={finalKnowledgePrompt}
+          disabled={busy || !status}
+          onChange={(event) => {
+            setFinalKnowledgePrompt(event.target.value);
+            setFinalPromptSaved(false);
+          }}
+        />
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="rounded border px-4 py-2 disabled:opacity-40"
+            disabled={busy || !status || !finalKnowledgePrompt.trim() || !finalPromptDirty}
+            onClick={() => void saveFinalPrompt()}
+          >
+            保存最终知识稿提示词
+          </button>
+          <button
+            type="button"
+            className="rounded border px-4 py-2 disabled:opacity-40"
+            disabled={busy || !status || !status.finalKnowledgePrompt}
+            onClick={() => void saveFinalPrompt(status?.defaultFinalKnowledgePrompt || "")}
+          >
+            恢复知识稿默认提示词
+          </button>
+        </div>
+        {finalPromptSaved && <p role="status">最终知识稿提示词已保存。</p>}
+        {finalPromptError && <p role="alert" className="text-rose-700">{finalPromptError}</p>}
+      </section>
+      {error && (
+        <p role="alert" className="text-rose-700">
+          {error}
+        </p>
+      )}
+      {saved && <p role="status">豆包 GEO 配置已保存。</p>}
+      <button
+        type="submit"
+        className="justify-self-start rounded border px-4 py-2 disabled:opacity-40"
+        disabled={busy || !model.trim()}
+      >
+        保存豆包 GEO 配置
+      </button>
+      <p>
+        测试使用已保存配置，每次发送一条固定测试请求，会消耗 API
+        用量；不发送客户资料，不自动重试或切换接口。修改配置后请先保存。
+      </p>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          className="rounded border px-4 py-2 disabled:opacity-40"
+          disabled={busy || configDirty}
+          onClick={() => void test(false)}
+        >
+          测试连接
+        </button>
+        <button
+          type="button"
+          className="rounded border px-4 py-2 disabled:opacity-40"
+          disabled={busy || configDirty || !webSearch}
+          onClick={() => void test(true)}
+        >
+          测试联网搜索
+        </button>
+      </div>
+      {testVisible && testState.busy && (
+        <p role="status">正在测试，请勿重复点击…</p>
+      )}
+      {testVisible && !testState.busy && testState.error && (
+        <p role="alert" className="text-rose-700">
+          {testState.error.userMessage}
+        </p>
+      )}
+      {testVisible && !testState.busy && !testState.error && testResult && (
+        <p role="status">
+          {testResult.search
+            ? `联网测试通过，返回 ${testResult.citationCount} 条可核验引用。`
+            : "连接测试通过：接口、密钥与模型可调用；联网搜索尚需单独测试。"}
+        </p>
+      )}
+    </form>
+  );
+}

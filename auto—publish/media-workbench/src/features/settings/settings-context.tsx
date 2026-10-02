@@ -28,9 +28,15 @@ import type {
   MediaProviderStatus,
 } from "../../types/settings";
 import { createSettingsFeature } from "./settings-feature.js";
+import { getGeoConfig, saveGeoConfig, saveGeoGlobalPrompt, saveGeoFinalKnowledgePrompt, testGeoConnection } from "../../bridge/geo-knowledge";
 
 function createProductionSettingsFeature() {
   return createSettingsFeature({
+    getGeoStatus: getGeoConfig,
+    saveGeo: saveGeoConfig,
+    saveGeoPrompt: saveGeoGlobalPrompt,
+    saveFinalKnowledgePrompt: saveGeoFinalKnowledgePrompt,
+    testGeo: testGeoConnection,
     getAiStatus: getAiProviderStatus,
     saveAi: saveAiProviderConfig,
     testAi: testAiProviderConnection,

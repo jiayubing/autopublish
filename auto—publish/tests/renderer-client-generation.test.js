@@ -38,3 +38,7 @@ it("renderer tracks background client operations while main composition shares t
   assert.match(composition, /aiExecutionService\.createClient\("batch-generation"\)/);
   assert.match(composition, /aiExecutionService\.createClient\(groupId\)/);
 });
+
+it("production composition keeps generation v1 history read-only", () => {
+  assert.match(composition, /allowLegacyV1Execution:\s*false/);
+});

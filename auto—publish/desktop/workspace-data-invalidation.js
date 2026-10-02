@@ -46,6 +46,7 @@ const SCOPES_BY_REASON = Object.freeze({
   CONTENT_QUESTION_CREATED: ["contentSources"],
   CONTENT_QUESTION_UPDATED: ["contentSources"],
   CONTENT_QUESTION_DELETED: ["contentSources"],
+  GEO_QUESTIONS_LINKED: ["contentSources"],
   CONTENT_RESEARCH_COLLECTED: ["contentSources"],
   CONTENT_RESEARCH_MANUAL_SAVED: ["contentSources"],
   PLATFORM_SUBMIT_COMPLETED: ["articleManagement", "articleAttention", "platformQueue"],

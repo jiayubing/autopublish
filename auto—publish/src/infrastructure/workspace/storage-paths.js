@@ -28,6 +28,7 @@ function createPortableContentPaths(contentLibrary) {
     mediaInput: path.join(input, "media"),
     data: path.join(autopublish, "data"),
     research: path.join(autopublish, "research"),
+    geoKnowledge: path.join(autopublish, "geo-knowledge"),
     generationBatches: path.join(autopublish, "batches"),
     queue: path.join(autopublish, "queue"),
     submissionRecords: path.join(autopublish, "submission-records"),

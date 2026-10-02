@@ -12,7 +12,6 @@
     "test:release": "node scripts/run-tests.js --suite release",
     "test:discover": "node scripts/run-tests.js --list",
     "benchmark:ticket-25-a": "node scripts/run-ticket-25-a-benchmark.js",
-    "test:desktop-core": "node scripts/run-tests.js --exclude tests/production-packaging.test.js --exclude tests/desktop-packaging.test.js --exclude tests/packaging-runtime.test.js --exclude tests/release-evidence.test.js --exclude tests/phase-02-runtime-capacity.test.js --exclude tests/phase-06-media-renderer-capacity.test.mjs --exclude tests/phase-06-production-ipc-fixture-matrix.test.js --exclude tests/renderer-settings-window-focus.electron.test.js --exclude tests/renderer-batch-generation-client-hydration.test.js --exclude tests/renderer-cold-start-navigation-convergence.electron.test.js --exclude tests/content-library-migration.test.js --exclude tests/content-metadata-migration.test.js --exclude tests/legacy-migration.test.js --exclude tests/phase-02-migration.test.js --exclude tests/structured-diagnostics.test.js --exclude tests/runtime-diagnostics.test.js --exclude tests/runtime-diagnostics-ipc.test.js --exclude tests/phase-04-media-transport.test.js",
     "test:capacity": "node --test --test-concurrency=1 tests/phase-02-runtime-capacity.test.js tests/phase-06-media-renderer-capacity.test.mjs",
     "test:production-ipc-matrix": "node --test tests/phase-06-production-ipc-fixture-matrix.test.js",
     "test:auth": "npm --prefix auth-server test",
@@ -45,7 +44,10 @@
     "pack:alpha": "npm run check:clean-build && npm run prepare:runtime-tools && npm run build:renderer && npm run build:preload && electron-builder --win portable --config electron-builder.alpha.yml",
     "pack:alpha:dirty": "node scripts/check-clean-build.js --allow-dirty && npm run prepare:runtime-tools && npm run build:renderer && npm run build:preload && electron-builder --win portable --config electron-builder.alpha.yml",
     "dist:alpha": "npm run check:clean-build && npm run prepare:runtime-tools && npm run build:renderer && npm run build:preload && electron-builder --win nsis --config electron-builder.alpha.yml && node scripts/verify-alpha-package.js release-alpha/win-unpacked/resources",
-    "dist:alpha:dirty": "node scripts/check-clean-build.js --allow-dirty && npm run prepare:runtime-tools && npm run build:renderer && npm run build:preload && electron-builder --win nsis --config electron-builder.alpha.yml && node scripts/verify-alpha-package.js release-alpha/win-unpacked/resources"
+    "dist:alpha:dirty": "node scripts/check-clean-build.js --allow-dirty && npm run prepare:runtime-tools && npm run build:renderer && npm run build:preload && electron-builder --win nsis --config electron-builder.alpha.yml && node scripts/verify-alpha-package.js release-alpha/win-unpacked/resources",
+    "test:desktop-regression": "node scripts/run-tests.js --exclude tests/production-packaging.test.js --exclude tests/desktop-packaging.test.js --exclude tests/packaging-runtime.test.js --exclude tests/release-evidence.test.js --exclude tests/phase-02-runtime-capacity.test.js --exclude tests/phase-06-media-renderer-capacity.test.mjs --exclude tests/phase-06-production-ipc-fixture-matrix.test.js --exclude tests/renderer-settings-window-focus.electron.test.js --exclude tests/renderer-cold-start-navigation-convergence.electron.test.js --exclude tests/content-library-migration.test.js --exclude tests/content-metadata-migration.test.js --exclude tests/legacy-migration.test.js --exclude tests/phase-02-migration.test.js --exclude tests/structured-diagnostics.test.js --exclude tests/runtime-diagnostics.test.js --exclude tests/runtime-diagnostics-ipc.test.js --exclude tests/phase-04-media-transport.test.js",
+    "test:submission": "node --test --test-concurrency=1 tests/regular-platform-acceptance.test.js tests/ticket-25-d-paid-media-acceptance.test.js tests/article-lifecycle-ticket-13.test.js tests/article-lifecycle-acceptance.test.js",
+    "test:storage": "node --test --test-concurrency=1 tests/operational-storage-safety.test.js tests/phase-02-migration.test.js tests/generation-batch-store.test.js"
   },
   "dependencies": {
     "@noble/hashes": "^2.2.0",
@@ -55,7 +57,8 @@
     "form-data": "^4.0.6",
     "iconv-lite": "^0.6.3",
     "mammoth": "1.12.0",
-    "playwright": "1.61.0-alpha-1781023400000"
+    "playwright": "1.61.0-alpha-1781023400000",
+    "word-extractor": "1.0.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

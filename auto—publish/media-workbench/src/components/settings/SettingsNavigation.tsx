@@ -13,6 +13,7 @@ import {
 export type SettingsSection =
   | "overview"
   | "ai"
+  | "geo"
   | "media"
   | "hepan"
   | "platformAccounts"
@@ -28,6 +29,7 @@ const ITEMS: Array<{
 }> = [
   { id: "overview", label: "概览", icon: LayoutDashboard },
   { id: "ai", label: "AI 生成", group: "服务配置", icon: Bot },
+  { id: "geo", label: "豆包 GEO", group: "服务配置", icon: Bot },
   { id: "media", label: "付费媒体", group: "服务配置", icon: Boxes },
   { id: "hepan", label: "蓝色河畔", group: "服务配置", icon: Radio },
   {

@@ -23,10 +23,12 @@ const { articleAttentionContracts } = require("./article-attention-contracts");
 const { generationContracts, generationEventContracts } = require("./generation-contracts");
 const { clientGenerationContracts, clientGenerationEventContracts } = require("./client-generation-contracts");
 const { contentOperationsContracts } = require("./content-operations-contracts");
+const { geoKnowledgeContracts } = require("./geo-knowledge-contracts");
 
 // This module is deliberately an assembly-only registry. Wire schemas and
 // projections live beside the domain namespace that owns their capability.
 const contracts = [
+  ...geoKnowledgeContracts,
   ...workspaceContracts,
   ...settingsContracts,
   ...mediaContracts,

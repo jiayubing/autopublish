@@ -98,6 +98,38 @@ it("projects ordinary and paid uncertainty as distinct frozen attention types", 
   ]);
 });
 
+it("projects the unique v2 GEO question for question-driven regeneration", () => {
+  const query = createArticleAttentionQuery({
+    operationalStore: {
+      listPublicationAttention: () => [{
+        publicationId: "publication-rejected",
+        attemptId: "attempt-rejected",
+        clientId: "client-1",
+        articleId: "article-1",
+        platformId: "hepan",
+        status: "failed",
+        reasonCode: "HEPAN_CONTENT_REJECTED",
+      }],
+    },
+    readers: {
+      getArticle: () => ({
+        id: "article-1",
+        clientId: "client-1",
+        status: "generated",
+        title: "Article",
+        content: "Body",
+        knowledgeSnapshot: {
+          version: 2,
+          targetQuestion: { geoQuestionId: "geo-question-1" },
+        },
+      }),
+    },
+  });
+  const item = query.list().items[0];
+  assert.equal(item.geoQuestionId, "geo-question-1");
+  assert.equal(item.safeFacts.geoQuestionId, "geo-question-1");
+});
+
 it("keeps independent attention items for the same article", () => {
   const query = createArticleAttentionQuery({
     readers: {

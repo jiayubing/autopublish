@@ -247,9 +247,10 @@ export default function GeneratedArticlesView({
     () => selectableArticles(filtered, clientId).filter(isArticleSelectable),
     [filtered, clientId, workflowByArticle, dirtyArticleId],
   );
+  const selectedKeys = useMemo(() => new Set(selected), [selected]);
   const selectedArticles = filtered.filter(
     (article) =>
-      selected.includes(selectionKey(article)) && isArticleSelectable(article),
+      selectedKeys.has(selectionKey(article)) && isArticleSelectable(article),
   );
   const selectedDirtyArticle = selectedArticles.find((article) =>
     Boolean(dirtyArticleId && article.id === dirtyArticleId),
@@ -314,11 +315,12 @@ export default function GeneratedArticlesView({
     const ids = selectableArticles(groupArticles, clientId)
       .filter(isArticleSelectable)
       .map(selectionKey);
+    const idSet = new Set(ids);
     const allSelected =
-      ids.length > 0 && ids.every((id) => selected.includes(id));
+      ids.length > 0 && ids.every((id) => selectedKeys.has(id));
     updateSelected((current) =>
       allSelected
-        ? current.filter((id) => !ids.includes(id))
+        ? current.filter((id) => !idSet.has(id))
         : [...new Set([...current, ...ids])],
     );
   }
@@ -393,11 +395,12 @@ export default function GeneratedArticlesView({
 
   function toggleAll() {
     const ids = operable.map(selectionKey);
+    const idSet = new Set(ids);
     const allSelected =
-      ids.length > 0 && ids.every((id) => selected.includes(id));
+      ids.length > 0 && ids.every((id) => selectedKeys.has(id));
     updateSelected((current) =>
       allSelected
-        ? current.filter((id) => !ids.includes(id))
+        ? current.filter((id) => !idSet.has(id))
         : [...new Set([...current, ...ids])],
     );
   }

@@ -7,7 +7,7 @@ const {
 const {
   app,
   BrowserWindow,
-  ipcMain,
+  ipcMain: electronIpcMain,
   shell,
   dialog,
   safeStorage,
@@ -44,6 +44,7 @@ configureApplicationIdentity(app);
 
 /** @type {import("electron").BrowserWindow | null} */
 let mainWindow = null;
+const ipcMain = require("./security/ipc-sender").createWindowIpcMain(electronIpcMain, () => mainWindow);
 let authService = null;
 let workspaceBootstrap = null;
 let runtimeContext = null;

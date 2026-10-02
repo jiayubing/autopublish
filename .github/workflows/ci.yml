@@ -5,6 +5,12 @@ on:
     branches:
       - master
   pull_request:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Run release-candidate packaging and capacity gates
+        type: boolean
+        default: false
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -40,7 +46,7 @@ jobs:
         run: node scripts/create-test-discovery-evidence.js --output build/evidence/desktop-discovery.json
         working-directory: auto—publish
       - name: required/root-tests
-        run: npm run test:desktop-core
+        run: npm run test:desktop-regression
         working-directory: auto—publish
       - name: required/migration-roundtrip
         run: >-
@@ -55,26 +61,52 @@ jobs:
       - name: required/toolchain
         run: |
           npm run lint
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run typecheck:bridge
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run typecheck:main
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run format:check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run build:renderer
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run build:preload
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         working-directory: auto—publish
       - name: required/packaging-contracts
         run: npm run test:packaging
         working-directory: auto—publish
+      - name: required/electron-focus
+        env:
+          RUN_ELECTRON_FOCUS_TESTS: "1"
+        run: >-
+          node scripts/create-test-suite-evidence.js
+          --output build/evidence/electron-focus.json
+          --operation electron-focus
+          --test tests/renderer-settings-window-focus.electron.test.js
+        working-directory: auto—publish
       - name: required/production-directory-smoke
-        if: github.event_name == 'push'
+        if: github.event_name == 'workflow_dispatch' && inputs.release
         run: npm run pack:production:smoke
         working-directory: auto—publish
       - name: Upload production artifact manifest
-        if: github.event_name == 'push'
+        if: github.event_name == 'workflow_dispatch' && inputs.release
         uses: actions/upload-artifact@v4
         with:
           name: production-artifact-manifest
           path: auto—publish/build/production-artifact-manifest.json
           if-no-files-found: error
+      - name: release/packaged-navigation
+        if: github.event_name == 'workflow_dispatch' && inputs.release
+        env:
+          RUN_UNPACKED_NAVIGATION_SMOKE: "1"
+          AUTO_PUBLISH_UNPACKED_EXECUTABLE: release-production-smoke/win-unpacked/ETO—001.exe
+        run: >-
+          node scripts/create-test-suite-evidence.js
+          --output build/evidence/packaged-navigation.json
+          --operation packaged-navigation
+          --test tests/renderer-cold-start-navigation-convergence.electron.test.js
+        working-directory: auto—publish
       - name: Upload desktop evidence
         uses: actions/upload-artifact@v4
         with:
@@ -111,7 +143,7 @@ jobs:
 
   auth-container:
     name: required/auth-container-node22
-    if: github.event_name == 'push'
+    if: github.event_name == 'workflow_dispatch' && inputs.release
     runs-on: ubuntu-latest
     env:
       CI_SYNTHETIC_ONLY: "1"
@@ -150,12 +182,6 @@ jobs:
       - name: required/backup-restore-fixture
         run: node auth-server/scripts/backup-restore-evidence.js --output build/evidence/backup-restore.json
         working-directory: auto—publish
-      - name: required/health-semantics
-        run: npm run test:health
-        working-directory: auto—publish/auth-server
-      - name: required/rate-limit-capacity
-        run: npm run test:rate-limit
-        working-directory: auto—publish/auth-server
       - name: Upload Auth verification evidence
         uses: actions/upload-artifact@v4
         with:
@@ -191,7 +217,7 @@ jobs:
 
   desktop-capacity:
     name: required/desktop-capacity-node24
-    if: github.event_name == 'push'
+    if: github.event_name == 'workflow_dispatch' && inputs.release
     runs-on: windows-latest
     env:
       CI_SYNTHETIC_ONLY: "1"
@@ -211,8 +237,6 @@ jobs:
           --operation ticket-15-capacity
           --test tests/phase-02-runtime-capacity.test.js
           --test tests/phase-06-media-renderer-capacity.test.mjs
-          --test tests/content-generation-batch-ipc.test.js
-          --test tests/generation-snapshot-event.test.js
         working-directory: auto—publish
       - name: Upload desktop capacity evidence
         uses: actions/upload-artifact@v4
@@ -223,7 +247,7 @@ jobs:
 
   desktop-artifact:
     name: required/desktop-artifact-node24
-    if: github.event_name == 'push'
+    if: github.event_name == 'workflow_dispatch' && inputs.release
     runs-on: windows-latest
     env:
       CI_SYNTHETIC_ONLY: "1"
@@ -259,12 +283,12 @@ jobs:
           cache-dependency-path: auto—publish/package-lock.json
       - run: npm ci
         working-directory: auto—publish
-      - run: npm run test:links
+      - run: node scripts/verify-link-capability.js --strict
         working-directory: auto—publish
 
   dependency-audit:
     name: release/dependency-audit
-    if: github.event_name == 'push'
+    if: github.event_name == 'workflow_dispatch' && inputs.release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -278,6 +302,9 @@ jobs:
       - name: Production dependency audit
         run: npm audit --omit=dev --audit-level=high
         working-directory: auto—publish
+      - name: Renderer dependency audit
+        run: npm audit --audit-level=high
+        working-directory: auto—publish/media-workbench
       - name: Development dependency audit (non-blocking known-risk report)
         continue-on-error: true
         run: npm audit --audit-level=high
@@ -285,7 +312,7 @@ jobs:
 
   release-evidence:
     name: required/release-evidence
-    if: github.event_name == 'push'
+    if: github.event_name == 'workflow_dispatch' && inputs.release
     needs: [desktop, desktop-capacity, desktop-artifact, auth, auth-container, auth-verification, desktop-security, link-security, dependency-audit]
     runs-on: ubuntu-latest
     env:

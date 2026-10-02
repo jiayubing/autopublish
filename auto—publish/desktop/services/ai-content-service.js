@@ -155,7 +155,7 @@ function createAiContentService(opts) {
     if (!usesMetadataPath) return Promise.all(clients.map(materializeClient));
     return Promise.all(clients.map(async function(client) {
       const value = clientDto(client);
-      if (materialStore && typeof materialStore.listMaterialMetadata === "function") value.knowledgeFiles = await materialStore.listMaterialMetadata(client.id);
+      if (materialStore && typeof materialStore.listMaterialMetadata === "function") value.knowledgeFiles = await materialStore.listMaterialMetadata(client.id, client.directory);
       else value.knowledgeFiles = value.knowledgeFiles.map(function(file) { const result = Object.assign({}, file); delete result.content; return result; });
       return clientDto(value);
     }));

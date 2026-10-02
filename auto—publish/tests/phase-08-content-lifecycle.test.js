@@ -157,12 +157,16 @@ describe("phase 08 content lifecycle seams", function () {
   });
 
   it("recovers a canonical JSON replacement after a process stops before or after install", function () {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "phase08-article-json-crash-"));
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), "phase08-article-json-crash-"),
+    );
     try {
       const store = createArticleStore(root);
       const item = article("article-1");
       store.saveArticle(item);
-      const beforeInstall = Object.assign({}, item, { title: "Old version wins" });
+      const beforeInstall = Object.assign({}, item, {
+        title: "Old version wins",
+      });
       crashBetweenFileSteps(
         root,
         `store.saveArticle(${JSON.stringify(beforeInstall)});`,
@@ -171,17 +175,28 @@ describe("phase 08 content lifecycle seams", function () {
       const recoveredOld = createArticleStore(root);
       assert.deepEqual(recoveredOld.getArticle("client-1", item.id), item);
 
-      const afterInstall = Object.assign({}, item, { title: "New version wins" });
+      const afterInstall = Object.assign({}, item, {
+        title: "New version wins",
+      });
       crashBetweenFileSteps(
         root,
         `store.saveArticle(${JSON.stringify(afterInstall)});`,
         "after-article-json-install",
       );
       const recoveredNew = createArticleStore(root);
-      assert.deepEqual(recoveredNew.getArticle("client-1", item.id), afterInstall);
+      assert.deepEqual(
+        recoveredNew.getArticle("client-1", item.id),
+        afterInstall,
+      );
       const directory = path.join(root, "generated", "client-1");
-      assert.equal(fs.existsSync(path.join(directory, "article-1.journal")), false);
-      assert.equal(fs.existsSync(path.join(directory, "article-1.json.backup")), false);
+      assert.equal(
+        fs.existsSync(path.join(directory, "article-1.journal")),
+        false,
+      );
+      assert.equal(
+        fs.existsSync(path.join(directory, "article-1.json.backup")),
+        false,
+      );
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

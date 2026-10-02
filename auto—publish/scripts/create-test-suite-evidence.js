@@ -66,9 +66,18 @@ function createTestSuiteEvidence(options) {
   const passed = lastNumber(output, "pass");
   const failed = lastNumber(output, "fail") + (result.status === 0 ? 0 : 1);
   const skipped = lastNumber(output, "skipped");
+  const todo = lastNumber(output, "todo");
   const count = lastNumber(output, "tests");
   const report = {
-    status: result.status === 0 && failed === 0 ? "PASSED" : "FAILED",
+    status:
+      result.status === 0 &&
+      failed === 0 &&
+      count > 0 &&
+      passed === count &&
+      skipped === 0 &&
+      todo === 0
+        ? "PASSED"
+        : "FAILED",
     operation: opts.operation,
     suite: "node-test",
     testFiles: tests.length,
@@ -76,6 +85,7 @@ function createTestSuiteEvidence(options) {
     passed,
     failed,
     skipped,
+    todo,
     durationMs: Date.now() - startedAt,
     sha256: crypto
       .createHash("sha256")

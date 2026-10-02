@@ -52,7 +52,7 @@ function createOperationalStoreFactReader(context) {
     const inList = placeholders(articleIds);
     const publications = db
       .prepare(
-        `SELECT p.publication_id,p.article_id,p.target_key,p.target_json,p.status,p.created_at,p.updated_at,a.attempt_id,a.finished_at,i.payload_json AS intent_payload,e.evidence_json AS success_evidence,e.remote_url AS success_remote_url,EXISTS(SELECT 1 FROM migration_import_entries m WHERE m.article_id=p.article_id AND m.variant='publishedEvidence') AS migration_success FROM publication_records p LEFT JOIN publication_attempts a ON a.attempt_id=(SELECT latest.attempt_id FROM publication_attempts latest WHERE latest.publication_id=p.publication_id ORDER BY latest.rowid DESC LIMIT 1) LEFT JOIN recovery_intents i ON i.attempt_id=a.attempt_id LEFT JOIN remote_evidence e ON e.attempt_id=a.attempt_id AND e.remote_id=('publication-success:' || a.attempt_id) WHERE p.article_id IN(${inList}) ORDER BY p.created_at,p.publication_id`,
+        `SELECT p.publication_id,p.article_id,p.target_key,p.target_json,p.status,p.created_at,p.updated_at,a.attempt_id,a.finished_at,json_object('detail',json_extract(i.payload_json,'$.detail')) AS intent_payload,e.evidence_json AS success_evidence,e.remote_url AS success_remote_url,EXISTS(SELECT 1 FROM migration_import_entries m WHERE m.article_id=p.article_id AND m.variant='publishedEvidence') AS migration_success FROM publication_records p LEFT JOIN publication_attempts a ON a.attempt_id=(SELECT latest.attempt_id FROM publication_attempts latest WHERE latest.publication_id=p.publication_id ORDER BY latest.rowid DESC LIMIT 1) LEFT JOIN recovery_intents i ON i.attempt_id=a.attempt_id LEFT JOIN remote_evidence e ON e.attempt_id=a.attempt_id AND e.remote_id=('publication-success:' || a.attempt_id) WHERE p.article_id IN(${inList}) ORDER BY p.created_at,p.publication_id`,
       )
       .all(...articleIds)
       .map((row) => {
@@ -114,7 +114,7 @@ function createOperationalStoreFactReader(context) {
       });
     const submissionItems = db
       .prepare(
-        `SELECT s.item_id,s.batch_id,s.article_id,s.target_key,s.revision,s.status,s.payload_json,q.queue_group_id,q.position,q.created_at AS queued_at,g.platform_id,g.account_profile_id,g.pause_intent FROM submission_items s LEFT JOIN submission_queue_items q ON q.item_id=s.item_id LEFT JOIN submission_queue_groups g ON g.queue_group_id=q.queue_group_id WHERE s.article_id IN(${inList}) ORDER BY s.article_id,s.item_id`,
+        `SELECT s.item_id,s.batch_id,s.article_id,s.target_key,s.revision,s.status,json_remove(s.payload_json,'$.publicationSnapshot') AS payload_json,q.queue_group_id,q.position,q.created_at AS queued_at,g.platform_id,g.account_profile_id,g.pause_intent FROM submission_items s LEFT JOIN submission_queue_items q ON q.item_id=s.item_id LEFT JOIN submission_queue_groups g ON g.queue_group_id=q.queue_group_id WHERE s.article_id IN(${inList}) ORDER BY s.article_id,s.item_id`,
       )
       .all(...articleIds)
       .map((row) => {

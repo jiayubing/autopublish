@@ -67,6 +67,18 @@ async function createContentProductionComposition(options) {
         },
       ),
     );
+    const geoKnowledgeService = ownService(
+      require("../services/geo-knowledge-service").createGeoKnowledgeService({
+        workspaceRoot: value.workspaceRoot,
+        paths: value.paths,
+        userDataPath: value.userDataPath,
+        safeStorage: value.safeStorage,
+        questionService: doubaoCollectionService,
+        contentStore: value.contentStore,
+        operationalStore: value.operationalStore,
+        onDataInvalidated: value.onDataInvalidated,
+      }),
+    );
     const generationScheduler = ownService(
       require("../../src/content/generation-execution-scheduler").createGenerationExecutionScheduler(
         {
@@ -139,12 +151,17 @@ async function createContentProductionComposition(options) {
         {
           workspaceRoot: value.workspaceRoot,
           paths: value.paths,
+          operationStore:
+            require("../../src/content/client-generation-operation-store").createClientGenerationOperationStore(
+              { workspaceRoot: value.workspaceRoot, paths: value.paths },
+            ),
           contentStore: value.contentStore,
           articleMutationCoordinator: value.articleMutationCoordinator,
           onDataInvalidated: value.onDataInvalidated,
           aiClientFactory: function (groupId) {
             return aiExecutionService.createClient(groupId);
           },
+          getGeoKnowledgeContext: geoKnowledgeService.getGenerationContext,
         },
       ),
     );
@@ -176,13 +193,17 @@ async function createContentProductionComposition(options) {
           contentStore: value.contentStore,
           articleMutationCoordinator: value.articleMutationCoordinator,
           aiProviderService: batchAiProvider,
+          getGeoKnowledgeContext: geoKnowledgeService.getGenerationContext,
+          getGenerationBriefV2: geoKnowledgeService.getGenerationBriefV2,
           getAttentionItems: value.getAttentionItems,
           onDataInvalidated: value.onDataInvalidated,
+          allowLegacyV1Execution: false,
         },
       ),
     );
 
     return Object.freeze({
+      geoKnowledgeService,
       doubaoCollectionService,
       aiProviderService,
       aiExecutionService,

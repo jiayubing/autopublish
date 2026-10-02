@@ -100,6 +100,7 @@ const attentionSafeFacts = exactObject({
   reasonSummary: optionalNullableText(1000),
   updatedAt: optionalNullableText(64),
   articleStatus: optionalNullableText(80),
+  geoQuestionId: optionalNullableText(200),
 });
 
 const articleAttentionItem = exactObject({
@@ -114,6 +115,7 @@ const articleAttentionItem = exactObject({
   safeFacts: attentionSafeFacts,
   articleId: optionalNullableText(200),
   titleSnapshot: optionalNullableText(1000),
+  geoQuestionId: optionalNullableText(200),
   clientId: optionalNullableText(200),
   platformId: optionalNullableText(100),
   displayName: optionalNullableText(200),
@@ -218,6 +220,7 @@ function projectArticleAttentionItem(input) {
     "safeFacts",
     "articleId",
     "titleSnapshot",
+    "geoQuestionId",
     "clientId",
     "platformId",
     "displayName",

@@ -85,6 +85,10 @@ export default function GeneratedArticlesList({
   onOpenPublication,
   onOpenOrder,
 }: GeneratedArticlesListProps) {
+  const [pages, setPages] = React.useState<Record<string, number>>({});
+  const selectedKeys = React.useMemo(() => new Set(selected), [selected]);
+  const pageSize = 50;
+  React.useEffect(() => { setPages({}); }, [clientId, groups]);
   const publishedTimeFacts = React.useMemo(
     () => publishedTimeFactsByArticle(publishedArchives),
     [publishedArchives],
@@ -103,10 +107,13 @@ export default function GeneratedArticlesList({
         ).filter(isArticleSubmittable);
         const groupSelection = selectionState(
           groupSelectable,
-          selected,
+          selectedKeys,
           clientId,
         );
         const isCollapsed = collapsed[group.key] !== false;
+        const pageCount = Math.max(1, Math.ceil(group.articles.length / pageSize));
+        const currentPage = Math.min(pages[group.key] || 1, pageCount);
+        const visibleArticles = group.articles.slice((currentPage - 1) * pageSize, currentPage * pageSize);
         const groupPublishedTime = publishedView
           ? publishedTimeFacts.get(group.articles[0]?.id) || null
           : null;
@@ -161,7 +168,7 @@ export default function GeneratedArticlesList({
 
             {!isCollapsed && (
               <div className="min-w-0 divide-y divide-slate-100">
-                {group.articles.map((article) => {
+                {visibleArticles.map((article) => {
                   const workflow = workflowByArticle.get(article.id);
                   const stageLabel = workflow?.label || "状态不可用";
                   const summary = workflow?.publicationSummary;
@@ -190,7 +197,7 @@ export default function GeneratedArticlesList({
                       <input
                         type="checkbox"
                         aria-label={`选择 ${article.title}`}
-                        checked={selected.includes(articleSelectionKey(article))}
+                        checked={selectedKeys.has(articleSelectionKey(article))}
                         onChange={() => onToggleArticle(article)}
                         disabled={!isArticleSelectable(article)}
                         className="h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-blue-600"
@@ -250,6 +257,11 @@ export default function GeneratedArticlesList({
                     </div>
                   );
                 })}
+                {pageCount > 1 && <nav aria-label={`${group.label}文章分页`} className="flex items-center justify-end gap-3 px-3.5 py-2.5 text-xs">
+                  <span>共 {group.articles.length} 篇 · 第 {currentPage}/{pageCount} 页 · 全选作用于整个分组</span>
+                  <button type="button" disabled={currentPage === 1} onClick={() => setPages(current => ({ ...current, [group.key]: currentPage - 1 }))}>上一页</button>
+                  <button type="button" disabled={currentPage === pageCount} onClick={() => setPages(current => ({ ...current, [group.key]: currentPage + 1 }))}>下一页</button>
+                </nav>}
               </div>
             )}
           </section>

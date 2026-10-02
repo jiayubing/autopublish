@@ -1,8 +1,8 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import {
   cancelPendingGenerationBatch,
-  createAndStartGenerationBatch,
-  regenerateAttentionItems,
+  checkUncertainGenerationBatchV2,
+  createAndStartGenerationBatchV2,
   getGenerationRuntimeSnapshot,
   pauseGenerationBatch,
   resumeGenerationBatch,
@@ -21,8 +21,8 @@ export function useGenerationFeature(enabled = true) {
   const featureRef = useRef<ReturnType<typeof createGenerationFeature> | null>(null);
   if (!featureRef.current) {
     featureRef.current = createGenerationFeature({
-      start: createAndStartGenerationBatch,
-      regenerate: regenerateAttentionItems,
+      start: createAndStartGenerationBatchV2,
+      checkUncertain: checkUncertainGenerationBatchV2,
       previewBatch: previewGenerationBatch,
       pause: pauseGenerationBatch,
       resume: resumeGenerationBatch,
@@ -49,7 +49,7 @@ export function useGenerationFeature(enabled = true) {
   return {
     snapshot,
     start: feature.start,
-    regenerate: feature.regenerate,
+    checkUncertain: feature.checkUncertain,
     refresh: feature.hydrate,
     previewBatch: feature.previewBatch,
     pause: feature.pause,

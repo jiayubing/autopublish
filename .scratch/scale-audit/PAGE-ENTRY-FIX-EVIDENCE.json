@@ -1,0 +1,133 @@
+{
+  "baseCommit": "d05d425063ec2c71d75aad436ec898a5a8e48898",
+  "branch": "codex/geo-knowledge-base",
+  "status": "LOCAL_VERIFIED_UNCOMMITTED",
+  "core": {
+    "counts": {
+      "tests": 651,
+      "passed": 651,
+      "failed": 0,
+      "skipped": 0,
+      "cancelled": 0,
+      "todo": 0
+    },
+    "wallClockMs": 39714
+  },
+  "integration": {
+    "counts": {
+      "tests": 1329,
+      "passed": 1329,
+      "failed": 0,
+      "skipped": 0,
+      "cancelled": 0,
+      "todo": 0
+    },
+    "wallClockMs": 234305
+  },
+  "finalDeltaValidation": {
+    "note": "During the final integration run the existing attention client filter was moved into cache construction; the final version was separately verified by 25 attention/query/page-entry regressions, lint and main typecheck. No source changed after that.",
+    "tests": 25,
+    "passed": 25
+  },
+  "scope": "Synthetic filesystem, SQLite and headless browser only; no external provider requests or production data.",
+  "sources": [
+    {
+      "path": "auto—publish/desktop/services/ai-content-service.js",
+      "sha256": "9f857c45cde2d28395755ed52e07f946d3a4231e5e2415458d6584cd7b8f85d6"
+    },
+    {
+      "path": "auto—publish/desktop/services/article-attention-query.js",
+      "sha256": "3b19e3df82279a3072992097247d300304d6b75761b90df99e9028a06a4cc39e"
+    },
+    {
+      "path": "auto—publish/desktop/services/article-management-snapshot.js",
+      "sha256": "750387a83363e45f55bf526d75db880790d903f850bf0e5de3d3c9ff404332bb"
+    },
+    {
+      "path": "auto—publish/desktop/services/submission-center-snapshot.js",
+      "sha256": "0b76b82dbb5182fa282b816449bf75a7f75de372ec8e264519d3c6eb03868ff6"
+    },
+    {
+      "path": "auto—publish/media-workbench/src/article-history-logic.js",
+      "sha256": "28402d607747ecb141aceb959dec4264ceb0e756fe0d5995b37937a967698ffc"
+    },
+    {
+      "path": "auto—publish/media-workbench/src/components/content/GeneratedArticlesList.tsx",
+      "sha256": "7c5e708ea382275980d8128888ce838f51176ce3a98b1ac21f17f19b9a8526fb"
+    },
+    {
+      "path": "auto—publish/media-workbench/src/components/content/GeneratedArticlesView.tsx",
+      "sha256": "544bc9e713b2dd69a8ece969d2963d189ed6e619ffbf8bf315ec4d64ac045d66"
+    },
+    {
+      "path": "auto—publish/src/content/client-knowledge.js",
+      "sha256": "d15d90c00bbd277d63efcac9ccd386de18c73e11036178d867360c0e67112796"
+    },
+    {
+      "path": "auto—publish/src/content/client-material-store.js",
+      "sha256": "f68f8254619312f20baa99946a2a7061874cef752720cf3bc038dddcd3a38205"
+    },
+    {
+      "path": "auto—publish/src/infrastructure/operational-store/internal/operational-store-fact-reader.js",
+      "sha256": "32b360ddb19880ad2a97598d52a83d9e57c9a316fe3587199f5a657269c1bc9b"
+    },
+    {
+      "path": "auto—publish/tests/article-management-snapshot-storage-cost.test.js",
+      "sha256": "4cd6f74c52076ae72f3145f17503ace2fc04dc593f03e249f7cdbb76b6f7167f"
+    },
+    {
+      "path": "auto—publish/tests/page-entry-performance.test.js",
+      "sha256": "c516fe3d7f34559001ae736791670bf51d3cfbfe54b01783f0926deda414095b"
+    },
+    {
+      "path": "auto—publish/tests/renderer-article-list-capacity.test.js",
+      "sha256": "2a5705ae6882b832009f4ecfbe555b454674964e12561985d86499d8ecf921a9"
+    }
+  ],
+  "logs": [
+    {
+      "path": "auto—publish/build/page-performance-core-final.log",
+      "sha256": "20750df6d1043251c0530d24e7cd0310bf81966596ce292aaeee9f34b87681b7"
+    },
+    {
+      "path": "auto—publish/build/page-performance-integration-final.log",
+      "sha256": "cb551a710981e7a736d1a93114e7b361acb51f36fab2dd57ad913e2175c98d69"
+    },
+    {
+      "path": "auto—publish/build/page-performance-scope-final.log",
+      "sha256": "6c14e18cf6094d9b312bcbf15e249957f134e6cb2d97d6cbf03132e88a510c8f"
+    },
+    {
+      "path": "auto—publish/build/page-performance-storage.log",
+      "sha256": "ab5d4b269b9a381729457860ba57c0c0cc67f939d5c0322c97305565bc17adcb"
+    },
+    {
+      "path": "auto—publish/build/page-performance-ui.log",
+      "sha256": "ba9bebba7ce5c5dcb9c9b515651499cf091ffa5ed47639b60ec3b6392ef63049"
+    },
+    {
+      "path": "auto—publish/build/page-performance-lint.log",
+      "sha256": "4719207db1de39dff12b56ed1bd59ff8218ca692682c09a44d607bd309d59967"
+    },
+    {
+      "path": "auto—publish/build/page-performance-main.log",
+      "sha256": "ebbc142724f130b6a415fe941f24cc023094b14e865322902f3ad4fce01fbed6"
+    },
+    {
+      "path": "auto—publish/build/page-performance-typecheck.log",
+      "sha256": "ba50aad13cc2f7875133f259bbe5227b70bc10a4482a41a0fd591db658c9de48"
+    },
+    {
+      "path": "auto—publish/build/page-performance-bridge.log",
+      "sha256": "1bde7b67ab165f2ead21a7a73f10585f97084eb9dcbfdbeba2fc67dc001da18b"
+    },
+    {
+      "path": "auto—publish/build/page-performance-renderer.log",
+      "sha256": "b46ab928fd7a2a4596d5bd21ddb54d7b0dd12707460b9982105e7feab298df36"
+    },
+    {
+      "path": "auto—publish/build/page-performance-catalog.log",
+      "sha256": "a74c597cccd12d38e7760abf1f9ecb18bc7aa6d8106d343f933cedb7f2e742c0"
+    }
+  ]
+}

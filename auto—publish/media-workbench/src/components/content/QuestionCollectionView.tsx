@@ -69,6 +69,7 @@ interface QuestionCollectionViewProps {
   login: DoubaoLoginState;
   queueQuery: { loading: boolean; error?: { userMessage?: string } | null };
   loginQuery: { loading: boolean; error?: { userMessage?: string } | null };
+  focusQuestionId?: string | null;
 }
 
 function loginTone(status: DoubaoLoginState["status"]) {
@@ -92,6 +93,7 @@ export default function QuestionCollectionView({
   login,
   queueQuery,
   loginQuery,
+  focusQuestionId,
 }: QuestionCollectionViewProps) {
   const { confirm } = useConfirmation();
   const [questionDraftId, setQuestionDraftId] = useState<string | null>(null);
@@ -521,6 +523,7 @@ export default function QuestionCollectionView({
               onCollect={(question) => void collect(question, false)}
               onRecollect={(question) => void recollect(question)}
               onDelete={(question) => void deleteQuestion(question)}
+              focusQuestionId={focusQuestionId}
             />
           </Surface>
 

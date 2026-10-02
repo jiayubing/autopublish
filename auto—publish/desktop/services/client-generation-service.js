@@ -9,6 +9,8 @@ const { createArticleGenerator } = require("../../src/content/article-generator"
 const { buildPrompt } = require("../../src/content/prompt-builder");
 const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
+const { isUncertain } = require("../../src/content/generation-result-policy");
+
 const RETRY_DELAYS = [5000, 15000];
 const DEFAULT_MAX_RETAINED_OPERATIONS = 50;
 const RETRYABLE_CODES = new Set([
@@ -77,13 +79,13 @@ function normalizeIds(value, requiredCode, invalidCode, label) {
 
 function safeError(error) {
   return {
-    code: error && typeof error.code === "string" ? error.code.slice(0, 100) : "CONTENT_GENERATION_FAILED",
-    message: error && typeof error.message === "string" ? error.message.slice(0, 500) : "文章生成失败",
+    code: error && /^[A-Z][A-Z0-9_]{0,99}$/.test(error.code || "") ? error.code : "CONTENT_GENERATION_FAILED",
+    message: error && error.code === "AI_CONFIG_INVALID" ? "AI client configuration is invalid" : "文章生成未完成，请根据错误代码核对任务状态",
   };
 }
 
 function isRetryable(error) {
-  if (!error || error.retryable === false) return false;
+  if (!error || isUncertain(error) || error.retryable === false) return false;
   if (RETRYABLE_CODES.has(error.code)) return true;
   return error.status === 429 || (Number.isInteger(error.status) && error.status >= 500 && error.status <= 599);
 }
@@ -93,7 +95,7 @@ function isConfigurationError(error) {
 }
 
 function countsFor(tasks) {
-  const counts = { total: tasks.length, pending: 0, running: 0, succeeded: 0, failed: 0 };
+  const counts = { total: tasks.length, pending: 0, running: 0, succeeded: 0, failed: 0, uncertain: 0 };
   tasks.forEach(function(task) {
     if (Object.prototype.hasOwnProperty.call(counts, task.status)) counts[task.status] += 1;
   });
@@ -132,6 +134,20 @@ function createClientGenerationService(options) {
     ? value.maxRetainedOperations
     : DEFAULT_MAX_RETAINED_OPERATIONS;
   let disposed = false;
+  let storageFailure = null;
+
+  function persist(operation) {
+    if (!value.operationStore) return;
+    const record = { ...operation };
+    delete record.controller;
+    delete record.promise;
+    try { value.operationStore.write({ ...record, version: 1 }); }
+    catch (error) {
+      storageFailure = error;
+      operations.forEach(item => { if (item.status === "running") item.controller.abort(); });
+      throw error;
+    }
+  }
 
   function snapshot(operation) {
     if (!operation) return null;
@@ -159,6 +175,7 @@ function createClientGenerationService(options) {
 
   function emit(operation) {
     operation.updatedAt = now();
+    persist(operation);
     const event = snapshot(operation);
     listeners.forEach(function(listener) {
       try { listener(clone(event)); } catch (error) {
@@ -175,7 +192,7 @@ function createClientGenerationService(options) {
 
   function finalize(operation) {
     const counts = countsFor(operation.tasks);
-    operation.status = counts.failed > 0 ? (counts.succeeded > 0 ? "partial" : "failed") : "completed";
+    operation.status = counts.uncertain > 0 ? "uncertain" : counts.failed > 0 ? (counts.succeeded > 0 ? "partial" : "failed") : "completed";
     operation.updatedAt = now();
     emit(operation);
     const existingIndex = terminalOperationIds.indexOf(operation.id);
@@ -219,6 +236,7 @@ function createClientGenerationService(options) {
     const generator = articleGeneratorFactory({
       getClient: function(id) { return clientKnowledge.getClient(id); },
       researchStore: researchStore,
+      getGeoKnowledgeContext: () => clone(operation.knowledgeSnapshot),
       materialStore: materialStore,
       templateStore: templateStore,
       buildPrompt: promptBuilder,
@@ -273,10 +291,10 @@ function createClientGenerationService(options) {
           task.error = null;
         } catch (error) {
           if (operation.controller.signal.aborted || error && error.code === "AI_ABORTED") {
-            task.status = "failed";
+            task.status = "uncertain";
             task.error = { code: "AI_ABORTED", message: "生成任务已停止" };
           } else {
-            task.status = "failed";
+            task.status = isUncertain(error) ? "uncertain" : "failed";
             task.error = safeError(error);
             if (isConfigurationError(error)) configurationFailure = task.error;
           }
@@ -284,7 +302,9 @@ function createClientGenerationService(options) {
         emit(operation);
       }
     }
-    await Promise.all(Array.from({ length: operation.concurrency }, worker));
+    const results = await Promise.allSettled(Array.from({ length: operation.concurrency }, worker));
+    const failure = results.find(result => result.status === "rejected");
+    if (failure) throw failure.reason;
     if (configurationFailure) {
       operation.tasks.forEach(function(task) {
         if (task.status === "pending") {
@@ -331,6 +351,7 @@ function createClientGenerationService(options) {
   }
 
   function start(input) {
+    if (storageFailure) throw storageFailure;
     if (disposed) throw clientGenerationError("CONTENT_RUNTIME_DISPOSED", "Content runtime is disposed");
     const request = prepareRequest(input);
     const current = latestByClient.get(request.clientId);
@@ -338,10 +359,23 @@ function createClientGenerationService(options) {
       if (current.id === request.generationOperationId) return snapshot(current);
       throw clientGenerationError("CONTENT_GENERATION_CLIENT_BUSY", "当前客户已有文章生成任务正在运行");
     }
-    const existingOperation = operations.get(request.generationOperationId);
-    if (existingOperation) return snapshot(existingOperation);
+    let existingOperation = operations.get(request.generationOperationId);
+    if (!existingOperation && value.operationStore) {
+      const saved = value.operationStore.list().find(item => item.id === request.generationOperationId);
+      if (saved) {
+        existingOperation = { ...saved, controller: new AbortController(), promise: null };
+        operations.set(saved.id, existingOperation);
+      }
+    }
+    if (existingOperation) {
+      if (existingOperation.clientId !== request.clientId) throw clientGenerationError("CONTENT_GENERATION_ID_CONFLICT");
+      return snapshot(existingOperation);
+    }
     const createdAt = now();
     const operation = {
+      knowledgeSnapshot: typeof value.getGeoKnowledgeContext === "function"
+        ? clone(value.getGeoKnowledgeContext(request.clientId, request.researchQueryIds.map(id => researchStore.getResearch(request.clientId, id)), request.researchQueryIds))
+        : null,
       id: request.generationOperationId,
       clientId: request.clientId,
       articleCount: request.articleCount,
@@ -352,6 +386,7 @@ function createClientGenerationService(options) {
         return { index: index, status: "pending", attempts: 0, articleId: null, articleTitle: null, error: null };
       }),
       createdAt: createdAt,
+      activatedAt: createdAt,
       updatedAt: createdAt,
       controller: new AbortController(),
       promise: null,
@@ -362,11 +397,12 @@ function createClientGenerationService(options) {
     operation.promise = runOperation(operation).catch(function(error) {
       operation.tasks.forEach(function(task) {
         if (task.status === "pending" || task.status === "running") {
-          task.status = "failed";
+          task.status = task.status === "running" ? "uncertain" : "failed";
           task.error = safeError(error);
         }
       });
-      finalize(operation);
+      if (!storageFailure) finalize(operation);
+      else operation.status = "uncertain";
       return snapshot(operation);
     });
     return snapshot(operation);
@@ -378,10 +414,19 @@ function createClientGenerationService(options) {
       return { status: running.length ? "running" : "idle", activeClientCount: running.length, isBatchRunning: running.length > 0 };
     }
     assertId(clientId, "Client id");
+    if (!latestByClient.has(clientId) && value.operationStore) {
+      const saved = value.operationStore.list().filter(item => item.clientId === clientId).sort((a, b) => b.activatedAt.localeCompare(a.activatedAt))[0];
+      if (saved) {
+        const operation = { ...saved, controller: new AbortController(), promise: null };
+        operations.set(operation.id, operation);
+        latestByClient.set(clientId, operation);
+      }
+    }
     return snapshot(latestByClient.get(clientId) || null);
   }
 
   function retryFailed(input) {
+    if (storageFailure) throw storageFailure;
     if (disposed) throw clientGenerationError("CONTENT_RUNTIME_DISPOSED", "Content runtime is disposed");
     const request = input || {};
     const operationId = assertId(request.operationId, "Operation id");
@@ -396,17 +441,19 @@ function createClientGenerationService(options) {
     }
     failed.forEach(function(task) { task.status = "pending"; task.error = null; });
     operation.status = "running";
+    operation.activatedAt = now();
     operation.controller = new AbortController();
     latestByClient.set(operation.clientId, operation);
     emit(operation);
     operation.promise = runOperation(operation).catch(function(error) {
       operation.tasks.forEach(function(task) {
         if (task.status === "pending" || task.status === "running") {
-          task.status = "failed";
+          task.status = task.status === "running" ? "uncertain" : "failed";
           task.error = safeError(error);
         }
       });
-      finalize(operation);
+      if (!storageFailure) finalize(operation);
+      else operation.status = "uncertain";
       return snapshot(operation);
     });
     return snapshot(operation);
@@ -417,7 +464,7 @@ function createClientGenerationService(options) {
     if (!operation) throw clientGenerationError("CONTENT_GENERATION_OPERATION_NOT_FOUND", "Generation operation was not found");
     if (operation.promise) await operation.promise;
     const succeeded = operation.tasks.filter(function(task) { return task.status === "succeeded"; });
-    const failed = operation.tasks.filter(function(task) { return task.status === "failed"; });
+    const failed = operation.tasks.filter(function(task) { return ["failed", "uncertain"].includes(task.status); });
     if (operation.articleCount === 1) {
       if (failed.length) throw Object.assign(new Error(failed[0].error && failed[0].error.message || "文章生成失败"), failed[0].error || {});
       return contentStore.getArticle(operation.clientId, succeeded[0].articleId);
@@ -425,7 +472,7 @@ function createClientGenerationService(options) {
     return {
       operationId: operation.id,
       articleCount: operation.articleCount,
-      status: failed.length ? (succeeded.length ? "partial" : "failed") : "completed",
+      status: operation.status,
       articles: succeeded.map(function(task) { return { index: task.index, article: contentStore.getArticle(operation.clientId, task.articleId) }; }),
       failures: failed.map(function(task) { return { index: task.index, code: task.error && task.error.code || "CONTENT_GENERATION_FAILED" }; }),
     };
@@ -434,6 +481,38 @@ function createClientGenerationService(options) {
   function generateArticle(input) {
     const started = start(input);
     return waitForOperation(started.operationId);
+  }
+
+  if (value.operationStore) {
+    try {
+    for (const record of value.operationStore.list().sort((a, b) => a.activatedAt.localeCompare(b.activatedAt))) {
+      const operation = { ...record, controller: new AbortController(), promise: null };
+      operations.set(operation.id, operation);
+      latestByClient.set(operation.clientId, operation);
+      if (operation.status === "running") {
+        operation.tasks.forEach(task => {
+          if (!["pending", "running"].includes(task.status)) return;
+          const childId = operation.articleCount === 1 ? operation.id : operation.id + "-" + String(task.index + 1);
+          const article = findExisting(childId);
+          if (article) {
+            task.status = "succeeded";
+            task.articleId = article.id;
+            task.articleTitle = article.title;
+            task.error = null;
+          } else {
+            task.status = task.status === "running" ? "uncertain" : "failed";
+            task.error = { code: "AI_ABORTED", message: "上次运行已中断，请核对任务结果" };
+          }
+        });
+        finalize(operation);
+      }
+    }
+    } catch (error) {
+      if (typeof value.operationStore.close === "function") {
+        try { value.operationStore.close(); } catch { error.lockCleanupFailed = true; }
+      }
+      throw error;
+    }
   }
 
   function subscribe(listener) {
@@ -452,6 +531,7 @@ function createClientGenerationService(options) {
     operations.clear();
     latestByClient.clear();
     terminalOperationIds.length = 0;
+    if (value.operationStore && typeof value.operationStore.close === "function") value.operationStore.close();
   }
 
   return {

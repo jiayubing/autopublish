@@ -33,6 +33,24 @@ describe("generation batch store", function() {
     fs.rmSync(workspaceRoot, { recursive: true, force: true });
   });
 
+  it("keeps uncertain work visible after cancelling pending tasks and reopening", function() {
+    const store = createGenerationBatchStore({ workspaceRoot });
+    const batch = store.createOrGetV2({
+      requestId: "cancel-uncertain", requestFingerprint: "a".repeat(64), concurrency: 1,
+      aiConfigFingerprint: "fp", templates: templates(),
+      questionSources: [{ id: "source-a", clientId: "c1", geoQuestionId: "geo-a", collectionQuestionId: "q1", questionText: "合成问题", knowledgeRevision: 1, researchCapturedAt: "2026-10-02T00:00:00Z", researchFingerprint: "b".repeat(64) }],
+    });
+    store.markTaskRunning(batch.id, batch.tasks[0].id);
+    store.markTaskUncertain(batch.id, batch.tasks[0].id);
+    store.updateBatchStatus(batch.id, "paused");
+    store.cancelPending(batch.id);
+    const restored = createGenerationBatchStore({ workspaceRoot }).getBatch(batch.id);
+    assert.equal(restored.status, "uncertain");
+    assert.equal(restored.counts.uncertain, 1);
+    assert.equal(restored.counts.cancelled, 1);
+    assert.equal(store.cancelPending(batch.id).status, "uncertain");
+  });
+
   it("reuses unchanged batch reads and skips idempotent writes without hiding external edits", function() {
     let reads = 0;
     let syncs = 0;
@@ -107,6 +125,54 @@ describe("generation batch store", function() {
     const persisted = fs.readFileSync(path.join(createWorkspacePaths(workspaceRoot).generationBatches, "batch-batch-1.json"), "utf8");
     assert.equal(persisted.includes("api-key"), false);
     assert.equal(persisted.includes("fingerprint"), true);
+  });
+
+  it("atomically creates one v2 question-template batch per request and persists explicit start intent", function() {
+    const store = createGenerationBatchStore({ workspaceRoot });
+    const input = {
+      requestId: "request-1",
+      requestFingerprint: "a".repeat(64),
+      concurrency: 2,
+      aiConfigFingerprint: "ai-fingerprint",
+      questionSources: [
+        { id: "source-1", clientId: "client-1", geoQuestionId: "geo-1", collectionQuestionId: "question-1", questionText: "如何选择？", knowledgeRevision: 3, researchCapturedAt: "2026-09-22T00:00:00.000Z", researchFingerprint: "b".repeat(64) },
+        { id: "source-2", clientId: "client-2", geoQuestionId: "geo-2", collectionQuestionId: "question-2", questionText: "哪里适用？", knowledgeRevision: 4, researchCapturedAt: "2026-09-22T00:00:00.000Z", researchFingerprint: "c".repeat(64) },
+      ],
+      templates: templates(),
+    };
+    const batch = store.createOrGetV2(input);
+    assert.equal(batch.version, 2);
+    assert.equal(batch.tasks.length, 4);
+    assert.equal(batch.startState, "not_started");
+    assert.equal("clientId" in batch.tasks[0], false);
+    assert.deepEqual(store.createOrGetV2(input), batch);
+    assert.throws(() => store.createOrGetV2({ ...input, requestFingerprint: "d".repeat(64) }), { code: "GENERATION_REQUEST_CONFLICT" });
+    assert.equal(store.markStartRequested(batch.id).startState, "starting");
+    assert.equal(store.markStartRequested(batch.id).startRequestedAt, store.getBatch(batch.id).startRequestedAt);
+    assert.equal(store.markStarted(batch.id).startState, "started");
+    const uncertain = store.markTaskUncertain(batch.id, batch.tasks[0].id, { code: "AI_TIMEOUT", message: "unknown" });
+    assert.equal(uncertain.tasks[0].status, "uncertain");
+    assert.equal(uncertain.counts.uncertain, 1);
+    assert.equal(store.getTasksForContinue(batch.id).some((task) => task.status === "uncertain"), false);
+  });
+
+  it("leaves v2 running tasks intact for service-level article identity recovery", function() {
+    const store = createGenerationBatchStore({ workspaceRoot });
+    const batch = store.createOrGetV2({
+      requestId: "request-recovery",
+      requestFingerprint: "a".repeat(64),
+      concurrency: 1,
+      aiConfigFingerprint: "ai-fingerprint",
+      questionSources: [
+        { id: "source-1", clientId: "client-1", geoQuestionId: "geo-1", collectionQuestionId: "question-1", questionText: "如何选择？", knowledgeRevision: 3, researchCapturedAt: "2026-09-22T00:00:00.000Z", researchFingerprint: "b".repeat(64) },
+      ],
+      templates: [{ platform: "media", templateId: "guide" }],
+    });
+    store.markTaskRunning(batch.id, batch.tasks[0].id);
+
+    const reopened = createGenerationBatchStore({ workspaceRoot });
+    assert.equal(reopened.getBatch(batch.id).tasks[0].status, "running");
+    assert.deepEqual(reopened.recoverInterrupted(), []);
   });
 
   it("enforces both task inputs, unique ids, valid ids, and the task limit", function() {

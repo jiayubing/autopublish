@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LoaderCircle, RefreshCw } from "lucide-react";
 import type { ContentClient, ContentTemplateCatalog, LiejuPublicationProfile } from "../types/content";
 import type { ArticleSummary, GeneratedContentArticle } from "../types/generation";
@@ -7,6 +7,7 @@ import ArticleGenerationView from "./content/ArticleGenerationView";
 import GeneratedArticleEditorPanel from "./content/GeneratedArticleEditorPanel";
 import GeneratedArticlesView from "./content/GeneratedArticlesView";
 import QuestionCollectionView from "./content/QuestionCollectionView";
+import GeoKnowledgeView from "./content/GeoKnowledgeView";
 import { CurrentClientSelector, type ClientGrouping } from "./content/ClientSelector";
 import { type ArticleWorkflowFilter } from "../article-workflow";
 import ArticleLibraryFilters from "./content/ArticleLibraryFilters";
@@ -17,7 +18,7 @@ import type { FavoriteMediaPage } from "./content/GeneratedArticlesView.types";
 import type { ArticleLibraryNavigationIntent } from "../article-library-navigation";
 
 type RefreshState = "idle" | "refreshing" | "error";
-type ProductionTab = "questions" | "client" | "batch";
+type ProductionTab = "questions" | "client" | "batch" | "knowledge";
 type WorkbenchTab = ProductionTab | "history";
 type MainNavigationGuard = (action: () => void) => void;
 
@@ -38,7 +39,7 @@ function loadProductionTab(): ProductionTab {
   if (typeof localStorage === "undefined") return "questions";
   const value = localStorage.getItem(PRODUCTION_TAB_KEY);
   if (value === "single") return "client";
-  return value === "client" || value === "batch" || value === "questions"
+  return value === "client" || value === "batch" || value === "questions" || value === "knowledge"
     ? value
     : "questions";
 }
@@ -68,6 +69,7 @@ function remember(key: string, value: string) {
 interface ContentWorkbenchProps {
   content: ContentWorkbenchFeature;
   initialBatchClientIds?: string[];
+  initialBatchQuestions?: Array<{ clientId: string; geoQuestionId: string }>;
   mode?: "production" | "library";
   articleIntent?: ArticleLibraryNavigationIntent | null;
   onArticleIntentConsumed?: () => void;
@@ -82,6 +84,7 @@ interface ContentWorkbenchProps {
 export default function ContentWorkbench({
   content,
   initialBatchClientIds,
+  initialBatchQuestions,
   mode = "production",
   articleIntent,
   onArticleIntentConsumed,
@@ -135,6 +138,9 @@ export default function ContentWorkbench({
   const [articleNavigationIntent, setArticleNavigationIntent] =
     useState<ArticleLibraryNavigationIntent | null>(null);
   const [error, setError] = useState("");
+  const [requestedBatchQuestions, setRequestedBatchQuestions] = useState<Array<{ clientId: string; geoQuestionId: string }> | undefined>();
+  const requestedBatchClientIds = useMemo(() => requestedBatchQuestions?.map((question) => question.clientId), [requestedBatchQuestions]);
+  const [focusedQuestionId, setFocusedQuestionId] = useState<string | null>(null);
   const [refreshConfirmationVisible, setRefreshConfirmationVisible] =
     useState(false);
   const historyDirtyRef = useRef(false);
@@ -338,6 +344,7 @@ export default function ContentWorkbench({
     requestHistoryLeave(() => {
       closeHistoryEditor(true);
       remember(SELECTED_CLIENT_KEY, nextClientId);
+      setRequestedBatchQuestions(undefined);
       content.selectClient(nextClientId);
       setError("");
       setGenerationBatchFilter(null);
@@ -354,6 +361,7 @@ export default function ContentWorkbench({
     if (nextTab === tab) return;
     requestHistoryLeave(() => {
       closeHistoryEditor(true);
+      if (nextTab !== "batch") setRequestedBatchQuestions(undefined);
       setTab(nextTab);
       if (nextTab === "questions" || nextTab === "client" || nextTab === "batch")
         remember(PRODUCTION_TAB_KEY, nextTab);
@@ -398,7 +406,7 @@ export default function ContentWorkbench({
       : "idle";
   const visibleError = error || query.error?.userMessage || "";
   const tabs = mode === "production"
-    ? (["questions", "client", "batch"] as const)
+    ? (["questions", "client", "batch", "knowledge"] as const)
     : ([] as const);
   if (loading)
     return (
@@ -416,7 +424,7 @@ export default function ContentWorkbench({
               ? "问题采集"
               : id === "client"
                 ? "客户生成"
-                : "批量生成";
+                : id === "knowledge" ? "客户知识库" : "批量生成";
           return (
             <button
               id={id}
@@ -480,11 +488,14 @@ export default function ContentWorkbench({
             login={doubaoLogin}
             queueQuery={doubaoQueueQuery}
             loginQuery={doubaoLoginQuery}
+            focusQuestionId={focusedQuestionId}
           />
         )}
+        {tab === "knowledge" && <div key={clientId} className="flex min-h-0 flex-1"><GeoKnowledgeView clientId={clientId} onCollectQuestion={(questionId) => { setFocusedQuestionId(questionId); changeTab("questions"); }} onGenerateQuestion={(geoQuestionId) => { setRequestedBatchQuestions([{ clientId, geoQuestionId }]); changeTab("batch"); }} /></div>}
         {(tab === "client" || tab === "batch") && (
           <ArticleGenerationView
-            initialBatchClientIds={initialBatchClientIds}
+            initialBatchClientIds={requestedBatchClientIds || initialBatchClientIds}
+            initialBatchQuestions={requestedBatchQuestions || initialBatchQuestions}
             grouping={grouping}
             client={clients.find((item) => item.id === clientId)}
             clients={clients}
@@ -500,6 +511,7 @@ export default function ContentWorkbench({
             generationFeature={content.generation}
             generationMode={tab}
             onViewBatchArticles={openGenerationBatchArticles}
+            onSwitchToClient={() => changeTab("client")}
           />
         )}
         {mode === "library" && tab === "history" && (

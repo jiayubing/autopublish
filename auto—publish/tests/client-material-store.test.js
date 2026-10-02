@@ -9,6 +9,7 @@ const { createClientMaterialStore } = require("../src/content/client-material-st
 const { setDiagnosticReporter } = require("../src/diagnostics/diagnostic-producer");
 
 const DOCX_FIXTURE = path.resolve(__dirname, "fixtures", "docx", "customer-material.docx");
+const DOC_FIXTURE = path.resolve(__dirname, "fixtures", "doc", "legacy-customer.doc");
 
 const LINK_UNAVAILABLE_CODES = new Set(["EPERM", "EACCES", "ENOTSUP", "EOPNOTSUPP", "EINVAL", "ENOSYS"]);
 
@@ -52,6 +53,44 @@ describe("client material store", function() {
     const items = await store.listMaterials("client-1");
 
     assert.deepEqual(items.map(function(item) { return item.name; }), ["brand.md", "menu.docx"]);
+  });
+
+  it("extracts Chinese body and table text from a binary DOC, then invalidates its cache", async function() {
+    const target = path.join(clientDirectory, "legacy.doc");
+    fs.copyFileSync(DOC_FIXTURE, target);
+    const store = createClientMaterialStore({ workspaceRoot });
+    const first = (await store.listMaterials("client-1")).find((item) => item.name === "legacy.doc");
+    assert.equal(first.status, "ready");
+    assert.match(first.content, /星河酒店提供客房与会议服务。/);
+    assert.match(first.content, /服务项目/);
+    assert.match(first.content, /客房/);
+    assert.equal(first.cacheHit, false);
+    const cached = (await store.listMaterials("client-1")).find((item) => item.name === "legacy.doc");
+    assert.equal(cached.cacheHit, true);
+    fs.writeFileSync(target, "not a DOC");
+    const changed = (await store.listMaterials("client-1")).find((item) => item.name === "legacy.doc");
+    assert.equal(changed.status, "error");
+    assert.equal(changed.error.code, "MATERIAL_DOC_INVALID");
+  });
+
+  it("reports encrypted, empty and oversized DOC files without returning empty success", async function() {
+    const binary = fs.readFileSync(DOC_FIXTURE);
+    const fib = binary.indexOf(Buffer.from([0xec, 0xa5]));
+    assert.ok(fib > 0);
+    binary.writeUInt16LE(binary.readUInt16LE(fib + 10) | 0x0100, fib + 10);
+    fs.writeFileSync(path.join(clientDirectory, "encrypted.doc"), binary);
+    fs.copyFileSync(path.join(__dirname, "fixtures", "doc", "empty.doc"), path.join(clientDirectory, "empty.doc"));
+    fs.writeFileSync(path.join(clientDirectory, "oversized.doc"), Buffer.alloc(8 * 1024 * 1024 + 1));
+    fs.writeFileSync(path.join(clientDirectory, "fake.doc"), fs.readFileSync(DOCX_FIXTURE));
+    const store = createClientMaterialStore({ workspaceRoot });
+    const items = await store.listMaterials("client-1");
+    const byName = (name) => items.find((item) => item.name === name);
+    assert.equal(byName("encrypted.doc").error.code, "MATERIAL_DOC_ENCRYPTED");
+    assert.equal(byName("empty.doc").error.code, "MATERIAL_DOC_EMPTY");
+    assert.equal(byName("fake.doc").error.code, "MATERIAL_DOC_INVALID");
+    assert.equal(byName("oversized.doc").error.code, "MATERIAL_DOC_TOO_LARGE");
+    for (const name of ["encrypted.doc", "empty.doc", "fake.doc", "oversized.doc"])
+      assert.equal(byName(name).content, "");
   });
 
   it("parses a real DOCX with the default converter when MarkItDown is unavailable", async function() {

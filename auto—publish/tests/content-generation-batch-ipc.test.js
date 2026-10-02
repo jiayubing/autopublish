@@ -71,12 +71,15 @@ describe("content generation batch IPC", function() {
         clientSources: [{ clientId: "client-1", materialIds: ["material-1"], researchQueryIds: ["research-1"] }],
         tasks: [{ clientId: "client-1", platform: "media", templateId: "guide", materialIds: ["material-1"], researchQueryIds: ["research-1"] }],
       }; },
-      createAndStartBatch: async function() { return { id: "batch-1" }; },
+      createBatchV2: async function() { return { id: "batch-1", status: "pending" }; },
+      startBatchV2: async function() { return { id: "batch-1", status: "running" }; },
+      checkUncertainBatchV2: async function() { return { id: "batch-1", status: "completed" }; },
        pauseBatch: async function() { return null; }, abandonBatch: async function() { return { id: "batch-1", status: "abandoned" }; }, resumeBatch: async function() { return null; }, retryFailed: async function() { return null; }, previewCancelPending: async function() { return { pendingCount: 1, canCancel: true }; }, cancelPending: async function() { return { id: "batch-1", status: "completed" }; }, getState: function() { return { status: "idle" }; },
       subscribe: function() { return function() {}; }
     };
     registerContentGenerationBatchIpc({ ipcMain, contentGenerationBatchService: service });
-     for (const channel of ["content:preview-generation-batch", "content:create-and-start-generation-batch", "content:pause-generation-batch", "content:abandon-generation-batch", "content:resume-generation-batch", "content:retry-failed-generation-batch", "content:preview-cancel-pending-generation-batch", "content:cancel-pending-generation-batch", "content:get-generation-runtime-snapshot"]) assert.ok(handlers.has(channel), channel);
+     for (const channel of ["content:preview-generation-batch", "content:create-generation-batch-v2", "content:start-generation-batch-v2", "content:check-uncertain-generation-batch-v2", "content:pause-generation-batch", "content:abandon-generation-batch", "content:resume-generation-batch", "content:retry-failed-generation-batch", "content:preview-cancel-pending-generation-batch", "content:cancel-pending-generation-batch", "content:get-generation-runtime-snapshot"]) assert.ok(handlers.has(channel), channel);
+    assert.equal(handlers.has("content:create-and-start-generation-batch"), false);
     assert.equal(handlers.has("content:stop-generation-batch"), false);
     assert.deepStrictEqual(await handlers.get("content:preview-generation-batch")({}, { templates: [{ platform: "media", templateId: "guide" }] }), { ok: true, data: {
       clientCount: 1,
@@ -89,6 +92,18 @@ describe("content generation batch IPC", function() {
       clientSources: [{ clientId: "client-1", materialIds: ["material-1"], researchQueryIds: ["research-1"] }],
       tasks: [{ clientId: "client-1", platform: "media", templateId: "guide", materialIds: ["material-1"], researchQueryIds: ["research-1"] }],
     } });
+    assert.deepStrictEqual(await handlers.get("content:create-generation-batch-v2")({}, { requestId: "request-1" }), {
+      ok: true,
+      data: { batch: { id: "batch-1", status: "pending", clientSources: [], templates: [], tasks: [], counts: undefined } },
+    });
+    assert.deepStrictEqual(await handlers.get("content:start-generation-batch-v2")({}, { batchId: "batch-1" }), {
+      ok: true,
+      data: { batch: { id: "batch-1", status: "running", clientSources: [], templates: [], tasks: [], counts: undefined } },
+    });
+    assert.deepStrictEqual(await handlers.get("content:check-uncertain-generation-batch-v2")({}, { batchId: "batch-1" }), {
+      ok: true,
+      data: { batch: { id: "batch-1", status: "completed", clientSources: [], templates: [], tasks: [], counts: undefined } },
+    });
     assert.deepStrictEqual(await handlers.get("content:preview-cancel-pending-generation-batch")({}, { batchId: "batch-1" }), { ok: true, data: { pendingCount: 1, canCancel: true } });
     assert.deepStrictEqual(await handlers.get("content:cancel-pending-generation-batch")({}, { batchId: "batch-1", confirmed: true }), {
       ok: true,

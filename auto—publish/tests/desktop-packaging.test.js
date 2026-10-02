@@ -15,6 +15,10 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+it("alpha packaging excludes nested browser runtime records", () => {
+  assert.ok(read("electron-builder.alpha.yml").includes('"!**/.playwright-cli/**"'));
+});
+
 function loadMainWithQuitHarness(dispose, harnessOptions) {
   const options = harnessOptions || {};
   const mainPath = path.resolve(__dirname, "..", "desktop", "main.js");

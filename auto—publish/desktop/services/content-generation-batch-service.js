@@ -6,9 +6,10 @@ const { createClientMaterialStore } = require("../../src/content/client-material
 const { createResearchStore } = require("../../src/content/research-store");
 const { createTemplateStore } = require("../../src/content/template-store");
 const { createArticleGenerator } = require("../../src/content/article-generator");
-const { buildPrompt } = require("../../src/content/prompt-builder");
+const { buildPrompt, buildPromptV2 } = require("../../src/content/prompt-builder");
 const { createGenerationBatchStore } = require("../../src/content/generation-batch-store");
 const { createGenerationBatchRunner } = require("../../src/content/generation-batch-runner");
+const { fingerprintCreateIntent } = require("../../src/content/generation-v2");
 const { reportDiagnostic } = require("../../src/diagnostics/diagnostic-producer");
 
 const { createGenerationBatchPreview } = require("./content-generation-batch-preview");
@@ -18,6 +19,7 @@ const SAFE_MESSAGES = {
   GENERATION_SOURCE_LIMIT: "Selected materials and research answers must contain at most 50 items each",
   GENERATION_TASK_LIMIT: "Generation batch has too many tasks",
   GENERATION_CLIENTS_REQUIRED: "At least one batch client is required",
+  GENERATION_QUESTIONS_REQUIRED: "At least one GEO question is required",
   GENERATION_TEMPLATES_REQUIRED: "At least one writing template is required",
   GENERATION_CLIENT_NOT_FOUND: "Client was not found",
   CLIENT_MATERIAL_REQUIRED: "At least one valid client material is required",
@@ -29,6 +31,11 @@ const SAFE_MESSAGES = {
   GENERATION_TEMPLATE_STALE: "模板目录已变化，请刷新后重新选择模板",
   GENERATION_NO_EXECUTABLE_TASKS: "No executable generation tasks are available",
   GENERATION_BATCH_BUSY: "Generation batch is already running",
+  GENERATION_REQUEST_INVALID: "Generation request is invalid",
+  GENERATION_REQUEST_CONFLICT: "Generation request conflicts with an existing batch",
+  GENERATION_RESULT_UNCERTAIN: "Generation result is uncertain and requires manual review",
+  GENERATION_SOURCE_STALE: "Generation source changed; preview again",
+  GENERATION_V1_EXECUTION_DISABLED: "Legacy generation batches are read-only",
   GENERATION_BATCH_NOT_FOUND: "Generation batch was not found",
   GENERATION_AI_CONFIG_CHANGED: "AI configuration changed; confirm before continuing",
   AI_CONFIG_NOT_SET: "AI provider configuration is not set",
@@ -117,9 +124,10 @@ function createContentGenerationBatchService(options) {
   const materialStore = opts.materialStore || createClientMaterialStore({ workspaceRoot: workspaceRoot, paths: paths });
   const researchStore = opts.researchStore || createResearchStore(workspaceRoot, { paths: paths });
   const templateStore = opts.templateStore || createTemplateStore(workspaceRoot, { paths: paths });
-  const preview = createGenerationBatchPreview({
+  const { preview, prepareV2 } = createGenerationBatchPreview({
     clientKnowledge, materialStore, researchStore, templateStore,
     generationError, assertObject, assertId,
+    getGenerationBriefV2: opts.getGenerationBriefV2,
   });
   const contentStore = opts.contentStore;
   const articleMutationCoordinator = opts.articleMutationCoordinator || null;
@@ -130,6 +138,7 @@ function createContentGenerationBatchService(options) {
   const provider = opts.aiProviderService || {};
   const generatorFactory = opts.articleGeneratorFactory || createArticleGenerator;
   const promptFactory = opts.buildPrompt || buildPrompt;
+  const promptV2Factory = opts.buildPromptV2 || buildPromptV2;
   const createId = opts.createId || function() { return crypto.randomUUID(); };
   const seenIds = opts.seenIds || new Set();
   const listeners = new Set();
@@ -144,6 +153,64 @@ function createContentGenerationBatchService(options) {
   const runtimeId = opts.runtimeId || crypto.randomUUID();
   let sequence = 0;
   const now = typeof opts.now === "function" ? opts.now : function() { return new Date().toISOString(); };
+  let recoveryError = null;
+
+  async function recoverV2Tasks(options) {
+    const recovery = options || {};
+    const statuses = recovery.statuses || new Set(["running"]);
+    const candidates = recovery.batchId
+      ? [batchStore.getBatch(recovery.batchId)]
+      : batchStore.listBatches();
+    for (const candidate of candidates) {
+      if (!candidate || candidate.version !== 2 || !candidate.tasks.some(function(task) { return statuses.has(task.status); })) continue;
+      for (const task of candidate.tasks.filter(function(item) { return statuses.has(item.status); })) {
+        let found;
+        try { found = await contentStore.findByGenerationTaskId(task.id); }
+        catch (error) {
+          if (error && ["ARTICLE_NOT_FOUND", "GENERATION_ARTICLE_NOT_FOUND"].includes(error.code)) found = null;
+          else throw error;
+        }
+        if (found && found.kind === "many") {
+          batchStore.markTaskUncertain(candidate.id, task.id, { code: "GENERATION_ARTICLE_IDENTITY_CONFLICT", message: "Multiple articles match the generation task" });
+        } else {
+          const article = found && found.kind === "one" ? found.article : found;
+          if (article && typeof article.id === "string") batchStore.markTaskSucceeded(candidate.id, task.id, article.id);
+          else batchStore.markTaskUncertain(candidate.id, task.id, { code: "GENERATION_RESULT_UNCERTAIN", message: "Generation result requires manual review" });
+        }
+      }
+      const recovered = batchStore.getBatch(candidate.id);
+      if (recovered.tasks.every(function(task) { return ["succeeded", "cancelled"].includes(task.status); }))
+        batchStore.updateBatchStatus(candidate.id, "completed");
+      else if (recovered.tasks.some(function(task) { return task.status === "uncertain"; }))
+        batchStore.updateBatchStatus(candidate.id, "uncertain");
+      else if (recovered.tasks.some(function(task) { return task.status === "pending"; }))
+        batchStore.updateBatchStatus(candidate.id, "pending");
+    }
+  }
+
+  const recoveryPromise = Promise.resolve().then(function() {
+    return recoverV2Tasks({ statuses: new Set(["running"]) });
+  }).catch(function(error) {
+    recoveryError = error;
+    reportDiagnostic({
+      code: "GENERATION_V2_RECOVERY_FAILED",
+      module: "content-generation-batch-service",
+      category: "storage",
+      operationId: "generation-v2-startup-recovery",
+      metadata: { operation: "article-identity-recovery", phase: "startup", outcome: "failed", errorCode: error && error.code || "GENERATION_V2_RECOVERY_FAILED" },
+    });
+  });
+
+  async function ensureRecovery() {
+    await recoveryPromise;
+    if (recoveryError) throw recoveryError;
+  }
+
+  function assertLegacyExecutionEnabled() {
+    if (opts.allowLegacyV1Execution !== true) {
+      throw generationError("GENERATION_V1_EXECUTION_DISABLED");
+    }
+  }
 
   function notifyData(reasonCode, batch) {
     if (typeof opts.onDataInvalidated !== "function") return;
@@ -213,14 +280,19 @@ function createContentGenerationBatchService(options) {
   function enrichBatch(batch) {
     // ContentStore owns and refreshes generation identity projections, so this
     // lookup avoids reopening canonical article JSON just to display a title.
-    return projectBatchTitles(clone(batch), false);
+    const summary = batch ? { ...batch } : batch;
+    if (summary) delete summary.proseBriefs;
+    return projectBatchTitles(clone(summary), false);
   }
 
   function emit(value) {
-    const event = safeEvent(value);
+    const safeValue = { ...value, ...(value.batch ? { batch: { ...value.batch } } : {}) };
+    if (safeValue.batch) delete safeValue.batch.proseBriefs;
+    const event = safeEvent(safeValue);
     if (event.batch) projectBatchTitles(event.batch, true);
     if (!event.capabilities && event.batch) {
       event.capabilities = {
+        canStart: canStart(event.batch),
         canResume: canResume(event.batch),
         canContinue: canResume(event.batch),
         canRetry: event.batch.status === "failed",
@@ -287,7 +359,15 @@ function createContentGenerationBatchService(options) {
   }
 
   function canResume(batch) {
+    if (batch && batch.version === 2)
+      return Boolean(batch.tasks && batch.tasks.some(function(task) { return ["pending", "failed", "interrupted"].includes(task.status); }));
     return Boolean(batch && ["pending", "failed", "interrupted", "paused", "paused_configuration"].includes(batch.status) && batch.tasks && batch.tasks.some(function(task) { return ["pending", "failed", "interrupted"].includes(task.status); }));
+  }
+
+  function canStart(batch) {
+    return Boolean(batch && batch.version === 2 && batch.tasks &&
+      batch.tasks.some(function(task) { return task.status === "pending"; }) &&
+      !batch.tasks.some(function(task) { return task.status === "running"; }));
   }
 
   function runtimeSnapshot() {
@@ -308,6 +388,7 @@ function createContentGenerationBatchService(options) {
       runtime: runtime,
       batch: enrichBatch(batch),
       capabilities: {
+        canStart: canStart(batch),
         canResume: canResume(batch),
         canContinue: canResume(batch),
         canRetry: Boolean(batch && batch.status === "failed"),
@@ -336,24 +417,50 @@ function createContentGenerationBatchService(options) {
         return sourceCache.research.get(key);
       }
     });
+    const batch = batchStore.getBatch(activeBatchId);
+    const isV2 = batch && batch.version === 2;
+    let resolvedV2 = null;
+    if (isV2) {
+      const source = batch.questionSources.find(function(item) { return item.id === task.questionSourceId; });
+      if (!source || typeof opts.getGenerationBriefV2 !== "function") throw generationError("GENERATION_SOURCE_INVALID");
+      resolvedV2 = batch.proseBriefs?.[source.id] ? { brief: clone(batch.proseBriefs[source.id]) } : await opts.getGenerationBriefV2({
+        clientId: source.clientId,
+        geoQuestionId: source.geoQuestionId,
+        knowledgeRevision: source.knowledgeRevision,
+        researchFingerprint: source.researchFingerprint,
+      });
+    }
     const generator = generatorFactory({
       getClient: function(clientId) { return clientKnowledge.getClient(clientId); },
       researchStore: scopedResearchStore, materialStore: scopedMaterialStore, templateStore: templateStore,
-      buildPrompt: promptFactory, aiClient: signalClient, createId: createId, seenIds: seenIds
+      getGeoKnowledgeContext: opts.getGeoKnowledgeContext,
+      buildPrompt: isV2 ? promptV2Factory : promptFactory, aiClient: signalClient, createId: createId, seenIds: seenIds
     });
-    const article = await generator.generateArticle({ clientId: task.clientId, materialIds: task.materialIds,
+    const article = await generator.generateArticle(isV2 ? {
+      articleBrief: resolvedV2.brief,
+      clientId: resolvedV2.brief.clientId,
+      platform: task.platform,
+      templateId: task.templateId,
+      generationBatchId: activeBatchId,
+      generationTaskId: task.id,
+    } : { clientId: task.clientId, materialIds: task.materialIds,
       researchQueryIds: task.researchQueryIds, platform: task.platform, templateId: task.templateId,
       generationBatchId: activeBatchId, generationTaskId: task.id });
     if (!article || typeof article.id !== "string") throw generationError("GENERATION_ARTICLE_INVALID");
     article.status = "generated";
     article.generationBatchId = activeBatchId;
     article.generationTaskId = task.id;
-    if (articleMutationCoordinator && typeof articleMutationCoordinator.createArticle === "function") {
-      articleMutationCoordinator.createArticle(article);
-    } else if (typeof contentStore.createArticle === "function") {
-      contentStore.createArticle(article);
-    } else {
-      contentStore.saveArticle(article);
+    try {
+      if (articleMutationCoordinator && typeof articleMutationCoordinator.createArticle === "function") {
+        articleMutationCoordinator.createArticle(article);
+      } else if (typeof contentStore.createArticle === "function") {
+        contentStore.createArticle(article);
+      } else {
+        contentStore.saveArticle(article);
+      }
+    } catch (error) {
+      if (isV2) throw generationError("GENERATION_RESULT_UNCERTAIN", undefined, error);
+      throw error;
     }
     return { id: article.id, articleId: article.id };
   }
@@ -368,6 +475,7 @@ function createContentGenerationBatchService(options) {
   }
 
   async function createBatch(input) {
+    assertLegacyExecutionEnabled();
     assertAvailable();
     const previewResult = await preview(input);
     if (!previewResult.executableTaskCount) throw generationError("GENERATION_NO_EXECUTABLE_TASKS");
@@ -382,10 +490,47 @@ function createContentGenerationBatchService(options) {
     return enrichBatch(batch);
   }
 
+  async function createBatchV2(input) {
+    await ensureRecovery();
+    assertAvailable();
+    const value = assertObject(input);
+    const requestId = assertId(value.requestId, "request id");
+    const requestedConcurrency = value.concurrency === undefined ? 2 : value.concurrency;
+    if (Array.isArray(value.selectedQuestions) && Array.isArray(value.templates)) {
+      const requestFingerprint = fingerprintCreateIntent({
+        selectedQuestions: value.selectedQuestions,
+        selectedTemplates: value.templates,
+        concurrency: requestedConcurrency,
+      });
+      if (typeof batchStore.resolveCreateReplayV2 === "function") {
+        const replay = batchStore.resolveCreateReplayV2({ requestId, requestFingerprint });
+        if (replay) return enrichBatch(replay);
+      }
+    }
+    const { preview: previewResult, proseBriefs } = await prepareV2(value);
+    if (previewResult.version !== 2 || !previewResult.executableTaskCount)
+      throw generationError("GENERATION_NO_EXECUTABLE_TASKS");
+    const aiConfigFingerprint = await fingerprint();
+    assertAvailable();
+    const batch = batchStore.createOrGetV2({
+      proseBriefs,
+      requestId,
+      requestFingerprint: previewResult.requestFingerprint,
+      questionSources: previewResult.questionSources,
+      templates: previewResult.templates,
+      concurrency: requestedConcurrency,
+      aiConfigFingerprint,
+    });
+    emitBatch(batch);
+    notifyData("GENERATION_BATCH_CREATED", batch);
+    return enrichBatch(batch);
+  }
+
   async function runBatch(batchId, selection, confirmConfigChange) {
     assertAvailable();
     const batch = batchStore.getBatch(batchId);
     if (!batch) throw generationError("GENERATION_BATCH_NOT_FOUND");
+    if (batch.version === 1) assertLegacyExecutionEnabled();
     const reservation = { batchId: batchId, selection: selection, promise: null };
     activeRun = reservation;
     activeBatchId = batchId;
@@ -472,9 +617,38 @@ function createContentGenerationBatchService(options) {
     return runBatch(assertId(value.batchId, "batch id"), "pending", value.confirmConfigChange === true);
   }
 
+  async function startBatchV2(input) {
+    await ensureRecovery();
+    const value = assertObject(input);
+    const batchId = assertId(value.batchId, "batch id");
+    const batch = batchStore.getBatch(batchId);
+    if (!batch || batch.version !== 2) throw generationError("GENERATION_BATCH_INVALID");
+    if (activeRun && activeBatchId === batchId) return runtimeBatch(batch, "running");
+    if (!canStart(batch)) return enrichBatch(batch);
+    batchStore.markStartRequested(batchId);
+    batchStore.markStarted(batchId);
+    return runBatch(batchId, "pending", false);
+  }
+
+  async function checkUncertainBatchV2(input) {
+    await ensureRecovery();
+    const value = assertObject(input);
+    const batchId = assertId(value.batchId, "batch id");
+    const batch = batchStore.getBatch(batchId);
+    if (!batch || batch.version !== 2) throw generationError("GENERATION_BATCH_INVALID");
+    await recoverV2Tasks({ batchId, statuses: new Set(["uncertain"]) });
+    const checked = batchStore.getBatch(batchId);
+    emitBatch(checked);
+    return enrichBatch(checked);
+  }
+
   async function resumeBatch(input) {
     const value = assertObject(input);
-    return runBatch(assertId(value.batchId, "batch id"), "unfinished", value.confirmConfigChange === true);
+    const batchId = assertId(value.batchId, "batch id");
+    const batch = batchStore.getBatch(batchId);
+    if (batch.version === 2 && ["not_started", "starting"].includes(batch.startState) && batch.tasks.some(function(task) { return task.status === "pending"; }))
+      return startBatchV2({ batchId });
+    return runBatch(batchId, "unfinished", value.confirmConfigChange === true);
   }
 
   async function retryFailed(input) {
@@ -543,11 +717,12 @@ function createContentGenerationBatchService(options) {
   }
 
   async function createAndStartBatch(input) {
-    const batch = await createBatch(input);
-    return runBatch(batch.id, "pending", false);
+    const batch = Array.isArray(input && input.selectedQuestions) ? await createBatchV2(input) : await createBatch(input);
+    return batch.version === 2 ? startBatchV2({ batchId: batch.id }) : runBatch(batch.id, "pending", false);
   }
 
   async function regenerateAttentionItems(input) {
+    assertLegacyExecutionEnabled();
     const value = assertObject(input);
     assertId(value.requestId, "request id");
     if (value.confirmed !== true || !Array.isArray(value.attentionIds) || value.attentionIds.length < 1 || value.attentionIds.length > 100 ||
@@ -666,7 +841,10 @@ function createContentGenerationBatchService(options) {
   return {
     preview,
     createBatch,
+    createBatchV2,
     startBatch,
+    startBatchV2,
+    checkUncertainBatchV2,
     createAndStartBatch,
     regenerateAttentionItems,
     pauseBatch,
@@ -679,6 +857,7 @@ function createContentGenerationBatchService(options) {
     listBatches,
     getState: currentState,
     getRuntimeSnapshot: runtimeSnapshot,
+    recoverStartup: ensureRecovery,
     subscribe,
     dispose,
   };

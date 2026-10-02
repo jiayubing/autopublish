@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const { closeRenderer, startRenderer } = require("./helpers/renderer-harness");
 
-test("batch generation hydrates a selected non-current client on cold start", { concurrency: false }, async (t) => {
+test("batch generation loads ready questions for a selected non-current client on cold start", { concurrency: false }, async (t) => {
   let renderer;
   try {
     renderer = await startRenderer({ port: 4183 });
@@ -69,6 +69,7 @@ test("batch generation hydrates a selected non-current client on cold start", { 
       publication: { listForArticles: () => ok([]) },
       articleAttention: { list: () => ok({ revision: 0, items: [], counts: { total: 0, actionable: 0 } }) },
       content,
+      geoKnowledge: { questionWorkflow: ({ clientId }) => ok({ clientId, knowledgeRevision: 1, items: [{ id: `geo-${clientId}`, name: clientId === "client-b" ? "问题 B" : "问题 A", intent: "comparison", knowledgeCoverage: "enough", linkStatus: "linked", questionId: research[clientId][0].id, collectionEnabled: true, research: { collectedAt: "2026-09-22T00:00:00.000Z", answerLength: 4, referenceCount: 0 }, articles: { total: 0, publishedCount: 0 }, generation: { ready: true, code: "GEO_GENERATION_READY" } }] }) },
     };
   });
 
@@ -85,7 +86,7 @@ test("batch generation hydrates a selected non-current client on cold start", { 
 
   const sourceText = await page.locator(".batch-generation-view").innerText();
   assert.match(sourceText, /客户 B/);
-  assert.match(sourceText, /brand-b\.txt/);
+  assert.match(sourceText, /问题 B/);
   assert.match(sourceText, /可生成/);
-  assert.ok((await page.evaluate(() => window.__batchHydrationCalls)).includes("getClientDetails:client-b"));
+  assert.equal((await page.evaluate(() => window.__batchHydrationCalls)).includes("getClientDetails:client-b"), false);
 });

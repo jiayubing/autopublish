@@ -90,13 +90,13 @@ export function WorkspaceScopedConfirmationHost({
 
 function ContentProductionPage({
   content,
-  initialBatchClientIds,
+  batchGenerationIntent,
   onOpenArticleLibrary,
   onOpenOrders,
   onReadinessChange,
 }: {
   content: ContentWorkbenchFeature;
-  initialBatchClientIds?: string[];
+  batchGenerationIntent?: { clientIds: string[]; selectedQuestions: Array<{ clientId: string; geoQuestionId: string }> };
   onOpenArticleLibrary: (intent?: ArticleLibraryNavigationIntent) => void;
   onOpenOrders: () => void;
   onReadinessChange: (readiness: PageReadiness) => void;
@@ -117,7 +117,8 @@ function ContentProductionPage({
     <ContentWorkbench
       content={content.production}
       mode="production"
-      initialBatchClientIds={initialBatchClientIds}
+      initialBatchClientIds={batchGenerationIntent?.clientIds}
+      initialBatchQuestions={batchGenerationIntent?.selectedQuestions}
       onOpenArticleLibrary={onOpenArticleLibrary}
       onOpenOrders={onOpenOrders}
     />
@@ -198,7 +199,7 @@ function SubmissionCenterPage({
   onReadinessChange,
 }: {
   content: ContentWorkbenchFeature;
-  onOpenBatchGeneration: (clientIds: string[]) => void;
+  onOpenBatchGeneration: (intent: { clientIds: string[]; selectedQuestions: Array<{ clientId: string; geoQuestionId: string }> }) => void;
   initialSection: "regular" | "paid" | "attention";
   onOpenArticleLibrary: (intent?: ArticleLibraryNavigationIntent) => void;
   onOpenOrders: () => void;
@@ -297,9 +298,9 @@ function ResourcesRoute({
 
 function AppContent() {
   const [currentView, setCurrentView] = useState<ViewMode>(loadLastView);
-  const [batchClientIds, setBatchClientIds] = useState<string[] | undefined>();
+  const [batchGenerationIntent, setBatchGenerationIntent] = useState<{ clientIds: string[]; selectedQuestions: Array<{ clientId: string; geoQuestionId: string }> } | undefined>();
   useEffect(() => {
-    if (currentView !== "content-production") setBatchClientIds(undefined);
+    if (currentView !== "content-production") setBatchGenerationIntent(undefined);
   }, [currentView]);
   const contentPage = contentPageForView(currentView);
   const content = useContentWorkbenchFeature({ page: contentPage });
@@ -459,7 +460,7 @@ function AppContent() {
                   <PlatformFeatureProvider>
                     <ContentProductionPage
                       content={content}
-                      initialBatchClientIds={batchClientIds}
+                      batchGenerationIntent={batchGenerationIntent}
                       onOpenArticleLibrary={openArticleLibrary}
                       onOpenOrders={() => changeView("orders")}
                       onReadinessChange={reportReadiness}
@@ -520,8 +521,8 @@ function AppContent() {
                   <PlatformFeatureProvider loadQueue>
                     <SubmissionCenterPage
                       content={content}
-                      onOpenBatchGeneration={(clientIds) => {
-                        setBatchClientIds(clientIds);
+                      onOpenBatchGeneration={(intent) => {
+                        setBatchGenerationIntent(intent);
                         changeView("content-production");
                       }}
                       initialSection={submissionCenterSection}

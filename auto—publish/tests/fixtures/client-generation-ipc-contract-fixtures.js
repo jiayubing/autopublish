@@ -13,6 +13,7 @@ function operationFixture() {
       running: 1,
       succeeded: 0,
       failed: 0,
+      uncertain: 0,
     },
     tasks: [
       {

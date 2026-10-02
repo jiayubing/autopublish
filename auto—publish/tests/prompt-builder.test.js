@@ -1,7 +1,7 @@
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 
-const { buildPrompt } = require("../src/content/prompt-builder");
+const { buildPrompt, buildPromptV2 } = require("../src/content/prompt-builder");
 
 function input(overrides) {
   return Object.assign({
@@ -28,6 +28,22 @@ function input(overrides) {
 }
 
 describe("prompt builder", function() {
+  it("builds the v2 prompt from one Article Brief without client material duplication", function() {
+    const brief = {
+      version: 2,
+      clientId: "client-1",
+      targetQuestion: { collectionQuestionId: "question-1", text: "如何选择？" },
+      client: { primaryName: "示例客户", aliases: [] },
+      selectedKnowledge: { profileFacts: [] },
+      restrictions: [],
+      currentResearch: { question: "如何选择？", answer: "只出现一次的研究回答", references: [], decisionDimensions: [] },
+    };
+    const prompt = buildPromptV2({ articleBrief: brief, platform: "media", templateId: "guide", template: { id: "guide", body: "写作约束" } });
+    assert.equal(prompt.user.split("只出现一次的研究回答").length - 1, 1);
+    assert.doesNotMatch(prompt.user, /【客户资料】/);
+    assert.match(prompt.system, /restrictions/);
+  });
+
   it("builds system and user prompts with four separated Chinese sections", function() {
     const prompt = buildPrompt(input());
     assert.deepStrictEqual(Object.keys(prompt), ["system", "user"]);

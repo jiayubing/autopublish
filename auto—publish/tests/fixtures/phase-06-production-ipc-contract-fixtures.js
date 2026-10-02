@@ -1134,11 +1134,12 @@ const rawProductionIpcContractFixtures = [
     },
   },
   {
-    capability: "generation.createAndStartBatch",
-    channel: "content:create-and-start-generation-batch",
+    capability: "generation.createBatchV2",
+    channel: "content:create-generation-batch-v2",
     owner: "generation",
     request: {
-      clientIds: ["fixture-1"],
+      requestId: "fixture-1",
+      selectedQuestions: [{ clientId: "fixture-1", geoQuestionId: "question-1" }],
       templates: [
         {
           platform: "fixture-1",
@@ -1165,16 +1166,18 @@ const rawProductionIpcContractFixtures = [
     },
   },
   {
-    capability: "generation.regenerateAttentionItems",
-    channel: "content:regenerate-attention-items",
+    capability: "generation.startBatchV2",
+    channel: "content:start-generation-batch-v2",
     owner: "generation",
-    request: { requestId: "request-1", attentionIds: ["attention-1"], confirmed: true },
-    result: {
-      batch: {
-        id: "regeneration-fixture", status: "pending", clientSources: [], templates: [], tasks: [],
-        counts: { total: 0, succeeded: 0, failed: 0, pending: 0, interrupted: 0, cancelled: 0 },
-      },
-    },
+    request: { batchId: "fixture-1" },
+    result: { batch: { id: "fixture-1", status: "running", clientSources: [], templates: [], tasks: [], counts: { total: 0, succeeded: 0, failed: 0, pending: 0, interrupted: 0, cancelled: 0 } } },
+  },
+  {
+    capability: "generation.checkUncertainBatchV2",
+    channel: "content:check-uncertain-generation-batch-v2",
+    owner: "generation",
+    request: { batchId: "fixture-1" },
+    result: { batch: { id: "fixture-1", status: "uncertain", clientSources: [], templates: [], tasks: [], counts: { total: 0, succeeded: 0, failed: 0, pending: 0, interrupted: 0, cancelled: 0 } } },
   },
   {
     capability: "generation.abandonBatch",
@@ -1306,6 +1309,7 @@ const rawProductionIpcContractFixtures = [
       },
       batch: null,
       capabilities: {
+        canStart: true,
         canResume: false,
         canContinue: false,
         canRetry: false,

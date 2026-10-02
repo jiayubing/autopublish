@@ -6,6 +6,9 @@ const path = require("node:path");
 const { createGenerationExecutionScheduler } = require("../src/content/generation-execution-scheduler");
 const { createAiExecutionService } = require("../desktop/services/ai-execution-service");
 const { createClientGenerationService } = require("../desktop/services/client-generation-service");
+const { createGeoKnowledgeService } = require("../desktop/services/geo-knowledge-service");
+const { createClientGenerationOperationStore } = require("../src/content/client-generation-operation-store");
+const { spawnSync } = require("node:child_process");
 
 function deferred() {
   let resolve;
@@ -70,6 +73,95 @@ function createSyntheticService(overrides = {}) {
     ...overrides,
   });
 }
+
+it("restores crashed client work without replaying the uncertain request", async (t) => {
+  const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "client-generation-crash-"));
+  const services = [];
+  t.after(async () => { for (const service of services) await service.dispose(); fs.rmSync(workspaceRoot, { recursive: true, force: true }); });
+  const source = `
+    const {createClientGenerationService} = require('./desktop/services/client-generation-service');
+    const {createClientGenerationOperationStore} = require('./src/content/client-generation-operation-store');
+    const root = process.argv[1];
+    const service = createClientGenerationService({ workspaceRoot: root,
+      operationStore: createClientGenerationOperationStore({workspaceRoot:root}),
+      contentStore:{createArticle(){}}, clientKnowledge:{getClient:id=>({id})},
+      aiClientFactory:()=>({}), articleGeneratorFactory:()=>({generateArticle:async()=>process.exit(23)}) });
+    service.start(${JSON.stringify(baseInput("client-a", "crashed", 2, 1))});
+  `;
+  const child = spawnSync(process.execPath, ["-e", source, workspaceRoot], { cwd: path.resolve(__dirname, ".."), encoding: "utf8" });
+  assert.equal(child.status, 23, child.stderr);
+  let calls = 0;
+  const store = createClientGenerationOperationStore({ workspaceRoot });
+  const service = createSyntheticService({ workspaceRoot, operationStore: store, aiClientFactory: () => { calls++; return { complete: async () => "# recovered\n\nbody" }; } });
+  t.after(() => service.dispose());
+  const recovered = service.getState("client-a");
+  services.push(service);
+  assert.throws(() => createSyntheticService({ workspaceRoot,
+    operationStore: createClientGenerationOperationStore({ workspaceRoot }) }), { code: "CONTENT_GENERATION_STORAGE_INVALID" });
+  assert.equal(recovered.operationId, "crashed");
+  assert.deepEqual(recovered.tasks.map(task => task.status), ["uncertain", "failed"]);
+  assert.equal(service.start(baseInput("client-a", "crashed", 2, 1)).status, "uncertain");
+  assert.equal(calls, 0);
+  service.retryFailed({ operationId: "crashed" });
+  await service.waitForOperation("crashed");
+  assert.equal(calls, 1);
+  assert.deepEqual(service.getState("client-a").tasks.map(task => task.status), ["uncertain", "succeeded"]);
+  await service.dispose();
+  const reopened = createSyntheticService({ workspaceRoot, operationStore: store });
+  services.push(reopened);
+  t.after(() => reopened.dispose());
+  assert.equal(reopened.getState("client-a").status, "uncertain");
+});
+
+it("does not dispatch when the operation journal cannot be saved", async (t) => {
+  let calls = 0;
+  const service = createSyntheticService({
+    operationStore: { list: () => [], write: () => { throw Object.assign(new Error("synthetic disk failure"), { code: "CONTENT_GENERATION_STORAGE_FAILED" }); } },
+    aiClientFactory: () => { calls++; throw new Error("must not dispatch"); },
+  });
+  t.after(() => service.dispose());
+  assert.throws(() => service.start(baseInput("client-a", "disk-failure", 1, 1)), { code: "CONTENT_GENERATION_STORAGE_FAILED" });
+  assert.equal(calls, 0);
+});
+
+it("recovers a saved article when final journal persistence failed", async (t) => {
+  const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "client-generation-save-"));
+  const services = [];
+  t.after(async () => { for (const service of services) await service.dispose(); fs.rmSync(workspaceRoot, { recursive: true, force: true }); });
+  const store = createClientGenerationOperationStore({ workspaceRoot });
+  const contentStore = createMemoryContentStore();
+  const service = createSyntheticService({ workspaceRoot, contentStore, operationStore: {
+    list: store.list,
+    close: store.close,
+    write: record => {
+      if (record.tasks.some(task => task.status === "succeeded")) throw Object.assign(new Error("synthetic write failure"), { code: "CONTENT_GENERATION_STORAGE_FAILED" });
+      store.write(record);
+    },
+  } });
+  service.start(baseInput("client-a", "article-saved", 1, 1));
+  services.push(service);
+  await service.waitForOperation("article-saved");
+  await service.dispose();
+  assert.equal(contentStore.articles.length, 1);
+  const reopened = createSyntheticService({ workspaceRoot, contentStore, operationStore: store,
+    aiClientFactory: () => { throw new Error("must not resend"); } });
+  services.push(reopened);
+  t.after(() => reopened.dispose());
+  assert.equal(reopened.getState("client-a").status, "completed");
+  assert.equal(reopened.getState("client-a").tasks[0].articleId, contentStore.articles[0].id);
+});
+
+it("generates from selected material and research when no GEO knowledge exists", async (t) => {
+  const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "generation-no-geo-"));
+  t.after(() => fs.rmSync(workspaceRoot, { recursive: true, force: true }));
+  const geo = createGeoKnowledgeService({ workspaceRoot, getClient: () => ({ name: "合成客户" }) });
+  const service = createSyntheticService({ getGeoKnowledgeContext: geo.getGenerationContext });
+  t.after(() => { service.dispose(); geo.dispose(); });
+  const article = await service.generateArticle(baseInput("client-a", "without-geo-knowledge", 1, 1));
+  assert.equal(article.title, "Synthetic title");
+  assert.equal(article.knowledgeSnapshot, undefined);
+  assert.deepEqual(article.researchQueryIds, ["question"]);
+});
 
 it("reuses persisted single and child results after restart without creating an AI client", async (t) => {
   for (const count of [1, 2]) {
@@ -343,14 +435,14 @@ it("client generation keeps successful articles when one task fails and retries 
   assert.deepEqual(await service.generateArticle(baseInput("client-a", "partial-operation", 3, 2)), partial);
   assert.equal(Array.from(calls.values()).reduce((total, count) => total + count, 0), 3);
   let state = service.getState("client-a");
-  assert.deepEqual(state.counts, { total: 3, pending: 0, running: 0, succeeded: 2, failed: 1 });
+  assert.deepEqual(state.counts, { total: 3, pending: 0, running: 0, succeeded: 2, failed: 1, uncertain: 0 });
   assert.equal(contentStore.articles.length, 2, "successful tasks stay persisted after a sibling failure");
 
   service.retryFailed({ operationId: "partial-operation" });
   const completed = await service.waitForOperation("partial-operation");
   assert.equal(completed.status, "completed");
   state = service.getState("client-a");
-  assert.deepEqual(state.counts, { total: 3, pending: 0, running: 0, succeeded: 3, failed: 0 });
+  assert.deepEqual(state.counts, { total: 3, pending: 0, running: 0, succeeded: 3, failed: 0, uncertain: 0 });
   assert.equal(state.tasks.find((task) => task.index === 1).attempts, 2);
   assert.equal(calls.get("partial-operation-1"), 1);
   assert.equal(calls.get("partial-operation-2"), 2);
@@ -430,4 +522,39 @@ it("bounds retained terminal operations and clears them on dispose", async () =>
 
   await service.dispose();
   await assert.rejects(service.waitForOperation("operation-b"), { code: "CONTENT_GENERATION_OPERATION_NOT_FOUND" });
+});
+
+
+it("one operation freezes saved prose across articles while the next operation gets new prose", async t => {
+  let revision = 1;
+  const contentStore = createMemoryContentStore();
+  const inputs = [];
+  const service = createSyntheticService({ contentStore,
+    getGeoKnowledgeContext: () => ({ version: 1, revision, context: "saved prose " + revision }),
+    buildPrompt: input => { inputs.push(input.knowledgeSnapshot); revision = 2; return { system: "synthetic", user: "synthetic" }; },
+  });
+  t.after(() => service.dispose());
+  await service.generateArticle(baseInput("client-a", "frozen-prose", 2, 1));
+  assert.deepEqual(inputs.map(item => item.revision), [1, 1]);
+  assert.deepEqual(contentStore.articles.map(item => item.knowledgeSnapshot.revision), [1, 1]);
+  await service.generateArticle(baseInput("client-a", "new-prose", 1, 1));
+  assert.equal(inputs[2].revision, 2);
+});
+
+for (const code of ["AI_TIMEOUT", "AI_NETWORK_ERROR", "AI_SERVER_ERROR", "AI_REQUEST_FAILED"]) it(`retains ${code} as uncertain without resending`, async (t) => {
+  let calls = 0;
+  const sleeps = [];
+  const service = createSyntheticService({
+    aiClientFactory: () => ({ complete: async () => { calls += 1; throw Object.assign(new Error(code), { code }); } }),
+    sleep: async (ms) => { sleeps.push(ms); },
+  });
+  t.after(() => service.dispose());
+  const input = baseInput("client-a", `uncertain-${code}`, 1, 1);
+  await assert.rejects(service.generateArticle(input), { code });
+  assert.equal(service.getState("client-a").status, "uncertain");
+  assert.equal(service.getState("client-a").counts.uncertain, 1);
+  service.retryFailed({ operationId: input.generationOperationId });
+  await assert.rejects(service.waitForOperation(input.generationOperationId), { code });
+  assert.equal(calls, 1);
+  assert.deepEqual(sleeps, []);
 });

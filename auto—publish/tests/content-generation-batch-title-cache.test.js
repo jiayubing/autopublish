@@ -25,6 +25,7 @@ function fixture(prefix) {
   let finish;
   let last;
   const service = createContentGenerationBatchService({
+    allowLegacyV1Execution: true,
     batchStore: {
       getBatch: (id) => batches.get(id), listBatches: () => [...batches.values()],
     },

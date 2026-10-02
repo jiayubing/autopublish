@@ -250,6 +250,42 @@ function createWorkspaceMigrationComposition(options) {
         repair: null,
       });
     }
+    // A superseded pre-import attempt has no imported facts to recover. Keep
+    // its journal intact; never extend this exception to an unverified import.
+    if (
+      !migrationRequired &&
+      !matchingJournal &&
+      counts.unplanned === 0 &&
+      counts.corrupt === 0 &&
+      currentRuntimeArtifactCount > 0 &&
+      journals.some((journal) => journal.phase === "verified") &&
+      journals.every(
+        (journal) =>
+          journal.sourceVersion === 1 &&
+          journal.workspaceFingerprint === planned.plan.workspaceFingerprint &&
+          (journal.phase === "verified" ||
+            (["detected", "backed_up", "confirmed"].includes(journal.phase) &&
+              journal.importCommitFingerprint === null &&
+              journal.importedEntryCount === 0)),
+      )
+    ) {
+      require("../../src/infrastructure/operational-store/operational-store").verifyOperationalDatabase(
+        require("node:path").join(
+          values.workspaceRoot,
+          ".autopublish",
+          "operations",
+          "operations.db",
+        ),
+      );
+      return Object.freeze({
+        allowed: true,
+        status: "stale_preimport_journals_ignored",
+        code: null,
+        phase: "verified",
+        executionGroupsPaused: true,
+        repair: null,
+      });
+    }
     if (!migrationRequired && !matchingJournal) {
       return Object.freeze({
         allowed: false,

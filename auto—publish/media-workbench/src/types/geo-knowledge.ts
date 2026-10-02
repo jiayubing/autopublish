@@ -1,0 +1,201 @@
+export type KnowledgeSection =
+  | "profile"
+  | "onlinePresence"
+  | "history"
+  | "offerings"
+  | "capabilities"
+  | "cases"
+  | "scenarios"
+  | "recommendationAngles"
+  | "competitors"
+  | "geoQuestions"
+  | "externalResearch"
+  | "restrictions";
+export type KnowledgeItem = {
+  id: string;
+  identity: string;
+  name?: string;
+  description?: string;
+  fields?: Record<string, string>;
+  basis: "fact" | "research" | "derived" | "candidate";
+  origin: "ai" | "manual";
+  locked: boolean;
+  sourceIds: string[];
+  relatedOfferingIds: string[];
+  relatedScenarioIds: string[];
+  intent?: string;
+  knowledgeCoverage?: string;
+  type?: string;
+  questionId?: string | null;
+  platform?: string;
+  url?: string;
+  dateText?: string;
+  claims?: ProfileClaim[];
+  target?: { section: "profile"; field: string };
+  claimIds?: string[];
+  conflictStatus?: "open" | "resolved";
+  resolution?: { acceptedClaimId: string; resolvedAt: string } | null;
+};
+export type ProfileClaim = {
+  id: string;
+  field: string;
+  value: string;
+  status: "accepted" | "candidate" | "rejected";
+  basis: "fact" | "research" | "derived" | "candidate";
+  origin: "ai" | "manual";
+  locked: boolean;
+  sourceIds: string[];
+};
+export type KnowledgeSource = {
+  id: string;
+  type: string;
+  title: string;
+  url?: string;
+  fetchedAt?: string;
+  fileName?: string;
+  materialId?: string;
+  contentHash?: string;
+  citationVerified?: boolean;
+};
+type KnowledgeDeliverable = {
+  researchNotes?: string;
+  sectionEvidence?: { title: string; kinds: string[]; sourceIds: string[] }[];
+  version: 1;
+  knowledgeRevision: number;
+  status: "complete" | "draft" | "stale";
+  markdown: string;
+  warnings: string[];
+  contentRevision?: number;
+  savedAt?: string;
+  origin?: "ai" | "manual" | "legacy";
+  indexStatus?: "current" | "stale";
+  sourceIds?: string[];
+  candidateId?: string;
+  baseContentRevision?: number;
+};
+export type GeoKnowledge = {
+  deliverable?: KnowledgeDeliverable;
+  pendingDeliverable?: KnowledgeDeliverable;
+  schemaVersion: number;
+  clientId: string;
+  revision: number;
+  businessType: string;
+  generatedAt: string;
+  updatedAt: string;
+  status: { outcome: "complete" | "partial"; warnings: string[] };
+  profile: KnowledgeItem;
+  onlinePresence: KnowledgeItem[];
+  history: KnowledgeItem[];
+  offerings: KnowledgeItem[];
+  capabilities: KnowledgeItem[];
+  cases: KnowledgeItem[];
+  scenarios: KnowledgeItem[];
+  recommendationAngles: KnowledgeItem[];
+  competitors: KnowledgeItem[];
+  geoQuestions: KnowledgeItem[];
+  externalResearch: KnowledgeItem[];
+  restrictions: KnowledgeItem[];
+  sources: KnowledgeSource[];
+};
+export type KnowledgeStorageStatus =
+  "missing" | "legacy_v1" | "current_v2" | "invalid";
+export type KnowledgeState = {
+  phase: string;
+  running: boolean;
+  outcome?: "uncertain";
+  completed?: number;
+  total?: number;
+  errorCode?: string;
+  failedPhase?:
+    | "materials"
+    | "extracting"
+    | "planning"
+    | "researching"
+    | "synthesizing"
+    | "saving"
+    | "R1"
+    | "R2"
+    | "R3"
+    | "R4"
+    | "R5"
+    | "K";
+};
+export type GeoConfigStatus = {
+  baseUrl: string;
+  configured: boolean;
+  model: string;
+  webSearch: boolean;
+  defaultGlobalPrompt: string;
+  globalPrompt: string;
+  defaultFinalKnowledgePrompt: string;
+  finalKnowledgePrompt: string;
+};
+export type GeoConfigInput = {
+  baseUrl: string;
+  model: string;
+  apiKey: string;
+  webSearch: boolean;
+};
+export type GeoConnectionResult = { search: boolean; citationCount: number };
+export type GeoPromptSettings = {
+  defaultGlobalPrompt: string;
+  globalPrompt: string;
+  clientPrompt: string;
+};
+export type KnowledgeEdit = {
+  clientId: string;
+  revision: number;
+  section: KnowledgeSection;
+  id: string;
+  changes: {
+    name?: string;
+    description?: string;
+    fields?: Record<string, string>;
+  };
+};
+export type KnowledgeQuestionDetails = {
+  id: string;
+  linkStatus: "unlinked" | "linked" | "stale";
+  enabled: boolean | null;
+  clientMentioned: boolean | null;
+  research: null | {
+    question: string;
+    answerText: string;
+    collectedAt: string;
+    collectionMethod: string;
+    references: { title: string; url: string }[];
+  };
+};
+export type KnowledgeQuestionArticles = {
+  articles: { id: string; title: string; stage: string; label: string }[];
+  total: number;
+  publishedCount: number;
+};
+export type KnowledgeQuestionWorkflow = {
+  clientId: string;
+  knowledgeRevision: number;
+  items: Array<{
+    id: string;
+    name: string;
+    intent: string;
+    knowledgeCoverage: string;
+    linkStatus: "unlinked" | "linked" | "stale";
+    questionId: string | null;
+    collectionEnabled: boolean | null;
+    research: null | {
+      collectedAt: string;
+      answerLength: number;
+      referenceCount: number;
+    };
+    articles: { total: number; publishedCount: number };
+    generation: {
+      ready: boolean;
+      code:
+        | "GEO_QUESTION_UNLINKED"
+        | "GEO_QUESTION_LINK_STALE"
+        | "GEO_RESEARCH_MISSING"
+        | "GEO_RESEARCH_STALE"
+        | "GEO_GENERATION_READY";
+    };
+  }>;
+};

@@ -1,0 +1,391 @@
+"use strict";
+
+const {
+  createGeoKnowledgeStore,
+} = require("../../src/content/geo-knowledge-store");
+const {
+  createClientMaterialStore,
+} = require("../../src/content/client-material-store");
+const { getClient } = require("../../src/content/client-knowledge");
+const {
+  createDoubaoGeoClient,
+} = require("../../src/content/doubao-geo-client");
+const {
+  runContinuousKnowledge,
+} = require("../../src/content/continuous-knowledge-run");
+const {
+  createGeoKnowledgeApplication,
+} = require("../../src/content/geo-knowledge-application");
+const { createDoubaoGeoConfigStore } = require("../doubao-geo-config-store");
+const { geoError } = require("../../src/content/geo-knowledge-schema");
+const {
+  createGeoQuestionLinks,
+} = require("../../src/content/geo-question-links");
+const { createResearchStore } = require("../../src/content/research-store");
+const {
+  selectGeoKnowledge,
+} = require("../../src/content/geo-generation-context");
+const {
+  queryGeoArticles,
+  queryGeoArticleCounts,
+} = require("../../src/content/geo-article-links");
+const {
+  buildGeoQuestionWorkflow,
+} = require("../../src/content/geo-question-workflow");
+const {
+  buildArticleBriefV2,
+} = require("../../src/content/geo-generation-context");
+const { fingerprintResearch } = require("../../src/content/generation-v2");
+const {
+  DEFAULT_RESEARCH_PROMPT,
+} = require("../../src/content/geo-knowledge-research");
+const {
+  DEFAULT_FINAL_KNOWLEDGE_PROMPT,
+} = require("../../src/content/final-knowledge-prompt");
+const {
+  createGeoKnowledgePromptStore,
+} = require("../geo-knowledge-prompt-store");
+const {
+  reportDiagnostic,
+} = require("../../src/diagnostics/diagnostic-producer");
+
+function createGeoKnowledgeService(options) {
+  const store = options.store || createGeoKnowledgeStore(options);
+  const materialStore =
+    options.materialStore || createClientMaterialStore(options);
+  const resolveClient =
+    options.getClient || ((id) => getClient(options.workspaceRoot, id));
+  let configStore = options.configStore;
+  const config = () =>
+    configStore || (configStore = createDoubaoGeoConfigStore(options));
+  const client =
+    options.client ||
+    createDoubaoGeoClient({ getConfig: () => config().read() });
+  const research = options.research || {
+    run: async ({
+      clientId,
+      clientName,
+      materials,
+      signal,
+      progress,
+      current,
+      promptSnapshot,
+    }) => {
+      return runContinuousKnowledge({
+        input: {
+          clientId,
+          clientName,
+          materials,
+          strategy: {
+            global: promptSnapshot.globalPrompt,
+            clientPersistent: promptSnapshot.clientPrompt,
+            runTemporary: promptSnapshot.temporaryPrompt,
+          },
+          knowledgePrompt: promptSnapshot.knowledgePrompt,
+          existingKnowledge: current,
+        },
+        client: promptSnapshot.requestClient,
+        signal,
+        onProgress: progress,
+        canonical: true,
+        artifactRoot: store.runDirectory(clientId),
+        maxSearches: promptSnapshot.searchEnabled ? 3 : 0,
+        limits: options.researchLimits || {
+          maxPromptCharacters: 80000,
+          analysisOutputTokens: 6000,
+          finalOutputTokens: 16000,
+        },
+      });
+    },
+  };
+  const promptStore =
+    options.promptStore || createGeoKnowledgePromptStore(options);
+  const application = createGeoKnowledgeApplication({
+    store,
+    materialStore,
+    getClient: resolveClient,
+    research,
+    getPromptSnapshot: (clientId, temporaryPrompt) => {
+      const prompts = promptStore.load();
+      const frozenConfig =
+        options.client || options.research
+          ? null
+          : Object.freeze({ ...config().read() });
+      return {
+        globalPrompt: prompts.researchPromptOverride || DEFAULT_RESEARCH_PROMPT,
+        knowledgePrompt:
+          prompts.finalKnowledgePromptOverride ||
+          DEFAULT_FINAL_KNOWLEDGE_PROMPT,
+        clientPrompt: store.loadPolicy(clientId).researchPrompt,
+        temporaryPrompt,
+        requestClient:
+          options.client ||
+          createDoubaoGeoClient({ getConfig: () => frozenConfig }),
+        searchEnabled: frozenConfig?.webSearch ?? true,
+      };
+    },
+  });
+  let active = 0;
+  let testController = null;
+  let disposed = false;
+  async function testConnection({ search = false } = {}) {
+    if (disposed) throw geoError("GEO_CANCELLED");
+    if (active || testController) throw geoError("GEO_ALREADY_RUNNING");
+    const controller = new AbortController();
+    testController = controller;
+    try {
+      const result = await client.request({
+        prompt: search
+          ? "请联网查找火山引擎官网，简短回复并提供网页引用。"
+          : "连接测试：请只回复 OK。",
+        search,
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) throw geoError("GEO_CANCELLED");
+      return { search, citationCount: result.citations.length };
+    } finally {
+      testController = null;
+    }
+  }
+  const researchStore =
+    options.researchStore ||
+    createResearchStore(options.workspaceRoot, { paths: options.paths });
+  const links = createGeoQuestionLinks({
+    store,
+    questionService: options.questionService,
+    researchStore,
+    getClient: resolveClient,
+  });
+  function linkQuestions(input) {
+    const result = links.linkQuestions(input);
+    if (typeof options.onDataInvalidated === "function") {
+      try {
+        options.onDataInvalidated("GEO_QUESTIONS_LINKED", {
+          clientId: input.clientId,
+        });
+      } catch (error) {
+        reportDiagnostic({
+          code: "GEO_QUESTION_LINK_INVALIDATION_FAILED",
+          module: "geo-knowledge-service",
+          category: "internal",
+          operationId: "geo-question-link-invalidation",
+          metadata: {
+            operation: "question-link-invalidation",
+            outcome: "listener-isolated",
+            errorCode:
+              error && /^[A-Z][A-Z0-9_]{1,127}$/.test(error.code || "")
+                ? error.code
+                : "LISTENER_FAILED",
+          },
+        });
+      }
+    }
+    return result;
+  }
+  function load({ clientId }) {
+    resolveClient(clientId);
+    const inspected = store.inspect
+      ? store.inspect(clientId)
+      : { status: "current_v2", knowledge: store.load(clientId) };
+    if (inspected.status === "invalid") throw geoError("GEO_KNOWLEDGE_INVALID");
+    const modelDraft = store.loadModelDraft?.(clientId);
+    return {
+      knowledge: inspected.knowledge,
+      storageStatus: inspected.status,
+      state: stateFor(clientId),
+      ...(modelDraft ? { modelDraft } : {}),
+    };
+  }
+  function stateFor(clientId) {
+    const state = application.state(clientId);
+    return state.phase === "idle"
+      ? store.loadRunState?.(clientId) || state
+      : state;
+  }
+  async function generate({ clientId, temporaryPrompt = "" }) {
+    if (testController) throw geoError("GEO_ALREADY_RUNNING");
+    active++;
+    try {
+      return {
+        knowledge: await application.generate(clientId, { temporaryPrompt }),
+      };
+    } finally {
+      active--;
+    }
+  }
+  function edit({ clientId, revision, section, id, changes }) {
+    resolveClient(clientId);
+    return { knowledge: store.edit(clientId, revision, section, id, changes) };
+  }
+  function confirmSourceType({ clientId, revision, sourceId, targetType }) {
+    resolveClient(clientId);
+    return {
+      knowledge: store.confirmSourceType(
+        clientId,
+        revision,
+        sourceId,
+        targetType,
+      ),
+    };
+  }
+  function resolveConflict({ clientId, revision, conflictId, claimId, value }) {
+    resolveClient(clientId);
+    return {
+      knowledge: store.resolveConflict(clientId, revision, conflictId, {
+        claimId,
+        value,
+      }),
+    };
+  }
+  function promptSettings({ clientId }) {
+    resolveClient(clientId);
+    return {
+      defaultGlobalPrompt: DEFAULT_RESEARCH_PROMPT,
+      globalPrompt: promptStore.load().researchPromptOverride,
+      clientPrompt: store.loadPolicy(clientId).researchPrompt,
+    };
+  }
+  function saveGlobalPrompt({ researchPromptOverride }) {
+    if (active) throw geoError("GEO_ALREADY_RUNNING");
+    promptStore.save(researchPromptOverride);
+    return {
+      defaultGlobalPrompt: DEFAULT_RESEARCH_PROMPT,
+      globalPrompt: researchPromptOverride,
+    };
+  }
+  function saveFinalKnowledgePrompt({ finalKnowledgePromptOverride }) {
+    promptStore.saveFinalKnowledgePrompt(finalKnowledgePromptOverride);
+    return {
+      defaultFinalKnowledgePrompt: DEFAULT_FINAL_KNOWLEDGE_PROMPT,
+      finalKnowledgePrompt: finalKnowledgePromptOverride,
+    };
+  }
+  function configStatus() {
+    return {
+      ...config().status(),
+      defaultGlobalPrompt: DEFAULT_RESEARCH_PROMPT,
+      globalPrompt: promptStore.load().researchPromptOverride,
+      defaultFinalKnowledgePrompt: DEFAULT_FINAL_KNOWLEDGE_PROMPT,
+      finalKnowledgePrompt: promptStore.load().finalKnowledgePromptOverride,
+    };
+  }
+  function saveClientPrompt({ clientId, researchPrompt }) {
+    resolveClient(clientId);
+    if (application.state(clientId).running)
+      throw geoError("GEO_ALREADY_RUNNING");
+    return store.savePolicy(clientId, researchPrompt);
+  }
+  function exportMarkdown({ clientId, revision }) {
+    const document = load({ clientId }).knowledge;
+    if (!document?.deliverable) throw geoError("GEO_NOT_FOUND");
+    if (revision !== document.revision) throw geoError("GEO_REVISION_CONFLICT");
+    return { markdown: document.deliverable.markdown };
+  }
+  return {
+    getGenerationBriefV2: ({
+      clientId,
+      geoQuestionId,
+      knowledgeRevision,
+      researchFingerprint,
+    }) => {
+      resolveClient(clientId);
+      const document = store.load(clientId);
+      if (!document) throw geoError("GEO_NOT_FOUND");
+      const geoQuestion = document.geoQuestions.find(
+        (item) => item.id === geoQuestionId,
+      );
+      if (!geoQuestion?.questionId) throw geoError("GENERATION_SOURCE_STALE");
+      const collectionQuestion = options.questionService
+        .listQuestions({ clientId })
+        .find((item) => item.id === geoQuestion.questionId);
+      if (!collectionQuestion) throw geoError("GENERATION_SOURCE_STALE");
+      let currentResearch;
+      try {
+        currentResearch = researchStore.getResearch(
+          clientId,
+          collectionQuestion.id,
+        );
+      } catch (_) {
+        throw geoError("GENERATION_SOURCE_STALE");
+      }
+      const fingerprint = fingerprintResearch(currentResearch);
+      if (researchFingerprint && researchFingerprint !== fingerprint)
+        throw geoError("GENERATION_SOURCE_STALE");
+      const brief = buildArticleBriefV2({
+        document,
+        knowledgeRevision:
+          knowledgeRevision === undefined
+            ? document.revision
+            : knowledgeRevision,
+        geoQuestionId,
+        collectionQuestion: { clientId, ...collectionQuestion },
+        research: currentResearch,
+      });
+      return {
+        brief,
+        research: currentResearch,
+        researchFingerprint: fingerprint,
+      };
+    },
+    questionWorkflow: async ({ clientId }) => {
+      const document = load({ clientId }).knowledge;
+      if (!document) return { clientId, knowledgeRevision: 0, items: [] };
+      const questions = options.questionService.listQuestions({ clientId });
+      const researchMetadata = researchStore.listResearchMetadata(clientId);
+      const articleCounts = await queryGeoArticleCounts(
+        options,
+        clientId,
+        document.geoQuestions.map((item) => item.id),
+      );
+      return buildGeoQuestionWorkflow({
+        document,
+        questions,
+        research: researchMetadata,
+        articleCounts,
+      });
+    },
+    questionArticles: ({ clientId, id }) => {
+      const document = load({ clientId }).knowledge;
+      if (!document?.geoQuestions.some((q) => q.id === id))
+        throw geoError("GEO_ITEM_NOT_FOUND");
+      return queryGeoArticles(options, clientId, id);
+    },
+    getGenerationContext: (clientId, researches, ids) =>
+      selectGeoKnowledge(store.load(clientId), researches, ids),
+    ...links,
+    linkQuestions,
+    load,
+    generate,
+    editDeliverable: ({ clientId, revision, markdown }) => {
+      resolveClient(clientId);
+      return { knowledge: store.editDeliverable(clientId, revision, markdown) };
+    },
+    acceptDeliverable: ({ clientId, revision, candidateId }) => {
+      resolveClient(clientId);
+      return { knowledge: store.acceptDeliverable(clientId, revision, candidateId) };
+    },
+    edit,
+    confirmSourceType,
+    resolveConflict,
+    promptSettings,
+    saveGlobalPrompt,
+    saveFinalKnowledgePrompt,
+    saveClientPrompt,
+    exportMarkdown,
+    state: ({ clientId }) => ({ state: stateFor(clientId) }),
+    cancel: ({ clientId }) => ({ state: application.cancel(clientId) }),
+    configStatus,
+    testConnection,
+    saveConfig: (input) => {
+      if (active || testController) throw geoError("GEO_ALREADY_RUNNING");
+      config().save(input);
+      return configStatus();
+    },
+    dispose: () => {
+      disposed = true;
+      testController?.abort();
+      application.dispose();
+    },
+  };
+}
+module.exports = { createGeoKnowledgeService };

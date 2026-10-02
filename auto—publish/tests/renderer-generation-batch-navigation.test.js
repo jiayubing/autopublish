@@ -12,7 +12,7 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
 
   after(closeRenderer);
 
-  async function checkBatch(batchStatus, endMixed = false) {
+  async function checkBatch(batchStatus, endMixed = false, missingKnowledge = false) {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     page.setDefaultTimeout(8000);
     await page.addInitScript(({ batchStatus, endMixed }) => {
@@ -285,6 +285,7 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
         },
         publication: { listForArticles: () => ok([]) },
         articleAttention: { list: () => ok({ revision: 0, items: [], counts: { total: 0, actionable: 0 } }) },
+        geoKnowledge: { questionWorkflow: ({ clientId }) => ok({ clientId, knowledgeRevision: 0, items: [] }) },
         content,
       };
       window.__generationBatchNavigation = state;
@@ -307,6 +308,17 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
       assert.equal(await page.locator("#nav-item-workbench").count(), 0);
       await page.locator("#nav-item-content-production").click();
       await page.getByRole("button", { name: "批量生成", exact: true }).click();
+      if (missingKnowledge) {
+        await page.getByRole("button", { name: "新建批量生成" }).click();
+        await page.getByRole("button", { name: "选择部分客户…" }).click();
+        await page.getByRole("dialog", { name: "选择批次客户" }).getByRole("checkbox", { name: "客户 A" }).check();
+        await page.getByRole("button", { name: "完成选择" }).click();
+        await page.getByText(/所选客户尚未生成知识库/).waitFor();
+        assert.equal(await page.getByText(/知识库操作未完成/).count(), 0);
+        await page.getByRole("button", { name: "前往客户生成" }).click();
+        await page.getByRole("heading", { name: /客户生成/ }).waitFor();
+        return;
+      }
       if (endMixed) {
         const detail = page.locator('.generation-batch-detail');
         await detail.getByTitle('永久取消待处理任务',{exact:true}).click();
@@ -391,6 +403,9 @@ describe("renderer generation batch navigation", { concurrency: false }, functio
 
   it("opens the article library with a batch filter without creating submission facts", async function () {
     await checkBatch("completed");
+  });
+  it("offers client generation when batch selection has no knowledge", async function () {
+    await checkBatch("completed", false, true);
   });
 
   it("uses continue for both configuration pauses and failed batches", async function () {
