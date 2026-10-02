@@ -73,13 +73,15 @@ function createGenerationBatchRunner(options) {
   let state = { status: "idle", batchId: null, counts: null, concurrency: concurrency, updatedAt: now() };
 
   function emit(batch, status, task, error, updatedAt) {
+    const summary = batch ? { ...batch } : null;
+    if (summary) delete summary.proseBriefs;
     const event = {
       batchId: batch && batch.id ? batch.id : null,
       taskId: task && task.id,
       clientId: task && task.clientId,
       platform: task && task.platform,
       templateId: task && task.templateId,
-      batch: batch ? clone(batch) : null,
+      batch: summary,
       counts: batch && batch.counts ? clone(batch.counts) : undefined,
       status: status || (batch && batch.status) || "idle",
       updatedAt: updatedAt || now(),

@@ -288,7 +288,8 @@ function createGeoKnowledgeService(options) {
       knowledgeRevision,
       researchFingerprint,
     }) => {
-      const document = load({ clientId }).knowledge;
+      resolveClient(clientId);
+      const document = store.load(clientId);
       if (!document) throw geoError("GEO_NOT_FOUND");
       const geoQuestion = document.geoQuestions.find(
         (item) => item.id === geoQuestionId,

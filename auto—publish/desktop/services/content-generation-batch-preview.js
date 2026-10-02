@@ -246,7 +246,7 @@ function createGenerationBatchPreview(options) {
 
   async function preview(input) {
     const value = assertObject(input);
-    if (Array.isArray(value.selectedQuestions)) return previewV2(value);
+    if (Array.isArray(value.selectedQuestions)) return (await prepareV2(value)).preview;
     const clientInput =
       value.clientIds === undefined && Array.isArray(value.clientSources)
         ? value.clientSources.map(function (source) {
@@ -295,7 +295,7 @@ function createGenerationBatchPreview(options) {
     };
   }
 
-  async function previewV2(value) {
+  async function prepareV2(value) {
     if (typeof getGenerationBriefV2 !== "function")
       throw generationError("GENERATION_SOURCE_INVALID", "Article Brief v2 is unavailable");
     const selections = arrayInput(value.selectedQuestions, "GENERATION_QUESTIONS_REQUIRED", "Selected questions", true);
@@ -316,6 +316,7 @@ function createGenerationBatchPreview(options) {
     if (selectedQuestions.length * templates.length > MAX_TASKS)
       throw generationError("GENERATION_TASK_LIMIT");
     const questionSources = [];
+    const proseBriefs = {};
     for (const selection of selectedQuestions) {
       const resolved = await getGenerationBriefV2(selection);
       const brief = resolved && resolved.brief;
@@ -331,13 +332,17 @@ function createGenerationBatchPreview(options) {
         researchCapturedAt: brief.currentResearch.capturedAt,
         researchFingerprint: resolved.researchFingerprint,
       });
+      if (brief.knowledgeProse) {
+        const source = questionSources[questionSources.length - 1];
+        proseBriefs[source.id] = JSON.parse(JSON.stringify(brief));
+      }
     }
     const tasks = questionSources.flatMap(function(source) {
       return templates.map(function(template) {
         return { questionSourceId: source.id, clientId: source.clientId, geoQuestionId: source.geoQuestionId, platform: template.platform, templateId: template.templateId };
       });
     });
-    return {
+    return { proseBriefs, preview: {
       version: 2,
       questionCount: questionSources.length,
       taskCount: tasks.length,
@@ -348,10 +353,10 @@ function createGenerationBatchPreview(options) {
       templates,
       tasks,
       requestFingerprint: fingerprintCreateIntent({ selectedQuestions, selectedTemplates: templates, concurrency }),
-    };
+    } };
   }
 
-  return preview;
+  return { preview, prepareV2 };
 }
 
 module.exports = { createGenerationBatchPreview };

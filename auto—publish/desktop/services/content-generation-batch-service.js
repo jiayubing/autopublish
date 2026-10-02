@@ -124,7 +124,7 @@ function createContentGenerationBatchService(options) {
   const materialStore = opts.materialStore || createClientMaterialStore({ workspaceRoot: workspaceRoot, paths: paths });
   const researchStore = opts.researchStore || createResearchStore(workspaceRoot, { paths: paths });
   const templateStore = opts.templateStore || createTemplateStore(workspaceRoot, { paths: paths });
-  const preview = createGenerationBatchPreview({
+  const { preview, prepareV2 } = createGenerationBatchPreview({
     clientKnowledge, materialStore, researchStore, templateStore,
     generationError, assertObject, assertId,
     getGenerationBriefV2: opts.getGenerationBriefV2,
@@ -280,9 +280,9 @@ function createContentGenerationBatchService(options) {
   function enrichBatch(batch) {
     // ContentStore owns and refreshes generation identity projections, so this
     // lookup avoids reopening canonical article JSON just to display a title.
-    const result = clone(batch);
-    if (result) delete result.proseBriefs;
-    return projectBatchTitles(result, false);
+    const summary = batch ? { ...batch } : batch;
+    if (summary) delete summary.proseBriefs;
+    return projectBatchTitles(clone(summary), false);
   }
 
   function emit(value) {
@@ -507,17 +507,10 @@ function createContentGenerationBatchService(options) {
         if (replay) return enrichBatch(replay);
       }
     }
-    const previewResult = await preview(value);
+    const { preview: previewResult, proseBriefs } = await prepareV2(value);
     if (previewResult.version !== 2 || !previewResult.executableTaskCount)
       throw generationError("GENERATION_NO_EXECUTABLE_TASKS");
     const aiConfigFingerprint = await fingerprint();
-    assertAvailable();
-    const proseBriefs = {};
-    for (const source of previewResult.questionSources) {
-      const resolved = await opts.getGenerationBriefV2({ clientId: source.clientId, geoQuestionId: source.geoQuestionId,
-        knowledgeRevision: source.knowledgeRevision, researchFingerprint: source.researchFingerprint });
-      if (resolved.brief.knowledgeProse) proseBriefs[source.id] = clone(resolved.brief);
-    }
     assertAvailable();
     const batch = batchStore.createOrGetV2({
       proseBriefs,
